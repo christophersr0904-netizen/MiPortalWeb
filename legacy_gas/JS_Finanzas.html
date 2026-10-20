@@ -1,0 +1,3034 @@
+<!--
+ * ============================================================================
+ * ARCHIVO: JS_Finanzas.html
+ * SISTEMA: PMO Personal Modular & Gestión Integral de Vida
+ * REINGENIERÍA TÉCNICA: SIMPLIFICACIÓN ESTRUCTURAL, COEXISTENCIA REAL/PROYECTADO,
+ * GOBERNANZA DE CUOTAS BANCARIAS, CALENDARIOS SINCRONIZADOS Y KPIS ACCIONABLES
+ * ============================================================================
+-->
+<script>
+  // ============================================================================
+  // SECCIÓN 0: ESCANEO Y EXTRACCIÓN OCR ASISTIDO POR IA (GEMINI)
+  // ============================================================================
+  function escanearComprobanteIA(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+
+    var btn = document.getElementById('btn-escanear-ia');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Extrayendo...</span>';
+    }
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      var dataBase64 = reader.result.split(',')[1];
+      var tipoMime = file.type || 'image/jpeg';
+      var ctx = [];
+      callBackend('parsearComprobante', { base64Data: dataBase64, mimeType: tipoMime, contexto: ctx }, function (res) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg class="portal-icon-sm inline mr-1" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg> Subir Archivo';
+        }
+        event.target.value = '';
+
+        if (res && res.success && res.data) {
+          var d = res.data;
+          if (d.descripcionGasto) document.getElementById('gasto-descripcion').value = d.descripcionGasto;
+          if (d.montoOriginal) document.getElementById('gasto-monto').value = d.montoOriginal;
+          if (d.monedaOriginal) document.getElementById('gasto-moneda').value = d.monedaOriginal;
+          if (d.tipoCambio) document.getElementById('gasto-tc').value = d.tipoCambio;
+          if (d.fechaGasto) document.getElementById('gasto-fecha').value = d.fechaGasto;
+
+          var selProy = document.getElementById('selector-idProyecto-gasto');
+          if (d.idProyectoInferido && selProy && state.proyectos && state.proyectos.some(function (p) { return p.ID_Proyecto === d.idProyectoInferido; })) {
+            selProy.value = d.idProyectoInferido;
+            if (typeof filtrarHitosYTareasGastoModal === 'function') filtrarHitosYTareasGastoModal(selProy.value);
+          }
+          var selHito = document.getElementById('selector-idHito-gasto');
+          if (selHito && d.idHitoInferido) {
+            selHito.value = d.idHitoInferido;
+            if (typeof filtrarTareasPorHitoGastoModal === 'function') filtrarTareasPorHitoGastoModal(selHito.value);
+          }
+
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'success',
+              title: '¡Comprobante Procesado!',
+              text: 'Datos extraídos con éxito mediante Gemini IA.',
+              confirmButtonColor: '#059669'
+            });
+          }
+        } else {
+          var errorMsg = (res && (res.error || res.message)) || 'No se pudieron extraer datos del comprobante.';
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'error',
+              title: 'Error al Procesar Comprobante',
+              text: errorMsg,
+              confirmButtonColor: '#ef4444'
+            });
+          }
+        }
+      }, function (err) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<svg class="portal-icon-sm inline mr-1" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg> Subir Archivo';
+        }
+        event.target.value = '';
+        var netErrorMsg = (err && (err.message || err)) || 'Error de red o conexión al procesar el comprobante.';
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error de Conexión',
+            text: netErrorMsg,
+            confirmButtonColor: '#ef4444'
+          });
+        }
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ============================================================================
+  // SECCIÓN 0.5: GOBERNANZA DE MODO DUAL EN MODALES FINANCIEROS (REAL VS PROGRAMADO)
+  // ============================================================================
+  window.cambiarModoRegistroGasto = function (modo) {
+    var esProg = (modo === 'PROGRAMADO');
+    var inputEsProg = document.getElementById('gasto-es-programado');
+    if (inputEsProg) inputEsProg.value = esProg ? 'true' : 'false';
+
+    var btnReal = document.getElementById('btn-modo-gasto-real');
+    var btnProg = document.getElementById('btn-modo-gasto-prog');
+    var card = document.getElementById('modal-gasto-card');
+    var dot = document.getElementById('badge-gasto-header-dot');
+    var badgeModo = document.getElementById('badge-gasto-modo');
+    var tit = document.getElementById('txt-modal-gasto-titulo');
+    var lblFecha = document.getElementById('lbl-gasto-fecha');
+    var hintFecha = document.getElementById('hint-gasto-fecha');
+    var bloqueProg = document.getElementById('bloque-gasto-programado');
+    var boxScanner = document.getElementById('box-escanear-ia-gasto');
+    var lblMetodo = document.getElementById('lbl-gasto-metodo');
+    var btnSubmit = document.getElementById('btn-submit-gasto');
+    var txtBtnSubmit = document.getElementById('txt-btn-submit-gasto');
+    var iconSpan = btnSubmit ? btnSubmit.querySelector('span:first-child') : null;
+
+    if (esProg) {
+      if (btnProg) {
+        btnProg.className = "py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 shadow-xs border border-amber-200/60 dark:border-amber-800/50";
+      }
+      if (btnReal) {
+        btnReal.className = "py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-300";
+      }
+      if (card) {
+        card.classList.remove('border-slate-200', 'dark:border-slate-800');
+        card.classList.add('border-amber-400/80', 'dark:border-amber-500/60');
+      }
+      if (dot) {
+        dot.className = "w-3 h-3 rounded-full bg-amber-500 shadow-xs animate-pulse";
+      }
+      if (badgeModo) {
+        badgeModo.textContent = "Programado / Futuro";
+        badgeModo.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800";
+      }
+      if (tit) tit.textContent = "Programar Gasto Futuro / Compromiso";
+      if (lblFecha) lblFecha.textContent = "Fecha de Vencimiento / Compromiso de Pago";
+      if (hintFecha) hintFecha.textContent = "No afectará tu liquidez real inmediata hasta su fecha de pago o conciliación.";
+      if (bloqueProg) bloqueProg.classList.remove('hidden');
+      if (boxScanner) boxScanner.classList.add('hidden');
+      if (lblMetodo) lblMetodo.textContent = "Método de Pago Previsto (Opcional)";
+      if (btnSubmit) {
+        btnSubmit.className = "w-full mt-2 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold rounded-xl shadow-md shadow-amber-600/20 transition flex items-center justify-center gap-2";
+      }
+      if (iconSpan) iconSpan.innerHTML = '<svg class="portal-icon-sm inline mr-1" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+      if (txtBtnSubmit) txtBtnSubmit.textContent = "Guardar Gasto Programado";
+    } else {
+      if (btnReal) {
+        btnReal.className = "py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 shadow-xs border border-emerald-200/60 dark:border-emerald-800/50";
+      }
+      if (btnProg) {
+        btnProg.className = "py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-300";
+      }
+      if (card) {
+        card.classList.remove('border-amber-400/80', 'dark:border-amber-500/60');
+        card.classList.add('border-slate-200', 'dark:border-slate-800');
+      }
+      if (dot) {
+        dot.className = "w-3 h-3 rounded-full bg-emerald-500 shadow-xs";
+      }
+      if (badgeModo) {
+        badgeModo.textContent = "Real / Inmediato";
+        badgeModo.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800";
+      }
+      if (tit) tit.textContent = "Registrar Gasto Inmediato";
+      if (lblFecha) lblFecha.textContent = "Fecha de Pago / Desembolso";
+      if (hintFecha) hintFecha.textContent = "Si seleccionas una fecha futura, cambiará automáticamente a Modo Programado.";
+      if (bloqueProg) bloqueProg.classList.add('hidden');
+      if (boxScanner) boxScanner.classList.remove('hidden');
+      if (lblMetodo) lblMetodo.textContent = "Método de Pago (Efectuado)";
+      if (btnSubmit) {
+        btnSubmit.className = "w-full mt-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2";
+      }
+      if (iconSpan) iconSpan.innerHTML = '<svg class="portal-icon-sm inline mr-1" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+      if (txtBtnSubmit) txtBtnSubmit.textContent = "Registrar Gasto Real";
+    }
+  };
+
+  window.evaluarFechaGastoAuto = function (fechaStr) {
+    if (!fechaStr) return;
+    var hoy = new Date().toISOString().split('T')[0];
+    if (fechaStr > hoy) {
+      window.cambiarModoRegistroGasto('PROGRAMADO');
+    } else {
+      window.cambiarModoRegistroGasto('REAL');
+    }
+  };
+
+  window.cambiarModoRegistroIngreso = function (modo) {
+    var esProg = (modo === 'PROGRAMADO');
+    var inputEsProg = document.getElementById('ingreso-es-programado');
+    if (inputEsProg) inputEsProg.value = esProg ? 'true' : 'false';
+
+    var btnReal = document.getElementById('btn-modo-ingreso-real');
+    var btnProg = document.getElementById('btn-modo-ingreso-prog');
+    var card = document.getElementById('modal-ingreso-card');
+    var dot = document.getElementById('badge-ingreso-header-dot');
+    var badgeModo = document.getElementById('badge-ingreso-modo');
+    var tit = document.getElementById('txt-modal-ingreso-titulo');
+    var lblFecha = document.getElementById('lbl-ingreso-fecha');
+    var bloqueProg = document.getElementById('bloque-ingreso-programado');
+    var lblCuenta = document.getElementById('lbl-ingreso-cuenta');
+    var btnSubmit = document.getElementById('btn-submit-ingreso');
+    var txtBtnSubmit = document.getElementById('txt-btn-submit-ingreso');
+    var iconSpanIng = btnSubmit ? btnSubmit.querySelector('span:first-child') : null;
+
+    if (esProg) {
+      if (btnProg) {
+        btnProg.className = "py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 shadow-xs border border-amber-200/60 dark:border-amber-800/50";
+      }
+      if (btnReal) {
+        btnReal.className = "py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-300";
+      }
+      if (card) {
+        card.classList.remove('border-slate-200', 'dark:border-slate-800');
+        card.classList.add('border-amber-400/80', 'dark:border-amber-500/60');
+      }
+      if (dot) {
+        dot.className = "w-3 h-3 rounded-full bg-amber-500 shadow-xs animate-pulse";
+      }
+      if (badgeModo) {
+        badgeModo.textContent = "Programado / Futuro";
+        badgeModo.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800";
+      }
+      if (tit) tit.textContent = "Programar Cobro Futuro / Proyectado";
+      if (lblFecha) lblFecha.textContent = "Fecha Estimada de Cobro";
+      if (bloqueProg) bloqueProg.classList.remove('hidden');
+      if (lblCuenta) lblCuenta.textContent = "Cuenta Destino Prevista (Opcional)";
+      if (btnSubmit) {
+        btnSubmit.className = "w-full mt-2 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold rounded-xl shadow-md shadow-amber-600/20 transition flex items-center justify-center gap-2";
+      }
+      if (iconSpanIng) iconSpanIng.innerHTML = '<svg class="portal-icon-sm inline mr-1" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+      if (txtBtnSubmit) txtBtnSubmit.textContent = "Guardar Ingreso Programado";
+    } else {
+      if (btnReal) {
+        btnReal.className = "py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 shadow-xs border border-emerald-200/60 dark:border-emerald-800/50";
+      }
+      if (btnProg) {
+        btnProg.className = "py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-300";
+      }
+      if (card) {
+        card.classList.remove('border-amber-400/80', 'dark:border-amber-500/60');
+        card.classList.add('border-slate-200', 'dark:border-slate-800');
+      }
+      if (dot) {
+        dot.className = "w-3 h-3 rounded-full bg-emerald-500 shadow-xs";
+      }
+      if (badgeModo) {
+        badgeModo.textContent = "Real / Inmediato";
+        badgeModo.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800";
+      }
+      if (tit) tit.textContent = "Registrar Ingreso Inmediato";
+      if (lblFecha) lblFecha.textContent = "Fecha de Cobro / Depósito";
+      if (bloqueProg) bloqueProg.classList.add('hidden');
+      if (lblCuenta) lblCuenta.textContent = "Cuenta Destino (Depositado)";
+      if (btnSubmit) {
+        btnSubmit.className = "w-full mt-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2";
+      }
+      if (iconSpanIng) iconSpanIng.innerHTML = '<svg class="portal-icon-sm inline mr-1" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+      if (txtBtnSubmit) txtBtnSubmit.textContent = "Registrar Ingreso Real";
+    }
+  };
+
+  window.evaluarFechaIngresoAuto = function (fechaStr) {
+    if (!fechaStr) return;
+    var hoy = new Date().toISOString().split('T')[0];
+    if (fechaStr > hoy) {
+      window.cambiarModoRegistroIngreso('PROGRAMADO');
+    } else {
+      window.cambiarModoRegistroIngreso('REAL');
+    }
+  };
+
+  // ============================================================================
+  // SECCIÓN 1: CONFIGURACIÓN CROMÁTICA E INICIALIZACIÓN DE ESTADO
+  // ============================================================================
+  var CATEGORIAS_GASTO_CONFIG = {
+    'Materiales': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>', color: 'indigo', bgLight: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300' },
+    'Servicios Profesionales': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>', color: 'blue', bgLight: 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300' },
+    'Licencias / Software': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><rect width="18" height="12" x="3" y="4" rx="2"/><line x1="2" x2="22" y1="20" y2="20"/></svg>', color: 'cyan', bgLight: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300' },
+    'Marketing / Publicidad': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>', color: 'purple', bgLight: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' },
+    'Logística / Transporte': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>', color: 'amber', bgLight: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' },
+    'Equipos / Hardware': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>', color: 'emerald', bgLight: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' },
+    'Cuota_Credito': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>', color: 'rose', bgLight: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300' },
+    'Alquiler / Servicios': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>', color: 'amber', bgLight: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' },
+    'Alimentación': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>', color: 'emerald', bgLight: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' },
+    'Otros': { icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>', color: 'slate', bgLight: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' }
+  };
+
+  var FUENTES_INGRESO_CONFIG = {
+    'Sueldo_Nomina': { label: 'Sueldo / Nómina', icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>', bgLight: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' },
+    'Honorarios_Freelance': { label: 'Honorarios / Freelance', icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>', bgLight: 'bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300' },
+    'Negocio_Emprendimiento': { label: 'Negocio / Emprendimiento', icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>', bgLight: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300' },
+    'Inversiones_Rendimientos': { label: 'Inversiones / Rend.', icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>', bgLight: 'bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300' },
+    'Obsequio_Monetario': { label: 'Obsequio / Donación', icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/></svg>', bgLight: 'bg-pink-50 text-pink-700 dark:bg-pink-950/60 dark:text-pink-300' },
+    'Ventas_Activos': { label: 'Venta de Activos', icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>', bgLight: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' },
+    'Otros': { label: 'Otros Ingresos', icon: '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>', bgLight: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' }
+  };
+
+  // Inicialización de Variables de Estado en State Global
+  if (typeof state === 'undefined') window.state = {};
+  if (!state.tipoCambioOficial) {
+    state.tipoCambioOficial = { usd: 3.760, eur: 4.120, compra: 3.730, venta: 3.760, origen: 'SUNAT/SBS Oficial' };
+  }
+  if (!state.tipoCambioActual) {
+    state.tipoCambioActual = 3.760;
+  }
+  if (!state.tabFinanzasActiva) {
+    state.tabFinanzasActiva = 'general';
+  }
+  if (!state.filtroTrxTipo) {
+    state.filtroTrxTipo = 'TODOS'; // 'TODOS' | 'INGRESO' | 'GASTO'
+  }
+  if (!state.filtroTrxEstado) {
+    state.filtroTrxEstado = 'TODOS'; // 'TODOS' | 'REAL' | 'PROGRAMADO'
+  }
+  if (!state.filtroTrxTiempo) {
+    state.filtroTrxTiempo = 'HISTORICO'; // 'HISTORICO' | 'ESTE_MES' | 'ESTA_SEMANA' | 'PROXIMOS_30'
+  }
+  if (!state.filtroTrxTexto) {
+    state.filtroTrxTexto = '';
+  }
+  if (!state.filtroMesFinanzas) {
+    state.filtroMesFinanzas = 'MES_ACTUAL';
+  }
+  if (!state.filtroSegmentoFinanzas) {
+    state.filtroSegmentoFinanzas = 'TODOS'; // 'TODOS' | 'PROYECTOS' | 'PERSONAL'
+  }
+  if (!state.presupuestosCategorias) {
+    try {
+      state.presupuestosCategorias = JSON.parse(localStorage.getItem('PMO_PRESUPUESTOS_CATEGORIAS') || 'null');
+    } catch (e) {
+      state.presupuestosCategorias = null;
+    }
+    if (!state.presupuestosCategorias) {
+      state.presupuestosCategorias = {
+        'Materiales': 1500,
+        'Servicios Profesionales': 2000,
+        'Licencias / Software': 500,
+        'Marketing / Publicidad': 800,
+        'Logística / Transporte': 600,
+        'Equipos / Hardware': 1200,
+        'Alimentación': 1200,
+        'Alquiler / Servicios': 1800,
+        'Cuota_Credito': 2500,
+        'Otros': 500
+      };
+    }
+  }
+  if (!state.presupuestosHabitos) {
+    try {
+      state.presupuestosHabitos = JSON.parse(localStorage.getItem('PMO_PRESUPUESTOS_HABITOS') || 'null');
+    } catch (e) {
+      state.presupuestosHabitos = null;
+    }
+    if (!state.presupuestosHabitos) {
+      state.presupuestosHabitos = {
+        'SALUD_DEPORTE': 800,
+        'DESARROLLO_ESTUDIO': 600,
+        'LABORAL_HONORARIO': 500,
+        'FINANZAS_TRAMITES': 400,
+        'SOCIAL_FAMILIA': 600,
+        'PERSONAL_DESCANSO': 500
+      };
+    }
+  }
+
+  // ============================================================================
+  // SECCIÓN 2: TIPO DE CAMBIO OFICIAL Y MONEDAS
+  // ============================================================================
+  window.consultarTipoCambioActual = function (forzar) {
+    var icon = document.getElementById('icon-refresh-tc');
+    if (icon) icon.classList.add('animate-spin');
+
+    callBackend('obtenertipocambio', {}, function (res) {
+      if (icon) icon.classList.remove('animate-spin');
+      var tcData = (res && res.data) ? res.data : (res && res.tipoCambio ? res.tipoCambio : null);
+      if (res && res.success && tcData) {
+        var tcUsd = parseFloat(tcData.usd || tcData.venta || tcData.precioVenta || tcData) || 3.760;
+        var tcEur = parseFloat(tcData.eur || (tcUsd * 1.09)) || 4.120;
+        state.tipoCambioActual = tcUsd;
+        state.tipoCambioOficial = {
+          usd: tcUsd,
+          eur: tcEur,
+          compra: parseFloat(tcData.compra) || (tcUsd - 0.03),
+          venta: tcUsd,
+          origen: tcData.origen || 'SUNAT/SBS Oficial',
+          fecha: tcData.fecha || ''
+        };
+
+        var btnLbl = document.getElementById('btn-label-tc');
+        if (btnLbl) btnLbl.textContent = tcUsd.toFixed(3);
+
+        var kpiTc = document.getElementById('kpi-fin-tc-val');
+        if (kpiTc) kpiTc.textContent = tcUsd.toFixed(3);
+
+        var gMoneda = document.getElementById('gasto-moneda');
+        if (gMoneda) alCambiarMonedaModal('gasto', gMoneda.value);
+
+        var ingMoneda = document.getElementById('ingreso-moneda');
+        if (ingMoneda) alCambiarMonedaModal('ingreso', ingMoneda.value);
+
+        if (forzar) {
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              toast: true,
+              position: 'top-end',
+              icon: 'success',
+              title: 'Tipo de Cambio SUNAT / SBS Actualizado',
+              html: '<div class="text-xs">USD: <strong>S/ ' + tcUsd.toFixed(3) + '</strong> | EUR: <strong>S/ ' + tcEur.toFixed(3) + '</strong></div>',
+              showConfirmButton: false,
+              timer: 3000
+            });
+          }
+          if (typeof renderTableroFinanciero === 'function') renderTableroFinanciero();
+        }
+      }
+    }, function () {
+      if (icon) icon.classList.remove('animate-spin');
+    });
+  };
+
+  window.alCambiarMonedaModal = function (tipo, moneda) {
+    var inputTc = document.getElementById(tipo === 'gasto' ? 'gasto-tc' : 'ingreso-tc');
+    if (!inputTc) return;
+    moneda = (moneda || 'PEN').toUpperCase();
+    var tcOficial = state.tipoCambioOficial || { usd: 3.760, eur: 4.120 };
+
+    if (moneda === 'PEN') {
+      inputTc.value = '1.000';
+    } else if (moneda === 'USD') {
+      inputTc.value = (tcOficial.usd || 3.760).toFixed(3);
+    } else if (moneda === 'EUR') {
+      inputTc.value = (tcOficial.eur || 4.120).toFixed(3);
+    } else {
+      inputTc.value = (tcOficial.usd || 3.760).toFixed(3);
+    }
+  };
+
+  // ============================================================================
+  // SECCIÓN 3: EVALUACIÓN TEMPORAL NORMALIZADA (PERIODOS Y HORIZONTES)
+  // ============================================================================
+  window.pertinecePeriodoFinanzas = function (fechaStr, periodo) {
+    if (!periodo || periodo === 'TODOS' || periodo === 'todos' || periodo === 'ALL' || periodo === 'HISTORICO') {
+      return true;
+    }
+    if (!fechaStr) return false;
+
+    var clean = String(fechaStr).split('T')[0].split(' ')[0].trim();
+    var parts = clean.split('-');
+    if (parts.length < 3) return true;
+
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10) - 1;
+    var d = parseInt(parts[2], 10);
+    if (isNaN(y) || isNaN(m)) return true;
+
+    var now = new Date();
+    var anioHoy = now.getFullYear();
+    var mesHoy = now.getMonth();
+    var diaHoy = now.getDate();
+
+    if (periodo === 'MES_ACTUAL' || periodo === 'ESTE_MES') {
+      return y === anioHoy && m === mesHoy;
+    } else if (periodo === 'MES_ANTERIOR') {
+      var mesAnt = new Date(anioHoy, mesHoy - 1, 1);
+      return y === mesAnt.getFullYear() && m === mesAnt.getMonth();
+    } else if (periodo === 'ULTIMOS_3_MESES') {
+      var itemDate = new Date(y, m, d);
+      var inicio3Meses = new Date(anioHoy, mesHoy - 2, 1);
+      var finMesHoy = new Date(anioHoy, mesHoy + 1, 0, 23, 59, 59);
+      return itemDate >= inicio3Meses && itemDate <= finMesHoy;
+    } else if (periodo === 'ANIO_ACTUAL') {
+      return y === anioHoy;
+    } else if (periodo === 'ESTA_SEMANA') {
+      var targetDate = new Date(y, m, d);
+      var hoyDate = new Date(anioHoy, mesHoy, diaHoy);
+      var diffDays = Math.round((targetDate - hoyDate) / (1000 * 60 * 60 * 24));
+      return diffDays >= -3 && diffDays <= 7;
+    } else if (periodo === 'PROXIMOS_30') {
+      var targetD = new Date(y, m, d);
+      var hoyD = new Date(anioHoy, mesHoy, diaHoy);
+      var diff = Math.round((targetD - hoyD) / (1000 * 60 * 60 * 24));
+      return diff >= 0 && diff <= 30;
+    }
+    return true;
+  };
+
+  // ============================================================================
+  // SECCIÓN 4: CÁLCULO DE KPIS DE IMPACTO DECISIONAL (FINANZAS PERSONALES REALES)
+  // ============================================================================
+  window.calcularMetricasSaludFinanciera = function () {
+    var gastos = (window.state && Array.isArray(state.gastos)) ? state.gastos : [];
+    var ingresos = (window.state && Array.isArray(state.ingresos)) ? state.ingresos : [];
+    var cuotas = (window.state && Array.isArray(state.cuotas)) ? state.cuotas : [];
+    var proyectos = (window.state && Array.isArray(state.proyectos)) ? state.proyectos : [];
+
+    var filtroPeriodo = state.filtroMesFinanzas || 'MES_ACTUAL';
+    var filtroSegmento = state.filtroSegmentoFinanzas || 'TODOS';
+    var tc = state.tipoCambioActual || 3.760;
+
+    // 1. Saldo en Mano Real Hoy (Ingresos Reales Cobrados - Gastos Reales Pagados)
+    var totalIngresosRealesPEN = 0;
+    var totalGastosRealesPEN = 0;
+    var saldoLiquidoPEN = 0;
+    var saldoLiquidoUSD = 0;
+
+    // 2. Proyecciones y Compromisos del Mes
+    var compromisosCuotasPendientesPEN = 0;
+    var compromisosOtrosPendientesPEN = 0;
+    var ingresosPendientesPEN = 0;
+    var countPendientesMes = 0;
+
+    // 3. Gastos Hormiga del Mes (Compras menores no esenciales <= S/ 40 o cat 'Otros')
+    var totalGastosHormigaMes = 0;
+
+    // 4. Radar de Categorías del Periodo
+    var consumoPorCategoria = {};
+
+    // 5. Lista de Próximos Vencimientos (Próximos 15 Días)
+    var proximosVencimientos = [];
+    var hoy = new Date();
+    var hoyDateOnly = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+
+    // Procesar INGRESOS
+    ingresos.forEach(function (ing) {
+      var idProyIng = String(ing.ID_Proyecto_Asociado || ing.idProyectoAsociado || ing.ID_Proyecto || '').trim();
+      var esProyIng = idProyIng && idProyIng.toUpperCase() !== 'PERSONAL';
+      if (filtroSegmento === 'PROYECTOS' && !esProyIng) return;
+      if (filtroSegmento === 'PERSONAL' && esProyIng) return;
+
+      var f = ing.Fecha_Ingreso || ing.fechaIngreso || ing.fecha || '';
+      var mOrig = parseFloat(ing.Monto_Original || ing.montoOriginal || ing.monto || 0);
+      var mon = String(ing.Moneda_Original || ing.monedaOriginal || 'PEN').toUpperCase();
+      var itemTc = parseFloat(ing.Tipo_Cambio || ing.tipoCambio || tc);
+      var mPEN = parseFloat(ing.Monto_PEN || ing.montoPEN || (mon === 'USD' ? mOrig * itemTc : mOrig));
+
+      var isReal = ing.Conciliado === true || (ing.Estado_Cobro || ing.Estado_Pago || '').toLowerCase() === 'cobrado' || (ing.Estado || '').toUpperCase() === 'EJECUTADO' || (ing.Estado || '').toUpperCase() === 'CONCILIADO';
+      var isProgramado = !isReal;
+
+      if (isReal) {
+        if (mon === 'USD') saldoLiquidoUSD += mOrig;
+        else saldoLiquidoPEN += mPEN;
+
+        if (window.pertinecePeriodoFinanzas(f, filtroPeriodo)) {
+          totalIngresosRealesPEN += mPEN;
+        }
+      } else {
+        if (window.pertinecePeriodoFinanzas(f, filtroPeriodo)) {
+          ingresosPendientesPEN += mPEN;
+        }
+        // Vencimiento en próximos 15 días
+        if (f) {
+          var p = f.split('T')[0].split('-');
+          if (p.length === 3) {
+            var fObj = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
+            var diffDays = Math.ceil((fObj - hoyDateOnly) / (1000 * 60 * 60 * 24));
+            if (diffDays >= -3 && diffDays <= 15) {
+              proximosVencimientos.push({
+                tipo: 'INGRESO',
+                id: ing.ID_Ingreso || ing.id || '',
+                concepto: ing.Descripcion_Ingreso || ing.Descripcion || 'Ingreso programado',
+                montoPEN: mPEN,
+                fecha: f,
+                diasRestantes: diffDays,
+                entidad: ing.Cuenta_Destino || 'Banco',
+                itemRef: ing
+              });
+            }
+          }
+        }
+      }
+    });
+
+    // Procesar GASTOS con filtrado determinista por Proyecto vs Personal
+    gastos.forEach(function (g) {
+      var idProyG = String(g.ID_Proyecto || g.idProyecto || '').trim().toUpperCase();
+      var idTarG = String(g.ID_Tarea || g.idTarea || g.ID_Entidad_Vinculada || g.idEntidadVinculada || '').trim().toUpperCase();
+      var idHitG = String(g.ID_Hito || g.idHito || '').trim().toUpperCase();
+      var rawTg = String(g.tipoGasto || g.Tipo_Gasto || g.Clasificacion_Origen || g.clasificacionOrigen || '').trim().toLowerCase();
+
+      var esProyecto = (idProyG && idProyG !== 'PERSONAL' && idProyG !== 'VIDA') ||
+                       (idTarG && idTarG.startsWith('TAR-')) ||
+                       (idHitG && idHitG !== 'PERSONAL' && idHitG !== '') ||
+                       rawTg.includes('proy') || rawTg.includes('tarea');
+      var esPersonal = !esProyecto;
+
+      if (filtroSegmento === 'PROYECTOS' && !esProyecto) return;
+      if (filtroSegmento === 'PERSONAL' && !esPersonal) return;
+
+      var f = g.Fecha_Gasto || g.fechaGasto || g.fecha || '';
+      var mOrig = parseFloat(g.Monto_Original || g.montoOriginal || g.monto || 0);
+      var mon = String(g.Moneda_Original || g.monedaOriginal || 'PEN').toUpperCase();
+      var itemTc = parseFloat(g.Tipo_Cambio || g.tipoCambio || tc);
+      var mPEN = parseFloat(g.Monto_PEN || g.montoPEN || (mon === 'USD' ? mOrig * itemTc : mOrig));
+      var cat = g.Categoria_Gasto || g.categoriaGasto || g.categoria || 'Otros';
+      var idCuota = g.ID_Cuota || g.idCuota || '';
+
+      var isReal = g.Conciliado === true || (g.Estado_Pago || '').toLowerCase() === 'pagado' || (g.Estado || '').toUpperCase() === 'EJECUTADO' || (g.Estado || '').toUpperCase() === 'CONCILIADO';
+      var isProgramado = !isReal;
+
+      if (isReal) {
+        if (mon === 'USD') saldoLiquidoUSD -= mOrig;
+        else saldoLiquidoPEN -= mPEN;
+
+        if (window.pertinecePeriodoFinanzas(f, filtroPeriodo)) {
+          totalGastosRealesPEN += mPEN;
+          consumoPorCategoria[cat] = (consumoPorCategoria[cat] || 0) + mPEN;
+
+          // Evaluación de Gastos Hormiga:
+          // Compras <= S/ 40.00 o en categoría Otros/Antojos sin proyecto formal
+          if (esPersonal && (mPEN <= 40 || cat === 'Otros')) {
+            totalGastosHormigaMes += mPEN;
+          }
+        }
+      } else {
+        if (window.pertinecePeriodoFinanzas(f, filtroPeriodo)) {
+          countPendientesMes++;
+          if (idCuota || cat === 'Cuota_Credito') {
+            compromisosCuotasPendientesPEN += mPEN;
+          } else {
+            compromisosOtrosPendientesPEN += mPEN;
+          }
+        }
+
+        // Vencimiento en próximos 15 días
+        if (f) {
+          var pG = f.split('T')[0].split('-');
+          if (pG.length === 3) {
+            var fObjG = new Date(parseInt(pG[0]), parseInt(pG[1]) - 1, parseInt(pG[2]));
+            var diffDaysG = Math.ceil((fObjG - hoyDateOnly) / (1000 * 60 * 60 * 24));
+            if (diffDaysG >= -5 && diffDaysG <= 15) {
+              proximosVencimientos.push({
+                tipo: 'GASTO',
+                id: g.ID_Gasto || g.id || '',
+                concepto: g.Descripcion_Gasto || g.descripcionGasto || 'Gasto programado',
+                montoPEN: mPEN,
+                fecha: f,
+                diasRestantes: diffDaysG,
+                entidad: idCuota ? 'Crédito Bancario' : (g.Metodo_Pago || 'Proveedor'),
+                idCuota: idCuota,
+                itemRef: g
+              });
+            }
+          }
+        }
+      }
+    });
+
+    // Compromisos totales pendientes
+    var totalCompromisosPendientesPEN = compromisosCuotasPendientesPEN + compromisosOtrosPendientesPEN;
+
+    // Saldo en mano equivalente consolidado
+    var saldoEnManoTotalPEN = saldoLiquidoPEN + (saldoLiquidoUSD * tc);
+
+    // Saldo Proyectado a fin de mes = Saldo en Mano + Ingresos pendientes - Compromisos pendientes
+    var saldoProyectadoFinMes = saldoEnManoTotalPEN + ingresosPendientesPEN - totalCompromisosPendientesPEN;
+
+    // Capacidad de Ahorro / Superávit del Periodo = Ingresos Totales - Gastos Totales (Reales + Programados)
+    var ingresosTotalesPeriodo = totalIngresosRealesPEN + ingresosPendientesPEN;
+    var gastosTotalesPeriodo = totalGastosRealesPEN + totalCompromisosPendientesPEN;
+    var superavitPeriodo = ingresosTotalesPeriodo - gastosTotalesPeriodo;
+    var tasaAhorroPct = ingresosTotalesPeriodo > 0 ? Math.max(0, (superavitPeriodo / ingresosTotalesPeriodo) * 100) : 0;
+
+    // Nivel de Endeudamiento en Cuotas Bancarias (Créditos personales) - Ciclo único O(N)
+    var planesActivos = [];
+    var compromisoMensualCuotas = 0;
+    var saldoPendienteTotalCuotas = 0;
+    var capitalAmortizadoTotalCuotas = 0;
+    if (filtroSegmento !== 'PROYECTOS') {
+      cuotas.forEach(function (p) {
+        var st = (p.Estado || 'ACTIVO').toUpperCase();
+        if (st === 'ACTIVO' || st === 'ATRASADO') {
+          planesActivos.push(p);
+          compromisoMensualCuotas += parseFloat(p.Monto_Cuota || p.montoCuota || 0);
+          saldoPendienteTotalCuotas += parseFloat(p.Saldo_Pendiente || p.saldoPendiente || 0);
+          capitalAmortizadoTotalCuotas += parseFloat(p.Monto_Pagado || p.montoPagado || 0);
+        }
+      });
+    }
+
+    // Ingreso mensual de referencia (ingresos del mes o promedio histórico)
+    var ingresoReferencia = ingresosTotalesPeriodo > 0 ? ingresosTotalesPeriodo : (calcularIngresoPromedioMensual() || 3500);
+    var ratioEndeudamientoCuotas = ingresoReferencia > 0 ? ((compromisoMensualCuotas / ingresoReferencia) * 100) : 0;
+
+    // Ordenar Próximos Vencimientos por cercanía
+    proximosVencimientos.sort(function (a, b) {
+      return a.diasRestantes - b.diasRestantes;
+    });
+
+    // Control Presupuestario por Proyectos (Burn Rate)
+    var presupConsolidado = 0;
+    var costoRealConsolidado = 0;
+    var proyectosAlerta80 = [];
+    proyectos.forEach(function (p) {
+      var est = String(p.Estado_Proyecto || '');
+      if (est.indexOf('06_Cerrado') === -1 && est.indexOf('05_Cancelado') === -1) {
+        var pTope = parseFloat(p.Presupuesto_Tope || 0);
+        var cReal = parseFloat(p.Costo_Real_Actual || p.Costo_Real || 0);
+        presupConsolidado += pTope;
+        costoRealConsolidado += cReal;
+        if (pTope > 0 && (cReal / pTope) >= 0.8) {
+          proyectosAlerta80.push({ id: p.ID_Proyecto, nombre: p.Nombre_Proyecto, ratio: (cReal / pTope) * 100 });
+        }
+      }
+    });
+    var burnRateGlobal = presupConsolidado > 0 ? (costoRealConsolidado / presupConsolidado) * 100 : 0;
+
+    return {
+      saldoEnManoTotalPEN: saldoEnManoTotalPEN,
+      saldoLiquidoPEN: saldoLiquidoPEN,
+      saldoLiquidoUSD: saldoLiquidoUSD,
+      totalIngresosRealesPEN: totalIngresosRealesPEN,
+      totalGastosRealesPEN: totalGastosRealesPEN,
+      saldoProyectadoFinMes: saldoProyectadoFinMes,
+      totalCompromisosPendientesPEN: totalCompromisosPendientesPEN,
+      compromisosCuotasPendientesPEN: compromisosCuotasPendientesPEN,
+      compromisosOtrosPendientesPEN: compromisosOtrosPendientesPEN,
+      countPendientesMes: countPendientesMes,
+      totalGastosHormigaMes: totalGastosHormigaMes,
+      superavitPeriodo: superavitPeriodo,
+      tasaAhorroPct: tasaAhorroPct,
+      planesActivos: planesActivos,
+      compromisoMensualCuotas: compromisoMensualCuotas,
+      saldoPendienteTotalCuotas: saldoPendienteTotalCuotas,
+      capitalAmortizadoTotalCuotas: capitalAmortizadoTotalCuotas,
+      ratioEndeudamientoCuotas: ratioEndeudamientoCuotas,
+      consumoPorCategoria: consumoPorCategoria,
+      proximosVencimientos: proximosVencimientos,
+      burnRateGlobal: burnRateGlobal,
+      presupConsolidado: presupConsolidado,
+      costoRealConsolidado: costoRealConsolidado,
+      proyectosAlerta80: proyectosAlerta80,
+      tipoCambioActual: tc
+    };
+  };
+
+  // ============================================================================
+  // SECCIÓN 5: NAVEGACIÓN ENTRE LAS 4 PESTAÑAS ESTRUCTURALES
+  // ============================================================================
+  window.cambiarTabFinanzas = function (tabId) {
+    // Normalizar llamadas de compatibilidad
+    if (tabId === 'ingresos') {
+      tabId = 'transacciones';
+      state.filtroTrxTipo = 'INGRESO';
+    } else if (tabId === 'gastos') {
+      tabId = 'transacciones';
+      state.filtroTrxTipo = 'GASTO';
+    } else if (tabId === 'metricas') {
+      tabId = 'general';
+    }
+
+    state.tabFinanzasActiva = tabId;
+
+    try {
+      localStorage.setItem('pmo_finanzas_tab_activa', tabId);
+    } catch (eStorage) {
+      console.warn('[cambiarTabFinanzas] Error guardando en localStorage:', eStorage);
+    }
+
+    // Actualizar botones de pestañas
+    document.querySelectorAll('.tab-btn-fin').forEach(function (btn) {
+      btn.classList.remove('bg-white', 'dark:bg-slate-800', 'text-slate-900', 'dark:text-white', 'font-bold', 'shadow-xs');
+      btn.classList.add('text-slate-600', 'dark:text-slate-400', 'font-semibold');
+    });
+
+    var activeBtn = document.getElementById('tab-btn-fin-' + tabId);
+    if (activeBtn) {
+      activeBtn.classList.add('bg-white', 'dark:bg-slate-800', 'text-slate-900', 'dark:text-white', 'font-bold', 'shadow-xs');
+      activeBtn.classList.remove('text-slate-600', 'dark:text-slate-400', 'font-semibold');
+    }
+
+    // Ocultar todas las vistas y mostrar la activa
+    document.querySelectorAll('.tab-fin-view').forEach(function (view) {
+      view.classList.add('hidden');
+    });
+
+    var activeView = document.getElementById('vista-fin-tab-' + tabId);
+    if (activeView) {
+      activeView.classList.remove('hidden');
+    }
+
+    // Si entramos a transacciones, sincronizar estado visual de píldoras
+    if (tabId === 'transacciones') {
+      sincronizarPildorasTransacciones();
+    }
+
+    renderTableroFinanciero();
+  };
+
+  // ============================================================================
+  // SECCIÓN 6: FILTROS ERGONÓMICOS DE LA PESTAÑA TRANSACCIONES & SEGMENTACIÓN
+  // ============================================================================
+  window.filtrarSegmentoFinanzas = function (segmento) {
+    state.filtroSegmentoFinanzas = (segmento || 'TODOS').toUpperCase();
+    try {
+      localStorage.setItem('pmo_finanzas_segmento', state.filtroSegmentoFinanzas);
+    } catch (eStorage) {
+      console.warn('[filtrarSegmentoFinanzas] Error guardando en localStorage:', eStorage);
+    }
+    sincronizarBarrasSegmentacionFinanzas();
+    renderTableroFinanciero();
+  };
+  window.setFiltroSegmentoFinanzas = window.filtrarSegmentoFinanzas;
+
+  // Restaurar y sincronizar filtros de Finanzas guardados en localStorage
+  function sincronizarFiltrosFinanzasDesdeStorage() {
+    try {
+      var tabGuardada = localStorage.getItem('pmo_finanzas_tab_activa');
+      if (tabGuardada && ['general', 'transacciones', 'cuotas', 'presupuesto'].indexOf(tabGuardada) !== -1) {
+        state.tabFinanzasActiva = tabGuardada;
+        document.querySelectorAll('.tab-btn-fin').forEach(function (btn) {
+          btn.classList.remove('bg-white', 'dark:bg-slate-800', 'text-slate-900', 'dark:text-white', 'font-bold', 'shadow-xs');
+          btn.classList.add('text-slate-600', 'dark:text-slate-400', 'font-semibold');
+        });
+        var activeBtn = document.getElementById('tab-btn-fin-' + tabGuardada);
+        if (activeBtn) {
+          activeBtn.classList.add('bg-white', 'dark:bg-slate-800', 'text-slate-900', 'dark:text-white', 'font-bold', 'shadow-xs');
+          activeBtn.classList.remove('text-slate-600', 'dark:text-slate-400', 'font-semibold');
+        }
+        document.querySelectorAll('.tab-fin-view').forEach(function (view) {
+          view.classList.add('hidden');
+        });
+        var activeView = document.getElementById('vista-fin-tab-' + tabGuardada);
+        if (activeView) {
+          activeView.classList.remove('hidden');
+        }
+      }
+
+      var segGuardado = localStorage.getItem('pmo_finanzas_segmento');
+      if (segGuardado && ['TODOS', 'PROYECTOS', 'PERSONAL'].indexOf(segGuardado.toUpperCase()) !== -1) {
+        state.filtroSegmentoFinanzas = segGuardado.toUpperCase();
+        if (typeof sincronizarBarrasSegmentacionFinanzas === 'function') {
+          sincronizarBarrasSegmentacionFinanzas();
+        }
+      }
+
+      var periodoGuardado = localStorage.getItem('pmo_finanzas_periodo');
+      if (periodoGuardado && ['MES_ACTUAL', 'MES_ANTERIOR', 'ULTIMOS_3_MESES', 'ANIO_ACTUAL', 'TODOS'].indexOf(periodoGuardado) !== -1) {
+        state.filtroMesFinanzas = periodoGuardado;
+        state.filtroTrxTiempo = periodoGuardado;
+        var selPeriodo = document.getElementById('filtro-mes-finanzas');
+        if (selPeriodo) selPeriodo.value = periodoGuardado;
+      }
+    } catch (eStorage) {
+      console.warn('[sincronizarFiltrosFinanzasDesdeStorage] Error leyendo de localStorage:', eStorage);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', sincronizarFiltrosFinanzasDesdeStorage);
+  } else {
+    sincronizarFiltrosFinanzasDesdeStorage();
+  }
+
+  window.sincronizarBarrasSegmentacionFinanzas = function () {
+    var seg = (state.filtroSegmentoFinanzas || 'TODOS').toUpperCase();
+
+    // 1. Barra de Navegación Maestra (Top Header)
+    ['todos', 'proyectos', 'personal'].forEach(function (s) {
+      var btn = document.getElementById('btn-seg-fin-' + s);
+      if (!btn) return;
+      var match = (s === 'todos' && seg === 'TODOS') ||
+        (s === 'proyectos' && seg === 'PROYECTOS') ||
+        (s === 'personal' && seg === 'PERSONAL');
+
+      btn.className = match
+        ? 'btn-seg-fin px-3 py-1 rounded-xl text-xs font-bold transition-all shadow-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white flex items-center gap-1.5'
+        : 'btn-seg-fin px-3 py-1 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5';
+    });
+
+    // 2. Píldoras de Transacciones (Tab Transacciones)
+    ['todos', 'proyectos', 'personal'].forEach(function (s) {
+      var pill = document.getElementById('pill-seg-' + s);
+      if (!pill) return;
+      var match = (s === 'todos' && seg === 'TODOS') ||
+        (s === 'proyectos' && seg === 'PROYECTOS') ||
+        (s === 'personal' && seg === 'PERSONAL');
+
+      pill.className = match
+        ? 'pill-trx-seg px-2.5 py-1 rounded-lg font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
+        : 'pill-trx-seg px-2.5 py-1 rounded-lg font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white';
+    });
+  };
+
+  window.filtrarTransaccionesPorTipo = function (tipo) {
+    state.filtroTrxTipo = tipo || 'TODOS';
+    sincronizarPildorasTransacciones();
+    renderTabTransaccionesUnificada();
+  };
+
+  window.filtrarTransaccionesPorEstado = function (estado) {
+    state.filtroTrxEstado = estado || 'TODOS';
+    sincronizarPildorasTransacciones();
+    renderTabTransaccionesUnificada();
+  };
+
+  window.filtrarTransaccionesPorTiempo = function (tiempo) {
+    state.filtroTrxTiempo = tiempo || 'ESTE_MES';
+    sincronizarPildorasTransacciones();
+    renderTabTransaccionesUnificada();
+  };
+
+  window.filtrarTransaccionesPorTexto = function (txt) {
+    state.filtroTrxTexto = (txt || '').toLowerCase().trim();
+    renderTabTransaccionesUnificada();
+  };
+
+  window.limpiarBusquedaTransacciones = function () {
+    var inp = document.getElementById('input-busqueda-transacciones');
+    if (inp) inp.value = '';
+    state.filtroTrxTexto = '';
+    renderTabTransaccionesUnificada();
+  };
+
+  /**
+   * Restablecimiento universal y reactivo de filtros de Finanzas (Atajo 'X')
+   */
+  window.limpiarFiltrosFinanzas = function () {
+    state.filtroSegmentoFinanzas = 'TODOS';
+    state.filtroTrxTipo = 'TODOS';
+    state.filtroTrxEstado = 'TODOS';
+    state.filtroTrxTiempo = 'HISTORICO';
+    state.filtroTrxTexto = '';
+    state.filtroMesFinanzas = 'TODOS';
+
+    var selMes = document.getElementById('filtro-mes-finanzas');
+    if (selMes) selMes.value = 'TODOS';
+
+    var inp = document.getElementById('input-busqueda-transacciones') || document.getElementById('input-busqueda-finanzas');
+    if (inp) {
+      inp.value = '';
+      inp.blur();
+    }
+
+    if (typeof sincronizarBarrasSegmentacionFinanzas === 'function') {
+      sincronizarBarrasSegmentacionFinanzas();
+    }
+    if (typeof sincronizarPildorasTransacciones === 'function') {
+      sincronizarPildorasTransacciones();
+    }
+    if (typeof renderTabTransaccionesUnificada === 'function') {
+      renderTabTransaccionesUnificada();
+    }
+    if (typeof renderTableroFinanciero === 'function') {
+      renderTableroFinanciero();
+    }
+  };
+
+  function sincronizarPildorasTransacciones() {
+    // Sincronizar segmento
+    if (typeof sincronizarBarrasSegmentacionFinanzas === 'function') {
+      sincronizarBarrasSegmentacionFinanzas();
+    }
+
+    // Tipo
+    ['todos', 'ingreso', 'gasto'].forEach(function (t) {
+      var btn = document.getElementById('pill-tipo-' + t);
+      if (!btn) return;
+      var match = (t === 'todos' && state.filtroTrxTipo === 'TODOS') ||
+        (t === 'ingreso' && state.filtroTrxTipo === 'INGRESO') ||
+        (t === 'gasto' && state.filtroTrxTipo === 'GASTO');
+      btn.className = match
+        ? 'pill-trx-tipo px-2.5 py-1 rounded-lg font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
+        : 'pill-trx-tipo px-2.5 py-1 rounded-lg font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+    });
+
+    // Estado
+    ['todos', 'real', 'programado'].forEach(function (e) {
+      var btn = document.getElementById('pill-estado-' + e);
+      if (!btn) return;
+      var match = (e === 'todos' && state.filtroTrxEstado === 'TODOS') ||
+        (e === 'real' && state.filtroTrxEstado === 'REAL') ||
+        (e === 'programado' && state.filtroTrxEstado === 'PROGRAMADO');
+      btn.className = match
+        ? 'pill-trx-estado px-2.5 py-1 rounded-lg font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
+        : 'pill-trx-estado px-2.5 py-1 rounded-lg font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+    });
+
+    // Tiempo
+    var mapTiempo = { 'ESTE_MES': 'mes', 'ESTA_SEMANA': 'semana', 'PROXIMOS_30': '30dias', 'HISTORICO': 'todos' };
+    ['mes', 'semana', '30dias', 'todos'].forEach(function (ti) {
+      var btn = document.getElementById('pill-tiempo-' + ti);
+      if (!btn) return;
+      var match = mapTiempo[state.filtroTrxTiempo] === ti;
+      btn.className = match
+        ? 'pill-trx-tiempo px-2 py-1 rounded-lg font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
+        : 'pill-trx-tiempo px-2 py-1 rounded-lg font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+    });
+  }
+
+  // ============================================================================
+  // SECCIÓN 7: RENDERIZADOR GENERAL DEL TABLERO FINANCIERO (ORQUESTADOR)
+  // ============================================================================
+  window.renderTableroFinanciero = function () {
+    sincronizarBarrasSegmentacionFinanzas();
+    var metricas = calcularMetricasSaludFinanciera();
+
+    // 1. ACTUALIZAR TOP CARDS DEL HERO
+    var elSaldoMano = document.getElementById('kpi-saldo-en-mano');
+    if (elSaldoMano) elSaldoMano.textContent = 'S/ ' + metricas.saldoEnManoTotalPEN.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    var elSubIngReal = document.getElementById('kpi-sub-ing-real');
+    if (elSubIngReal) elSubIngReal.textContent = 'S/ ' + metricas.totalIngresosRealesPEN.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    var elSubGasReal = document.getElementById('kpi-sub-gas-real');
+    if (elSubGasReal) elSubGasReal.textContent = 'S/ ' + metricas.totalGastosRealesPEN.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    var elSaldoProy = document.getElementById('kpi-saldo-proyectado-fin-mes');
+    if (elSaldoProy) {
+      elSaldoProy.textContent = 'S/ ' + metricas.saldoProyectadoFinMes.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      elSaldoProy.className = metricas.saldoProyectadoFinMes >= 0
+        ? 'text-2xl font-black font-mono text-cyan-600 dark:text-cyan-400 truncate'
+        : 'text-2xl font-black font-mono text-rose-600 dark:text-rose-400 truncate';
+    }
+
+    var elBadgeProy = document.getElementById('badge-proy-status');
+    if (elBadgeProy) {
+      elBadgeProy.textContent = metricas.saldoProyectadoFinMes >= 0 ? 'Superávit' : 'Déficit';
+      elBadgeProy.className = metricas.saldoProyectadoFinMes >= 0
+        ? 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300'
+        : 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+    }
+
+    var elTotalCompromisos = document.getElementById('kpi-total-compromisos-pendientes');
+    if (elTotalCompromisos) elTotalCompromisos.textContent = 'S/ ' + metricas.totalCompromisosPendientesPEN.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    var elBadgePendientes = document.getElementById('badge-count-pendientes');
+    if (elBadgePendientes) elBadgePendientes.textContent = metricas.countPendientesMes + ' Pendientes';
+
+    var elSubCuotasPend = document.getElementById('kpi-sub-cuotas-pend');
+    if (elSubCuotasPend) elSubCuotasPend.textContent = 'S/ ' + metricas.compromisosCuotasPendientesPEN.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    var elSubOtrosPend = document.getElementById('kpi-sub-otros-pend');
+    if (elSubOtrosPend) elSubOtrosPend.textContent = 'S/ ' + metricas.compromisosOtrosPendientesPEN.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    var elBimonPEN = document.getElementById('kpi-fin-bimon-pen');
+    if (elBimonPEN) elBimonPEN.textContent = 'S/ ' + metricas.saldoLiquidoPEN.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    var elBimonUSD = document.getElementById('kpi-fin-bimon-usd');
+    if (elBimonUSD) elBimonUSD.textContent = '$ ' + metricas.saldoLiquidoUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    var elTcVal = document.getElementById('kpi-fin-tc-val');
+    if (elTcVal) elTcVal.textContent = metricas.tipoCambioActual.toFixed(3);
+
+    // 2. ACTUALIZAR LOS 5 KPIS DE IMPACTO DECISIONAL (BENTO GRID)
+    // KPI 1: Semáforo de Liquidez
+    var dotSem = document.getElementById('dot-semaforo-liquidez');
+    var badgeSem = document.getElementById('badge-semaforo-liquidez');
+    var valSem = document.getElementById('val-semaforo-liquidez');
+    var descSem = document.getElementById('desc-semaforo-liquidez');
+    var barSem = document.getElementById('bar-semaforo-liquidez');
+
+    if (valSem) valSem.textContent = 'S/ ' + metricas.saldoProyectadoFinMes.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (metricas.saldoProyectadoFinMes >= 1000) {
+      if (dotSem) dotSem.className = 'w-3 h-3 rounded-full bg-emerald-500';
+      if (badgeSem) {
+        badgeSem.textContent = 'Holgado';
+        badgeSem.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+      }
+      if (descSem) descSem.textContent = 'Tus ingresos cubren con holgura los gastos y cuotas restantes del mes.';
+      if (barSem) { barSem.style.width = '85%'; barSem.className = 'bg-emerald-500 h-full rounded-full transition-all duration-500'; }
+    } else if (metricas.saldoProyectadoFinMes >= 0) {
+      if (dotSem) dotSem.className = 'w-3 h-3 rounded-full bg-amber-500';
+      if (badgeSem) {
+        badgeSem.textContent = 'Ajustado';
+        badgeSem.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+      }
+      if (descSem) descSem.textContent = 'Margen de maniobra estrecho. Evita consumos hormiga o imprevistos.';
+      if (barSem) { barSem.style.width = '45%'; barSem.className = 'bg-amber-500 h-full rounded-full transition-all duration-500'; }
+    } else {
+      if (dotSem) dotSem.className = 'w-3 h-3 rounded-full bg-rose-500 animate-ping';
+      if (badgeSem) {
+        badgeSem.textContent = 'Riesgo / Déficit';
+        badgeSem.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+      }
+      if (descSem) descSem.textContent = 'Alerta: Los compromisos pactados superan tu liquidez disponible.';
+      if (barSem) { barSem.style.width = '20%'; barSem.className = 'bg-rose-500 h-full rounded-full transition-all duration-500'; }
+    }
+
+    // KPI 2: Alerta Fuga / Gastos Hormiga
+    var valHormiga = document.getElementById('val-gastos-hormiga');
+    var badgeHormiga = document.getElementById('badge-gastos-hormiga');
+    var barHormiga = document.getElementById('bar-gastos-hormiga');
+    if (valHormiga) valHormiga.textContent = 'S/ ' + metricas.totalGastosHormigaMes.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    var pctHormiga = Math.min((metricas.totalGastosHormigaMes / 300) * 100, 100);
+    if (barHormiga) {
+      barHormiga.style.width = pctHormiga + '%';
+      barHormiga.className = pctHormiga > 100 ? 'bg-rose-500 h-full rounded-full transition-all duration-500' : (pctHormiga > 70 ? 'bg-amber-500 h-full rounded-full transition-all duration-500' : 'bg-emerald-500 h-full rounded-full transition-all duration-500');
+    }
+    if (badgeHormiga) {
+      if (metricas.totalGastosHormigaMes > 300) {
+        badgeHormiga.textContent = 'Fuga Detectada';
+        badgeHormiga.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+      } else if (metricas.totalGastosHormigaMes > 200) {
+        badgeHormiga.textContent = 'En Atención';
+        badgeHormiga.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+      } else {
+        badgeHormiga.textContent = 'Bajo Control';
+        badgeHormiga.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+      }
+    }
+
+    // KPI 3: Capacidad de Ahorro / Superávit
+    var valAhorro = document.getElementById('val-capacidad-ahorro');
+    var badgeAhorro = document.getElementById('badge-capacidad-ahorro');
+    var valRatioAhorro = document.getElementById('val-ratio-ahorro-pct');
+    var barAhorro = document.getElementById('bar-capacidad-ahorro');
+    if (valAhorro) valAhorro.textContent = 'S/ ' + metricas.superavitPeriodo.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (valRatioAhorro) valRatioAhorro.textContent = metricas.tasaAhorroPct.toFixed(1) + '%';
+    if (barAhorro) {
+      barAhorro.style.width = Math.min(metricas.tasaAhorroPct, 100) + '%';
+      barAhorro.className = metricas.tasaAhorroPct >= 20 ? 'bg-emerald-500 h-full rounded-full transition-all duration-500' : (metricas.tasaAhorroPct >= 10 ? 'bg-amber-500 h-full rounded-full transition-all duration-500' : 'bg-rose-500 h-full rounded-full transition-all duration-500');
+    }
+    if (badgeAhorro) {
+      if (metricas.tasaAhorroPct >= 20) {
+        badgeAhorro.textContent = 'Superávit Saludable';
+        badgeAhorro.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+      } else if (metricas.tasaAhorroPct >= 10) {
+        badgeAhorro.textContent = 'Aceptable';
+        badgeAhorro.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+      } else {
+        badgeAhorro.textContent = 'Alerta';
+        badgeAhorro.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300';
+      }
+    }
+
+    // KPI 4: Nivel de Endeudamiento en Cuotas
+    var valEndeuda = document.getElementById('val-endeudamiento-cuotas');
+    var badgeEndeuda = document.getElementById('badge-endeudamiento-cuotas');
+    var valCuotasSub = document.getElementById('val-cuotas-compromiso-sub');
+    var barEndeuda = document.getElementById('bar-endeudamiento-cuotas');
+    if (valEndeuda) valEndeuda.textContent = metricas.ratioEndeudamientoCuotas.toFixed(1) + '%';
+    if (valCuotasSub) valCuotasSub.textContent = 'S/ ' + metricas.compromisoMensualCuotas.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '/mes';
+    if (barEndeuda) {
+      barEndeuda.style.width = Math.min(metricas.ratioEndeudamientoCuotas, 100) + '%';
+      barEndeuda.className = metricas.ratioEndeudamientoCuotas > 40 ? 'bg-rose-500 h-full rounded-full transition-all duration-500' : (metricas.ratioEndeudamientoCuotas > 30 ? 'bg-amber-500 h-full rounded-full transition-all duration-500' : 'bg-violet-500 h-full rounded-full transition-all duration-500');
+    }
+    if (badgeEndeuda) {
+      if (metricas.ratioEndeudamientoCuotas > 40) {
+        badgeEndeuda.textContent = 'Sobrecarga Bancaria';
+        badgeEndeuda.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 animate-pulse';
+      } else if (metricas.ratioEndeudamientoCuotas > 30) {
+        badgeEndeuda.textContent = 'Precaución';
+        badgeEndeuda.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+      } else {
+        badgeEndeuda.textContent = 'Saludable';
+        badgeEndeuda.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+      }
+    }
+
+    // KPI 5: Radar de Categorías Críticas
+    renderRadarCategoriasCriticas(metricas.consumoPorCategoria);
+
+    // 3. ACTUALIZAR WIDGET DE PRÓXIMOS VENCIMIENTOS (15 DÍAS)
+    renderProximosVencimientos(metricas.proximosVencimientos);
+
+    // 4. DESPACHAR CONTENIDO DE LA PESTAÑA ACTIVA
+    var tabActiva = state.tabFinanzasActiva || 'general';
+    if (tabActiva === 'transacciones') {
+      renderTabTransaccionesUnificada();
+    } else if (tabActiva === 'cuotas') {
+      renderTabCuotas(metricas);
+    } else if (tabActiva === 'presupuesto') {
+      renderTabPresupuestos(metricas);
+    }
+  };
+
+  // ============================================================================
+  // SECCIÓN 8: RADAR DE CATEGORÍAS CRÍTICAS Y WIDGET DE VENCIMIENTOS
+  // ============================================================================
+  function renderRadarCategoriasCriticas(consumos) {
+    var cont = document.getElementById('lista-radar-categorias-criticas');
+    if (!cont) return;
+    cont.innerHTML = '';
+
+    var techos = state.presupuestosCategorias || {};
+    var cats = Object.keys(consumos);
+    if (cats.length === 0) {
+      cont.innerHTML = '<div class="col-span-full p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-xs text-slate-400 italic text-center">Sin consumos registrados en este periodo</div>';
+      return;
+    }
+
+    // Ordenar categorías por mayor consumo
+    cats.sort(function (a, b) {
+      return consumos[b] - consumos[a];
+    });
+
+    var fragment = document.createDocumentFragment();
+
+    // Mostrar las top 4
+    cats.slice(0, 4).forEach(function (cat) {
+      var monto = consumos[cat];
+      var techo = techos[cat] || (monto * 1.3);
+      var pct = techo > 0 ? (monto / techo) * 100 : 0;
+      var conf = CATEGORIAS_GASTO_CONFIG[cat] || CATEGORIAS_GASTO_CONFIG['Otros'];
+
+      var colorBar = pct >= 100 ? 'bg-rose-500' : (pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500');
+      var colorTxt = pct >= 100 ? 'text-rose-600 dark:text-rose-400 font-bold' : (pct >= 80 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300');
+
+      var item = document.createElement('div');
+      item.className = 'p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-col justify-between';
+      item.innerHTML =
+        '<div class="flex items-center justify-between text-xs mb-1">' +
+        '  <span class="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">' +
+        '    <span>' + conf.icon + '</span>' +
+        '    <span class="truncate max-w-[120px]">' + cat + '</span>' +
+        '  </span>' +
+        '  <span class="' + colorTxt + ' font-mono text-[11px]">' + pct.toFixed(0) + '%</span>' +
+        '</div>' +
+        '<div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden my-1">' +
+        '  <div class="' + colorBar + ' h-full rounded-full transition-all duration-500" style="width: ' + Math.min(pct, 100) + '%"></div>' +
+        '</div>' +
+        '<div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">' +
+        '  <span>S/ ' + monto.toFixed(0) + '</span>' +
+        '  <span>Tope: S/ ' + techo.toFixed(0) + '</span>' +
+        '</div>';
+      fragment.appendChild(item);
+    });
+
+    cont.appendChild(fragment);
+  }
+
+  function renderProximosVencimientos(lista) {
+    var cont = document.getElementById('lista-proximos-vencimientos-dashboard');
+    if (!cont) return;
+    cont.innerHTML = '';
+
+    if (!lista || lista.length === 0) {
+      cont.innerHTML = '<div class="text-xs text-slate-400 italic p-4 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl col-span-full">Sin compromisos pendientes de liquidación en los próximos 15 días</div>';
+      return;
+    }
+
+    var fragment = document.createDocumentFragment();
+
+    lista.slice(0, 6).forEach(function (v) {
+      var isIngreso = v.tipo === 'INGRESO';
+      var isUrgente = v.diasRestantes <= 3;
+      var isVencido = v.diasRestantes < 0;
+
+      var borderClass = isVencido
+        ? 'border-rose-300 dark:border-rose-800/80 bg-rose-50/30 dark:bg-rose-950/20'
+        : (isUrgente
+          ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50/30 dark:bg-amber-950/20'
+          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900');
+
+      var labelDias = isVencido
+        ? 'Vencido hace ' + Math.abs(v.diasRestantes) + 'd'
+        : (v.diasRestantes === 0 ? 'Vence HOY' : 'En ' + v.diasRestantes + ' días');
+
+      var item = document.createElement('div');
+      item.className = 'p-3 rounded-xl border ' + borderClass + ' flex flex-col justify-between shadow-2xs transition-all hover:shadow-xs';
+      item.innerHTML =
+        '<div class="flex items-start justify-between gap-2 mb-1.5">' +
+        '  <span class="text-[9px] font-bold px-2 py-0.5 rounded-md ' + (isIngreso ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300') + '">' + (isIngreso ? 'Ingreso Programado' : (v.idCuota ? 'Cuota Bancaria' : 'Gasto Programado')) + '</span>' +
+        '  <span class="text-[10px] font-bold ' + (isVencido || isUrgente ? 'text-rose-600 dark:text-rose-400 font-mono animate-pulse' : 'text-slate-400') + '">' + labelDias + '</span>' +
+        '</div>' +
+        '<div class="font-bold text-xs text-slate-800 dark:text-slate-100 truncate mb-1" title="' + v.concepto + '">' + v.concepto + '</div>' +
+        '<div class="flex items-baseline justify-between pt-1 border-t border-slate-100 dark:border-slate-800">' +
+        '  <span class="text-[10px] text-slate-400 truncate max-w-[110px]">' + v.entidad + '</span>' +
+        '  <span class="font-black font-mono tabular-nums text-xs ' + (isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400') + '">S/ ' + v.montoPEN.toFixed(2) + '</span>' +
+        '</div>' +
+        '<div class="pt-2 mt-1 flex justify-end">' +
+        '  <button type="button" onclick="event.stopPropagation(); abrirModalConciliarTransaccion(' + JSON.stringify(v.itemRef).replace(/"/g, '&quot;') + ')" class="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-50 dark:bg-cyan-950/60 hover:bg-cyan-100 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/60 transition active:scale-95 flex items-center gap-1"><svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span>Conciliar</span></button>' +
+        '</div>';
+      fragment.appendChild(item);
+    });
+
+    cont.appendChild(fragment);
+  }
+
+  // ============================================================================
+  // SECCIÓN 9: PESTAÑA TRANSACCIONES (COEXISTENCIA REAL VS PROGRAMADO)
+  // ============================================================================
+  window.renderTabTransaccionesUnificada = function () {
+    var cont = document.getElementById('lista-transacciones-unificada');
+    var tabBadge = document.getElementById('tab-count-transacciones');
+    if (!cont) return;
+    cont.innerHTML = '';
+
+    var gastos = (window.state && Array.isArray(state.gastos)) ? state.gastos : [];
+    var ingresos = (window.state && Array.isArray(state.ingresos)) ? state.ingresos : [];
+
+    var filtroTipo = state.filtroTrxTipo || 'TODOS';
+    var filtroEstado = state.filtroTrxEstado || 'TODOS';
+    var filtroTiempo = state.filtroMesFinanzas || state.filtroTrxTiempo || 'MES_ACTUAL';
+    var filtroTexto = (state.filtroTrxTexto || '').toLowerCase().trim();
+
+    var coleccionUnificada = [];
+
+    // Recopilar Gastos
+    if (filtroTipo === 'TODOS' || filtroTipo === 'GASTO') {
+      gastos.forEach(function (g) {
+        var f = g.Fecha_Gasto || g.fechaGasto || g.fecha || '';
+        var isReal = g.Conciliado === true || (g.Estado_Pago || '').toLowerCase() === 'pagado' || (g.Estado || '').toUpperCase() === 'EJECUTADO';
+        var isProgramado = !isReal;
+        var idProyG = String(g.ID_Proyecto || g.idProyecto || '').trim().toUpperCase();
+        var idTarG = String(g.ID_Tarea || g.idTarea || g.ID_Entidad_Vinculada || g.idEntidadVinculada || '').trim().toUpperCase();
+        var idHitG = String(g.ID_Hito || g.idHito || '').trim().toUpperCase();
+        var rawTg = String(g.tipoGasto || g.Tipo_Gasto || g.Clasificacion_Origen || g.clasificacionOrigen || '').trim().toLowerCase();
+
+        var esProyG = (idProyG && idProyG !== 'PERSONAL' && idProyG !== 'VIDA') ||
+                      (idTarG && idTarG.startsWith('TAR-')) ||
+                      (idHitG && idHitG !== 'PERSONAL' && idHitG !== '') ||
+                      rawTg.includes('proy') || rawTg.includes('tarea');
+
+        var tipoG = esProyG ? 'Tarea Proyecto' : 'Actividad Personal';
+
+        coleccionUnificada.push({
+          tipoFlujo: 'GASTO',
+          tipoGasto: tipoG,
+          id: g.ID_Gasto || g.id || '',
+          descripcion: g.Descripcion_Gasto || g.descripcionGasto || g.descripcion || 'Gasto registrado',
+          categoria: g.Categoria_Gasto || g.categoriaGasto || g.categoria || 'Otros',
+          fecha: f,
+          montoOriginal: parseFloat(g.Monto_Original || g.montoOriginal || g.monto || 0),
+          monedaOriginal: (g.Moneda_Original || g.monedaOriginal || 'PEN').toUpperCase(),
+          tipoCambio: parseFloat(g.Tipo_Cambio || g.tipoCambio || state.tipoCambioActual || 1),
+          montoPEN: parseFloat(g.Monto_PEN || g.montoPEN || 0),
+          montoReal: parseFloat(g.Monto_Real || g.montoReal || 0),
+          isReal: isReal,
+          isProgramado: isProgramado,
+          conciliado: g.Conciliado === true,
+          idCuota: g.ID_Cuota || g.idCuota || '',
+          idProyecto: g.ID_Proyecto || g.idProyecto || '',
+          metodoPago: g.Metodo_Pago || g.metodoPago || 'Transferencia Bancaria',
+          comprobanteUrl: g.Comprobante_URL || g.comprobanteUrl || '',
+          rawItem: g
+        });
+      });
+    }
+
+    // Recopilar Ingresos
+    if (filtroTipo === 'TODOS' || filtroTipo === 'INGRESO') {
+      ingresos.forEach(function (ing) {
+        var f = ing.Fecha_Ingreso || ing.fechaIngreso || ing.fecha || '';
+        var isReal = ing.Conciliado === true || (ing.Estado_Cobro || ing.Estado_Pago || '').toLowerCase() === 'cobrado' || (ing.Estado || '').toUpperCase() === 'EJECUTADO';
+        var isProgramado = !isReal;
+        var idOrigenVincIng = String(ing.ID_Origen_Vinculado || ing.idOrigenVinculado || ing.ID_Proyecto_Asociado || ing.idProyectoAsociado || ing.ID_Proyecto || '').trim();
+        var tipoOrigenIng = String(ing.Tipo_Origen || ing.tipoOrigen || '').trim().toUpperCase();
+        var tipoGastoNormalizado = (tipoOrigenIng === 'PROYECTO' || (idOrigenVincIng && idOrigenVincIng !== 'PERSONAL' && idOrigenVincIng !== 'NINGUNO')) ? 'Proyecto' : 'Personal';
+
+        var descIng = ing.Descripcion_Ingreso || ing.Descripcion || ing.descripcion || ing.Concepto || 'Ingreso registrado';
+        var catIng = ing.Categoria_Ingreso || ing.categoriaIngreso || ing.Categoria || ing.Origen_Fuente || ing.origenFuente || ing.fuente || 'Otros';
+        var metCobro = ing.Metodo_Cobro || ing.metodoCobro || ing.Metodo_Pago || ing.Cuenta_Destino || ing.cuentaDestino || 'BCP';
+
+        coleccionUnificada.push({
+          tipoFlujo: 'INGRESO',
+          tipoGasto: tipoGastoNormalizado,
+          tipoOrigen: tipoOrigenIng || (tipoGastoNormalizado === 'Proyecto' ? 'PROYECTO' : 'LIBRE_CORRIENTE'),
+          idOrigenVinculado: idOrigenVincIng,
+          id: ing.ID_Ingreso || ing.id || '',
+          descripcion: descIng,
+          categoria: catIng,
+          fecha: f,
+          montoOriginal: parseFloat(ing.Monto_Original || ing.montoOriginal || ing.monto || 0),
+          monedaOriginal: (ing.Moneda_Original || ing.monedaOriginal || 'PEN').toUpperCase(),
+          tipoCambio: parseFloat(ing.Tipo_Cambio || ing.tipoCambio || state.tipoCambioActual || 1),
+          montoPEN: parseFloat(ing.Monto_PEN || ing.montoPEN || 0),
+          montoReal: parseFloat(ing.Monto_Real || ing.montoReal || 0),
+          isReal: isReal,
+          isProgramado: isProgramado,
+          conciliado: ing.Conciliado === true,
+          idCuota: '',
+          idProyecto: idOrigenVincIng,
+          metodoPago: metCobro,
+          metodoCobro: metCobro,
+          comprobanteUrl: '',
+          rawItem: ing
+        });
+      });
+    }
+
+
+
+    // Filtrar Colección
+    var filtradas = coleccionUnificada.filter(function (item) {
+      // Regla estricta: todo objeto completado/conciliado con más de 10 días desaparece del canvas activo
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(item.rawItem || item)) {
+        return false;
+      }
+
+      // Filtro Segmento / Origen
+      var filtroSeg = (state.filtroSegmentoFinanzas || 'TODOS').toUpperCase();
+      if (filtroSeg === 'PROYECTOS') {
+        if (item.tipoFlujo === 'GASTO' && item.tipoGasto !== 'Tarea Proyecto') return false;
+        if (item.tipoFlujo === 'INGRESO' && item.tipoGasto !== 'Proyecto') return false;
+      } else if (filtroSeg === 'PERSONAL') {
+        if (item.tipoFlujo === 'GASTO' && item.tipoGasto !== 'Actividad Personal') return false;
+        if (item.tipoFlujo === 'INGRESO' && item.tipoGasto !== 'Personal') return false;
+      }
+
+      // Filtro Estado
+      if (filtroEstado === 'REAL' && !item.isReal) return false;
+      if (filtroEstado === 'PROGRAMADO' && !item.isProgramado) return false;
+
+      // Filtro Temporal (no filtrar transacciones optimistas recién creadas)
+      if (!item.rawItem || !item.rawItem._isOptimistic) {
+        if (!window.pertinecePeriodoFinanzas(item.fecha, filtroTiempo)) return false;
+      }
+
+      // Filtro Búsqueda
+      if (filtroTexto) {
+        var searchable = (item.descripcion + ' ' + item.categoria + ' ' + item.id + ' ' + item.metodoPago + ' ' + item.idProyecto + ' ' + item.idCuota + ' ' + (item.tipoGasto || '')).toLowerCase();
+        if (searchable.indexOf(filtroTexto) === -1) return false;
+      }
+      return true;
+    });
+
+    // Ordenar por fecha descendente
+    filtradas.sort(function (a, b) {
+      var tA = a.fecha ? new Date(a.fecha).getTime() : 0;
+      var tB = b.fecha ? new Date(b.fecha).getTime() : 0;
+      return tB - tA;
+    });
+
+    if (tabBadge) tabBadge.textContent = filtradas.length;
+
+    if (filtradas.length === 0) {
+      cont.innerHTML =
+        '<div class="col-span-full text-center py-14 px-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl select-none">' +
+        '  <div class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto mb-2.5 text-slate-400 dark:text-slate-500 border border-slate-200/60 dark:border-slate-700/60">' +
+        '    <svg class="portal-icon-lg" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v.5"/><path d="M12 6v.5"/></svg>' +
+        '  </div>' +
+        '  <div class="text-xs font-semibold text-slate-700 dark:text-slate-300">Sin transacciones registradas</div>' +
+        '  <div class="text-[11px] text-slate-400 mt-0.5">No hay movimientos que coincidan con los filtros aplicados</div>' +
+        '</div>';
+      return;
+    }
+
+    var fragment = document.createDocumentFragment();
+    filtradas.forEach(function (trx) {
+      fragment.appendChild(crearTarjetaTransaccionUnificada(trx));
+    });
+    cont.appendChild(fragment);
+  };
+
+  // Constructor de Tarjeta Inteligente Unificada (Coexistencia Real / Programado)
+  function crearTarjetaTransaccionUnificada(trx) {
+    var isIngreso = trx.tipoFlujo === 'INGRESO';
+    var isReal = trx.isReal;
+    var isProgramado = trx.isProgramado;
+
+    var mOrig = trx.montoOriginal;
+    var monOrig = trx.monedaOriginal;
+    var tc = trx.tipoCambio;
+    var mPEN = trx.montoPEN || (monOrig === 'USD' ? mOrig * tc : mOrig);
+
+    var diasRestantes = 0;
+    var isVencido = false;
+    if (isProgramado && trx.fecha) {
+      var hoy = new Date();
+      var hoyD = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+      var p = trx.fecha.split('T')[0].split('-');
+      if (p.length === 3) {
+        var fD = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]));
+        diasRestantes = Math.ceil((fD - hoyD) / (1000 * 60 * 60 * 24));
+        isVencido = diasRestantes < 0;
+      }
+    }
+
+    var card = document.createElement('div');
+    var borderClass = '';
+    var badgeEstado = '';
+
+    var isProyecto = trx.tipoGasto === 'Tarea Proyecto' || trx.tipoGasto === 'Proyecto';
+    var accentBorder = isProyecto
+      ? 'border-l-[5px] border-l-indigo-500 hover:border-l-indigo-600 dark:border-l-indigo-400'
+      : 'border-l-[5px] border-l-emerald-500 hover:border-l-emerald-600 dark:border-l-emerald-400';
+
+    if (isReal) {
+      borderClass = 'border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 shadow-xs hover:shadow-md ' + accentBorder;
+      badgeEstado = '<span class="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1 shadow-2xs">' +
+        '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span>Conciliado</span></span>';
+    } else {
+      if (isVencido) {
+        borderClass = 'border border-dashed border-rose-300 dark:border-rose-800/80 bg-rose-50/25 dark:bg-rose-950/20 shadow-xs hover:shadow-md ' + accentBorder;
+        badgeEstado = '<span class="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 animate-pulse flex items-center gap-1">' +
+          '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Vencido hace ' + Math.abs(diasRestantes) + 'd</span></span>';
+      } else {
+        borderClass = 'border border-dashed border-amber-300 dark:border-amber-700/80 bg-amber-50/20 dark:bg-amber-950/15 shadow-xs hover:shadow-md ' + accentBorder;
+        badgeEstado = '<span class="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 flex items-center gap-1">' +
+          '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>' + (diasRestantes === 0 ? 'Vence Hoy' : 'Vence en ' + diasRestantes + 'd') + '</span></span>';
+      }
+    }
+
+    var colorBarra = isProyecto ? 'bg-indigo-500' : 'bg-emerald-500';
+
+    card.className = 'portal-surface group p-3.5 pl-4 rounded-2xl transition-all duration-150 ease-out hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between relative overflow-hidden select-none ' + borderClass;
+
+    // Indicador visual de transacción archivada (>10 días conciliada)
+    if (typeof esElementoArchivado === 'function' && esElementoArchivado(trx.rawItem || trx)) {
+      card.classList.add('opacity-60', 'border-dashed');
+    }
+
+    card.onclick = function (e) {
+      if (e.target.closest('.btn-check-conciliar') || e.target.closest('.btn-link-comprobante')) return;
+      abrirDrawerDetalleTransaccion(trx.tipoFlujo.toLowerCase(), trx.id);
+    };
+
+    var catConf = isIngreso
+      ? (FUENTES_INGRESO_CONFIG[trx.categoria] || FUENTES_INGRESO_CONFIG['Otros'])
+      : (CATEGORIAS_GASTO_CONFIG[trx.categoria] || CATEGORIAS_GASTO_CONFIG['Otros']);
+
+    var html = '';
+    html += '<div class="absolute left-0 top-0 bottom-0 w-1 ' + colorBarra + ' transition-all duration-150 group-hover:w-1.5"></div>';
+    
+    // Fila 1: Badges Semánticos y Estado
+    html += '<div class="flex items-center justify-between gap-1.5 mb-2 flex-wrap">';
+    html += '  <div class="flex items-center gap-1.5 flex-wrap min-w-0">';
+
+    // Distintivo Visual Notorio: Proyecto vs Personal
+    if (isProyecto) {
+      html += '    <span class="text-[9.5px] font-bold px-2 py-0.5 rounded-md border bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border-indigo-200/70 inline-flex items-center gap-1 font-mono shrink-0 shadow-2xs"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg> PROYECTO</span>';
+    } else {
+      html += '    <span class="text-[9.5px] font-bold px-2 py-0.5 rounded-md border bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200/70 inline-flex items-center gap-1 font-mono shrink-0 shadow-2xs"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> PERSONAL</span>';
+    }
+
+    html += '    <span class="text-[9.5px] font-bold px-2 py-0.5 rounded-full ' + catConf.bgLight + ' border border-slate-200/60 dark:border-slate-700/60 flex items-center gap-1 shadow-2xs">';
+    html += '      <span>' + catConf.icon + '</span>';
+    html += '      <span>' + (catConf.label || trx.categoria) + '</span>';
+    html += '    </span>';
+
+    if (trx.idCuota) {
+      html += '    <span class="text-[9px] font-bold px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 dark:bg-violet-950/80 dark:text-violet-300 border border-violet-200/60 font-mono inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg> Cuota Bancaria</span>';
+    } else if (trx.idProyecto && trx.idProyecto.toUpperCase() !== 'PERSONAL') {
+      html += '    <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200/50 font-mono truncate max-w-[130px] inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg> ' + trx.idProyecto + '</span>';
+    }
+
+    var badgeNotasTrx = (typeof generarBadgeNotasVinculadas === 'function')
+      ? generarBadgeNotasVinculadas(trx.id, trx.tipoFlujo === 'GASTO' ? 'GASTO' : 'INGRESO')
+      : '';
+    if (badgeNotasTrx) {
+      html += '    ' + badgeNotasTrx;
+    }
+
+    html += '  </div>';
+    html += '  <div class="flex items-center gap-1 shrink-0 ml-auto">' + badgeEstado + '</div>';
+    html += '</div>';
+
+    // Fila 2: Descripción y concepto
+    html += '<div class="font-bold text-slate-800 dark:text-slate-100 text-xs line-clamp-2 mb-2 leading-snug" title="' + trx.descripcion + '">';
+    html += trx.descripcion;
+    html += '</div>';
+
+    // Fila 3: Importes (Destacado y Soles Oficial)
+    html += '<div class="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-end justify-between gap-2">';
+    html += '  <div>';
+
+    var colorMonto = isIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+    var signo = isIngreso ? '+' : '-';
+
+    if (monOrig === 'USD') {
+      html += '    <div class="font-mono font-black text-sm tabular-nums ' + colorMonto + '">' + signo + ' $ ' + mOrig.toFixed(2) + '</div>';
+      html += '    <div class="text-[10px] font-mono tabular-nums text-slate-500 dark:text-slate-400 mt-0.5">≈ S/ ' + mPEN.toFixed(2) + '</div>';
+    } else {
+      html += '    <div class="font-mono font-black text-sm tabular-nums ' + colorMonto + '">' + signo + ' S/ ' + mPEN.toFixed(2) + '</div>';
+      if (!isReal) {
+        html += '    <div class="text-[9px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">No afecta liquidez hoy</div>';
+      }
+    }
+    html += '  </div>';
+
+    // Fila 3 Derecha: Fecha y Medio de Pago (Elementos hermanos)
+    html += '  <div class="flex flex-col items-end gap-1 text-[10px] text-slate-400 dark:text-slate-500 font-mono">';
+    html += '    <span class="inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg> ' + (trx.fecha ? trx.fecha.split('T')[0] : '--') + '</span>';
+    var svgMetodo = isIngreso
+      ? '<svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>';
+    html += '    <span class="text-[9px] px-2 py-0.5 rounded-md bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 truncate max-w-[120px] font-medium inline-flex items-center gap-1">' + svgMetodo + ' ' + trx.metodoPago + '</span>';
+    html += '  </div>';
+    html += '</div>';
+
+    // Fila 4: Checkbox Interactivo de Conciliación Manual (Para movimientos programados)
+    if (isProgramado) {
+      html += '<div class="mt-2.5 pt-2 border-t border-amber-200/40 dark:border-amber-900/40 flex items-center justify-between gap-2 bg-amber-50/40 dark:bg-amber-950/20 p-2 rounded-xl">';
+      html += '  <span class="text-[10px] font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Pendiente de liquidación</span>';
+      html += '  <button type="button" onclick="event.stopPropagation(); abrirModalConciliarTransaccion(' + JSON.stringify(trx.rawItem).replace(/"/g, '&quot;') + ')" class="btn-check-conciliar px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 active:scale-95 text-white font-bold text-[10px] rounded-lg shadow-2xs flex items-center gap-1 transition">';
+      html += '    <svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span>Conciliar</span>';
+      html += '  </button>';
+      html += '</div>';
+    } else if (trx.conciliado) {
+      html += '<div class="mt-2 pt-1 flex items-center justify-end text-[9px] text-emerald-600 dark:text-emerald-400 font-mono font-medium">';
+      html += '  <span class="inline-flex items-center gap-1"><svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Conciliado con éxito</span>';
+      html += '</div>';
+    }
+
+    card.innerHTML = html;
+    return card;
+  }
+
+  // ============================================================================
+  window.abrirModalConciliarTransaccion = function (item) {
+    if (!item) return;
+
+    var elIdGasto = document.getElementById('conciliar-id-gasto');
+    var elIdIngreso = document.getElementById('conciliar-id-ingreso');
+    var elTipo = document.getElementById('conciliar-tipo');
+    var elTxtConcepto = document.getElementById('conciliar-concepto-texto');
+    var elTxtMontoEst = document.getElementById('conciliar-monto-estimado');
+    var elInpMontoReal = document.getElementById('conciliar-monto-real');
+    var elInpFechaReal = document.getElementById('conciliar-fecha-real');
+    var elSelMetodo = document.getElementById('conciliar-metodo-pago');
+
+    var isGasto = item.ID_Gasto || item.Categoria_Gasto || item.descripcionGasto;
+    var tipoStr = isGasto ? 'GASTO' : 'INGRESO';
+    var concepto = item.Descripcion_Gasto || item.Descripcion_Ingreso || item.Descripcion || item.descripcion || 'Transacción';
+    var montoEstimado = parseFloat(item.Monto_PEN || item.montoPEN || item.Monto_Original || item.montoOriginal || 0);
+
+    if (elIdGasto) elIdGasto.value = item.ID_Gasto || '';
+    if (elIdIngreso) elIdIngreso.value = item.ID_Ingreso || '';
+    if (elTipo) elTipo.value = tipoStr;
+
+    if (elTxtConcepto) elTxtConcepto.textContent = concepto;
+    if (elTxtMontoEst) elTxtMontoEst.textContent = 'S/ ' + montoEstimado.toFixed(2);
+    if (elInpMontoReal) elInpMontoReal.value = montoEstimado.toFixed(2);
+    if (elInpFechaReal) elInpFechaReal.value = new Date().toISOString().split('T')[0];
+
+    if (elSelMetodo) {
+      elSelMetodo.value = item.Metodo_Pago || item.Cuenta_Destino || 'BCP';
+    }
+
+    openModal('modal-conciliar-transaccion');
+  };
+
+  // Listener del formulario de Conciliación Manual con Mutación Optimista Inmediata
+  var fConciliar = document.getElementById('form-conciliar-transaccion');
+  if (fConciliar) {
+    fConciliar.addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      var idGasto = (document.getElementById('conciliar-id-gasto') || {}).value || '';
+      var idIngreso = (document.getElementById('conciliar-id-ingreso') || {}).value || '';
+      var tipo = (document.getElementById('conciliar-tipo') || {}).value || 'GASTO';
+      var montoReal = parseFloat((document.getElementById('conciliar-monto-real') || {}).value) || 0;
+      var fechaReal = (document.getElementById('conciliar-fecha-real') || {}).value || new Date().toISOString().split('T')[0];
+      var metodoPago = (document.getElementById('conciliar-metodo-pago') || {}).value || 'BCP';
+
+      var payload = {
+        idGasto: idGasto,
+        idIngreso: idIngreso,
+        tipo: tipo,
+        montoReal: montoReal,
+        fechaReal: fechaReal,
+        metodoPago: metodoPago
+      };
+
+      // 1. MUTACIÓN OPTIMISTA INMEDIATA EN MEMORIA
+      var itemMutado = null;
+      var idCuotaAfectada = '';
+
+      if (idGasto && Array.isArray(state.gastos)) {
+        itemMutado = state.gastos.find(function (g) { return (g.ID_Gasto || g.id) === idGasto; });
+        if (itemMutado) {
+          itemMutado.Conciliado = true;
+          itemMutado.Estado_Pago = 'Pagado';
+          itemMutado.Monto_PEN = montoReal;
+          itemMutado.Monto_Real = montoReal;
+          itemMutado.Fecha_Gasto = fechaReal;
+          itemMutado.Metodo_Pago = metodoPago;
+          idCuotaAfectada = itemMutado.ID_Cuota || '';
+        }
+      }
+
+      if (idIngreso && Array.isArray(state.ingresos)) {
+        itemMutado = state.ingresos.find(function (i) { return (i.ID_Ingreso || i.id) === idIngreso; });
+        if (itemMutado) {
+          itemMutado.Conciliado = true;
+          itemMutado.Estado_Cobro = 'Cobrado';
+          itemMutado.estadoCobro = 'Cobrado';
+          itemMutado.Estado_Pago = 'Cobrado';
+          itemMutado.Estado = 'Cobrado';
+          itemMutado.Monto_PEN = montoReal;
+          itemMutado.montoPEN = montoReal;
+          itemMutado.Monto_Moneda_Base = montoReal;
+          itemMutado.Monto_Real = montoReal;
+          itemMutado.Fecha_Ingreso = fechaReal;
+          itemMutado.fechaIngreso = fechaReal;
+          itemMutado.Metodo_Cobro = metodoPago;
+          itemMutado.metodoCobro = metodoPago;
+          itemMutado.Metodo_Pago = metodoPago;
+          itemMutado.Cuenta_Destino = metodoPago;
+        }
+      }
+
+      // Si pertenece a un plan de cuotas, avanzar el progreso en memoria
+      if (idCuotaAfectada && Array.isArray(state.cuotas)) {
+        var plan = state.cuotas.find(function (c) { return (c.ID_Cuota || c.id) === idCuotaAfectada; });
+        if (plan) {
+          plan.Cuotas_Pagadas = (plan.Cuotas_Pagadas || 0) + 1;
+          plan.Monto_Pagado = (plan.Monto_Pagado || 0) + montoReal;
+          plan.Saldo_Pendiente = Math.max(0, (plan.Saldo_Pendiente || 0) - montoReal);
+          if (plan.Cuotas_Pagadas >= plan.Num_Cuotas) plan.Estado = 'COMPLETADO';
+        }
+      }
+
+      // 2. Cerrar Modal y Recalcular Pantalla Inmediatamente (Sin F5)
+      closeModal('modal-conciliar-transaccion');
+      renderTableroFinanciero();
+
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('success', 'Transacción Conciliada', 'Liquidado: S/ ' + montoReal.toFixed(2) + ' (' + metodoPago + ')');
+      }
+
+      // 3. PERSISTENCIA EN BACKEND Y ACTUALIZACIÓN EN GOOGLE CALENDAR
+      callBackend('conciliartransaccion', payload, function (res) {
+        if (res && res.success) {
+          renderTableroFinanciero();
+        } else {
+          if (typeof mostrarToastOperativo === 'function') {
+            mostrarToastOperativo('error', 'Error en sincronización', (res && res.error) || 'Ocurrió un error al persistir');
+          }
+        }
+      }, function () {
+        // En caso de fallo de red
+        if (typeof mostrarToastOperativo === 'function') {
+          mostrarToastOperativo('warning', 'Sin conexión inmediata', 'La conciliación se procesará al reconectar.');
+        }
+      });
+    });
+  }
+
+  // ============================================================================
+  // SECCIÓN 11: CONTROL DE CUOTAS Y CRÉDITOS (ENFOQUE REAL BANCARIO)
+  // ============================================================================
+  window.renderTabCuotas = function (metricasInput) {
+    var cont = document.getElementById('lista-planes-cuotas');
+    var tabBadge = document.getElementById('tab-count-cuotas');
+    if (!cont) return;
+    cont.innerHTML = '';
+
+    var planes = (window.state && Array.isArray(state.cuotas)) ? state.cuotas : [];
+    var metricas = metricasInput || calcularMetricasSaludFinanciera();
+
+    // Actualizar KPIs de Cuotas
+    var elActivas = document.getElementById('kpi-cuotas-activas');
+    var elMensual = document.getElementById('kpi-cuotas-mensual');
+    var elAmortizado = document.getElementById('kpi-cuotas-amortizado');
+    var elDeuda = document.getElementById('kpi-cuotas-deuda');
+
+    if (elActivas) elActivas.textContent = metricas.planesActivos.length;
+    if (elMensual) elMensual.textContent = 'S/ ' + metricas.compromisoMensualCuotas.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (elAmortizado) elAmortizado.textContent = 'S/ ' + metricas.capitalAmortizadoTotalCuotas.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (elDeuda) elDeuda.textContent = 'S/ ' + metricas.saldoPendienteTotalCuotas.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (tabBadge) tabBadge.textContent = metricas.planesActivos.length;
+
+    if (planes.length === 0) {
+      cont.innerHTML = '<div class="col-span-full text-center py-16 text-xs text-slate-400 dark:text-slate-500 italic border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">' +
+        '<div class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto mb-2 text-slate-400 dark:text-slate-500 border border-slate-200/60 dark:border-slate-700/60"><svg class="portal-icon-lg" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg></div>' +
+        'Sin planes de cuotas bancarias. Registra tu primer crédito para seguimiento automatizado.' +
+        '</div>';
+      return;
+    }
+
+    var fragment = document.createDocumentFragment();
+    planes.forEach(function (plan) {
+      fragment.appendChild(crearTarjetaPlanCuotas(plan));
+    });
+    cont.appendChild(fragment);
+  };
+
+  function crearTarjetaPlanCuotas(plan) {
+    var card = document.createElement('div');
+    var isCompletado = (plan.Estado || '').toUpperCase() === 'COMPLETADO';
+    var isAtrasado = (plan.Estado || '').toUpperCase() === 'ATRASADO';
+
+    var borderColor = isAtrasado ? 'border-rose-300 dark:border-rose-800/80 bg-rose-50/20' :
+      (isCompletado ? 'border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/15' : 'border-violet-200 dark:border-violet-800/60 bg-white dark:bg-slate-900');
+
+    card.className = 'portal-surface rounded-2xl border ' + borderColor + ' p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between';
+
+    var totalCuotas = parseInt(plan.Num_Cuotas || plan.numCuotas || 1);
+    var cuotasPagadas = parseInt(plan.Cuotas_Pagadas || plan.cuotasPagadas || 0);
+    var pctAvance = totalCuotas > 0 ? Math.min(100, Math.round((cuotasPagadas / totalCuotas) * 100)) : 0;
+
+    var montoCuota = parseFloat(plan.Monto_Cuota || plan.montoCuota || 0);
+    var montoPagado = parseFloat(plan.Monto_Pagado || plan.montoPagado || 0);
+    var saldoPendiente = parseFloat(plan.Saldo_Pendiente || plan.saldoPendiente || (montoCuota * (totalCuotas - cuotasPagadas)));
+
+    var idPlan = plan.ID_Cuota || plan.id || '';
+    var banco = plan.Entidad_Financiera || plan.entidadFinanciera || 'Banco';
+    var concepto = plan.Nombre_Plan || plan.nombrePlan || 'Crédito';
+
+    card.id = 'plan-card-' + idPlan;
+
+    // Generar Cronograma / Racha de Cuotas Visual
+    var rachaDots = '';
+    var maxDots = Math.min(totalCuotas, 36);
+    for (var i = 1; i <= maxDots; i++) {
+      if (i <= cuotasPagadas) {
+        rachaDots += '<span class="w-3 h-3 rounded-full bg-violet-600 text-white flex items-center justify-center font-bold" title="Cuota ' + i + ' pagada"><svg class="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>';
+      } else {
+        rachaDots += '<span class="w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700" title="Cuota ' + i + ' pendiente"></span>';
+      }
+    }
+
+    card.innerHTML =
+      '<div class="flex items-start justify-between gap-2 mb-2">' +
+      '  <div>' +
+      '    <div class="flex items-center gap-2">' +
+      '      <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg> ' + banco + '</span>' +
+      '      <span class="text-[10px] font-mono text-slate-400">' + idPlan + '</span>' +
+      '    </div>' +
+      '    <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100 mt-1 line-clamp-1" title="' + concepto + '">' + concepto + '</h4>' +
+      '  </div>' +
+      '  <span id="plan-badge-' + idPlan + '" class="text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ' + (isCompletado ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : (isAtrasado ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300' : 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300')) + '">' + (isCompletado ? '<svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg> Liquidada / Cancelada' : (isAtrasado ? 'Atrasado' : 'Activo')) + '</span>' +
+      '</div>' +
+
+      // Cifras Clave (Cuota Fija Banco, Amortizado, Restante)
+      '<div class="grid grid-cols-3 gap-2 my-2.5 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 font-mono tabular-nums text-xs">' +
+      '  <div>' +
+      '    <span class="text-[9px] text-slate-400 block uppercase font-bold">Cuota Fija</span>' +
+      '    <strong id="plan-cuota-fija-' + idPlan + '" class="text-violet-600 dark:text-violet-400 font-black">S/ ' + montoCuota.toFixed(2) + '</strong>' +
+      '  </div>' +
+      '  <div>' +
+      '    <span class="text-[9px] text-slate-400 block uppercase font-bold">Amortizado</span>' +
+      '    <strong id="plan-amortizado-' + idPlan + '" class="text-emerald-600 dark:text-emerald-400">S/ ' + montoPagado.toFixed(2) + '</strong>' +
+      '  </div>' +
+      '  <div>' +
+      '    <span class="text-[9px] text-slate-400 block uppercase font-bold">Saldo Deuda</span>' +
+      '    <strong id="plan-saldo-' + idPlan + '" class="text-amber-600 dark:text-amber-400">S/ ' + saldoPendiente.toFixed(2) + '</strong>' +
+      '  </div>' +
+      '</div>' +
+
+      // Barra de Avance y Racha de Cuotas
+      '<div class="space-y-1.5">' +
+      '  <div class="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 font-medium">' +
+      '    <span id="plan-racha-text-' + idPlan + '">Racha: <strong>' + cuotasPagadas + ' de ' + totalCuotas + ' cuotas pagadas</strong></span>' +
+      '    <span id="plan-pct-text-' + idPlan + '" class="font-bold text-violet-600 dark:text-violet-400 font-mono">' + pctAvance + '%</span>' +
+      '  </div>' +
+      '  <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">' +
+      '    <div id="plan-progress-bar-' + idPlan + '" class="bg-gradient-to-r from-violet-500 to-indigo-600 h-full rounded-full transition-all duration-700 ease-out" style="width: ' + pctAvance + '%"></div>' +
+      '  </div>' +
+      '  <div id="plan-racha-dots-' + idPlan + '" class="flex items-center gap-1 flex-wrap pt-1">' + rachaDots + '</div>' +
+      '</div>' +
+
+      // Footer con Acciones Rápidas
+      '<div class="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400">' +
+      '  <span>Día cobro: <strong>' + (plan.Dia_Pago || plan.diaPago || 15) + ' de c/mes</strong></span>' +
+      '  <div id="plan-actions-' + idPlan + '" class="flex items-center gap-1.5">' +
+      (!isCompletado
+        ? '    <button id="plan-btn-pagar-' + idPlan + '" type="button" onclick="pagarSiguienteCuotaDirecta(\'' + idPlan + '\')" class="px-2.5 py-1 bg-violet-600 hover:bg-violet-700 active:scale-95 text-white font-bold rounded-lg shadow-xs transition inline-flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg> Pagar Siguiente Cuota</button>'
+        : '') +
+      '    <button type="button" onclick="eliminarPlanCuotas(\'' + idPlan + '\')" class="p-1 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 rounded transition inline-flex items-center justify-center" title="Eliminar plan"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></button>' +
+      '  </div>' +
+      '</div>';
+
+    return card;
+  }
+
+  // Pagar siguiente cuota con mutación reactiva, diálogo interactivo y animación fluida
+  window.pagarSiguienteCuotaDirecta = function (idPlan) {
+    var planes = (window.state && Array.isArray(state.cuotas)) ? state.cuotas : [];
+    var plan = planes.find(function (p) { return (p.ID_Cuota || p.id) === idPlan; });
+    if (!plan) return;
+
+    var totalCuotas = parseInt(plan.Num_Cuotas || plan.numCuotas || 12);
+    var cuotasPagadas = parseInt(plan.Cuotas_Pagadas || plan.cuotasPagadas || 0);
+    var numSig = cuotasPagadas + 1;
+    var montoCuota = parseFloat(plan.Monto_Cuota || plan.montoCuota || 0);
+    var concepto = plan.Nombre_Plan || plan.nombrePlan || 'Crédito';
+    var banco = plan.Entidad_Financiera || plan.entidadFinanciera || 'Banco';
+    var metodoDef = plan.Metodo_Pago || 'Transferencia_Bancaria';
+
+    // 1. Identificación Atómica de la cuota en state.gastos
+    var planNombre = (plan.Nombre_Plan || plan.nombrePlan || '').trim().toUpperCase();
+    var cuotasDelPlan = (window.state && Array.isArray(state.gastos)) ? state.gastos.filter(function (g) {
+      var vinc = String(g.ID_Entidad_Vinculada || g.idEntidadVinculada || g.ID_Cuota || g.idCuota || g.ID_Tarea || g.idTarea || '').trim().toUpperCase();
+      var idG = String(g.ID_Gasto || g.id || '').trim().toUpperCase();
+      var desc = String(g.Descripcion_Gasto || g.descripcionGasto || g.Descripcion || g.descripcion || g.Concepto || g.concepto || '').trim().toUpperCase();
+      return vinc === idPlan.toUpperCase() ||
+             idG.includes(idPlan.toUpperCase()) ||
+             (planNombre && desc.includes(planNombre) && (desc.includes('CUOTA') || vinc.includes('CUO-')));
+    }) : [];
+
+    var cuotaPendiente = cuotasDelPlan.find(function (g) {
+      var st = String(g.Estado || g.Estado_Pago || g.estado || g.estadoPago || '').toLowerCase();
+      var mod = String(g.Modalidad || g.modalidad || '').toLowerCase();
+      return st.includes('pendiente') || st.includes('programado') || mod.includes('programado') || (!st.includes('pagado') && !st.includes('ejecutado'));
+    });
+
+    var idGastoReal = cuotaPendiente ? (cuotaPendiente.ID_Gasto || cuotaPendiente.ID_Transaccion || cuotaPendiente.id) : '';
+    var fechaPorDefecto = cuotaPendiente ? (cuotaPendiente.Fecha_Registro || cuotaPendiente.Fecha_Gasto || cuotaPendiente.fecha) : new Date().toISOString().split('T')[0];
+    var montoPorDefecto = cuotaPendiente ? (parseFloat(cuotaPendiente.Monto_PEN || cuotaPendiente.Monto_Original) || montoCuota) : montoCuota;
+
+    var hoyStr = new Date().toISOString().split('T')[0];
+
+    // 2. Diálogo Interactivo con confirmación de fecha real y método/comprobante
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: 'Pagar Cuota ' + numSig + '/' + totalCuotas,
+        html:
+          '<div class="text-left text-xs space-y-3 pt-2 text-slate-700 dark:text-slate-200">' +
+          '  <div class="p-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-100 dark:border-violet-800/60">' +
+          '    <div class="font-bold text-violet-900 dark:text-violet-200 text-sm">' + concepto + '</div>' +
+          '    <div class="text-slate-500 dark:text-slate-400 text-[11px]">Entidad: <strong>' + banco + '</strong> | Plan: <span class="font-mono">' + idPlan + '</span></div>' +
+          (idGastoReal ? ('    <div class="text-slate-500 dark:text-slate-400 text-[10px] font-mono mt-0.5">ID Gasto: ' + idGastoReal + '</div>') : '') +
+          '  </div>' +
+          '  <div>' +
+          '    <label class="block font-bold mb-1 text-slate-600 dark:text-slate-300">Fecha Real de Pago:</label>' +
+          '    <input id="swal-fecha-pago" type="date" value="' + hoyStr + '" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-mono">' +
+          '  </div>' +
+          '  <div class="grid grid-cols-2 gap-2">' +
+          '    <div>' +
+          '      <label class="block font-bold mb-1 text-slate-600 dark:text-slate-300">Importe Pagado (S/):</label>' +
+          '      <input id="swal-monto-pago" type="number" step="0.01" value="' + montoPorDefecto.toFixed(2) + '" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-mono font-bold text-violet-600">' +
+          '    </div>' +
+          '    <div>' +
+          '      <label class="block font-bold mb-1 text-slate-600 dark:text-slate-300">Método de Pago:</label>' +
+          '      <select id="swal-metodo-pago" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs">' +
+          '        <option value="Transferencia_Bancaria"' + (metodoDef.includes('Trans') ? ' selected' : '') + '>Transferencia Bancaria</option>' +
+          '        <option value="Debito_Automatico"' + (metodoDef.includes('Deb') || metodoDef.includes('Déb') ? ' selected' : '') + '>Débito Automático</option>' +
+          '        <option value="BCP">BCP Banca Móvil</option>' +
+          '        <option value="BBVA">BBVA Net / Móvil</option>' +
+          '        <option value="Interbank">Interbank</option>' +
+          '        <option value="Tarjeta_Credito">Tarjeta de Crédito</option>' +
+          '        <option value="Efectivo">Efectivo / Ventanilla</option>' +
+          '      </select>' +
+          '    </div>' +
+          '  </div>' +
+          '  <div>' +
+          '    <label class="block font-bold mb-1 text-slate-600 dark:text-slate-300">N° Operación / URL Comprobante (Opcional):</label>' +
+          '    <input id="swal-comprobante" type="text" placeholder="Ej: Op. 849204 o link Drive" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs">' +
+          '  </div>' +
+          '</div>',
+        showCancelButton: true,
+        confirmButtonText: 'Confirmar Pago de Cuota',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#7c3aed',
+        cancelButtonColor: '#94a3b8',
+        focusConfirm: false,
+        preConfirm: function () {
+          var f = document.getElementById('swal-fecha-pago').value;
+          var m = parseFloat(document.getElementById('swal-monto-pago').value);
+          var met = document.getElementById('swal-metodo-pago').value;
+          var comp = document.getElementById('swal-comprobante').value;
+          if (!f) {
+            Swal.showValidationMessage('La fecha de pago es requerida');
+            return false;
+          }
+          if (isNaN(m) || m <= 0) {
+            Swal.showValidationMessage('El monto pagado debe ser mayor a 0');
+            return false;
+          }
+          return { idCuota: idGastoReal, fechaReal: f, montoReal: m, metodoPago: met, comprobanteUrl: comp };
+        }
+      }).then(function (result) {
+        if (!result.isConfirmed || !result.value) return;
+
+        var datosPago = result.value;
+
+        // 3. MUTACIÓN REACTIVA Y ANIMACIÓN FLUIDA EN CALIENTE
+        var nuevasPagadas = cuotasPagadas + 1;
+        var nuevoMontoPagado = parseFloat(plan.Monto_Pagado || plan.montoPagado || 0) + datosPago.montoReal;
+        var nuevoSaldo = Math.max(0, parseFloat(plan.Saldo_Pendiente || plan.saldoPendiente || 0) - datosPago.montoReal);
+        var esLiquidada = nuevasPagadas >= totalCuotas || nuevoSaldo <= 0;
+        var nuevoPct = totalCuotas > 0 ? Math.min(100, Math.round((nuevasPagadas / totalCuotas) * 100)) : 100;
+
+        // Actualizar plan en memoria
+        plan.Cuotas_Pagadas = nuevasPagadas;
+        plan.cuotasPagadas = nuevasPagadas;
+        plan.Monto_Pagado = nuevoMontoPagado;
+        plan.montoPagado = nuevoMontoPagado;
+        plan.Saldo_Pendiente = nuevoSaldo;
+        plan.saldoPendiente = nuevoSaldo;
+        if (esLiquidada) {
+          plan.Estado = 'COMPLETADO';
+          plan.estado = 'COMPLETADO';
+        }
+
+        // Actualizar cuota específica en state.gastos
+        if (cuotaPendiente) {
+          cuotaPendiente.Modalidad = 'Real / Ejecutado';
+          cuotaPendiente.modalidad = 'Real / Ejecutado';
+          cuotaPendiente.Estado = 'Pagado';
+          cuotaPendiente.estado = 'Pagado';
+          cuotaPendiente.Estado_Pago = 'Pagado';
+          cuotaPendiente.estadoPago = 'Pagado';
+          cuotaPendiente.Fecha_Registro = datosPago.fechaReal;
+          cuotaPendiente.Fecha_Gasto = datosPago.fechaReal;
+          cuotaPendiente.fechaGasto = datosPago.fechaReal;
+          cuotaPendiente.Monto_Original = datosPago.montoReal;
+          cuotaPendiente.Monto_PEN = datosPago.montoReal;
+          cuotaPendiente.Monto_Moneda_Base = datosPago.montoReal;
+          cuotaPendiente.Metodo_Pago = datosPago.metodoPago;
+          cuotaPendiente.Comprobante_URL = datosPago.comprobanteUrl;
+          cuotaPendiente.Conciliado = true;
+        }
+
+        // 4. ANIMACIÓN VISUAL EN CALIENTE DEL DOM (Barra de progreso, racha y badge)
+        var barEl = document.getElementById('plan-progress-bar-' + idPlan);
+        if (barEl) {
+          barEl.style.width = nuevoPct + '%';
+        }
+
+        var pctEl = document.getElementById('plan-pct-text-' + idPlan);
+        if (pctEl) {
+          pctEl.textContent = nuevoPct + '%';
+        }
+
+        var rachaEl = document.getElementById('plan-racha-text-' + idPlan);
+        if (rachaEl) {
+          rachaEl.innerHTML = 'Racha: <strong>' + nuevasPagadas + ' de ' + totalCuotas + ' cuotas pagadas</strong>';
+        }
+
+        var amortEl = document.getElementById('plan-amortizado-' + idPlan);
+        if (amortEl) {
+          amortEl.textContent = 'S/ ' + nuevoMontoPagado.toFixed(2);
+        }
+
+        var saldoEl = document.getElementById('plan-saldo-' + idPlan);
+        if (saldoEl) {
+          saldoEl.textContent = 'S/ ' + nuevoSaldo.toFixed(2);
+        }
+
+        // Racha Dots en caliente
+        var dotsEl = document.getElementById('plan-racha-dots-' + idPlan);
+        if (dotsEl) {
+          var newDots = '';
+          var maxDots = Math.min(totalCuotas, 36);
+          for (var d = 1; d <= maxDots; d++) {
+            if (d <= nuevasPagadas) {
+              newDots += '<span class="w-3 h-3 rounded-full bg-violet-600 text-white flex items-center justify-center font-bold" title="Cuota ' + d + ' pagada"><svg class="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>';
+            } else {
+              newDots += '<span class="w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700" title="Cuota ' + d + ' pendiente"></span>';
+            }
+          }
+          dotsEl.innerHTML = newDots;
+        }
+
+        // Badge de Estado
+        var badgeEl = document.getElementById('plan-badge-' + idPlan);
+        if (badgeEl) {
+          if (esLiquidada) {
+            badgeEl.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+            badgeEl.textContent = 'Liquidada / Cancelada';
+          }
+        }
+
+        // Si quedó liquidada, ocultar el botón de pagar
+        if (esLiquidada) {
+          var btnPagar = document.getElementById('plan-btn-pagar-' + idPlan);
+          if (btnPagar) btnPagar.remove();
+        }
+
+        // Actualizar KPIs globales de la pestaña cuotas si existen
+        if (typeof calcularMetricasSaludFinanciera === 'function') {
+          var metricas = calcularMetricasSaludFinanciera();
+          var elAmortizado = document.getElementById('kpi-cuotas-amortizado');
+          var elDeuda = document.getElementById('kpi-cuotas-deuda');
+          if (elAmortizado) elAmortizado.textContent = 'S/ ' + metricas.capitalAmortizadoTotalCuotas.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          if (elDeuda) elDeuda.textContent = 'S/ ' + metricas.saldoPendienteTotalCuotas.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // Guardar snapshot local
+        if (typeof window.sincronizarCacheLocalState === 'function') {
+          window.sincronizarCacheLocalState();
+        }
+
+        // 5. DESPACHO TRANSACCIONAL RPC CON LOCKSERVICE AL BACKEND
+        // 5. DESPACHO TRANSACCIONAL RPC CANÓNICO AL BACKEND
+        var payloadRpc = {
+          idCuota: datosPago.idCuota,
+          fechaPago: datosPago.fechaReal,
+          metodoPago: datosPago.metodoPago,
+          comprobanteUrl: datosPago.comprobanteUrl
+        };
+
+        callBackend('pagarSiguienteCuota', payloadRpc, function (res) {
+          if (res && res.success) {
+            // Sincronizar datos confirmados por el servidor
+            if (res.cuotasPagadas !== undefined) {
+              plan.Cuotas_Pagadas = res.cuotasPagadas;
+              plan.cuotasPagadas = res.cuotasPagadas;
+            }
+            if (res.saldoPendiente !== undefined) {
+              plan.Saldo_Pendiente = res.saldoPendiente;
+              plan.saldoPendiente = res.saldoPendiente;
+            }
+            if (res.montoPagado !== undefined) {
+              plan.Monto_Pagado = res.montoPagado;
+              plan.montoPagado = res.montoPagado;
+            }
+            if (res.estado) {
+              plan.Estado = res.estado;
+              plan.estado = res.estado;
+            }
+            // Sincronizar cuota en state.gastos si el servidor reportó el idGasto
+            if (res.idGasto && Array.isArray(state.gastos)) {
+              var gMatch = state.gastos.find(function (g) {
+                var gid = String(g.ID_Gasto || g.id || '').trim().toUpperCase();
+                return gid === res.idGasto.toUpperCase();
+              });
+              if (gMatch) {
+                gMatch.Estado = 'Pagado';
+                gMatch.estado = 'Pagado';
+                gMatch.Estado_Pago = 'Pagado';
+                gMatch.estadoPago = 'Pagado';
+                gMatch.Modalidad = 'Real / Ejecutado';
+                gMatch.modalidad = 'Real / Ejecutado';
+                gMatch.Fecha_Registro = datosPago.fechaReal;
+                gMatch.Fecha_Gasto = datosPago.fechaReal;
+                gMatch.Conciliado = true;
+              }
+            }
+            if (typeof window.sincronizarCacheLocalState === 'function') {
+              window.sincronizarCacheLocalState();
+            }
+            if (typeof mostrarToastOperativo === 'function') {
+              mostrarToastOperativo('success', 'Cuota Conciliada', (concepto || idPlan) + ' — Cuota ' + (res.cuotasPagadas || nuevasPagadas) + '/' + (res.totalCuotas || totalCuotas));
+            }
+          } else {
+            if (typeof Swal !== 'undefined') {
+              Swal.fire('Atención', 'El pago se procesó localmente, pero el servidor reportó: ' + ((res && res.error) || 'Error desconocido'), 'warning');
+            }
+            if (typeof renderizarPlanesCuotas === 'function') renderizarPlanesCuotas();
+          }
+        }, function (err) {
+          if (typeof Swal !== 'undefined') {
+            Swal.fire('Error de Conexión', 'No se pudo sincronizar el pago con el servidor: ' + (err.message || String(err)), 'error');
+          }
+          if (typeof renderizarPlanesCuotas === 'function') renderizarPlanesCuotas();
+        });
+      });
+    }
+  };
+
+  // Función de auditoría y saneamiento preventivo en Sheets
+  window.ejecutarSaneamientoCuotas = function () {
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: '¿Auditar y Sanear Cuotas en Sheets?',
+        text: 'Se auditará BBDD_Finanzas_Gastos para sanear cuotas desfasadas y unificar la base de datos sin divergencias.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, auditar y sanear',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#7c3aed'
+      }).then(function (result) {
+        if (!result.isConfirmed) return;
+        Swal.fire({
+          title: 'Saneando Base de Datos...',
+          text: 'Unificando registros en BBDD_Finanzas_Gastos con mapeo dinámico canónico.',
+          allowOutsideClick: false,
+          didOpen: function () { Swal.showLoading(); }
+        });
+
+        callBackend('sanearcuotasdesfasadas', {}, function (res) {
+          if (res && res.success) {
+            Swal.fire({
+              icon: 'success',
+              title: '¡Saneamiento y Unificación Exitosa!',
+              text: res.mensaje || ('Se sanearon ' + (res.filasSanadas || 0) + ' cuotas exitosamente.'),
+              confirmButtonColor: '#7c3aed'
+            });
+            if (typeof forzarRefrescoTotalDashboard === 'function') {
+              forzarRefrescoTotalDashboard();
+            } else if (typeof renderTableroFinanciero === 'function') {
+              renderTableroFinanciero();
+            }
+          } else {
+            Swal.fire('Error al sanear', (res && res.error) || 'Ocurrió un error en el servidor', 'error');
+          }
+        }, function (err) {
+          Swal.fire('Error de Conexión', err.message || String(err), 'error');
+        });
+      });
+    }
+  };
+
+  // Comparador teórico referencial
+  window.toggleComparadorTeorico = function () {
+    var box = document.getElementById('box-comparador-teorico');
+    var icon = document.getElementById('icon-toggle-teorico');
+    if (!box) return;
+
+    var isHidden = box.classList.contains('hidden');
+    if (isHidden) {
+      box.classList.remove('hidden');
+      if (icon) icon.textContent = '▲';
+      actualizarComparadorTeorico();
+    } else {
+      box.classList.add('hidden');
+      if (icon) icon.textContent = '▼';
+    }
+  };
+
+  function actualizarComparadorTeorico() {
+    var cuotaMensual = parseFloat((document.getElementById('cuota-monto-mensual') || {}).value) || 0;
+    var numCuotas = parseInt((document.getElementById('cuota-num-cuotas') || {}).value) || 12;
+    var montoTotal = parseFloat((document.getElementById('cuota-monto-total') || {}).value) || 0;
+
+    var totalComprometido = cuotaMensual * numCuotas;
+    var cuotaPura = (montoTotal > 0 && numCuotas > 0) ? (montoTotal / numCuotas) : 0;
+    var interesesEstimados = (montoTotal > 0) ? (totalComprometido - montoTotal) : 0;
+
+    var elTotalComp = document.getElementById('teorico-total-comp');
+    var elCuotaPura = document.getElementById('teorico-cuota-pura');
+    var elDiferencia = document.getElementById('teorico-diferencia');
+
+    if (elTotalComp) elTotalComp.textContent = 'S/ ' + totalComprometido.toFixed(2);
+    if (elCuotaPura) elCuotaPura.textContent = cuotaPura > 0 ? ('S/ ' + cuotaPura.toFixed(2)) : 'Pendiente de digitar monto total';
+    if (elDiferencia && montoTotal > 0) {
+      elDiferencia.textContent = 'Costo financiero estimado (intereses, seguro y portes): S/ ' + interesesEstimados.toFixed(2);
+    }
+  }
+
+  // Listener del formulario de Creación de Plan de Cuotas (Régimen Bancario)
+  var fCrearCuota = document.getElementById('form-create-plan-cuotas');
+  if (fCrearCuota) {
+    fCrearCuota.addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      var banco = (document.getElementById('cuota-entidad') || {}).value || 'Banco';
+      var concepto = (document.getElementById('cuota-nombre') || {}).value || 'Crédito';
+      var cuotaMensual = parseFloat((document.getElementById('cuota-monto-mensual') || {}).value) || 0;
+      var numCuotas = parseInt((document.getElementById('cuota-num-cuotas') || {}).value) || 12;
+      var fechaInicio = (document.getElementById('cuota-fecha-inicio') || {}).value || new Date().toISOString().split('T')[0];
+      var diaPago = parseInt((document.getElementById('cuota-dia-pago') || {}).value) || 15;
+      var categoria = (document.getElementById('cuota-categoria') || {}).value || 'ELECTRONICO';
+      var montoTotal = parseFloat((document.getElementById('cuota-monto-total') || {}).value) || (cuotaMensual * numCuotas);
+      var metodoPago = (document.getElementById('cuota-metodo-pago') || {}).value || 'Débito Automático';
+
+      if (cuotaMensual <= 0) {
+        if (typeof Swal !== 'undefined') Swal.fire('Atención', 'Debes digitar el monto mensual exacto de la cuota bancaria', 'warning');
+        return;
+      }
+
+      var tempId = 'CUO-' + Date.now().toString().slice(-6);
+      var nuevoPlan = {
+        ID_Cuota: tempId,
+        Nombre_Plan: concepto,
+        Entidad_Financiera: banco,
+        Monto_Total: montoTotal,
+        Cuota_Inicial: 0,
+        Num_Cuotas: numCuotas,
+        Monto_Cuota: cuotaMensual,
+        Tasa_Interes: 0,
+        Tipo_Tasa: 'BANCO_LIQUIDADO',
+        Fecha_Inicio: fechaInicio,
+        Dia_Pago: diaPago,
+        Cuotas_Pagadas: 0,
+        Monto_Pagado: 0,
+        Saldo_Pendiente: cuotaMensual * numCuotas,
+        Estado: 'ACTIVO',
+        Categoria: categoria,
+        Metodo_Pago: metodoPago,
+        Notas: 'Plan registrado con cuota fija informada por el banco'
+      };
+
+      if (!Array.isArray(state.cuotas)) state.cuotas = [];
+      state.cuotas.unshift(nuevoPlan);
+
+      closeModal('modal-plan-cuotas');
+      renderTableroFinanciero();
+
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('success', '¡Plan de Cuotas Creado!', concepto + ' (' + numCuotas + ' cuotas de S/ ' + cuotaMensual.toFixed(2) + ')');
+      }
+
+      var payload = {
+        nombrePlan: concepto,
+        entidadFinanciera: banco,
+        cuotaMensual: cuotaMensual,
+        montoCuota: cuotaMensual,
+        numCuotas: numCuotas,
+        fechaInicio: fechaInicio,
+        diaPago: diaPago,
+        categoria: categoria,
+        montoTotal: montoTotal,
+        metodoPago: metodoPago
+      };
+
+      callBackend('createplancuotas', payload, function (res) {
+        if (res && res.success) {
+          if (res.idCuota) nuevoPlan.ID_Cuota = res.idCuota;
+          if (res.cuotasGastos && Array.isArray(res.cuotasGastos)) {
+            if (!Array.isArray(state.gastos)) state.gastos = [];
+            res.cuotasGastos.forEach(function (cg) {
+              state.gastos.unshift(cg);
+            });
+          }
+          if (typeof window.sincronizarCacheLocalState === 'function') {
+            window.sincronizarCacheLocalState();
+          }
+          renderTableroFinanciero();
+        } else {
+          state.cuotas = state.cuotas.filter(function (c) { return c.ID_Cuota !== tempId; });
+          renderTableroFinanciero();
+          if (typeof mostrarToastOperativo === 'function') {
+            mostrarToastOperativo('error', 'Error al guardar plan', (res && res.error) || 'Ocurrió un error');
+          }
+        }
+      }, function () {
+        state.cuotas = state.cuotas.filter(function (c) { return c.ID_Cuota !== tempId; });
+        renderTableroFinanciero();
+      });
+    });
+  }
+
+  // Eliminar Plan de Cuotas
+  window.eliminarPlanCuotas = function (idCuota) {
+    var accion = function () {
+      var backup = state.cuotas ? state.cuotas.slice() : [];
+      state.cuotas = state.cuotas.filter(function (c) { return (c.ID_Cuota || c.id) !== idCuota; });
+      if (typeof window.sincronizarCacheLocalState === 'function') {
+        window.sincronizarCacheLocalState();
+      }
+      renderTableroFinanciero();
+
+      callBackend('deleteplancuotas', { idCuota: idCuota }, function (res) {
+        if (res && (res.success === true || res.success === 'true')) {
+          if (typeof window.sincronizarCacheLocalState === 'function') {
+            window.sincronizarCacheLocalState();
+          }
+          if (typeof mostrarToastOperativo === 'function') mostrarToastOperativo('success', 'Plan Eliminado', idCuota);
+        } else {
+          state.cuotas = backup;
+          if (typeof window.sincronizarCacheLocalState === 'function') {
+            window.sincronizarCacheLocalState();
+          }
+          renderTableroFinanciero();
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'error',
+              title: 'No se pudo eliminar el plan',
+              text: 'Error del servidor: ' + ((res && res.error) ? res.error : 'Desconocido'),
+              confirmButtonColor: '#4f46e5'
+            });
+          }
+        }
+      }, function (err) {
+        state.cuotas = backup;
+        if (typeof window.sincronizarCacheLocalState === 'function') {
+          window.sincronizarCacheLocalState();
+        }
+        renderTableroFinanciero();
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error de conexión',
+            text: 'No se pudo conectar con el servidor: ' + ((err && err.message) ? err.message : String(err)),
+            confirmButtonColor: '#4f46e5'
+          });
+        }
+      });
+    };
+
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: '¿Eliminar plan de cuotas?',
+        text: 'Se removerán las cuotas futuras asociadas de tu calendario y flujo de caja.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#e11d48'
+      }).then(function (result) {
+        if (result.isConfirmed) accion();
+      });
+    } else {
+      if (confirm('¿Eliminar este plan de cuotas?')) accion();
+    }
+  };
+
+  // ============================================================================
+  // SECCIÓN 12: PESTAÑA PRESUPUESTOS (TECHOS POR CATEGORÍA & PROYECTOS & HÁBITOS)
+  // ============================================================================
+  window.renderTabPresupuestos = function (metricasInput) {
+    renderTechosCategorias(metricasInput);
+    renderPresupuestosHabitos();
+    renderMatrizPresupuestoProyectos();
+  };
+
+  function renderTechosCategorias(metricasInput) {
+    var cont = document.getElementById('lista-presupuestos-categorias');
+    if (!cont) return;
+    cont.innerHTML = '';
+
+    var metricas = metricasInput || calcularMetricasSaludFinanciera();
+    var consumos = metricas.consumoPorCategoria || {};
+    var techos = state.presupuestosCategorias || {};
+
+    var todasCats = Object.keys(techos);
+    var fragment = document.createDocumentFragment();
+
+    todasCats.forEach(function (cat) {
+      var techo = techos[cat] || 1000;
+      var gastado = consumos[cat] || 0;
+      var pct = (gastado / techo) * 100;
+      var restante = techo - gastado;
+
+      var conf = CATEGORIAS_GASTO_CONFIG[cat] || CATEGORIAS_GASTO_CONFIG['Otros'];
+      var isExcedido = gastado > techo;
+      var isRiesgo = pct >= 80 && !isExcedido;
+
+      var barColor = isExcedido ? 'bg-rose-500' : (isRiesgo ? 'bg-amber-500' : 'bg-emerald-500');
+      var badgeColor = isExcedido ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 animate-pulse' :
+        (isRiesgo ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300');
+
+      var card = document.createElement('div');
+      card.className = 'bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs flex flex-col justify-between';
+      card.innerHTML =
+        '<div class="flex items-start justify-between gap-2 mb-2">' +
+        '  <div class="flex items-center gap-2">' +
+        '    <span class="text-xl">' + conf.icon + '</span>' +
+        '    <div>' +
+        '      <h4 class="font-bold text-xs text-slate-800 dark:text-slate-100">' + cat + '</h4>' +
+        '      <span class="text-[10px] text-slate-400 font-mono">Techo: S/ ' + techo.toFixed(2) + '</span>' +
+        '    </div>' +
+        '  </div>' +
+        '  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ' + badgeColor + '">' + (isExcedido ? 'Excedido' : (isRiesgo ? 'Alerta >80%' : 'Bajo Techo')) + '</span>' +
+        '</div>' +
+        '<div class="space-y-1.5 my-2">' +
+        '  <div class="flex items-baseline justify-between text-xs">' +
+        '    <span class="text-slate-500 text-[11px]">Ejecutado este mes:</span>' +
+        '    <strong class="font-mono text-slate-800 dark:text-slate-100 font-bold">S/ ' + gastado.toFixed(2) + ' (' + pct.toFixed(0) + '%)</strong>' +
+        '  </div>' +
+        '  <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">' +
+        '    <div class="' + barColor + ' h-full rounded-full transition-all duration-500" style="width: ' + Math.min(pct, 100) + '%"></div>' +
+        '  </div>' +
+        '  <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">' +
+        '    <span>' + (isExcedido ? 'Sobregiro:' : 'Cupo disponible:') + '</span>' +
+        '    <strong class="' + (isExcedido ? 'text-rose-600 font-bold' : 'text-emerald-600 dark:text-emerald-400 font-bold') + '">S/ ' + Math.abs(restante).toFixed(2) + '</strong>' +
+        '  </div>' +
+        '</div>';
+      fragment.appendChild(card);
+    });
+
+    cont.appendChild(fragment);
+  }
+
+  window.abrirModalEditarPresupuestosCategorias = function () {
+    var techos = state.presupuestosCategorias || {};
+    var cats = Object.keys(techos);
+
+    var html = '<div class="space-y-2 text-left max-h-[60vh] overflow-y-auto pr-1">';
+    cats.forEach(function (c) {
+      html += '<div class="flex items-center justify-between gap-2 text-xs">' +
+        '  <label class="font-semibold text-slate-700 dark:text-slate-300 w-1/2 truncate">' + c + '</label>' +
+        '  <input type="number" id="techo-inp-' + c.replace(/\s+/g, '_') + '" value="' + (techos[c] || 0) + '" step="50" class="w-1/2 border rounded-lg p-1.5 font-mono text-xs">' +
+        '</div>';
+    });
+    html += '</div>';
+
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: 'Configurar Techos Presupuestales',
+        html: html,
+        showCancelButton: true,
+        confirmButtonText: 'Guardar Techos',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#059669',
+        preConfirm: function () {
+          var nuevos = {};
+          cats.forEach(function (c) {
+            var val = parseFloat(document.getElementById('techo-inp-' + c.replace(/\s+/g, '_')).value) || 0;
+            nuevos[c] = val;
+          });
+          return nuevos;
+        }
+      }).then(function (result) {
+        if (result.isConfirmed && result.value) {
+          state.presupuestosCategorias = result.value;
+          try {
+            localStorage.setItem('PMO_PRESUPUESTOS_CATEGORIAS', JSON.stringify(result.value));
+          } catch (e) { }
+          renderTableroFinanciero();
+          if (typeof mostrarToastOperativo === 'function') {
+            mostrarToastOperativo('success', 'Techos Actualizados', 'Los nuevos límites de gasto fueron guardados.');
+          }
+        }
+      });
+    }
+  };
+
+  function renderPresupuestosHabitos() {
+    var cont = document.getElementById('lista-presupuestos-habitos');
+    if (!cont) return;
+    cont.innerHTML = '';
+
+    var data = (typeof window.calcularDesgloseInversionBienestar === 'function')
+      ? window.calcularDesgloseInversionBienestar()
+      : { totalMacroPEN: 0, desglose: {}, dimensiones: [] };
+
+    var techos = state.presupuestosHabitos || {
+      'SALUD_DEPORTE': 800,
+      'DESARROLLO_ESTUDIO': 600,
+      'LABORAL_HONORARIO': 500,
+      'FINANZAS_TRAMITES': 400,
+      'SOCIAL_FAMILIA': 600,
+      'PERSONAL_DESCANSO': 500
+    };
+
+    var dims = data.dimensiones || ['SALUD_DEPORTE', 'DESARROLLO_ESTUDIO', 'LABORAL_HONORARIO', 'FINANZAS_TRAMITES', 'SOCIAL_FAMILIA', 'PERSONAL_DESCANSO'];
+
+    var obtenerIconoDim = function (clave) {
+      var iconMap = {
+        'SALUD_DEPORTE': '<svg class="portal-icon text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
+        'DESARROLLO_ESTUDIO': '<svg class="portal-icon text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>',
+        'LABORAL_HONORARIO': '<svg class="portal-icon text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+        'FINANZAS_TRAMITES': '<svg class="portal-icon text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 21h18"/><path d="M3 10h18"/><path d="M5 6l7-3 7 3"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M8 14v4"/><path d="M12 14v4"/><path d="M16 14v4"/></svg>',
+        'SOCIAL_FAMILIA': '<svg class="portal-icon text-pink-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+        'PERSONAL_DESCANSO': '<svg class="portal-icon text-teal-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>'
+      };
+      return iconMap[clave] || '<svg class="portal-icon text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+    };
+
+    dims.forEach(function (k) {
+      var d = data.desglose[k] || { gastoRealPEN: 0, actividadesCount: 0, gastosCount: 0, config: {} };
+      var cfg = d.config || (window.CATEGORIAS_VIDA_CONFIG && window.CATEGORIAS_VIDA_CONFIG[k]) || { nombre: k, color: '#10b981' };
+
+      var asignado = parseFloat(techos[k] !== undefined ? techos[k] : 500);
+      var ejecutado = parseFloat(d.gastoRealPEN || 0);
+      var restante = asignado - ejecutado;
+      var pct = asignado > 0 ? (ejecutado / asignado) * 100 : 0;
+
+      var isExcedido = ejecutado > asignado;
+      var isAlerta = pct >= 80 && !isExcedido;
+
+      var barColor = isExcedido ? 'bg-rose-500' : (isAlerta ? 'bg-amber-500' : 'bg-emerald-500');
+      var badgeClass = isExcedido
+        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 animate-pulse'
+        : (isAlerta ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300');
+      var estadoTexto = isExcedido ? 'Sobregiro' : (isAlerta ? 'Alerta >80%' : 'En Rango');
+
+      var card = document.createElement('div');
+      card.className = 'portal-surface bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between';
+      card.innerHTML =
+        '<div class="flex items-start justify-between gap-2 mb-2">' +
+        '  <div class="flex items-center gap-2">' +
+        '    <span class="p-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 shadow-2xs flex items-center justify-center">' + obtenerIconoDim(k) + '</span>' +
+        '    <div>' +
+        '      <h4 class="font-bold text-xs text-slate-800 dark:text-slate-100">' + (cfg.nombre || k) + '</h4>' +
+        '      <span class="text-[10px] text-slate-400 font-mono">' + d.actividadesCount + ' activ. · ' + d.gastosCount + ' egresos vinculados</span>' +
+        '    </div>' +
+        '  </div>' +
+        '  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ' + badgeClass + '">' + estadoTexto + '</span>' +
+        '</div>' +
+        '<!-- Matriz Asignado | Ejecutado | Restante -->' +
+        '<div class="grid grid-cols-3 gap-1.5 p-2 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 text-center my-2">' +
+        '  <div>' +
+        '    <span class="block text-[9px] uppercase tracking-wider text-slate-400 font-bold">Asignado</span>' +
+        '    <strong class="font-mono text-xs text-slate-700 dark:text-slate-200">S/ ' + asignado.toFixed(0) + '</strong>' +
+        '  </div>' +
+        '  <div>' +
+        '    <span class="block text-[9px] uppercase tracking-wider text-slate-400 font-bold">Ejecutado</span>' +
+        '    <strong class="font-mono text-xs ' + (isExcedido ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400') + '">S/ ' + ejecutado.toFixed(2) + '</strong>' +
+        '  </div>' +
+        '  <div>' +
+        '    <span class="block text-[9px] uppercase tracking-wider text-slate-400 font-bold">Restante</span>' +
+        '    <strong class="font-mono text-xs ' + (restante < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300') + '">' +
+        (restante < 0 ? '-S/ ' + Math.abs(restante).toFixed(2) : 'S/ ' + restante.toFixed(2)) +
+        '</strong>' +
+        '  </div>' +
+        '</div>' +
+        '<!-- Barra de consumo -->' +
+        '<div class="space-y-1">' +
+        '  <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">' +
+        '    <div class="' + barColor + ' h-full rounded-full transition-all duration-500" style="width: ' + Math.min(pct, 100) + '%"></div>' +
+        '  </div>' +
+        '  <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">' +
+        '    <span>Consumo: <strong class="text-slate-600 dark:text-slate-300">' + pct.toFixed(1) + '%</strong></span>' +
+        '    <span class="' + (isExcedido ? 'text-rose-500 font-bold' : 'text-emerald-600 dark:text-emerald-400') + '">' +
+        (isExcedido ? 'Excedido por S/ ' + Math.abs(restante).toFixed(2) : 'Cupo: S/ ' + restante.toFixed(2)) +
+        '</span>' +
+        '  </div>' +
+        '</div>';
+
+      cont.appendChild(card);
+    });
+  }
+  window.renderPresupuestosHabitos = renderPresupuestosHabitos;
+
+  window.abrirModalEditarPresupuestosHabitos = function () {
+    var techos = state.presupuestosHabitos || {
+      'SALUD_DEPORTE': 800,
+      'DESARROLLO_ESTUDIO': 600,
+      'LABORAL_HONORARIO': 500,
+      'FINANZAS_TRAMITES': 400,
+      'SOCIAL_FAMILIA': 600,
+      'PERSONAL_DESCANSO': 500
+    };
+
+    var dims = ['SALUD_DEPORTE', 'DESARROLLO_ESTUDIO', 'LABORAL_HONORARIO', 'FINANZAS_TRAMITES', 'SOCIAL_FAMILIA', 'PERSONAL_DESCANSO'];
+
+    var html = '<div class="space-y-3 text-left max-h-[60vh] overflow-y-auto pr-1 text-xs">';
+    html += '<p class="text-slate-500 dark:text-slate-400 text-xs mb-2">Fija el techo presupuestal mensual para cada dimensión del Life OS:</p>';
+
+    var iconMapModal = {
+      'SALUD_DEPORTE': '<svg class="portal-icon text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
+      'DESARROLLO_ESTUDIO': '<svg class="portal-icon text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10"/><path d="M6 10h10"/></svg>',
+      'LABORAL_HONORARIO': '<svg class="portal-icon text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+      'FINANZAS_TRAMITES': '<svg class="portal-icon text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 21h18"/><path d="M3 10h18"/><path d="M5 6l7-3 7 3"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M8 14v4"/><path d="M12 14v4"/><path d="M16 14v4"/></svg>',
+      'SOCIAL_FAMILIA': '<svg class="portal-icon text-pink-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+      'PERSONAL_DESCANSO': '<svg class="portal-icon text-teal-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>'
+    };
+
+    dims.forEach(function (k) {
+      var cfg = (window.CATEGORIAS_VIDA_CONFIG && window.CATEGORIAS_VIDA_CONFIG[k]) || { nombre: k };
+      var val = techos[k] !== undefined ? techos[k] : 500;
+      var ico = iconMapModal[k] || '<svg class="portal-icon text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+
+      html +=
+        '<div class="flex items-center justify-between gap-3 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60">' +
+        '  <div class="flex items-center gap-2 min-w-0 flex-1">' +
+        '    <span class="flex items-center justify-center">' + ico + '</span>' +
+        '    <label class="font-bold text-slate-700 dark:text-slate-200 truncate">' + (cfg.nombre || k) + '</label>' +
+        '  </div>' +
+        '  <div class="flex items-center gap-1 shrink-0">' +
+        '    <span class="font-mono text-slate-400 font-bold">S/</span>' +
+        '    <input type="number" id="techo-habito-' + k + '" value="' + val + '" step="50" min="0"' +
+        '      class="w-24 text-right border border-slate-200 dark:border-slate-700 rounded-lg p-1.5 font-mono font-bold text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:ring-1 focus:ring-indigo-500">' +
+        '  </div>' +
+        '</div>';
+    });
+    html += '</div>';
+
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: 'Techos de Inversión en Bienestar',
+        html: html,
+        width: '520px',
+        showCancelButton: true,
+        confirmButtonText: 'Guardar Techos',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#4f46e5',
+        preConfirm: function () {
+          var nuevos = {};
+          dims.forEach(function (k) {
+            var inp = document.getElementById('techo-habito-' + k);
+            nuevos[k] = inp ? (parseFloat(inp.value) || 0) : 500;
+          });
+          return nuevos;
+        }
+      }).then(function (result) {
+        if (result.isConfirmed && result.value) {
+          state.presupuestosHabitos = result.value;
+          try {
+            localStorage.setItem('PMO_PRESUPUESTOS_HABITOS', JSON.stringify(result.value));
+          } catch (e) { }
+          renderPresupuestosHabitos();
+          if (typeof mostrarToastOperativo === 'function') {
+            mostrarToastOperativo('success', 'Techos de Bienestar Actualizados', 'Los presupuestos por tipo de hábito fueron guardados.');
+          }
+        }
+      });
+    }
+  };
+
+  window.renderMatrizPresupuestoProyectos = function () {
+    var cont = document.getElementById('lista-fin-presupuesto-proyectos');
+    if (!cont) return;
+    cont.innerHTML = '';
+
+    var proyectos = (window.state && Array.isArray(state.proyectos)) ? state.proyectos : [];
+    if (proyectos.length === 0) {
+      cont.innerHTML = '<div class="col-span-full text-center text-xs text-slate-400 py-8">No hay proyectos registrados</div>';
+      return;
+    }
+
+    proyectos.forEach(function (p) {
+      var idProy = p.ID_Proyecto || p.id || '';
+      var nombre = p.Nombre_Proyecto || 'Sin nombre';
+      var presup = parseFloat(p.Presupuesto_Tope || 0);
+      var costoReal = parseFloat(p.Costo_Real_Actual || p.Costo_Real || 0);
+      var burnRate = presup > 0 ? (costoReal / presup) * 100 : 0;
+      var saldoRestante = presup - costoReal;
+
+      var badgeColor = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
+      var barColor = 'bg-emerald-500';
+      var alertaMsg = 'Saludable';
+      if (burnRate >= 100) {
+        badgeColor = 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 animate-pulse';
+        barColor = 'bg-rose-500';
+        alertaMsg = '¡Presupuesto Excedido!';
+      } else if (burnRate >= 80) {
+        badgeColor = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+        barColor = 'bg-amber-500';
+        alertaMsg = 'Riesgo de Sobrecosto (>80%)';
+      }
+
+      var card = document.createElement('div');
+      card.className = 'portal-surface bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between';
+      card.innerHTML =
+        '<div class="flex items-start justify-between gap-2 mb-3">' +
+        '  <div>' +
+        '    <span class="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300"><svg class="portal-icon-sm text-indigo-600 dark:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>' + idProy + '</span>' +
+        '    <h4 class="font-bold text-slate-800 dark:text-slate-100 text-sm mt-1.5 line-clamp-1" title="' + nombre + '">' + nombre + '</h4>' +
+        '  </div>' +
+        '  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ' + badgeColor + '">' + alertaMsg + '</span>' +
+        '</div>' +
+        '<div class="space-y-2">' +
+        '  <div class="flex items-baseline justify-between text-xs">' +
+        '    <span class="text-slate-400 font-medium">Ejecutado:</span>' +
+        '    <span class="font-mono font-bold text-slate-800 dark:text-slate-200">S/ ' + costoReal.toFixed(2) + ' / S/ ' + presup.toFixed(2) + '</span>' +
+        '  </div>' +
+        '  <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">' +
+        '    <div class="' + barColor + ' h-full rounded-full transition-all duration-500" style="width: ' + Math.min(burnRate, 100) + '%"></div>' +
+        '  </div>' +
+        '  <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">' +
+        '    <span>Burn Rate: <strong class="text-slate-700 dark:text-slate-300">' + burnRate.toFixed(1) + '%</strong></span>' +
+        '    <span>Disponible: <strong class="' + (saldoRestante < 0 ? 'text-rose-500' : 'text-emerald-500') + '">S/ ' + saldoRestante.toFixed(2) + '</strong></span>' +
+        '  </div>' +
+        '</div>';
+      cont.appendChild(card);
+    });
+  };
+
+  // ============================================================================
+  // SECCIÓN 13: UTILIDADES Y COMPATIBILIDAD CON VISTAS GLOBALES
+  // ============================================================================
+  function calcularIngresoPromedioMensual() {
+    var listaIngresos = (window.state && Array.isArray(state.ingresos)) ? state.ingresos : [];
+    if (listaIngresos.length === 0) return 0;
+
+    var meses = {};
+    listaIngresos.forEach(function (ing) {
+      var f = ing.Fecha_Ingreso || ing.fechaIngreso || ing.fecha || '';
+      if (!f) return;
+      var mesKey = f.substring(0, 7);
+      var monto = parseFloat(ing.Monto_PEN || ing.montoPEN || (ing.Moneda_Original === 'USD' ? (ing.Monto_Original || 0) * (ing.Tipo_Cambio || 3.76) : (ing.Monto_Original || 0)));
+      meses[mesKey] = (meses[mesKey] || 0) + monto;
+    });
+
+    var keys = Object.keys(meses);
+    if (keys.length === 0) return 0;
+    var total = 0;
+    keys.forEach(function (k) { total += meses[k]; });
+    return total / keys.length;
+  }
+
+  window.cambiarFiltroMesFinanzas = function (val) {
+    state.filtroMesFinanzas = val;
+    state.filtroTrxTiempo = val;
+    try {
+      localStorage.setItem('pmo_finanzas_periodo', val);
+    } catch (eStoragePeriodo) {
+      console.warn('[cambiarFiltroMesFinanzas] Error guardando periodo:', eStoragePeriodo);
+    }
+    renderTableroFinanciero();
+    if (typeof renderTabTransaccionesUnificada === 'function') {
+      renderTabTransaccionesUnificada();
+    }
+  };
+
+  // ============================================================================
+  // SECCIÓN 14: DRAWER DE DETALLE Y ACCIONES DE EDICIÓN / ELIMINACIÓN
+  // ============================================================================
+  window.abrirDrawerDetalleTransaccion = function (tipo, id) {
+    var item = null;
+    if (tipo === 'gasto') {
+      item = (state.gastos || []).find(function (x) { return (x.ID_Gasto || x.ID_Transaccion || x.id) === id; });
+    } else {
+      item = (state.ingresos || []).find(function (x) { return (x.ID_Ingreso || x.ID_Transaccion || x.id) === id; });
+    }
+    if (!item) return;
+
+    state.transaccionDetalleActiva = { tipo: tipo, data: item };
+
+    var idEl = document.getElementById('drawer-transaccion-id');
+    if (idEl) idEl.textContent = id;
+
+    var bNotasDrawer = document.getElementById('drawer-transaccion-header-badge-notas');
+    if (bNotasDrawer) {
+      bNotasDrawer.innerHTML = (typeof generarBadgeNotasVinculadas === 'function')
+        ? generarBadgeNotasVinculadas(id, tipo === 'gasto' ? 'GASTO' : 'INGRESO')
+        : '';
+    }
+
+    // Clasificación y Origen Polimórfico
+    var clasifOrigen = String(item.Clasificacion_Origen || item.clasificacionOrigen || '').trim();
+    var tipoEntidad = String(item.Tipo_Entidad || item.tipoEntidad || '').trim();
+    var idEntidadVinculada = String(item.ID_Entidad_Vinculada || item.idEntidadVinculada || item.ID_Tarea || item.idTarea || item.idActividad || item.idHabito || '').trim();
+    var idProyG = String(item.ID_Proyecto || item.idProyecto || item.ID_Proyecto_Asociado || '').trim();
+    var tipoG = String(item.tipoGasto || item.Tipo_Gasto || '').trim();
+
+    var esProy = clasifOrigen === 'Proyecto' || tipoG === 'Tarea Proyecto' || (idProyG && idProyG.toUpperCase() !== 'PERSONAL');
+
+    var tipoIcon = document.getElementById('drawer-transaccion-tipo-icon');
+    var tipoTitulo = document.getElementById('drawer-transaccion-tipo-titulo');
+    if (tipoIcon && tipoTitulo) {
+      if (tipo === 'gasto') {
+        tipoIcon.className = 'w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold ' +
+          (esProy ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400');
+        tipoIcon.innerHTML = esProy
+          ? '<svg class="portal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>'
+          : '<svg class="portal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+        tipoTitulo.textContent = esProy ? 'Egreso: Tarea Proyecto' : 'Egreso: Actividad Personal';
+      } else {
+        tipoIcon.className = 'w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400';
+        tipoIcon.innerHTML = '<svg class="portal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>';
+        tipoTitulo.textContent = 'Ingreso Monetario';
+      }
+    }
+
+    var estadoEl = document.getElementById('drawer-transaccion-estado');
+    if (estadoEl) {
+      var est = item.Estado_Cobro || item.Estado_Pago || item.Estado || (item.Conciliado ? 'Conciliado' : 'Programado');
+      estadoEl.textContent = est;
+      estadoEl.className = (est === 'Pagado' || est === 'Cobrado' || est === 'Conciliado' || est === 'Real / Ejecutado')
+        ? 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+        : 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300';
+    }
+
+    var mOrig = parseFloat(item.Monto_Original || item.montoOriginal || item.monto || 0);
+    var monOrig = (item.Moneda_Original || item.monedaOriginal || 'PEN').toUpperCase();
+    var tc = parseFloat(item.Tipo_Cambio || item.tipoCambio || 1);
+    var mPEN = parseFloat(item.Monto_Moneda_Base || item.Monto_PEN || item.montoPEN || (monOrig === 'USD' ? mOrig * tc : mOrig));
+    var mUSD = parseFloat(item.Monto_USD || item.montoUSD || (monOrig === 'USD' ? mOrig : (tc > 0 ? (mPEN / (state.tipoCambioActual || 3.76)) : 0)));
+
+    var heroMonto = document.getElementById('drawer-transaccion-monto-hero');
+    var heroMoneda = document.getElementById('drawer-transaccion-moneda-orig');
+    var simbolo = monOrig === 'USD' ? '$ ' : (monOrig === 'EUR' ? '€ ' : 'S/ ');
+    if (heroMonto) heroMonto.textContent = simbolo + mOrig.toFixed(2);
+    if (heroMoneda) heroMoneda.textContent = monOrig;
+
+    var equivMonto = document.getElementById('drawer-transaccion-monto-convertido');
+    var tcEl = document.getElementById('drawer-transaccion-tc');
+    if (equivMonto) {
+      if (monOrig === 'USD' || monOrig === 'EUR') equivMonto.textContent = 'S/ ' + mPEN.toFixed(2);
+      else equivMonto.textContent = '$ ' + mUSD.toFixed(2);
+    }
+    if (tcEl) tcEl.textContent = tc.toFixed(3);
+
+    var desc = document.getElementById('drawer-transaccion-descripcion');
+    if (desc) desc.textContent = item.Descripcion_Ingreso || item.Descripcion_Gasto || item.Concepto || item.Descripcion || item.descripcion || '--';
+
+    var fEl = document.getElementById('drawer-transaccion-fecha');
+    var fRaw = item.Fecha_Ingreso || item.Fecha_Gasto || item.Fecha_Registro || item.fecha || '';
+    if (fEl) fEl.textContent = fRaw ? String(fRaw).split('T')[0] : '--';
+
+    var catEl = document.getElementById('drawer-transaccion-categoria');
+    if (catEl) catEl.textContent = item.Categoria_Ingreso || item.Categoria || item.Categoria_Gasto || item.Origen_Fuente || 'General';
+
+    var metEl = document.getElementById('drawer-transaccion-metodo');
+    if (metEl) metEl.textContent = item.Metodo_Cobro || item.Metodo_Pago || item.Cuenta_Destino || 'Transferencia Bancaria';
+
+    var ambitoEl = document.getElementById('drawer-transaccion-ambito');
+    if (ambitoEl) {
+      ambitoEl.textContent = esProy ? ('Proyecto: ' + (idProyG || 'WBS')) : 'Personal / Hábitos';
+    }
+
+    // RESOLUCIÓN DE RUTA / BREADCRUMB EXPLÍCITO Y ENTIDADES VINCULADAS
+    var breadcrumbEl = document.getElementById('drawer-transaccion-breadcrumb');
+    var badgeEntidadTipo = document.getElementById('drawer-transaccion-entidad-tipo-badge');
+    var elProy = document.getElementById('drawer-transaccion-proyecto');
+    var elHito = document.getElementById('drawer-transaccion-hito');
+    var elTarea = document.getElementById('drawer-transaccion-tarea');
+    var relBox = document.getElementById('drawer-transaccion-relaciones');
+    var persBox = document.getElementById('drawer-transaccion-personal-box');
+
+    if (esProy) {
+      if (relBox) relBox.classList.remove('hidden');
+      if (persBox) persBox.classList.add('hidden');
+
+      // Buscar Tarea
+      var tareaObj = null;
+      var hitoObj = null;
+      var proyObj = null;
+
+      if (idEntidadVinculada && (tipoEntidad === 'Tarea' || idEntidadVinculada.indexOf('TAR-') === 0 || !tipoEntidad)) {
+        tareaObj = (state.tareas || []).find(function (t) {
+          return String(t.ID_Tarea || '').trim().toUpperCase() === idEntidadVinculada.toUpperCase();
+        });
+      }
+      if (!tareaObj && (item.ID_Tarea || item.idTarea)) {
+        var idT = String(item.ID_Tarea || item.idTarea).trim().toUpperCase();
+        tareaObj = (state.tareas || []).find(function (t) {
+          return String(t.ID_Tarea || '').trim().toUpperCase() === idT;
+        });
+      }
+
+      // Buscar Hito
+      var idH = tareaObj ? (tareaObj.ID_Hito || '') : (item.ID_Hito || item.idHito || (tipoEntidad === 'Hito' ? idEntidadVinculada : ''));
+      if (idH) {
+        var idHUpper = String(idH).trim().toUpperCase();
+        hitoObj = (state.hitos || []).find(function (h) {
+          return String(h.ID_Hito || '').trim().toUpperCase() === idHUpper;
+        });
+      }
+
+      // Buscar Proyecto
+      var idP = (tareaObj && tareaObj.ID_Proyecto) ? tareaObj.ID_Proyecto : (hitoObj && hitoObj.ID_Proyecto ? hitoObj.ID_Proyecto : idProyG);
+      if (idP) {
+        var idPUpper = String(idP).trim().toUpperCase();
+        proyObj = (state.proyectos || []).find(function (p) {
+          return String(p.ID_Proyecto || '').trim().toUpperCase() === idPUpper;
+        });
+      }
+
+      var nomProy = proyObj ? proyObj.Nombre_Proyecto : (idP || 'Proyecto');
+      var nomHito = hitoObj ? hitoObj.Nombre_Hito : (idH || 'Hito General');
+      var nomTarea = tareaObj ? (tareaObj.Titulo || tareaObj.Nombre_Tarea || tareaObj.nombre || tareaObj.ID_Tarea) : (idEntidadVinculada || 'Tarea Vinculada');
+
+      if (elProy) elProy.textContent = (proyObj ? (proyObj.ID_Proyecto + ' - ' + nomProy) : (idP || 'Sin Proyecto'));
+      if (elHito) elHito.textContent = (hitoObj ? (hitoObj.ID_Hito + ' - ' + nomHito) : (idH || 'No especificado'));
+      if (elTarea) elTarea.textContent = (tareaObj ? (tareaObj.ID_Tarea + ' - ' + nomTarea) : (idEntidadVinculada || 'Sin Tarea Específica'));
+
+      if (badgeEntidadTipo) {
+        badgeEntidadTipo.textContent = 'PROYECTO: ' + (tipoEntidad ? tipoEntidad.toUpperCase() : (tareaObj ? 'TAREA' : (hitoObj ? 'HITO' : 'PROYECTO')));
+        badgeEntidadTipo.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800';
+      }
+
+      if (breadcrumbEl) {
+        var bHtml = '';
+        bHtml += '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-100/90 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200 font-bold shrink-0"><svg class="portal-icon-sm text-indigo-600 dark:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>' + (proyObj ? proyObj.Nombre_Proyecto : (idP || 'Proyecto')) + '</span>';
+        if (nomHito && nomHito !== 'No especificado') {
+          bHtml += '<span class="text-indigo-400 font-bold">›</span>';
+          bHtml += '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-100/60 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 shrink-0"><svg class="portal-icon-sm text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>' + nomHito + '</span>';
+        }
+        if (nomTarea && nomTarea !== 'Sin Tarea Específica') {
+          bHtml += '<span class="text-indigo-400 font-bold">›</span>';
+          bHtml += '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 shadow-2xs font-extrabold text-slate-900 dark:text-white shrink-0"><svg class="portal-icon-sm text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>' + nomTarea + '</span>';
+        }
+        breadcrumbEl.innerHTML = bHtml;
+      }
+    } else {
+      // Personal / Actividad
+      if (relBox) relBox.classList.add('hidden');
+      if (persBox) persBox.classList.remove('hidden');
+
+      var actObj = null;
+      if (idEntidadVinculada) {
+        var idUpper = idEntidadVinculada.toUpperCase();
+        actObj = (state.actividades || state.habitos || []).find(function (a) {
+          return String(a.ID_Actividad || a.ID_Habito || a.id || '').toUpperCase() === idUpper;
+        });
+      }
+      var nomAct = actObj ? (actObj.Nombre || actObj.Titulo || actObj.nombre || idEntidadVinculada) : (idEntidadVinculada || item.Categoria || 'Actividad Personal');
+
+      var persCatEl = document.getElementById('drawer-transaccion-personal-cat');
+      if (persCatEl) persCatEl.textContent = nomAct;
+
+      if (badgeEntidadTipo) {
+        badgeEntidadTipo.textContent = 'PERSONAL: ACTIVIDAD';
+        badgeEntidadTipo.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
+      }
+
+      if (breadcrumbEl) {
+        var bHtml = '';
+        bHtml += '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold shrink-0"><svg class="portal-icon-sm text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Finanzas Personales</span>';
+        bHtml += '<span class="text-emerald-400 font-bold">›</span>';
+        bHtml += '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white dark:bg-slate-800 shadow-2xs font-extrabold text-slate-900 dark:text-white shrink-0"><svg class="portal-icon-sm text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>' + nomAct + '</span>';
+        breadcrumbEl.innerHTML = bHtml;
+      }
+    }
+
+    // Comprobante
+    var compUrl = item.Comprobante_URL || item.comprobanteUrl || '';
+    var compLink = document.getElementById('drawer-transaccion-comprobante-link');
+    var compTxt = document.getElementById('drawer-transaccion-comprobante-texto');
+    if (compUrl && compUrl.startsWith('http')) {
+      if (compLink) {
+        compLink.href = compUrl;
+        compLink.classList.remove('hidden');
+        compLink.classList.add('inline-flex');
+      }
+      if (compTxt) compTxt.textContent = 'Comprobante adjunto disponible';
+    } else {
+      if (compLink) {
+        compLink.classList.add('hidden');
+        compLink.classList.remove('inline-flex');
+      }
+      if (compTxt) compTxt.textContent = 'Sin archivo adjunto';
+    }
+
+    var backdrop = document.getElementById('drawer-transaccion-backdrop');
+    var drawer = document.getElementById('drawer-detalle-transaccion');
+    if (backdrop) backdrop.classList.remove('hidden');
+    if (drawer) drawer.classList.remove('translate-x-full');
+  };
+
+  window.cerrarDrawerDetalleTransaccion = function () {
+    var backdrop = document.getElementById('drawer-transaccion-backdrop');
+    var drawer = document.getElementById('drawer-detalle-transaccion');
+    if (drawer) drawer.classList.add('translate-x-full');
+    if (backdrop) {
+      setTimeout(function () {
+        backdrop.classList.add('hidden');
+      }, 300);
+    }
+  };
+
+  window.editarDesdeDrawer = function () {
+    if (state.transaccionDetalleActiva && state.transaccionDetalleActiva.tipo === 'gasto') {
+      var id = state.transaccionDetalleActiva.data.ID_Gasto;
+      cerrarDrawerDetalleTransaccion();
+      setTimeout(function () {
+        if (typeof abrirModalEditarGasto === 'function') abrirModalEditarGasto(id);
+      }, 300);
+    }
+  };
+
+  window.eliminarDesdeDrawer = function () {
+    if (!state.transaccionDetalleActiva) return;
+    var tipo = state.transaccionDetalleActiva.tipo;
+    var data = state.transaccionDetalleActiva.data;
+    if (!data) return;
+
+    if (tipo === 'gasto') {
+      var idGasto = data.ID_Gasto;
+      cerrarDrawerDetalleTransaccion();
+      setTimeout(function () {
+        if (typeof confirmarEliminarGasto === 'function') confirmarEliminarGasto(idGasto);
+      }, 200);
+    } else if (tipo === 'ingreso') {
+      var idIngreso = data.ID_Ingreso;
+      cerrarDrawerDetalleTransaccion();
+      setTimeout(function () {
+        if (typeof confirmarEliminarIngreso === 'function') confirmarEliminarIngreso(idIngreso);
+      }, 200);
+    }
+  };
+
+  // ============================================================================
+  // SECCIÓN 15: COMPATIBILIDAD CON ATRIBUTOS Y MÉTODOS HEREDADOS
+  // ============================================================================
+  window.abrirModalCrearPlanCuotas = function () {
+    var form = document.getElementById('form-create-plan-cuotas');
+    if (form) form.reset();
+    var elFecha = document.getElementById('cuota-fecha-inicio');
+    if (elFecha) elFecha.value = new Date().toISOString().split('T')[0];
+    var boxTeorico = document.getElementById('box-comparador-teorico');
+    if (boxTeorico) boxTeorico.classList.add('hidden');
+    openModal('modal-plan-cuotas');
+  };
+
+  // Re-hook listener para live updates en comparador teórico informativo
+  ['cuota-monto-mensual', 'cuota-num-cuotas', 'cuota-monto-total'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', actualizarComparadorTeorico);
+  });
+</script>

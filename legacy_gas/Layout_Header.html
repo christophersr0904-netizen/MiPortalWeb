@@ -1,0 +1,384 @@
+<!-- ===================================================================== -->
+<!-- SECCIÓN 1: BARRA SUPERIOR GLOBAL DE NAVEGACIÓN Y ACCIONES             -->
+<!-- ===================================================================== -->
+<header
+  class="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 transition-colors duration-200 shadow-xs flex items-center justify-between px-3 md:px-6 py-1.5 md:py-2.5 h-11 md:h-auto shrink-0 gap-3 relative">
+
+  <!-- FLANCO IZQUIERDO: Branding & Sync Status -->
+  <div class="flex items-center gap-2.5 shrink-0">
+    <div class="flex items-center gap-2">
+      <div
+        class="w-7 h-7 md:w-9 md:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center font-black text-xs md:text-sm text-white shadow-md shadow-indigo-500/20 ring-1 ring-white/20">
+        <span>P</span>
+      </div>
+      <div class="hidden md:flex flex-col">
+        <span class="text-xs font-black tracking-wider text-slate-900 dark:text-white uppercase leading-none">PMO
+          Modular</span>
+        <span class="text-[10px] font-semibold text-slate-400 dark:text-slate-400 leading-tight">Executive
+          Suite</span>
+      </div>
+      <!-- Título compacto de la vista activa para móviles (< md) -->
+      <span id="mobile-header-view-title" class="md:hidden text-xs font-bold text-slate-800 dark:text-slate-100 truncate max-w-[170px]">
+        Tablero Kanban
+      </span>
+    </div>
+
+    <!-- Indicador sutil de sincronización (Solo Desktop) -->
+    <div id="sync-status-container"
+      class="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-default bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 shadow-2xs"
+      title="Última sincronización: Al iniciar">
+      <span id="sync-status-led" class="relative flex h-2 w-2">
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+      </span>
+      <span id="sync-status-text" class="text-[11px] font-medium hidden md:inline">Al día</span>
+    </div>
+  </div>
+
+  <!-- CENTRO: Pestañas Principales Centradas Matemáticamente (Tablero, Portafolio, Hábitos, Finanzas) -->
+  <nav
+    class="hidden md:inline-flex items-center p-1.5 bg-slate-100/90 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-inner gap-1 text-xs select-none absolute left-1/2 -translate-x-1/2">
+    <button type="button" onclick="cambiarVistaGlobal('kanban')" id="tab-nav-kanban"
+      class="nav-tab-btn nav-tab-active px-3.5 py-1.5 rounded-xl font-bold transition-all duration-200 ease-out flex items-center gap-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs dark:shadow-md dark:shadow-slate-950/40 border border-slate-200/90 dark:border-slate-700/80 ring-1 ring-black/5 dark:ring-white/10 active:scale-95 cursor-pointer"
+      title="Tablero Kanban de Tareas (Presiona 1)">
+      <svg class="w-4 h-4 shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M6 5v11" />
+        <path d="M12 5v6" />
+        <path d="M18 5v14" />
+      </svg>
+      <span class="hidden sm:inline">Tablero</span>
+      <span id="badge-header-kanban"
+        class="hidden text-[10px] font-mono font-bold px-1.5 py-0.5 min-w-[18px] h-4 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60 shadow-2xs leading-none">0</span>
+    </button>
+
+    <button type="button" onclick="cambiarVistaGlobal('portafolio')" id="tab-nav-portafolio"
+      class="nav-tab-btn nav-tab-inactive px-3.5 py-1.5 rounded-xl font-medium transition-all duration-200 ease-out flex items-center gap-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 border border-transparent active:scale-95 cursor-pointer"
+      title="Portafolio de Proyectos (Presiona 2)">
+      <svg class="w-4 h-4 shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+      </svg>
+      <span class="hidden sm:inline">Portafolio</span>
+      <span id="badge-header-portafolio"
+        class="hidden text-[10px] font-mono font-bold px-1.5 py-0.5 min-w-[18px] h-4 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 shadow-2xs leading-none">0</span>
+    </button>
+
+    <button type="button" id="tab-nav-habitos" onclick="cambiarVistaGlobal('habitos')"
+      class="nav-tab-btn nav-tab-inactive px-3.5 py-1.5 rounded-xl font-medium transition-all duration-200 ease-out flex items-center gap-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 border border-transparent active:scale-95 cursor-pointer"
+      title="Hábitos y Gestión de Vida (Presiona 3)">
+      <svg class="w-4 h-4 shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+      </svg>
+      <span class="hidden sm:inline">Hábitos</span>
+    </button>
+
+    <button type="button" id="tab-nav-financiero"
+      onclick="cambiarVistaGlobal('financiero'); if (typeof window.renderTableroFinanciero === 'function') window.renderTableroFinanciero();"
+      class="nav-tab-btn nav-tab-inactive px-3.5 py-1.5 rounded-xl font-medium transition-all duration-200 ease-out flex items-center gap-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 border border-transparent active:scale-95 cursor-pointer"
+      title="Flujo de Caja y Finanzas (Presiona 4)">
+      <svg class="w-4 h-4 shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
+        <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+      </svg>
+      <span class="hidden sm:inline">Finanzas</span>
+    </button>
+  </nav>
+
+  <!-- FLANCO DERECHO: Acceso a Notas, Calendar, Archivados y Dock de Utilidades Flotantes -->
+  <div class="flex items-center gap-1.5 shrink-0">
+    <!-- 1. Botón de Notas (#btn-nav-notas): Protagonista con fondo ámbar visible en reposo (Solo Escritorio) -->
+    <div class="hidden md:inline-flex">
+      <button type="button" id="btn-nav-notas"
+        onclick="cambiarVistaGlobal('notas'); if (typeof window.renderVistaNotas === 'function') window.renderVistaNotas();"
+        class="relative hidden md:inline-flex items-center justify-center w-11 h-9 rounded-2xl bg-amber-500/[0.12] border border-amber-500/40 hover:bg-amber-500/20 hover:border-amber-400/70 active:scale-95 transition-all duration-200 cursor-pointer select-none shadow-xs"
+        title="Notas Inteligentes (Presiona 5)">
+        <svg class="w-4 h-4 text-amber-400 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+          <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+          <path d="M10 9H8" />
+          <path d="M16 13H8" />
+          <path d="M16 17H8" />
+        </svg>
+        <span id="badge-header-notas"
+          class="hidden absolute -top-1 -right-1 text-[9px] font-mono font-bold px-1 min-w-[15px] h-3.5 rounded-full bg-amber-500 text-slate-950 border border-amber-300 leading-none items-center justify-center shadow-xs">0</span>
+      </button>
+    </div>
+
+    <!-- 2. Botón Calendar (#btn-header-calendar): Idéntico a Repetir y Atajos, sin clase header-dock-btn -->
+    <a href="https://calendar.google.com/calendar/r" target="_blank" id="btn-header-calendar"
+      style="background: transparent !important; border: 1px solid transparent !important; box-shadow: none !important;"
+      class="h-9 w-9 p-0 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 active:scale-95 transition-all duration-200 cursor-pointer hidden md:flex items-center justify-center select-none"
+      title="Abrir Google Calendar (Presiona C)">
+      <svg class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M8 2v4" />
+        <path d="M16 2v4" />
+        <rect width="18" height="18" x="3" y="4" rx="2" />
+        <path d="M3 10h18" />
+        <path d="M8 14h.01" />
+        <path d="M12 14h.01" />
+        <path d="M16 14h.01" />
+        <path d="M8 18h.01" />
+        <path d="M12 18h.01" />
+        <path d="M16 18h.01" />
+      </svg>
+    </a>
+
+    <!-- 3. Botón de Archivados (#btn-header-archivados): Idéntico a Repetir y Atajos, sin clase header-dock-btn -->
+    <button type="button" id="btn-header-archivados" data-legacy-id="btn-header-boveda-archivados"
+      onclick="abrirDrawerArchivados()"
+      style="background: transparent !important; border: 1px solid transparent !important; box-shadow: none !important;"
+      class="relative h-9 w-9 p-0 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 active:scale-95 transition-all duration-200 cursor-pointer hidden md:flex items-center justify-center select-none"
+      title="Bóveda de Archivados (+10 días completados/conciliados)">
+      <svg class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <rect width="20" height="5" x="2" y="3" rx="1" />
+        <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+        <path d="M10 12h4" />
+      </svg>
+      <span id="badge-header-archivados"
+        class="absolute -top-1 -right-1 text-[9px] font-mono font-bold px-1 min-w-[15px] h-3.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 leading-none flex items-center justify-center shadow-xs">0</span>
+    </button>
+
+    <!-- 4. Recargar (#btn-refresh-global): Icono flotante limpio, sin marco ni caja en reposo -->
+    <button type="button" id="btn-refresh-global" data-legacy-id="btn-header-refresh" onclick="refreshData(true)"
+      class="header-dock-btn h-9 w-9 p-0 rounded-xl bg-transparent border border-transparent text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 active:scale-95 transition-all duration-200 cursor-pointer hidden md:flex items-center justify-center"
+      title="Sincronizar datos con Google Sheets (Presiona R)">
+      <svg id="icon-header-refresh" class="w-4 h-4 transition-transform duration-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+        viewBox="0 0 24 24">
+        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+        <path d="M21 3v5h-5" />
+      </svg>
+    </button>
+
+    <!-- 5. Atajos (#btn-toggle-shortcuts-modal): Icono flotante limpio, sin marco ni caja en reposo -->
+    <button type="button" id="btn-toggle-shortcuts-modal" data-legacy-id="btn-shortcuts-config"
+      onclick="abrirModalAtajosTeclado()"
+      class="header-dock-btn h-9 w-9 p-0 rounded-xl bg-transparent border border-transparent text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 active:scale-95 transition-all duration-200 cursor-pointer hidden md:flex items-center justify-center"
+      title="Atajos de Teclado (Presiona ?)">
+      <svg class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <rect width="20" height="16" x="2" y="4" rx="2" />
+        <path d="M10 8h.01" />
+        <path d="M14 8h.01" />
+        <path d="M18 8h.01" />
+        <path d="M6 8h.01" />
+        <path d="M8 12h.01" />
+        <path d="M12 12h.01" />
+        <path d="M16 12h.01" />
+        <path d="M7 16h10" />
+      </svg>
+    </button>
+
+    <!-- 6. Selector de Modo / Tema (#btn-theme-dropdown): Icono flotante limpio, sin marco ni caja en reposo (SIEMPRE VISIBLE) -->
+    <div class="relative" id="container-theme-dropdown">
+      <button type="button" id="btn-theme-dropdown" onclick="toggleThemeDropdown(event)"
+        class="header-dock-btn h-8 w-8 md:h-9 md:w-9 p-0 rounded-xl bg-transparent border border-transparent text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 flex items-center justify-center active:scale-95 transition-all duration-200 cursor-pointer"
+        title="Tema e Iluminación (Sol / Luna y Paletas)">
+        <span id="icon-theme-mode-indicator" class="w-4 h-4 flex items-center justify-center transition-transform duration-200 select-none">
+          <svg class="lucide-sun w-4 h-4 block dark:hidden" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="m4.93 4.93 1.41 1.41" />
+            <path d="m17.66 17.66 1.41 1.41" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+            <path d="m6.34 17.66-1.41 1.41" />
+            <path d="m19.07 4.93-1.41 1.41" />
+          </svg>
+          <svg class="lucide-moon w-4 h-4 hidden dark:block" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+          </svg>
+        </span>
+      </button>
+
+      <!-- Micro-Dropdown Flotante Glassmorphism -->
+      <div id="menu-theme-dropdown"
+        class="hidden absolute right-0 mt-2 w-60 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-2xl p-3 z-50 animate-fadeIn space-y-3">
+
+        <!-- Encabezado del Micro-Dropdown -->
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs">✨</span>
+            <span
+              class="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">Apariencia</span>
+          </div>
+          <button type="button" onclick="toggleTheme()"
+            class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
+            Alternar Modo
+          </button>
+        </div>
+
+        <!-- Selección de Iluminación (Claro / Oscuro) -->
+        <div class="space-y-1.5">
+          <span
+            class="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider block">Iluminación</span>
+          <div class="grid grid-cols-2 gap-2">
+            <!-- Modo Claro -->
+            <button type="button" onclick="seleccionarModoColor('light')" id="opt-mode-light"
+              class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-amber-400 transition-all duration-150 cursor-pointer">
+              <span class="text-sm">☀️</span>
+              <div class="flex flex-col">
+                <span class="text-xs font-bold text-slate-800 dark:text-slate-200">Claro</span>
+                <span class="text-[9px] text-slate-400">Light</span>
+              </div>
+            </button>
+
+            <!-- Modo Oscuro -->
+            <button type="button" onclick="seleccionarModoColor('dark')" id="opt-mode-dark"
+              class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 transition-all duration-150 cursor-pointer">
+              <span class="text-sm">🌙</span>
+              <div class="flex flex-col">
+                <span class="text-xs font-bold text-slate-800 dark:text-slate-200">Oscuro</span>
+                <span class="text-[9px] text-slate-400">OLED</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Selección de Paleta / Sabor -->
+        <div class="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+          <span class="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider block">Paleta
+            de Color</span>
+          <div class="grid grid-cols-2 gap-2">
+            <!-- Opción Slate -->
+            <button type="button" onclick="seleccionarSaborTema('slate')" id="opt-theme-slate"
+              class="flex flex-col items-start p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 transition-all duration-150 text-left cursor-pointer group">
+              <div class="flex items-center justify-between w-full mb-1">
+                <span class="text-xs font-bold text-slate-800 dark:text-slate-200">⚡ Slate</span>
+                <span class="w-2 h-2 rounded-full bg-indigo-500 check-indicator-slate hidden"></span>
+              </div>
+              <span class="text-[9px] text-slate-500 dark:text-slate-400 leading-tight">Metálico</span>
+            </button>
+
+            <!-- Opción Rose Luxury -->
+            <button type="button" onclick="seleccionarSaborTema('rose')" id="opt-theme-rose"
+              class="flex flex-col items-start p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-rose-400 transition-all duration-150 text-left cursor-pointer group">
+              <div class="flex items-center justify-between w-full mb-1">
+                <span class="text-xs font-bold text-rose-700 dark:text-rose-300">🌸 Rose</span>
+                <span class="w-2 h-2 rounded-full bg-rose-500 check-indicator-rose hidden"></span>
+              </div>
+              <span class="text-[9px] text-slate-500 dark:text-slate-400 leading-tight">Champagne</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ===================================================================== -->
+<!-- DRAWER LATERAL DERECHO: BÓVEDA DE ELEMENTOS ARCHIVADOS (+10 DÍAS)    -->
+<!-- ===================================================================== -->
+<!-- Overlay Backdrop con desenfoque de fondo ultra fluido -->
+<div id="drawer-archivados-overlay" onclick="cerrarDrawerArchivados()"
+  class="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[90] transition-opacity duration-300 opacity-0 pointer-events-none">
+</div>
+
+<!-- Panel Deslizante Drawer -->
+<aside id="drawer-archivados"
+  class="fixed inset-y-0 right-0 z-[95] w-full sm:w-[500px] lg:w-[580px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl shadow-2xl border-l border-slate-200/90 dark:border-slate-800 transition-transform duration-300 ease-out translate-x-full flex flex-col min-h-0 select-none">
+
+  <!-- Encabezado del Drawer -->
+  <div
+    class="p-4 sm:p-5 border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between shrink-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md">
+    <div class="flex items-center gap-3">
+      <div
+        class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center text-lg shadow-md shadow-amber-500/20 ring-1 ring-white/20">
+        <span>📦</span>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h3 class="text-base font-black text-slate-900 dark:text-white leading-tight">Bóveda de Archivados</h3>
+          <span
+            class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">+10
+            días</span>
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Elementos finalizados o conciliados retirados
+          del canvas activo</p>
+      </div>
+    </div>
+
+    <!-- Botón Cerrar Drawer -->
+    <button type="button" onclick="cerrarDrawerArchivados()"
+      class="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-150 active:scale-95 cursor-pointer"
+      title="Cerrar Bóveda (Esc)">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  </div>
+
+  <!-- Barra de Herramientas: Buscador y Pestañas Segmentadas -->
+  <div
+    class="p-4 border-b border-slate-200/80 dark:border-slate-800/80 space-y-3 shrink-0 bg-slate-50/70 dark:bg-slate-900/40">
+    <!-- Buscador en Vivo de Archivados -->
+    <div class="relative">
+      <span
+        class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">🔍</span>
+      <input type="text" id="input-busqueda-drawer-archivados" oninput="filtrarDrawerArchivados(this.value)"
+        placeholder="Buscar por título, ID, proyecto o categoría..."
+        class="w-full pl-8 pr-8 py-2 text-xs bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 text-slate-800 dark:text-slate-100 shadow-2xs placeholder:text-slate-400">
+      <button type="button" id="btn-clear-busqueda-drawer" onclick="limpiarBusquedaDrawerArchivados()"
+        class="hidden absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 text-xs font-bold">✕</button>
+    </div>
+
+    <!-- Pestañas de Filtro Contextual -->
+    <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs custom-scrollbar">
+      <button type="button" onclick="cambiarTabDrawerArchivados('todos')" id="tab-drawer-todos"
+        class="tab-drawer-pill px-3 py-1.5 rounded-xl font-bold transition-all duration-150 flex items-center gap-1.5 shrink-0 bg-amber-500 text-white shadow-2xs cursor-pointer">
+        <span>🌐 Todos</span>
+        <span id="count-tab-arch-todos" class="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-black">0</span>
+      </button>
+
+      <button type="button" onclick="cambiarTabDrawerArchivados('kanban')" id="tab-drawer-kanban"
+        class="tab-drawer-pill px-3 py-1.5 rounded-xl font-medium transition-all duration-150 flex items-center gap-1.5 shrink-0 text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer">
+        <span>📋 Kanban</span>
+        <span id="count-tab-arch-kanban"
+          class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-bold">0</span>
+      </button>
+
+      <button type="button" onclick="cambiarTabDrawerArchivados('portafolio')" id="tab-drawer-portafolio"
+        class="tab-drawer-pill px-3 py-1.5 rounded-xl font-medium transition-all duration-150 flex items-center gap-1.5 shrink-0 text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer">
+        <span>💼 Portafolio</span>
+        <span id="count-tab-arch-portafolio"
+          class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-bold">0</span>
+      </button>
+
+      <button type="button" onclick="cambiarTabDrawerArchivados('habitos')" id="tab-drawer-habitos"
+        class="tab-drawer-pill px-3 py-1.5 rounded-xl font-medium transition-all duration-150 flex items-center gap-1.5 shrink-0 text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer">
+        <span>🏃 Hábitos</span>
+        <span id="count-tab-arch-habitos"
+          class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-bold">0</span>
+      </button>
+
+      <button type="button" onclick="cambiarTabDrawerArchivados('finanzas')" id="tab-drawer-finanzas"
+        class="tab-drawer-pill px-3 py-1.5 rounded-xl font-medium transition-all duration-150 flex items-center gap-1.5 shrink-0 text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer">
+        <span>💳 Finanzas</span>
+        <span id="count-tab-arch-finanzas"
+          class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-bold">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Contenedor Scrollable de Micro-Tarjetas Bento -->
+  <div id="lista-elementos-drawer-archivados"
+    class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 custom-scrollbar min-h-0 bg-slate-100/50 dark:bg-slate-950/50">
+    <!-- Inyectado dinámicamente por renderListaDrawerArchivados() -->
+    <div class="text-center py-16 text-xs text-slate-400 italic">
+      Cargando elementos archivados...
+    </div>
+  </div>
+
+  <!-- Pie del Drawer -->
+  <div
+    class="p-3.5 px-5 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center justify-between shrink-0 text-xs text-slate-500 dark:text-slate-400">
+    <div class="flex items-center gap-1.5">
+      <span class="text-amber-500 font-bold">💡</span>
+      <span class="text-[11px]">Pulsa <b>'↩️ Restaurar'</b> para devolver un elemento al canvas activo en
+        caliente.</span>
+    </div>
+    <span id="lbl-total-archivados-footer"
+      class="font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">0 archivados</span>
+  </div>
+
+</aside>
+
+<!-- ===================================================================== -->

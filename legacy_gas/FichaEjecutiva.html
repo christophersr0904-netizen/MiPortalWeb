@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Ficha Ejecutiva PMO - EVM</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 4px; font-size: 10.5px; line-height: 1.35; }
+    .card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px; max-width: 710px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 10px; }
+    .badge { display: inline-block; padding: 2px 6px; font-size: 8.5px; font-weight: 700; border-radius: 4px; text-transform: uppercase; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .title { font-size: 16px; font-weight: 800; color: #0f172a; margin: 3px 0 2px 0; }
+    .subtitle { font-size: 10px; color: #64748b; margin: 0; }
+    .health-icon { font-size: 24px; line-height: 1; text-align: right; }
+    
+    .evm-container { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; margin-bottom: 10px; }
+    .evm-metric { text-align: center; border-right: 1px solid #e2e8f0; }
+    .evm-metric:last-child { border-right: none; }
+    .evm-lbl { display: block; font-size: 8px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 2px; }
+    .evm-val { font-size: 12.5px; font-weight: 800; }
+    .val-good { color: #059669; }
+    .val-bad { color: #dc2626; }
+    .val-neutral { color: #0f172a; }
+
+    .section-title { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px 0; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 2px; }
+    .ai-box { background: #fffbeb; border: 1px solid #fef3c7; border-left: 3px solid #d97706; padding: 7px 9px; border-radius: 4px; margin-bottom: 10px; }
+    .ai-text { font-size: 9.5px; color: #92400e; margin: 0; font-style: italic; line-height: 1.4; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10px; }
+    th { text-align: left; padding: 3px 5px; font-weight: 700; color: #64748b; border-bottom: 1px solid #cbd5e1; font-size: 8.5px; text-transform: uppercase; }
+    td { padding: 3px 5px; border-bottom: 1px solid #f1f5f9; }
+    .text-right { text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    
+    <div class="header">
+      <div>
+        <span class="badge"><?= proyecto.ID_Proyecto ?></span>
+        <span class="badge"><?= proyecto.Tipo_Iniciativa || proyecto.Tipo ?></span>
+        <span class="badge"><?= proyecto.Fase_Ciclo_Vida || proyecto.Fase ?></span>
+        <h1 class="title"><?= proyecto.Nombre_Proyecto || proyecto.Nombre ?></h1>
+        <p class="subtitle">Líder: <strong><?= proyecto.Terceros_Involucrados || 'Christopher' ?></strong> | DoD: <?= proyecto.Criterios_Aceptacion_DoD || proyecto.DoD ?></p>
+      </div>
+      <div>
+        <div class="health-icon"><?= (proyecto.Health_Status || proyecto.Health || '🟢').split(' ')[0] ?></div>
+        <span style="font-size: 7.5px; font-weight: 700; color: #94a3b8; text-transform: uppercase; display: block; text-align: right;">Estado</span>
+      </div>
+    </div>
+
+    <div class="section-title">Matriz Cuantitativa de Valor Ganado (EVM)</div>
+    <div class="evm-container">
+      <div class="evm-metric">
+        <span class="evm-lbl">Avance Real</span>
+        <span class="evm-val val-neutral"><?= Math.round((Number(proyecto.Avance_Real_Pct) || 0) * 100) ?>%</span>
+      </div>
+      <div class="evm-metric">
+        <span class="evm-lbl">Cost Index (CPI)</span>
+        <span class="evm-val <?= evm.cpi >= 1.0 ? 'val-good' : 'val-bad' ?>"><?= evm.cpi.toFixed(2) ?></span>
+      </div>
+      <div class="evm-metric">
+        <span class="evm-lbl">Sched Index (SPI)</span>
+        <span class="evm-val <?= evm.spi >= 1.0 ? 'val-good' : 'val-bad' ?>"><?= evm.spi.toFixed(2) ?></span>
+      </div>
+      <div class="evm-metric">
+        <span class="evm-lbl">Var. Costo (CV)</span>
+        <span class="evm-val <?= evm.cv >= 0 ? 'val-good' : 'val-bad' ?>"><?= evm.cv >= 0 ? '+' : '' ?><?= evm.cv.toFixed(1) ?></span>
+      </div>
+      <div class="evm-metric">
+        <span class="evm-lbl">Var. Plazo (SV)</span>
+        <span class="evm-val <?= evm.sv >= 0 ? 'val-good' : 'val-bad' ?>"><?= evm.sv >= 0 ? '+' : '' ?><?= evm.sv.toFixed(1) ?></span>
+      </div>
+      <div class="evm-metric">
+        <span class="evm-lbl">Est. Fin (EAC)</span>
+        <span class="evm-val val-neutral"><?= evm.moneda ?> <?= evm.eac.toFixed(0) ?></span>
+      </div>
+    </div>
+
+    <div class="section-title">Diagnóstico Ejecutivo de Desempeño (IA)</div>
+    <div class="ai-box">
+      <p class="ai-text"><?= analisisIA ?></p>
+    </div>
+
+    <div class="section-title">Hitos de Ruta Crítica & Entregables</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Hito</th>
+          <th>Fase</th>
+          <th>Límite Plan</th>
+          <th>Estado</th>
+          <th class="text-right">Desvío</th>
+        </tr>
+      </thead>
+      <tbody>
+        <? for (var i = 0; i < hitos.length; i++) { ?>
+          <tr>
+            <td><strong><?= hitos[i].Nombre_Hito ?></strong></td>
+            <td><?= hitos[i].Fase_Asociada || hitos[i].Fase ?></td>
+            <td><?= Utilities.formatDate(new Date(hitos[i].Fecha_Limite_Plan), 'America/Lima', 'yyyy-MM-dd') ?></td>
+            <td><?= hitos[i].Estado_Hito || hitos[i].Estado ?></td>
+            <td class="text-right font-bold <?= Number(hitos[i].Desviacion_Dias) > 0 ? 'val-bad' : '' ?>" style="<?= Number(hitos[i].Desviacion_Dias) > 0 ? 'color: #dc2626;' : '' ?>"><?= hitos[i].Desviacion_Dias ?> d</td>
+          </tr>
+        <? } ?>
+      </tbody>
+    </table>
+
+    <div class="section-title">Top Bloqueos Operativos Vigentes</div>
+    <? if (bloqueos.length === 0) { ?>
+      <p style="color: #64748b; font-style: italic; margin: 2px 0;">Sin impedimentos reportados.</p>
+    <? } else { ?>
+      <ul style="margin: 0; padding-left: 14px; color: #b91c1c;">
+        <? for (var b = 0; b < bloqueos.length; b++) { ?>
+          <li><strong><?= bloqueos[b].Nombre_Tarea_Actividad || bloqueos[b].Nombre_Tarea ?>:</strong> <?= bloqueos[b].Notas || bloqueos[b].Notas_Impedimentos ?></li>
+        <? } ?>
+      </ul>
+    <? } ?>
+
+  </div>
+</body>
+</html>

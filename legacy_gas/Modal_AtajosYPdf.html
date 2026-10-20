@@ -1,0 +1,242 @@
+<!-- ===================================================================== -->
+<!-- MODALES DE EXPORTACIÓN PDF Y ATAJOS DE TECLADO                          -->
+<!-- ===================================================================== -->
+  <div id="modal-exportar-pdf"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-exportar-pdf-card" class="portal-surface elevation-3 w-full max-w-lg max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative">
+
+      <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-xs">
+        <div>
+          <h3 class="font-bold text-slate-800 text-sm md:text-base flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+            <span>Generar FICHA RESUMEN (PDF)</span>
+          </h3>
+          <p class="text-[11px] text-slate-500">Compilación ejecutiva y métricas EVM</p>
+        </div>
+        <button type="button" onclick="closeModal('modal-exportar-pdf')"
+          class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+      </div>
+      <div class="shrink-0 px-5 pt-3 pb-2 bg-slate-50/80 dark:bg-slate-950/40 border-b border-slate-200/80 dark:border-slate-800">
+        <div class="grid grid-cols-4 gap-1.5 p-1 bg-slate-200/80 rounded-xl text-xs font-semibold">
+          <button type="button" onclick="cambiarTabPdf('activos')" id="tab-pdf-activos"
+            class="tab-btn-pdf py-1.5 px-2 rounded-lg text-center truncate bg-white text-indigo-700 shadow-sm font-bold">Activos</button>
+          <button type="button" onclick="cambiarTabPdf('planificados')" id="tab-pdf-planificados"
+            class="tab-btn-pdf py-1.5 px-2 rounded-lg text-center truncate text-slate-600">Planificados</button>
+          <button type="button" onclick="cambiarTabPdf('cerrados')" id="tab-pdf-cerrados"
+            class="tab-btn-pdf py-1.5 px-2 rounded-lg text-center truncate text-slate-600">Cerrados</button>
+          <button type="button" onclick="cambiarTabPdf('todos')" id="tab-pdf-todos"
+            class="tab-btn-pdf py-1.5 px-2 rounded-lg text-center truncate text-slate-600">Todos</button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar text-xs">
+        <div><label class="block font-semibold mb-1.5">Proyecto para Ficha</label><select id="selector-proyecto-pdf"
+            class="w-full border rounded-lg p-2.5 bg-white"></select></div>
+        <div id="box-resultado-pdf"
+          class="hidden p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex items-center justify-between">
+          <span class="inline-flex items-center gap-1.5 font-medium">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            <span>Documento compilado</span>
+          </span>
+          <a id="link-abrir-pdf-directo" href="#" target="_blank"
+            class="px-3 py-1 bg-emerald-600 text-white rounded font-bold hover:bg-emerald-700">Ver PDF</a>
+        </div>
+        <button type="button" id="btn-compilar-pdf" onclick="ejecutarCompilacionPdf()"
+          class="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow transition">Compilar
+          FICHA RESUMEN (PDF)</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===================================================================== -->
+  <div id="modal-atajos-teclado"
+    class="hidden fixed inset-0 z-[9999] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-atajos-teclado-card"
+      class="portal-surface elevation-3 w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative animate-fadeIn">
+
+      <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <!-- Header Modal -->
+      <div
+        class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-xs">
+        <div class="flex items-center gap-2.5">
+          <div
+            class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect x="2" y="4" width="20" height="16" rx="3" stroke-width="2" />
+              <path stroke-linecap="round" stroke-width="2"
+                d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2">
+              <span>Atajos de Teclado</span>
+              <span
+                class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60">Configurables</span>
+            </h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">Navega y filtra velozmente. Haz clic en cualquier
+              tecla para reasignarla.</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- Toggle Activar/Desactivar atajos -->
+          <label class="flex items-center gap-1.5 cursor-pointer text-xs text-slate-600 dark:text-slate-300 select-none"
+            title="Activar o desactivar escucha global de atajos">
+            <input type="checkbox" id="chk-shortcuts-toggle" onchange="toggleShortcutsMaster(this.checked)"
+              class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5" checked>
+            <span class="text-[11px] font-semibold">Atajos activos</span>
+          </label>
+          <button type="button" onclick="cerrarModalAtajosTeclado()"
+            class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition font-bold"
+            title="Cerrar (Esc)">✕</button>
+        </div>
+      </div>
+
+      <!-- NÚCLEO ESENCIAL DE 4 ATAJOS GLOBALES (ESC, C, X, ENTER) -->
+      <div class="px-5 py-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border-b border-indigo-900/50 shrink-0">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <h4 class="text-xs font-black uppercase tracking-wider text-indigo-300">Núcleo Esencial Transversal (4 Atajos Globales)</h4>
+          </div>
+          <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">Blindado contra Inputs</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+          <!-- Escape -->
+          <div class="bg-white/10 hover:bg-white/15 backdrop-blur-xs p-2.5 rounded-xl border border-white/10 transition-all flex flex-col justify-between gap-1 shadow-2xs">
+            <div class="flex items-center justify-between">
+              <kbd class="px-2 py-0.5 rounded-md bg-white/20 text-white font-mono font-black text-xs border border-white/20 shadow-2xs">Esc</kbd>
+              <span class="text-[9.5px] font-mono text-slate-400">Pila LIFO</span>
+            </div>
+            <p class="text-[11px] font-bold text-white truncate">Cerrar / Cancelar</p>
+            <p class="text-[9.5px] text-slate-300 leading-tight">Cierra popovers, datepickers, modales o desenfoca inputs (blur)</p>
+          </div>
+          <!-- C -->
+          <div class="bg-white/10 hover:bg-white/15 backdrop-blur-xs p-2.5 rounded-xl border border-white/10 transition-all flex flex-col justify-between gap-1 shadow-2xs">
+            <div class="flex items-center justify-between">
+              <kbd class="px-2.5 py-0.5 rounded-md bg-emerald-500/30 text-emerald-300 font-mono font-black text-xs border border-emerald-400/40 shadow-2xs">C</kbd>
+              <span class="text-[9.5px] font-mono text-emerald-300">Canvas</span>
+            </div>
+            <p class="text-[11px] font-bold text-white truncate">Google Calendar</p>
+            <p class="text-[9.5px] text-slate-300 leading-tight">Abre tu Google Calendar en nueva pestaña (fuera de inputs)</p>
+          </div>
+          <!-- X -->
+          <div class="bg-white/10 hover:bg-white/15 backdrop-blur-xs p-2.5 rounded-xl border border-white/10 transition-all flex flex-col justify-between gap-1 shadow-2xs">
+            <div class="flex items-center justify-between">
+              <kbd class="px-2.5 py-0.5 rounded-md bg-amber-500/30 text-amber-300 font-mono font-black text-xs border border-amber-400/40 shadow-2xs">X</kbd>
+              <span class="text-[9.5px] font-mono text-amber-300">Universal</span>
+            </div>
+            <p class="text-[11px] font-bold text-white truncate">Limpiar Filtros</p>
+            <p class="text-[9.5px] text-slate-300 leading-tight">Resetea filtros y búsquedas en caliente en la pestaña activa</p>
+          </div>
+          <!-- Enter -->
+          <div class="bg-white/10 hover:bg-white/15 backdrop-blur-xs p-2.5 rounded-xl border border-white/10 transition-all flex flex-col justify-between gap-1 shadow-2xs">
+            <div class="flex items-center justify-between">
+              <kbd class="px-2 py-0.5 rounded-md bg-cyan-500/30 text-cyan-300 font-mono font-black text-xs border border-cyan-400/40 shadow-2xs">↵ Enter</kbd>
+              <span class="text-[9.5px] font-mono text-cyan-300">Acción</span>
+            </div>
+            <p class="text-[11px] font-bold text-white truncate">Confirmar Primaria</p>
+            <p class="text-[9.5px] text-slate-300 leading-tight">Guardar / Aceptar / Continuar (textarea multilínea respetado)</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selector de Pestañas de Atajos (Scoped Tabs UI) -->
+      <div class="px-5 pt-3 pb-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 text-xs">
+        <button type="button" onclick="cambiarTabModalAtajos('global')" id="tab-btn-atajos-global"
+          class="tab-atajo-btn px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-2xs">
+          <span>🌐 Globales</span>
+          <span class="badge-tab-atajos px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold" id="badge-count-atajos-global">0</span>
+        </button>
+        <button type="button" onclick="cambiarTabModalAtajos('kanban')" id="tab-btn-atajos-kanban"
+          class="tab-atajo-btn px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
+          <span>📋 Kanban</span>
+          <span class="badge-tab-atajos px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold" id="badge-count-atajos-kanban">0</span>
+        </button>
+        <button type="button" onclick="cambiarTabModalAtajos('portafolio')" id="tab-btn-atajos-portafolio"
+          class="tab-atajo-btn px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
+          <span>📁 Portafolio</span>
+          <span class="badge-tab-atajos px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold" id="badge-count-atajos-portafolio">0</span>
+        </button>
+        <button type="button" onclick="cambiarTabModalAtajos('habitos')" id="tab-btn-atajos-habitos"
+          class="tab-atajo-btn px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
+          <span>🌱 Hábitos & Vida</span>
+          <span class="badge-tab-atajos px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold" id="badge-count-atajos-habitos">0</span>
+        </button>
+        <button type="button" onclick="cambiarTabModalAtajos('finanzas')" id="tab-btn-atajos-finanzas"
+          class="tab-atajo-btn px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
+          <span>💰 Finanzas</span>
+          <span class="badge-tab-atajos px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold" id="badge-count-atajos-finanzas">0</span>
+        </button>
+        <button type="button" onclick="cambiarTabModalAtajos('notas')" id="tab-btn-atajos-notas"
+          class="tab-atajo-btn px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all">
+          <span>📝 Notas</span>
+          <span class="badge-tab-atajos px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold" id="badge-count-atajos-notas">0</span>
+        </button>
+      </div>
+
+      <!-- Banner de Grabación de Tecla (activo cuando el usuario presiona Reasignar) -->
+      <div id="banner-grabando-atajo"
+        class="hidden bg-indigo-600 text-white px-4 py-2 text-xs flex items-center justify-between shadow-inner shrink-0 transition-all">
+        <div class="flex items-center gap-2">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+          </span>
+          <span>Presiona cualquier tecla para asignar a <b id="lbl-grabando-accion"
+              class="underline underline-offset-2">Acción</b>...</span>
+        </div>
+        <button type="button" onclick="cancelarGrabacionAtajo()"
+          class="text-white/90 hover:text-white font-bold text-[11px] bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded transition">Cancelar</button>
+      </div>
+
+      <!-- Cuerpo del Modal: Lista de Atajos Interactiva Agrupada por Pestaña -->
+      <div id="contenedor-lista-atajos" class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar text-xs">
+        <!-- Generado dinámicamente vía JavaScript -->
+      </div>
+
+      <!-- Footer Modal -->
+      <div
+        class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between gap-2.5">
+        <div class="flex items-center gap-3">
+          <!-- ELIMINADO: Botón "Sincronizar Calendarios" — la sincronización ahora es reactiva -->
+
+          <button type="button" onclick="restablecerAtajosPestana()"
+            class="text-xs text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 font-semibold transition flex items-center gap-1.5"
+            title="Restablecer solo los atajos de la pestaña seleccionada a sus valores por defecto">
+            <span>↺</span>
+            <span id="lbl-restablecer-pestana">Restablecer pestaña</span>
+          </button>
+
+          <span class="text-slate-300 dark:text-slate-700">|</span>
+
+          <button type="button" onclick="restablecerAtajosFabrica()"
+            class="text-xs text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 font-medium transition flex items-center gap-1"
+            title="Restablecer todos los atajos de todas las secciones">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Restablecer todo</span>
+          </button>
+        </div>
+
+        <button type="button" onclick="cerrarModalAtajosTeclado()"
+          class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl font-bold shadow-xs transition text-xs">
+          Listo
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast flotante sutil para feedback táctil de atajos ejecutados -->
+  <div id="toast-atajo-feedback"
+    class="pointer-events-none fixed bottom-5 right-5 z-[10000] hidden items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/90 dark:bg-slate-800/95 text-white text-xs font-semibold shadow-lg backdrop-blur border border-slate-700/60 transition-all duration-300 transform translate-y-2 opacity-0">
+    <span id="toast-atajo-msg">Atajo ejecutado</span>
+  </div>

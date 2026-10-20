@@ -1,0 +1,781 @@
+<div id="modal-actividad-flow"
+  class="fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs hidden flex items-end sm:items-center justify-center p-0 sm:p-4"
+  style="transition: all 0.15s ease-out;">
+  <div id="modal-actividad-flow-card"
+    class="portal-surface elevation-3 w-full max-w-xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative"
+    style="transition: all 0.15s ease-out;">
+
+    <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+    <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+    <!-- CAMPOS OCULTOS DE CONTROL Y RETROCOMPATIBILIDAD -->
+    <input type="hidden" id="edit-act-id">
+    <input type="hidden" id="act-flow-id">
+    <input type="hidden" id="act-flow-categoria-val" value="SALUD_DEPORTE">
+    <input type="hidden" id="act-flow-tipo-val" value="HABITUAL">
+    <input type="hidden" id="act-flow-frecuencia-val" value="DIARIA">
+    <input type="hidden" id="act-flow-regla-val" value="">
+    <input type="hidden" id="act-flow-prioridad-val" value="02_P2_Media">
+    <input type="hidden" id="act-flow-calendar-val" value="Sí">
+    <input type="hidden" id="act-flow-duracion-val" value="1.0">
+    <input type="hidden" id="act-flow-duracion-minutos" value="60">
+    <input type="hidden" id="act-flow-es-puntual" value="false">
+    <input type="hidden" id="act-flow-dias-val" value="">
+    <input type="hidden" id="act-flow-fecha-val" value="">
+    <input type="hidden" id="act-flow-hora-val" value="08:00">
+
+    <!-- CABECERA: CATEGORÍA HEREDADA + MODO + CERRAR -->
+    <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 bg-white/50 dark:bg-slate-900/50">
+      <!-- Chip de Categoría Heredada con Dropdown rápido -->
+      <div class="relative">
+        <button type="button" id="flow-cat-badge-btn" onclick="toggleSelectorCategoriaFlow(event)"
+          class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border transition shadow-2xs hover:scale-[1.02] active:scale-95 bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60"
+          title="Clic para cambiar de Categoría de Vida">
+          <span id="flow-cat-icono" class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+          <span id="flow-cat-nombre">Deporte & Salud</span>
+          <span class="text-[10px] opacity-60">▾</span>
+        </button>
+
+        <!-- Menú desplegable flotante de las 6 Categorías de Vida -->
+        <div id="flow-cat-dropdown"
+          class="hidden absolute left-0 top-full mt-2 w-60 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-2 z-50 space-y-1 animate-fadeIn">
+          <p class="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 py-1 uppercase tracking-wider">
+            Vincular a Categoría:</p>
+          <button type="button" onclick="seleccionarCategoriaFlow('SALUD_DEPORTE')"
+            class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-xs font-bold flex items-center gap-2 text-slate-700 dark:text-slate-200 transition">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Deporte & Salud</span>
+          </button>
+          <button type="button" onclick="seleccionarCategoriaFlow('DESARROLLO_ESTUDIO')"
+            class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/40 text-xs font-bold flex items-center gap-2 text-slate-700 dark:text-slate-200 transition">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span><span>Estudio & Mente</span>
+          </button>
+          <button type="button" onclick="seleccionarCategoriaFlow('LABORAL_HONORARIO')"
+            class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-violet-50 dark:hover:bg-violet-950/40 text-xs font-bold flex items-center gap-2 text-slate-700 dark:text-slate-200 transition">
+            <span class="w-2 h-2 rounded-full bg-violet-500"></span><span>Trabajo & Carrera</span>
+          </button>
+          <button type="button" onclick="seleccionarCategoriaFlow('FINANZAS_TRAMITES')"
+            class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/40 text-xs font-bold flex items-center gap-2 text-slate-700 dark:text-slate-200 transition">
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span><span>Finanzas & Admin</span>
+          </button>
+          <button type="button" onclick="seleccionarCategoriaFlow('SOCIAL_FAMILIA')"
+            class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 text-xs font-bold flex items-center gap-2 text-slate-700 dark:text-slate-200 transition">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span><span>Social & Familia</span>
+          </button>
+          <button type="button" onclick="seleccionarCategoriaFlow('PERSONAL_DESCANSO')"
+            class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-pink-50 dark:hover:bg-pink-950/40 text-xs font-bold flex items-center gap-2 text-slate-700 dark:text-slate-200 transition">
+            <span class="w-2 h-2 rounded-full bg-pink-500"></span><span>Personal & Relax</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="act-flow-badge-notas"></span>
+        <span id="flow-badge-modo"
+          class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-mono">
+          Nuevo Hábito
+        </span>
+        <button type="button" onclick="cerrarModalActividadFlow()"
+          class="btn-portal-icon" title="Cerrar">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- CUERPO DE CONTENIDO CON SCROLL EXCLUSIVO VERTICAL (ZERO JITTER) -->
+    <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar">
+
+    <!-- INPUT DE TÍTULO PRINCIPAL (GOOGLE TASKS STYLE) -->
+    <div>
+      <input type="text" id="act-flow-titulo"
+        class="w-full text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 bg-transparent outline-none border-b border-transparent focus:border-indigo-500/40 pb-1.5 transition-colors"
+        placeholder="Añadir título (ej. Salir a correr 5k, Meditación matutina...)" autocomplete="off">
+    </div>
+
+    <!-- BARRA DE CHIPS DE CONFIGURACIÓN RÁPIDA -->
+    <div class="flex items-center gap-1.5 flex-wrap">
+      <!-- Chip Fecha y Hora (Abre Popover Inteligente) -->
+      <button type="button" id="flow-chip-datetime" onclick="abrirDatePickerFlow(event)"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-200 dark:border-indigo-800/80 transition shadow-2xs group">
+        <svg class="portal-icon-sm text-slate-500 dark:text-slate-400 group-hover:text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+        <span id="flow-chip-datetime-label">Fecha y hora</span>
+        <span class="text-[10px] text-slate-400 group-hover:text-indigo-500">▾</span>
+      </button>
+
+      <!-- Chip Prioridad Eisenhower (Ciclo rápido P1, P2, P3) -->
+      <button type="button" id="flow-chip-prioridad" onclick="togglePrioridadFlow(event)"
+        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 transition shadow-2xs"
+        title="Clic para cambiar prioridad">
+        <svg class="portal-icon-sm text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <span id="flow-chip-prioridad-label">P2 Media</span>
+      </button>
+
+      <!-- Chip Gasto Asociado -->
+      <button type="button" id="flow-chip-gasto" onclick="toggleGastoFlow(event)"
+        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700/60 hover:border-emerald-300 transition shadow-2xs"
+        title="Clic para imputar gasto">
+        <svg class="portal-icon-sm text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <span id="flow-chip-gasto-label">Sin gasto</span>
+      </button>
+
+      <!-- Chip Sincronizar Google Calendar (Activo por defecto) -->
+      <button type="button" id="flow-chip-calendar" onclick="toggleCalendarFlow(event)"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800/70 transition shadow-2xs"
+        title="Sincronizar con Google Calendar (Clic para alternar)">
+        <span id="flow-chip-calendar-dot"
+          class="w-2 h-2 rounded-full bg-blue-500 inline-block shadow-xs animate-pulse"></span>
+        <span id="flow-chip-calendar-label">Calendar: Sí</span>
+      </button>
+
+      <!-- Chip Notas Vinculadas -->
+      <button type="button" id="act-flow-chip-notas" onclick="toggleNotasSectionActividadFlow(event)"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700/60 hover:border-purple-400 dark:hover:border-purple-600/60 transition shadow-2xs cursor-pointer"
+        title="Vincular o consultar notas asociadas a este hábito">
+        <svg class="portal-icon-sm text-purple-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+        <span id="act-flow-chip-notas-label" class="font-mono tabular-nums text-xs">+ Notas</span>
+      </button>
+
+      <!-- Chip Meta Cuantitativa / OKR (Fase 4.8) -->
+      <button type="button" id="flow-chip-meta" onclick="toggleMetaCuantitativaFlow(event)"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700/60 hover:border-cyan-400 dark:hover:border-cyan-600/60 transition shadow-2xs cursor-pointer"
+        title="Configurar Meta Cuantificable y Rescate Mínimo de Racha">
+        <svg class="portal-icon-sm text-cyan-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        <span id="flow-chip-meta-label">Meta Cuantitativa</span>
+      </button>
+    </div>
+
+    <!-- INPUT DESPLEGABLE DE GASTO ASOCIADO (MULTIDIVISA PEN / USD / EUR - MODO DUAL Y ATÓMICO) -->
+    <div id="flow-gasto-container"
+      class="hidden bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl p-3 space-y-2.5 animate-fadeIn text-xs">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div class="flex items-center gap-1.5">
+          <svg class="portal-icon-sm text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+          <div>
+            <p class="font-bold text-emerald-900 dark:text-emerald-200 leading-tight">Gasto Asociado</p>
+            <p class="text-[10px] text-emerald-700 dark:text-emerald-400">Persistencia atómica inmediata en Finanzas</p>
+          </div>
+        </div>
+
+        <!-- Selector de Modo: Nuevo vs Existente -->
+        <div class="inline-flex p-0.5 bg-emerald-100/80 dark:bg-emerald-900/60 rounded-xl border border-emerald-200 dark:border-emerald-800/80 text-[11px]">
+          <button type="button" id="act-tab-gasto-nuevo" onclick="cambiarTabGastoActividadFlow('NUEVO')"
+            class="px-2.5 py-1 rounded-lg font-bold transition-all shadow-xs bg-emerald-600 text-white flex items-center gap-1 active:scale-95">
+            <span>Registrar Nuevo</span>
+          </button>
+          <button type="button" id="act-tab-gasto-vincular" onclick="cambiarTabGastoActividadFlow('VINCULAR')"
+            class="px-2.5 py-1 rounded-lg font-medium text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-white transition-all flex items-center gap-1 active:scale-95">
+            <span>Vincular Existente</span>
+          </button>
+        </div>
+
+        <button type="button" onclick="toggleGastoFlow(event)" class="btn-portal-icon" title="Cerrar sección gasto">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- PANEL TAB 1: REGISTRAR NUEVO GASTO -->
+      <div id="act-panel-gasto-nuevo" class="space-y-2.5">
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+          <!-- Segmented Control Moneda (4 cols) -->
+          <div class="sm:col-span-4">
+            <label class="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">Moneda / Divisa</label>
+            <input type="hidden" id="act-flow-gasto-moneda" value="PEN">
+            <div class="inline-flex p-0.5 bg-slate-200/70 dark:bg-slate-800 rounded-xl border border-slate-300/60 dark:border-slate-700 w-full justify-between">
+              <button type="button" id="act-btn-moneda-pen" onclick="seleccionarMonedaActividadFlow('PEN')"
+                class="flex-1 py-1 rounded-lg text-xs font-bold transition shadow-xs bg-emerald-600 text-white flex items-center justify-center gap-1 active:scale-95"
+                title="Soles Peruanos">
+                <span class="font-mono">S/</span><span>PEN</span>
+              </button>
+              <button type="button" id="act-btn-moneda-usd" onclick="seleccionarMonedaActividadFlow('USD')"
+                class="flex-1 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center gap-1 active:scale-95"
+                title="Dólares Americanos">
+                <span class="font-mono">$</span><span>USD</span>
+              </button>
+              <button type="button" id="act-btn-moneda-eur" onclick="seleccionarMonedaActividadFlow('EUR')"
+                class="flex-1 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center gap-1 active:scale-95"
+                title="Euros">
+                <span class="font-mono">€</span><span>EUR</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Monto Input (3 cols) -->
+          <div class="sm:col-span-3">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-semibold text-[10px] text-slate-600 dark:text-slate-400">Monto</label>
+              <span id="act-flow-gasto-tc-badge" class="hidden text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">TC: 3.75</span>
+            </div>
+            <div class="relative">
+              <span id="act-flow-gasto-simbolo" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-slate-400 select-none">S/</span>
+              <input type="number" step="0.01" min="0" id="act-flow-gasto-input" placeholder="0.00"
+                class="w-full pl-8 pr-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 font-mono font-bold text-emerald-700 dark:text-emerald-300 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                onfocus="if(this.value==='0.00'||this.value==='0')this.value=''; this.select();"
+                oninput="actualizarGastoLabelFlow(this.value)">
+            </div>
+          </div>
+
+          <!-- Categoría (5 cols) -->
+          <div class="sm:col-span-5">
+            <label class="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">Categoría</label>
+            <select id="act-flow-gasto-categoria" class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 bg-white dark:bg-slate-900 text-xs">
+              <option value="Personal_Alimentacion" selected>Alimentación y Comida</option>
+              <option value="Personal_Transporte">Transporte y Movilidad</option>
+              <option value="Personal_Salud">Salud y Cuidado</option>
+              <option value="Personal_Educacion">Educación y Cursos</option>
+              <option value="Personal_Ocio">Ocio y Entretenimiento</option>
+              <option value="Servicios_Contratados">Servicios Contratados</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Fila de Concepto + Equivalencia + BOTÓN GUARDAR ATÓMICO -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <div class="flex-1 min-w-[200px]">
+            <input type="text" id="act-flow-gasto-desc" placeholder="Concepto o descripción breve del egreso..."
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs">
+          </div>
+          <div id="act-flow-gasto-equiv-box" class="hidden shrink-0">
+            <span id="act-flow-gasto-equiv-lbl" class="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-white dark:bg-slate-900 px-2 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800/60 inline-block shadow-2xs">
+              ≈ S/ 0.00
+            </span>
+          </div>
+          <!-- BOTÓN ATÓMICO: GUARDAR GASTO INMEDIATO -->
+          <button type="button" id="act-btn-guardar-gasto-inmediato" onclick="guardarGastoAtomicoActividadFlow()"
+            class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+            title="Registrar y persistir este gasto de inmediato">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span>Guardar Gasto</span>
+          </button>
+          <!-- BOTÓN ELIMINAR / DESCARTAR GASTO -->
+          <button type="button" id="act-btn-eliminar-gasto" onclick="eliminarGastoModalActividadFlow()"
+            class="px-3 py-2 border border-rose-200 dark:border-rose-800/80 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+            title="Eliminar gasto o descartar borrador">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span>Eliminar Gasto</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- PANEL TAB 2: VINCULAR GASTO EXISTENTE -->
+      <div id="act-panel-gasto-vincular" class="hidden space-y-2">
+        <!-- Buscador en tiempo real -->
+        <div class="relative">
+          <input type="text" id="act-flow-gasto-search-input"
+            placeholder="Buscar gasto existente por concepto, código (GAS-XXX) o monto..."
+            class="w-full pl-8 pr-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-emerald-500/20"
+            oninput="filtrarGastosParaVincularActividadFlow(this.value)">
+          <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </span>
+        </div>
+
+        <!-- Lista de Gastos Disponibles en memoria local (state.gastos) -->
+        <div id="act-flow-gastos-disponibles-list" class="max-h-48 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+          <!-- Renderizado dinámico de candidatos -->
+        </div>
+      </div>
+
+      <!-- EGRESOS YA VINCULADOS A ESTA ACTIVIDAD (CONFIRMADOS CON ACCIÓN DESVINCULAR) -->
+      <div id="act-flow-gastos-asociados-box" class="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/40 hidden">
+        <div class="flex items-center justify-between mb-1.5">
+          <p class="font-bold text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
+            Egresos vinculados a esta actividad:
+          </p>
+          <span id="act-flow-gastos-total-badge" class="font-mono text-[10px] font-bold text-emerald-700 dark:text-emerald-400">Total: S/ 0.00</span>
+        </div>
+        <div id="act-flow-gastos-asociados-list" class="space-y-1.5 text-[11px]"></div>
+      </div>
+    </div>
+
+    <!-- SECCIÓN NOTAS VINCULADAS (MODO RECÍPROCO Y BITEMÁTICO MINIMALISTA) -->
+    <div id="act-flow-notas-section"
+      class="hidden bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 rounded-2xl p-3 space-y-2.5 animate-fadeIn text-xs">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5">
+          <svg class="portal-icon-sm text-purple-600 dark:text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+          <span class="font-bold text-xs text-purple-900 dark:text-purple-200">Notas Vinculadas</span>
+        </div>
+        <button type="button" onclick="toggleNotasSectionActividadFlow(event)" class="btn-portal-icon" title="Cerrar panel de notas">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Lista de notas ya vinculadas a esta actividad -->
+      <div id="act-flow-notas-vinculadas-list" class="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar"></div>
+
+      <!-- Buscador en tiempo real de notas -->
+      <div class="space-y-1 pt-1 border-t border-purple-200/60 dark:border-purple-800/40">
+        <div class="relative">
+          <input type="text" id="act-flow-notas-search-input"
+            placeholder="Buscar nota para vincular..."
+            class="w-full pl-8 pr-3 py-1.5 border border-purple-200 dark:border-purple-800/80 rounded-xl bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-purple-500/20"
+            oninput="filtrarNotasParaVincularActividadFlow(this.value)">
+          <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </span>
+        </div>
+        <div id="act-flow-notas-disponibles-list" class="max-h-36 overflow-y-auto custom-scrollbar space-y-1 pr-1"></div>
+      </div>
+    </div>
+
+    <!-- SECCIÓN METAS CUANTIFICABLES Y RESCATE DE RACHA (FASE 4.8) -->
+    <div id="act-flow-meta-section"
+      class="hidden bg-cyan-50/60 dark:bg-cyan-950/30 border border-cyan-200/80 dark:border-cyan-800/60 rounded-2xl p-3 space-y-2.5 animate-fadeIn text-xs">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5">
+          <svg class="portal-icon-sm text-cyan-600 dark:text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          <div>
+            <span class="font-bold text-xs text-cyan-900 dark:text-cyan-200">Meta Cuantificable & Rescate de Racha</span>
+            <p class="text-[10px] text-cyan-700 dark:text-cyan-400">Seguimiento por acumulación numérica y preservación de streak</p>
+          </div>
+        </div>
+        <button type="button" onclick="toggleMetaCuantitativaFlow(event)" class="btn-portal-icon" title="Cerrar panel de metas">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+        <!-- Macro Meta Nombre (8 cols) -->
+        <div class="sm:col-span-8">
+          <label class="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">Meta Macro / OKR</label>
+          <input type="text" id="act-flow-meta-macro" placeholder="Ej: Leer 12 libros, Ahorro $10k, Maratón 42k..."
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-cyan-500/20">
+        </div>
+        <!-- Unidad de Medida (4 cols) -->
+        <div class="sm:col-span-4">
+          <label class="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">Unidad de Medida</label>
+          <input type="text" id="act-flow-unidad-medida" placeholder="páginas, km, mins, soles..."
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-cyan-500/20">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <!-- Meta Objetivo Total -->
+        <div>
+          <label class="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">Meta Objetivo Total</label>
+          <input type="number" step="any" min="0" id="act-flow-meta-total" placeholder="0"
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono font-bold text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-cyan-500/20">
+        </div>
+        <!-- Valor Acumulado Actual -->
+        <div>
+          <label class="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">Valor Acumulado Actual</label>
+          <input type="number" step="any" min="0" id="act-flow-valor-acumulado" placeholder="0"
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono font-bold text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-cyan-500/20">
+        </div>
+        <!-- Meta Diaria Estándar -->
+        <div>
+          <label class="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">Meta Diaria Estándar</label>
+          <input type="number" step="any" min="0" id="act-flow-meta-diaria" placeholder="0"
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono font-bold text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-cyan-500/20">
+        </div>
+        <!-- Nivel Rescate Mínimo -->
+        <div>
+          <label class="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1" title="Avance mínimo para rescatar racha diaria">Nivel Rescate Mínimo</label>
+          <input type="number" step="any" min="0" id="act-flow-rescate-minimo" placeholder="0"
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono font-bold text-xs bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 outline-none focus:ring-2 focus:ring-cyan-500/20">
+        </div>
+      </div>
+    </div>
+
+    <!-- SECCIÓN DE PASOS / SUBTAREAS PROCEDURALES ("CÓMO HACERLO") -->
+    <div class="pt-1 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
+      <div class="flex items-center justify-between">
+        <button type="button" id="flow-btn-toggle-pasos" onclick="toggleSeccionPasosFlow(event)"
+          class="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1Z"/></svg>
+          <span id="flow-pasos-toggle-label">+ Añadir pasos secuenciales</span>
+        </button>
+        <div id="flow-pasos-progreso-badge"
+          class="hidden font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+          0/0 pasos (0%)
+        </div>
+      </div>
+
+      <!-- Contenedor desplegable de pasos -->
+      <div id="flow-pasos-container"
+        class="hidden space-y-2 p-3 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl animate-fadeIn">
+        <!-- Micro-barra de progreso -->
+        <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+          <div id="flow-pasos-progreso-bar"
+            class="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+
+        <!-- Input ágil consecutivo (Enter crea y mantiene foco) -->
+        <div class="flex items-center gap-2">
+          <input type="text" id="act-flow-nuevo-paso-input"
+            placeholder="Escribe el siguiente paso procedural y pulsa Enter..."
+            class="flex-1 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            onkeydown="if(event.key === 'Enter'){ event.preventDefault(); agregarPasoFlow(); }">
+          <button type="button" onclick="agregarPasoFlow()"
+            class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-2xs transition flex items-center gap-1 shrink-0">
+            <span>+</span><span>Agregar</span>
+          </button>
+        </div>
+
+        <!-- Lista interactiva de pasos con reordenar y eliminar -->
+        <div id="act-flow-lista-pasos" class="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+          <!-- Render dinámico -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ÁREA DE NOTAS / ENLACES (TEXTO LIBRE DISCRETO) -->
+    <div>
+      <textarea id="act-flow-notas" rows="2"
+        class="w-full text-xs bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 resize-none transition-colors"
+        placeholder="Añadir notas, enlaces o apuntes rápidos..."></textarea>
+    </div>
+
+    </div>
+    <!-- FIN CUERPO DE CONTENIDO CON SCROLL EXCLUSIVO VERTICAL (ZERO JITTER) -->
+
+    <!-- FOOTER DE ACCIONES -->
+    <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between gap-2.5">
+      <div class="flex items-center gap-2">
+        <button type="button" id="act-flow-btn-eliminar" onclick="confirmarEliminarActividadPersonalDesdeModal()"
+          class="hidden px-3 py-2 border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl font-bold flex items-center gap-1.5 transition text-xs active:scale-95"
+          title="Eliminar esta actividad permanentemente">
+          <svg class="portal-icon-sm text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          <span>Eliminar</span>
+        </button>
+        <p class="text-[10px] text-slate-400 hidden sm:flex items-center gap-1">
+          <kbd
+            class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[9px] border border-slate-200 dark:border-slate-700">Enter</kbd>
+          <span>para guardar rápido</span>
+        </p>
+      </div>
+      <div class="flex items-center gap-2 ml-auto">
+        <button type="button" onclick="cerrarModalActividadFlow()"
+          class="btn-portal-secondary">
+          Cancelar
+        </button>
+        <button type="button" id="btn-submit-flow-actividad" onclick="guardarActividadFlow()"
+          class="btn-portal-primary flex items-center gap-1.5">
+          <span id="btn-submit-flow-label">Guardar Actividad</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- POPOVER INTELIGENTE DE FECHA, HORA Y RECURRENCIA (GLASSMORPHISM)   -->
+    <!-- ================================================================= -->
+    <div id="flow-datepicker-popover"
+      class="hidden absolute inset-x-3 sm:inset-x-6 top-16 bottom-3 z-40 bg-white/98 dark:bg-slate-900/98 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-slate-700/80 shadow-2xl p-4 sm:p-5 overflow-y-auto custom-scrollbar space-y-4 animate-fadeIn">
+
+      <!-- CABECERA DEL POPOVER -->
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-2">
+          <svg class="portal-icon-sm text-indigo-600 dark:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <h4 class="text-xs font-bold text-slate-900 dark:text-slate-100">Fecha, Hora y Recurrencia</h4>
+        </div>
+        <button type="button" onclick="cerrarDatePickerFlow()"
+          class="btn-portal-icon" title="Cerrar fecha">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 1. CALENDARIO INTERACTIVO COMPACTO -->
+      <div class="space-y-2">
+        <!-- Navegador de Mes -->
+        <div class="flex items-center justify-between">
+          <button type="button" onclick="navegarMesDatePicker(-1)"
+            class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition"
+            title="Mes anterior">
+            ◀
+          </button>
+          <div class="flex items-center gap-2">
+            <span id="flow-cal-mes-ano"
+              class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+              Septiembre 2026
+            </span>
+            <button type="button" onclick="irAHoyDatePicker()"
+              class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40">
+              Hoy
+            </button>
+          </div>
+          <button type="button" onclick="navegarMesDatePicker(1)"
+            class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition"
+            title="Mes siguiente">
+            ▶
+          </button>
+        </div>
+
+        <!-- Cabecera Días de Semana -->
+        <div
+          class="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-slate-400 dark:text-slate-500 uppercase">
+          <span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sá</span><span>Do</span>
+        </div>
+
+        <!-- Cuadrícula de Días -->
+        <div id="flow-cal-dias-grid" class="grid grid-cols-7 gap-1 text-xs">
+          <!-- Días generados por JavaScript -->
+        </div>
+      </div>
+
+      <!-- 2. HORA Y DURACIÓN (GOOGLE TASKS STYLE) -->
+      <div class="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <span>⏱️</span><span>Establecer Hora y Duración</span>
+          </label>
+          <div class="flex items-center gap-2">
+            <input type="time" id="flow-picker-time-input" value="08:00"
+              class="text-xs font-mono font-bold px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500"
+              onchange="actualizarHoraManualPicker(this.value)">
+          </div>
+        </div>
+
+        <!-- Presets de Hora Rápida -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          <button type="button" onclick="seleccionarHoraPreset('07:00', 1.0)"
+            class="flow-time-preset px-2 py-1.5 text-[10.5px] font-medium rounded-lg border border-slate-200 dark:border-slate-700/80 hover:border-indigo-400 text-slate-700 dark:text-slate-300 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition text-center truncate">
+            07:00 AM Mañana
+          </button>
+          <button type="button" onclick="seleccionarHoraPreset('10:00', 1.0)"
+            class="flow-time-preset px-2 py-1.5 text-[10.5px] font-medium rounded-lg border border-slate-200 dark:border-slate-700/80 hover:border-indigo-400 text-slate-700 dark:text-slate-300 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition text-center truncate">
+            10:00 AM Media m.
+          </button>
+          <button type="button" onclick="seleccionarHoraPreset('14:00', 1.0)"
+            class="flow-time-preset px-2 py-1.5 text-[10.5px] font-medium rounded-lg border border-slate-200 dark:border-slate-700/80 hover:border-indigo-400 text-slate-700 dark:text-slate-300 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition text-center truncate">
+            02:00 PM Tarde
+          </button>
+          <button type="button" onclick="seleccionarHoraPreset('20:30', 1.5)"
+            class="flow-time-preset px-2 py-1.5 text-[10.5px] font-medium rounded-lg border border-slate-200 dark:border-slate-700/80 hover:border-indigo-400 text-slate-700 dark:text-slate-300 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition text-center truncate">
+            08:30 PM Noche
+          </button>
+        </div>
+
+        <!-- Toggle Tarea Puntual (0 Horas / Check Rápido) -->
+        <div
+          class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 transition">
+          <div class="flex items-center gap-2">
+            <svg class="portal-icon-sm text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <div>
+              <p class="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">Tarea puntual / Check rápido
+              </p>
+              <p class="text-[10px] text-slate-500 dark:text-slate-400">Duración 0 hrs · Evento instantáneo o
+                recordatorio de todo el día</p>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer select-none">
+            <input type="checkbox" id="flow-toggle-puntual" class="sr-only peer"
+              onchange="toggleTareaPuntualPicker(this.checked)">
+            <div
+              class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600">
+            </div>
+          </label>
+        </div>
+
+        <!-- Contenedor de Duración con Presets e Input Manual Fluido -->
+        <div id="flow-duracion-container" class="space-y-2 transition-all">
+          <!-- Selector de Presets de Duración con Opción Explícita 0m (Puntual / Google Tasks) -->
+          <div class="flex items-center justify-between gap-1.5 flex-wrap">
+            <span class="text-[10.5px] font-bold text-slate-400">Presets rápidos:</span>
+            <div class="flex items-center gap-1 flex-wrap" id="flow-duracion-pills">
+              <button type="button" onclick="seleccionarDuracionPicker(0)"
+                class="flow-dur-btn px-2 py-0.5 text-[10px] font-bold rounded-lg border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition">0m
+                (Puntual)</button>
+              <button type="button" onclick="seleccionarDuracionPicker(0.25)"
+                class="flow-dur-btn px-2 py-0.5 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-500 transition">15m</button>
+              <button type="button" onclick="seleccionarDuracionPicker(0.5)"
+                class="flow-dur-btn px-2 py-0.5 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-500 transition">30m</button>
+              <button type="button" onclick="seleccionarDuracionPicker(0.75)"
+                class="flow-dur-btn px-2 py-0.5 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-500 transition">45m</button>
+              <button type="button" onclick="seleccionarDuracionPicker(1.0)"
+                class="flow-dur-btn px-2 py-0.5 text-[10px] font-bold rounded-lg border border-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 transition">1h</button>
+              <button type="button" onclick="seleccionarDuracionPicker(1.5)"
+                class="flow-dur-btn px-2 py-0.5 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-500 transition">1.5h</button>
+              <button type="button" onclick="seleccionarDuracionPicker(2.0)"
+                class="flow-dur-btn px-2 py-0.5 text-[10px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-indigo-500 transition">2h</button>
+            </div>
+          </div>
+
+          <!-- Selector Manual de Horas y Minutos Exactos -->
+          <div
+            class="flex items-center justify-between p-2 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-xs">
+            <span class="text-[11px] font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+              <span>⏱️</span><span>Duración personalizada:</span>
+            </span>
+            <div class="flex items-center gap-2">
+              <div class="flex items-center gap-1">
+                <input type="number" id="flow-custom-horas" min="0" max="24" step="1" value="1"
+                  class="w-12 text-center text-xs font-mono font-bold py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                  onchange="actualizarDuracionManualExacta()">
+                <span class="text-[10px] text-slate-400 font-bold">h</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <input type="number" id="flow-custom-minutos" min="0" max="59" step="5" value="0"
+                  class="w-12 text-center text-xs font-mono font-bold py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500"
+                  onchange="actualizarDuracionManualExacta()">
+                <span class="text-[10px] text-slate-400 font-bold">m</span>
+              </div>
+              <span id="flow-custom-total-badge"
+                class="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-1 rounded-md border border-indigo-200/50 dark:border-indigo-800/40">
+                1.0h
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. SUBMÓDULO DE RECURRENCIA (REPETIR) -->
+      <div class="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <span>Repetición del Hábito</span>
+          </label>
+          <select id="flow-recurrencia-preset" onchange="cambiarFrecuenciaPresetPicker(this.value)"
+            class="text-xs font-semibold px-2.5 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none text-slate-800 dark:text-slate-200">
+            <option value="NINGUNA">Sin repetición (Puntual)</option>
+            <option value="DIARIA" selected>Todos los días</option>
+            <option value="DIARIA_LABORAL">Días laborables (L-V)</option>
+            <option value="FIN_SEMANA">Fines de semana (S-D)</option>
+            <option value="SEMANAL">Cada semana</option>
+            <option value="MENSUAL">Cada mes</option>
+            <option value="PERSONALIZADA">Personalizada...</option>
+          </select>
+        </div>
+
+        <!-- Opciones de Regla Personalizada -->
+        <div id="flow-recurrencia-custom-panel"
+          class="hidden space-y-2.5 p-3 bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 rounded-xl text-xs">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-medium text-slate-600 dark:text-slate-400">Repetir cada</span>
+            <input type="number" id="flow-repeat-interval" value="1" min="1" max="99"
+              class="w-12 text-center font-bold px-1.5 py-0.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900"
+              onchange="actualizarResumenRecurrencia()">
+            <select id="flow-repeat-unit" onchange="actualizarResumenRecurrencia()"
+              class="px-2 py-0.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 font-medium">
+              <option value="DIA">Día(s)</option>
+              <option value="SEMANA" selected>Semana(s)</option>
+              <option value="MES">Mes(es)</option>
+            </select>
+          </div>
+
+          <!-- Círculos de selección de días de la semana -->
+          <div class="space-y-1">
+            <span class="text-[10px] font-bold text-slate-400 uppercase">Días específicos:</span>
+            <div class="flex items-center gap-1.5 flex-wrap" id="flow-repeat-days-container">
+              <button type="button" data-day="LU" onclick="toggleDiaRecurrencia('LU')"
+                class="flow-day-btn w-6 h-6 rounded-full border border-slate-300 dark:border-slate-600 text-[10px] font-bold transition flex items-center justify-center">L</button>
+              <button type="button" data-day="MA" onclick="toggleDiaRecurrencia('MA')"
+                class="flow-day-btn w-6 h-6 rounded-full border border-slate-300 dark:border-slate-600 text-[10px] font-bold transition flex items-center justify-center">M</button>
+              <button type="button" data-day="MI" onclick="toggleDiaRecurrencia('MI')"
+                class="flow-day-btn w-6 h-6 rounded-full border border-slate-300 dark:border-slate-600 text-[10px] font-bold transition flex items-center justify-center">X</button>
+              <button type="button" data-day="JU" onclick="toggleDiaRecurrencia('JU')"
+                class="flow-day-btn w-6 h-6 rounded-full border border-slate-300 dark:border-slate-600 text-[10px] font-bold transition flex items-center justify-center">J</button>
+              <button type="button" data-day="VI" onclick="toggleDiaRecurrencia('VI')"
+                class="flow-day-btn w-6 h-6 rounded-full border border-slate-300 dark:border-slate-600 text-[10px] font-bold transition flex items-center justify-center">V</button>
+              <button type="button" data-day="SA" onclick="toggleDiaRecurrencia('SA')"
+                class="flow-day-btn w-6 h-6 rounded-full border border-slate-300 dark:border-slate-600 text-[10px] font-bold transition flex items-center justify-center">S</button>
+              <button type="button" data-day="DO" onclick="toggleDiaRecurrencia('DO')"
+                class="flow-day-btn w-6 h-6 rounded-full border border-slate-300 dark:border-slate-600 text-[10px] font-bold transition flex items-center justify-center">D</button>
+            </div>
+          </div>
+
+          <!-- Límite de ciclo -->
+          <div class="flex items-center gap-3 pt-1 text-[11px] text-slate-600 dark:text-slate-400">
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="flow-repeat-end" value="NUNCA" checked
+                onchange="actualizarResumenRecurrencia()">
+              <span>Nunca termina</span>
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="flow-repeat-end" value="CONTEO" onchange="actualizarResumenRecurrencia()">
+              <span>Tras</span>
+              <input type="number" id="flow-repeat-count" value="10" min="1" max="100"
+                class="w-10 text-center border rounded px-1 py-0.5 text-xs bg-white dark:bg-slate-900"
+                onchange="actualizarResumenRecurrencia()">
+              <span>veces</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Resumen Legible Automático -->
+        <div
+          class="p-2.5 bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 rounded-xl text-xs text-indigo-900 dark:text-indigo-300 flex items-start gap-2">
+          <p id="flow-resumen-recurrencia" class="font-medium leading-snug">
+            Se repite todos los días a las 08:00 AM
+          </p>
+        </div>
+      </div>
+
+      <!-- ACCIONES DEL POPOVER -->
+      <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button type="button" onclick="limpiarDatePickerFlow()"
+          class="text-xs font-bold text-slate-400 hover:text-rose-600 transition">
+          Borrar fecha
+        </button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="cerrarDatePickerFlow()"
+            class="px-3 py-1.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition">
+            Cancelar
+          </button>
+          <button type="button" onclick="aplicarDatePickerFlow()"
+            class="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition">
+            Listo / Aceptar
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===================================================================== -->
+<!-- MODAL: DESGLOSE DE INVERSIÓN EN BIENESTAR POR DIMENSIÓN               -->
+<!-- ===================================================================== -->
+<div id="modal-desglose-inversion-bienestar"
+  class="fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs hidden flex items-end sm:items-center justify-center p-0 sm:p-4"
+  style="z-index: 9999;"
+  onclick="if(event.target === this) cerrarModalDesgloseInversionBienestar();">
+  <div id="modal-desglose-inversion-bienestar-card"
+    class="portal-surface elevation-3 w-full max-w-xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative">
+
+    <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+    <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+    <!-- CABECERA -->
+    <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between bg-white/50 dark:bg-slate-900/50">
+      <div class="flex items-center gap-2.5">
+        <span class="p-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
+          <svg class="portal-icon text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+        </span>
+        <div>
+          <h3 class="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100 tracking-tight leading-tight">Inversión en Bienestar por Dimensión</h3>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 font-medium">Distribución financiera en las 6 dimensiones de Vida</p>
+        </div>
+      </div>
+      <button type="button" onclick="cerrarModalDesgloseInversionBienestar()"
+        class="btn-portal-icon"
+        title="Cerrar modal (Esc)">
+        <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+
+    <!-- CONTENIDO DINÁMICO CON SCROLLBAR ELEGANTE -->
+    <div id="contenido-desglose-inversion-modal" class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
+      <!-- Inyectado dinámicamente -->
+    </div>
+
+    <!-- FOOTER / ACCIONES -->
+    <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between">
+      <div class="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+        <svg class="portal-icon-sm text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        <span>Configura presupuestos en <b>Finanzas &gt; Presupuestos</b>.</span>
+      </div>
+      <button type="button" onclick="cerrarModalDesgloseInversionBienestar()"
+        class="btn-portal-primary text-xs">
+        Entendido
+      </button>
+    </div>
+
+  </div>
+</div>

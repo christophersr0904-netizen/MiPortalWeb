@@ -1,0 +1,227 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-canvas: #040711;
+  --bg-surface-1: #0D1526;
+  --bg-surface-2: #1e293b;
+  --bg-surface-hover: #243247;
+  --border-subtle: rgba(30, 41, 59, 0.45);
+  --border-card: #334155;
+  --border-focus: #38bdf8;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-brand: #38bdf8;
+  --accent-brand-hover: #0284c7;
+  --accent-glow: rgba(56, 189, 248, 0.25);
+  
+  /* Elevaciones Cobalt Aerodynamic A.2.2 */
+  --elevation-1: 0 10px 25px -5px rgba(2, 6, 23, 0.8), 0 8px 10px -6px rgba(30, 58, 138, 0.18);
+  --elevation-hover: 0 14px 28px -4px rgba(2, 6, 23, 0.85), 0 10px 14px -5px rgba(30, 58, 138, 0.28);
+  --elevation-3: 0 25px 50px -12px rgba(2, 6, 23, 0.9), 0 12px 24px -8px rgba(30, 58, 138, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+/* Tipografía Numérica Tabular Canónica (legacy_gas/Styles.html:L232-247) */
+.tabular-nums,
+.font-mono,
+.monto-financiero,
+.precio,
+.moneda,
+.currency,
+.hora-badge,
+.tiempo-contador,
+.duracion,
+.kpi-valor,
+.progreso-texto,
+.metric-value {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums !important;
+  -webkit-font-feature-settings: "tnum" 1 !important;
+  font-feature-settings: "tnum" 1 !important;
+}
+
+/* Superficie Semántica Cobalt */
+.portal-surface {
+  background-color: var(--bg-surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  box-shadow: var(--elevation-1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.2s ease;
+}
+
+.portal-surface:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: var(--elevation-hover);
+}
+
+/* Iconografía estándar PMO */
+.portal-icon-sm {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.75;
+  stroke: currentColor;
+  fill: none;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.portal-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.75;
+  stroke: currentColor;
+  fill: none;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.portal-icon-lg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.75;
+  stroke: currentColor;
+  fill: none;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Scrollbar fluida para columnas */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(51, 65, 85, 0.5);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(56, 189, 248, 0.5);
+}
+
+/* ============================================================================
+ * REGLAS MÓVILES, CAPACITOR & SAFE-AREAS (Android / iOS)
+ * ============================================================================ */
+html, body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe Area Paddings */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-area-insets {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Touch Target Mínimo Estándar (44x44 px) */
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================================
+ * TRAZABILIDAD Y DEPENDENCIAS KANBAN (Paridad 1:1 legacy_gas/Styles.html)
+ * ============================================================================ */
+.kanban-card-foco {
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.6), 0 6px 16px -2px rgba(99, 102, 241, 0.16) !important;
+  z-index: 30 !important;
+  position: relative !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.kanban-card-predecesora {
+  box-shadow: 0 0 0 1.5px rgba(245, 158, 11, 0.75), 0 5px 14px -2px rgba(245, 158, 11, 0.14) !important;
+  background-color: rgba(245, 158, 11, 0.1) !important;
+  z-index: 25 !important;
+  position: relative !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.kanban-card-sucesora {
+  box-shadow: 0 0 0 1.5px rgba(16, 185, 129, 0.75), 0 5px 14px -2px rgba(16, 185, 129, 0.14) !important;
+  background-color: rgba(16, 185, 129, 0.1) !important;
+  z-index: 25 !important;
+  position: relative !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.kanban-card-atenuada {
+  opacity: 0.58 !important;
+  filter: saturate(0.85);
+}
+
+/* ============================================================================
+ * GRAFO WBS - MODO ENFOQUE RUTA CRÍTICA CANÓNICO (legacy_gas/Styles.html:L1200-1219)
+ * ============================================================================ */
+.wbs-node-dimmed {
+  opacity: 0.18 !important;
+  filter: grayscale(60%) !important;
+  pointer-events: none !important;
+  transition: opacity 0.25s ease, filter 0.25s ease !important;
+}
+
+.wbs-node-focused {
+  opacity: 1 !important;
+  filter: none !important;
+  z-index: 50 !important;
+  box-shadow: 0 0 0 2px #38bdf8, 0 0 25px rgba(56, 189, 248, 0.7) !important;
+  border-radius: 0.75rem !important;
+  transition: opacity 0.25s ease, filter 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+@keyframes wbsCriticalPulse {
+  0%, 100% {
+    stroke: #f59e0b;
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.7));
+  }
+  50% {
+    stroke: #d97706;
+    filter: drop-shadow(0 0 8px rgba(217, 119, 6, 0.95));
+  }
+}
+
+.wbs-connector-critical {
+  stroke-width: 3.5px !important;
+  stroke: #f59e0b !important;
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.95)) !important;
+  z-index: 50 !important;
+  animation: wbsCriticalPulse 2s infinite ease-in-out;
+}
+
+.wbs-connector-dimmed {
+  opacity: 0.05 !important;
+  stroke-width: 1px !important;
+  transition: opacity 0.25s ease !important;
+}
+

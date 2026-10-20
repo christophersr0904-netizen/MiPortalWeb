@@ -1,0 +1,948 @@
+<!-- ===================================================================== -->
+<!-- MODALES Y DRAWER FINANCIEROS (GASTOS, INGRESOS Y TRANSACCIONES)         -->
+<!-- ===================================================================== -->
+  <!-- MODAL: REGISTRAR GASTO CON PARSER OCR ASISTIDO -->
+  <!-- MODAL: REGISTRAR GASTO (MODO DUAL: REAL VS PROGRAMADO) -->
+  <div id="modal-gasto"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-gasto-card" class="portal-surface elevation-3 w-full max-w-xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative transition-all duration-200">
+
+      <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <!-- Cabecera Dinámica -->
+      <div id="modal-gasto-header" class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-xs transition-colors duration-200">
+        <div class="flex items-center gap-2">
+          <span id="badge-gasto-header-dot" class="w-3 h-3 rounded-full bg-emerald-500 shadow-xs"></span>
+          <div>
+            <h3 id="txt-modal-gasto-titulo" class="font-bold text-sm text-slate-800 dark:text-slate-100 leading-tight">
+              Registrar Gasto Inmediato
+            </h3>
+            <span class="text-[10px] text-slate-400">Control de salidas y compromisos financieros</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="badge-gasto-modo" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Real / Inmediato</span>
+          <button type="button" onclick="closeModal('modal-gasto')" class="btn-portal-icon" title="Cerrar">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Selector Segmentado: Modo Dual (Real vs Programado) -->
+      <div class="px-5 pt-3 pb-2 bg-slate-50/80 dark:bg-slate-850/60 border-b border-slate-200/60 dark:border-slate-800">
+        <div class="grid grid-cols-2 p-1 bg-slate-200/80 dark:bg-slate-900/90 rounded-xl gap-1 text-xs">
+          <button type="button" id="btn-modo-gasto-real" onclick="cambiarModoRegistroGasto('REAL')"
+            class="py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 shadow-xs border border-emerald-200/60 dark:border-emerald-800/50">
+            <span>Movimiento Real / Inmediato</span>
+          </button>
+          <button type="button" id="btn-modo-gasto-prog" onclick="cambiarModoRegistroGasto('PROGRAMADO')"
+            class="py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-300">
+            <span>Movimiento Programado / Futuro</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Sección Escanear Comprobante con IA (Gemini) -->
+      <div id="box-escanear-ia-gasto" class="p-3 bg-indigo-50/70 dark:bg-indigo-950/30 border-b border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between">
+        <div class="text-xs text-indigo-900 dark:text-indigo-200 font-medium">
+          <span class="font-bold">Escanear comprobante</span> (IA Gemini)
+        </div>
+        <input type="file" id="file-comprobante" accept="image/*,application/pdf" class="hidden"
+          onchange="escanearComprobanteIA(event)">
+        <button type="button" id="btn-escanear-ia" onclick="document.getElementById('file-comprobante').click()"
+          class="btn-portal-secondary text-xs flex items-center gap-1.5">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          <span>Subir Archivo</span>
+        </button>
+      </div>
+
+      <form id="form-create-gasto" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
+        <input type="hidden" id="gasto-es-programado" name="esProgramado" value="false">
+
+        <div>
+          <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Descripción / Concepto Comercial</label>
+          <input type="text" id="gasto-descripcion" name="descripcionGasto" required placeholder="Ej: Compra de insumos, Suscripción Figma, Almuerzo cliente..."
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500 font-medium">
+        </div>
+
+        <!-- Clasificación / Origen del Gasto (Tipo_Gasto) -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block font-semibold text-slate-700 dark:text-slate-300">Origen / Clasificación del Gasto</label>
+            <span id="badge-gasto-tipo-inferred" class="text-[9.5px] font-bold text-slate-400 font-mono">Auto-detectado</span>
+          </div>
+          <div class="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl gap-1 text-xs">
+            <button type="button" id="btn-tipo-gasto-personal" onclick="seleccionarTipoGastoModal('Actividad Personal')"
+              class="py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-2xs border border-slate-200/60 dark:border-slate-600/50">
+              <span>Actividad Personal</span>
+            </button>
+            <button type="button" id="btn-tipo-gasto-proyecto" onclick="seleccionarTipoGastoModal('Tarea Proyecto')"
+              class="py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all text-slate-500 dark:text-slate-400 hover:text-indigo-600">
+              <span>Tarea Proyecto</span>
+            </button>
+          </div>
+          <input type="hidden" id="gasto-tipo-origen" name="tipoGasto" value="Actividad Personal">
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Proyecto</label>
+            <select id="selector-idProyecto-gasto" name="idProyecto"
+              onchange="onCambioProyectoGastoModal(this.value)" class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-medium"></select>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Hito</label>
+            <select id="selector-idHito-gasto" name="idHito" onchange="filtrarTareasPorHitoGastoModal(this.value)"
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-medium"></select>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Tarea (Opcional)</label>
+            <select id="selector-idTarea-gasto" name="idTarea" class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-mono">
+              <option value="">Sin tarea específica</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Categoría del Gasto</label>
+            <select id="gasto-categoria" name="categoriaGasto"
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-medium">
+              <option value="Materiales" selected>Materiales</option>
+              <option value="Servicios Profesionales">Servicios Profesionales</option>
+              <option value="Licencias / Software">Licencias / Software</option>
+              <option value="Marketing / Publicidad">Marketing / Publicidad</option>
+              <option value="Logística / Transporte">Logística / Transporte</option>
+              <option value="Equipos / Hardware">Equipos / Hardware</option>
+              <option value="Cuota_Credito">Cuota de Crédito</option>
+              <option value="Alquiler / Servicios">Alquiler / Servicios</option>
+              <option value="Alimentación">Alimentación</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Monto Original</label>
+            <input type="number" step="0.01" id="gasto-monto" name="montoOriginal" required placeholder="0.00"
+              class="no-spinner w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 font-mono font-bold text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-200">Moneda</label>
+            <select id="gasto-moneda" name="monedaOriginal" onchange="alCambiarMonedaModal('gasto', this.value)"
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 outline-none font-medium">
+              <option value="PEN" selected>PEN (S/)</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+            </select>
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-semibold text-slate-700 dark:text-slate-200">Tipo de Cambio</label>
+              <span
+                class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                <span>SUNAT/SBS</span>
+                <button type="button" onclick="consultarTipoCambioActual(true)" title="Actualizar TC"
+                  class="hover:rotate-180 transition-transform duration-300 text-amber-700 dark:text-amber-300">
+                  <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                </button>
+              </span>
+            </div>
+            <input type="number" step="0.001" id="gasto-tc" name="tipoCambio" value="1.000" readonly
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 font-mono bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 cursor-not-allowed select-none">
+          </div>
+        </div>
+
+        <!-- Fecha (Adaptativa según Real vs Programado) -->
+        <div>
+          <label id="lbl-gasto-fecha" class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Fecha de Pago / Desembolso</label>
+          <input type="date" id="gasto-fecha" name="fechaGasto" required onchange="evaluarFechaGastoAuto(this.value)"
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-emerald-500">
+          <span id="hint-gasto-fecha" class="text-[10px] text-slate-400 mt-1 block">Si seleccionas una fecha futura, cambiará automáticamente a Modo Programado.</span>
+        </div>
+
+        <!-- BLOQUE EXCLUSIVO PARA MOVIMIENTOS PROGRAMADOS (ADAPTATIVO) -->
+        <div id="bloque-gasto-programado" class="hidden p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 space-y-3 animate-in fade-in duration-150">
+          <div class="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-bold text-xs">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+            <span>Parámetros de Compromiso Futuro</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Hora de Vencimiento</label>
+              <input type="time" id="gasto-hora" name="horaProgramada" value="09:00"
+                class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-mono text-xs outline-none">
+            </div>
+            <div>
+              <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Recurrencia / Frecuencia</label>
+              <select id="gasto-frecuencia" name="frecuencia"
+                class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs outline-none font-medium">
+                <option value="UNICA" selected>Única / Puntual</option>
+                <option value="SEMANAL">Semanal</option>
+                <option value="QUINCENAL">Quincenal</option>
+                <option value="MENSUAL">Mensual</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Switch Alerta Google Calendar -->
+          <label class="flex items-center gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/50 cursor-pointer select-none">
+            <input type="checkbox" id="gasto-agendar-calendar" name="agendarCalendar" checked
+              class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300">
+            <div class="min-w-0 flex-1">
+              <span class="text-xs font-bold text-slate-800 dark:text-slate-100 block">Agendar recordatorio en Google Calendar</span>
+              <span class="text-[10px] text-slate-500 dark:text-slate-400">Crea el evento con color nativo en "PMO - Gastos Programados"</span>
+            </div>
+          </label>
+        </div>
+
+        <!-- Método de Pago -->
+        <div>
+          <label id="lbl-gasto-metodo" class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Método de Pago (Efectuado)</label>
+          <select id="gasto-metodoPago" name="metodoPago" class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-medium">
+            <option value="Transferencia Bancaria" selected>Transferencia Bancaria</option>
+            <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+            <option value="Efectivo">Efectivo</option>
+            <option value="Billetera Digital (Yape/Plin)">Yape / Plin</option>
+            <option value="Débito Automático">Débito Automático</option>
+          </select>
+        </div>
+
+        </div>
+        <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-end gap-2.5">
+          <button type="button" onclick="closeModal('modal-gasto')" class="btn-portal-secondary">Cancelar</button>
+          <button type="submit" id="btn-submit-gasto" class="btn-portal-primary">
+            <span id="txt-btn-submit-gasto">Registrar Gasto Real</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: REGISTRAR INGRESO (MODO DUAL: REAL VS PROGRAMADO) -->
+  <div id="modal-ingreso"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-ingreso-card" class="portal-surface elevation-3 w-full max-w-xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative transition-all duration-200">
+
+      <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <!-- Cabecera Dinámica -->
+      <div id="modal-ingreso-header" class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-emerald-50/50 dark:bg-emerald-950/30 backdrop-blur-xs transition-colors duration-200">
+        <div class="flex items-center gap-2">
+          <span id="badge-ingreso-header-dot" class="w-3 h-3 rounded-full bg-emerald-500 shadow-xs"></span>
+          <div>
+            <h3 id="txt-modal-ingreso-titulo" class="font-bold text-sm text-emerald-900 dark:text-emerald-300 leading-tight">
+              Registrar Ingreso Inmediato
+            </h3>
+            <span class="text-[10px] text-slate-400">Inyección de liquidez y cobros programados</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="badge-ingreso-modo" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Real / Inmediato</span>
+          <button type="button" onclick="closeModal('modal-ingreso')"
+            class="btn-portal-icon" title="Cerrar">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Selector Segmentado: Modo Dual (Real vs Programado) -->
+      <div class="px-5 pt-3 pb-2 bg-slate-50/80 dark:bg-slate-850/60 border-b border-slate-200/60 dark:border-slate-800">
+        <div class="grid grid-cols-2 p-1 bg-slate-200/80 dark:bg-slate-900/90 rounded-xl gap-1 text-xs">
+          <button type="button" id="btn-modo-ingreso-real" onclick="cambiarModoRegistroIngreso('REAL')"
+            class="py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 shadow-xs border border-emerald-200/60 dark:border-emerald-800/50">
+            <span>Movimiento Real / Inmediato</span>
+          </button>
+          <button type="button" id="btn-modo-ingreso-prog" onclick="cambiarModoRegistroIngreso('PROGRAMADO')"
+            class="py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-300">
+            <span>Movimiento Programado / Futuro</span>
+          </button>
+        </div>
+      </div>
+
+      <form id="form-create-ingreso" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
+        <input type="hidden" id="ingreso-es-programado" name="esProgramado" value="false">
+
+        <div>
+          <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Descripción / Concepto Comercial</label>
+          <input type="text" id="ingreso-descripcion" name="descripcion" required class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+            placeholder="Ej. Pago de cliente ABC, Sueldo mensual, Cobro de factura...">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Origen / Fuente</label>
+            <select id="ingreso-origen" name="origenFuente" class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-medium">
+              <option value="Sueldo_Nomina" selected>Sueldo / Nómina</option>
+              <option value="Honorarios_Freelance">Honorarios / Freelance</option>
+              <option value="Negocio_Emprendimiento">Negocio / Emprendimiento</option>
+              <option value="Inversiones_Rendimientos">Inversiones / Rendimientos</option>
+              <option value="Obsequio_Monetario">Obsequio / Donación</option>
+              <option value="Ventas_Activos">Venta de Activos</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Proyecto Asociado</label>
+            <select id="selector-idProyecto-ingreso" name="idProyectoAsociado"
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-medium">
+              <option value="PERSONAL">-- Ingreso Personal --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-200">Moneda</label>
+            <select id="ingreso-moneda" name="monedaOriginal" onchange="alCambiarMonedaModal('ingreso', this.value)"
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 outline-none font-medium">
+              <option value="PEN" selected>PEN (S/)</option>
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Monto Original</label>
+            <input type="number" step="0.01" id="ingreso-monto" name="montoOriginal" required placeholder="0.00"
+              class="no-spinner w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 font-mono font-bold text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label id="lbl-ingreso-fecha" class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Fecha de Cobro / Depósito</label>
+            <input type="date" id="ingreso-fecha" name="fechaIngreso" required onchange="evaluarFechaIngresoAuto(this.value)"
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="font-semibold text-slate-700 dark:text-slate-200">Tipo de Cambio</label>
+              <span
+                class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                <span>SUNAT/SBS</span>
+                <button type="button" onclick="consultarTipoCambioActual(true)" title="Actualizar TC"
+                  class="hover:rotate-180 transition-transform duration-300 text-amber-700 dark:text-amber-300">
+                  <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                </button>
+              </span>
+            </div>
+            <input type="number" step="0.001" id="ingreso-tc" name="tipoCambio" value="1.000" readonly
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 font-mono bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 cursor-not-allowed select-none">
+          </div>
+        </div>
+
+        <!-- BLOQUE EXCLUSIVO PARA INGRESOS PROGRAMADOS (ADAPTATIVO) -->
+        <div id="bloque-ingreso-programado" class="hidden p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 space-y-3 animate-in fade-in duration-150">
+          <div class="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-bold text-xs">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+            <span>Parámetros de Cobro Proyectado</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Hora Prevista de Cobro</label>
+              <input type="time" id="ingreso-hora" name="horaProgramada" value="09:00"
+                class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-mono text-xs outline-none">
+            </div>
+            <div>
+              <label class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Recurrencia / Frecuencia</label>
+              <select id="ingreso-frecuencia" name="frecuencia"
+                class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs outline-none font-medium">
+                <option value="UNICA" selected>Única / Puntual</option>
+                <option value="SEMANAL">Semanal</option>
+                <option value="QUINCENAL">Quincenal</option>
+                <option value="MENSUAL">Mensual</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Switch Alerta Google Calendar -->
+          <label class="flex items-center gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/50 cursor-pointer select-none">
+            <input type="checkbox" id="ingreso-agendar-calendar" name="agendarCalendar" checked
+              class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300">
+            <div class="min-w-0 flex-1">
+              <span class="text-xs font-bold text-slate-800 dark:text-slate-100 block">Agendar recordatorio en Google Calendar</span>
+              <span class="text-[10px] text-slate-500 dark:text-slate-400">Crea el evento con color nativo en "PMO - Ingresos Programados"</span>
+            </div>
+          </label>
+        </div>
+
+        <div>
+          <label id="lbl-ingreso-cuenta" class="block font-semibold mb-1 text-slate-700 dark:text-slate-300">Cuenta Destino (Depositado)</label>
+          <select id="ingreso-cuenta-destino" name="cuentaDestino"
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none">
+            <option value="BCP" selected>BCP</option>
+            <option value="IBK">IBK</option>
+            <option value="BBVA">BBVA</option>
+            <option value="SCTBK">SCTBK</option>
+            <option value="BANCO">BANCO</option>
+            <option value="Efectivo">Efectivo</option>
+            <option value="Otros">Otros</option>
+          </select>
+        </div>
+
+        </div>
+        <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-end gap-2.5">
+          <button type="button" onclick="closeModal('modal-ingreso')" class="btn-portal-secondary">Cancelar</button>
+          <button type="submit" id="btn-submit-ingreso" class="btn-portal-primary">
+            <span id="txt-btn-submit-ingreso">Registrar Ingreso Real</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDITAR GASTO (UI EJECUTIVA REFACTORIZADA) -->
+  <div id="modal-editar-gasto"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-editar-gasto-card"
+      class="portal-surface elevation-3 w-full max-w-xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative transition-all duration-200">
+
+      <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <!-- Cabecera Modal -->
+      <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between bg-white/50 dark:bg-slate-900/50">
+        <div class="flex items-center gap-2">
+          <span class="p-2 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 rounded-lg">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+          </span>
+          <div>
+            <h3 class="text-sm font-black text-slate-900 dark:text-slate-100 leading-tight">Modificar Registro de Egreso</h3>
+            <span id="edit-gasto-badge-id"
+              class="font-mono text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">GAS-000</span>
+          </div>
+        </div>
+        <button type="button" onclick="closeModal('modal-editar-gasto')"
+          class="btn-portal-icon" title="Cerrar">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Formulario -->
+      <form id="form-editar-gasto" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
+        <input type="hidden" id="edit-gasto-id">
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Descripción / Concepto Comercial</label>
+          <input type="text" id="edit-gasto-desc" required
+            class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-100 transition outline-none"
+            placeholder="Glosa del desembolso...">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="md:col-span-1">
+            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Categoría</label>
+            <select id="edit-gasto-categoria"
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 font-medium text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="Materiales">Materiales</option>
+              <option value="Servicios Profesionales">Servicios Profesionales</option>
+              <option value="Licencias / Software">Licencias / Software</option>
+              <option value="Marketing / Publicidad">Marketing / Publicidad</option>
+              <option value="Logística / Transporte">Logística / Transporte</option>
+              <option value="Equipos / Hardware">Equipos / Hardware</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Monto Original</label>
+            <input type="number" step="0.01" id="edit-gasto-monto" required
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-mono font-bold text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="0.00">
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-bold text-slate-700 dark:text-slate-200">Tipo de Cambio</label>
+              <span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">Oficial SUNAT/SBS</span>
+            </div>
+            <input type="number" step="0.001" id="edit-gasto-tc" readonly
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed select-none outline-none"
+              placeholder="1.000">
+            <span class="text-[9px] text-slate-400 dark:text-slate-500 mt-1 block">Tipo de cambio oficial SUNAT/SBS del día</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Clasificación / Origen</label>
+            <select id="edit-gasto-tipo"
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 font-medium text-xs text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="Tarea Proyecto">Tarea Proyecto</option>
+              <option value="Actividad Personal">Actividad Personal</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Tarea Asociada</label>
+            <select id="edit-gasto-tarea"
+              class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 font-mono text-xs text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"></select>
+          </div>
+        </div>
+
+        </div>
+        <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between gap-2.5">
+          <button type="button" id="btn-eliminar-gasto" onclick="confirmarEliminarGastoDesdeModal()"
+            class="px-3.5 py-2 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl font-bold flex items-center gap-1.5 transition text-xs active:scale-95"
+            title="Eliminar este registro de gasto permanentemente">
+            <svg class="portal-icon-sm text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <span>Eliminar</span>
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="closeModal('modal-editar-gasto')"
+              class="btn-portal-secondary">Cancelar</button>
+            <button type="submit" id="btn-submit-edit-gasto"
+              class="btn-portal-primary">Guardar Cambios</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- DRAWER / SLIDE-OVER: DETALLE Y TRAZABILIDAD DE TRANSACCIÓN            -->
+  <!-- ===================================================================== -->
+  <div id="drawer-transaccion-backdrop" onclick="cerrarDrawerDetalleTransaccion()"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden transition-opacity duration-300"></div>
+
+  <div id="drawer-detalle-transaccion"
+    class="fixed inset-y-0 right-0 max-w-lg w-full bg-white dark:bg-slate-900 shadow-2xl z-50 border-l border-slate-200 dark:border-slate-800 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+
+    <!-- CABECERA DEL DRAWER -->
+    <div
+      class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-900/80">
+      <div class="flex items-center gap-2.5">
+        <span id="drawer-transaccion-tipo-icon"
+          class="w-8 h-8 rounded-xl flex items-center justify-center font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>
+        </span>
+        <div>
+          <div class="flex items-center gap-2">
+            <span id="drawer-transaccion-id"
+              class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">TRX-000</span>
+            <span id="drawer-transaccion-estado"
+              class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Pagado</span>
+            <span id="drawer-transaccion-header-badge-notas"></span>
+          </div>
+          <h3 id="drawer-transaccion-tipo-titulo"
+            class="text-sm font-black text-slate-800 dark:text-slate-100 leading-tight">Detalle de Transacción</h3>
+        </div>
+      </div>
+      <button type="button" onclick="cerrarDrawerDetalleTransaccion()"
+        class="btn-portal-icon" title="Cerrar detalle">
+        <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <!-- CONTENIDO DEL DRAWER -->
+    <div class="flex-1 overflow-y-auto p-5 space-y-4">
+
+      <!-- CARD DE MONTO HERO -->
+      <div
+        class="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100/70 dark:from-slate-800/60 dark:to-slate-900/60 border border-slate-200/80 dark:border-slate-700/80">
+        <div class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Monto de la
+          Transacción</div>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="drawer-transaccion-monto-hero"
+            class="text-2xl font-black font-mono text-slate-900 dark:text-slate-100">S/ 0.00</span>
+          <span id="drawer-transaccion-moneda-orig"
+            class="text-xs font-bold text-slate-500 dark:text-slate-400 font-mono">PEN</span>
+        </div>
+        <!-- Conversión bimonetaria -->
+        <div id="drawer-transaccion-conversion-box"
+          class="mt-2.5 pt-2.5 border-t border-slate-200/70 dark:border-slate-700/70 flex items-center justify-between text-xs font-mono">
+          <span class="text-slate-500 dark:text-slate-400">Equivalencia / TC:</span>
+          <div class="flex items-center gap-1.5 font-bold">
+            <span id="drawer-transaccion-monto-convertido" class="text-emerald-600 dark:text-emerald-400">$ 0.00</span>
+            <span class="text-[10px] text-slate-400 dark:text-slate-500 font-normal">(TC: <span
+                id="drawer-transaccion-tc">1.000</span>)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- DESCRIPCIÓN Y CONCEPTO -->
+      <div class="space-y-1">
+        <label class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Concepto /
+          Descripción</label>
+        <div id="drawer-transaccion-descripcion"
+          class="text-sm font-semibold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+          --
+        </div>
+      </div>
+
+      <!-- METADATOS CLAVE EN GRID -->
+      <div class="grid grid-cols-2 gap-3">
+        <div
+          class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
+          <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block">Fecha</span>
+          <div id="drawer-transaccion-fecha" class="text-xs font-bold text-slate-700 dark:text-slate-300">--</div>
+        </div>
+        <div
+          class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
+          <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block">Categoría /
+            Fuente</span>
+          <div id="drawer-transaccion-categoria" class="text-xs font-bold text-slate-700 dark:text-slate-300">--</div>
+        </div>
+        <div
+          class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
+          <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block">Método / Cuenta</span>
+          <div id="drawer-transaccion-metodo" class="text-xs font-bold text-slate-700 dark:text-slate-300">--</div>
+        </div>
+        <div
+          class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
+          <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase block">Ámbito</span>
+          <div id="drawer-transaccion-ambito" class="text-xs font-bold text-slate-700 dark:text-slate-300">--</div>
+        </div>
+      </div>
+
+      <!-- RUTA / BREADCRUMB EXPLÍCITO DE TRAZABILIDAD JERÁRQUICA -->
+      <div id="drawer-transaccion-breadcrumb-box" class="space-y-1.5">
+        <label class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center justify-between">
+          <span>Ruta de Entidad Vinculada</span>
+          <span id="drawer-transaccion-entidad-tipo-badge" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">--</span>
+        </label>
+        <div id="drawer-transaccion-breadcrumb"
+          class="p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 flex items-center gap-1.5 text-xs font-semibold text-indigo-950 dark:text-indigo-200 flex-wrap leading-relaxed">
+          <!-- Renderizado dinámico: Proyecto X › Hito Y › Tarea Z -->
+        </div>
+      </div>
+
+      <!-- VINCULACIÓN RELACIONAL (PROYECTO, HITO, TAREA) -->
+      <div id="drawer-transaccion-relaciones" class="space-y-2">
+        <label class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Trazabilidad en Detalle</label>
+        <div
+          class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1.5 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-500 dark:text-slate-400">Proyecto:</span>
+            <span id="drawer-transaccion-proyecto" class="font-bold text-indigo-600 dark:text-indigo-400">Personal / Sin
+              Proyecto</span>
+          </div>
+          <div id="drawer-transaccion-hito-row" class="flex items-center justify-between">
+            <span class="text-slate-500 dark:text-slate-400">Hito:</span>
+            <span id="drawer-transaccion-hito" class="font-medium text-slate-700 dark:text-slate-300">--</span>
+          </div>
+          <div id="drawer-transaccion-tarea-row" class="flex items-center justify-between">
+            <span class="text-slate-500 dark:text-slate-400">Tarea Asoc.:</span>
+            <span id="drawer-transaccion-tarea" class="font-medium text-slate-700 dark:text-slate-300">--</span>
+          </div>
+          <div id="drawer-transaccion-impacto-row" class="hidden items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800 text-xs">
+            <span class="text-slate-500 dark:text-slate-400">Impacto Presupuestal:</span>
+            <span id="drawer-transaccion-impacto" class="font-mono font-bold text-indigo-600 dark:text-indigo-400">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- VINCULACIÓN EN ÁMBITO PERSONAL / HÁBITOS -->
+      <div id="drawer-transaccion-personal-box" class="space-y-2 hidden">
+        <label class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Área de Vida / Actividad Personal</label>
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 text-xs space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-500 dark:text-slate-400">Categoría Personal:</span>
+            <span id="drawer-transaccion-personal-cat" class="font-bold text-rose-600 dark:text-rose-400">Personal / Vida</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPROBANTE DIGITAL / RECIBO -->
+      <div class="space-y-2">
+        <label class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Comprobante /
+          Sustento Digital</label>
+        <div id="drawer-transaccion-comprobante-box"
+          class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+            <svg class="portal-icon-sm text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <span id="drawer-transaccion-comprobante-texto">Sin archivo adjunto</span>
+          </div>
+          <a id="drawer-transaccion-comprobante-link" href="#" target="_blank" rel="noopener"
+            class="hidden px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold items-center gap-1 transition">
+            <span>Ver / Abrir</span>
+            <span>↗</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- APUNTES Y NOTAS VINCULADAS -->
+      <div id="drawer-transaccion-notas-box" class="space-y-2 hidden">
+        <label class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Notas & Apuntes Vinculados</label>
+        <div class="p-3 rounded-xl bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-xs text-purple-900 dark:text-purple-200 font-medium">
+            <svg class="portal-icon-sm text-purple-600 dark:text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <span id="drawer-transaccion-notas-texto">Notas asociadas</span>
+          </div>
+          <div id="drawer-transaccion-notas-badge-container"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- FOOTER CON ACCIONES -->
+    <div
+      class="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <button type="button" id="drawer-btn-editar" onclick="editarDesdeDrawer()"
+          class="btn-portal-primary" style="padding: 0.5rem 1rem;">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <span>Editar</span>
+        </button>
+        <button type="button" id="drawer-btn-eliminar" onclick="eliminarDesdeDrawer()"
+          class="px-3.5 py-2 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95"
+          title="Eliminar este registro permanentemente">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Eliminar</span>
+        </button>
+      </div>
+      <button type="button" onclick="cerrarDrawerDetalleTransaccion()"
+        class="btn-portal-secondary">
+        Cerrar
+      </button>
+    </div>
+
+  </div>
+
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: CREAR/EDITAR PLAN DE CUOTAS                                    -->
+  <!-- ===================================================================== -->
+  <!-- MODAL: CREAR/EDITAR PLAN DE CUOTAS (ENFOQUE REAL BANCARIO)             -->
+  <!-- ===================================================================== -->
+  <div id="modal-plan-cuotas"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-plan-cuotas-card" class="portal-surface elevation-3 w-full max-w-lg max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative transition-all duration-200">
+
+      <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-violet-50/80 dark:bg-violet-950/30 backdrop-blur-xs">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-xl bg-violet-600 text-white flex items-center justify-center text-sm font-bold shadow-md shadow-violet-600/20">
+            <svg class="portal-icon-sm text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+          </span>
+          <div>
+            <h3 id="modal-cuotas-titulo" class="font-bold text-sm text-slate-800 dark:text-slate-100 leading-tight">
+              Nuevo Plan de Crédito / Cuotas
+            </h3>
+            <span class="text-[10px] text-slate-500 dark:text-slate-400">Régimen según liquidación de tu entidad financiera</span>
+          </div>
+        </div>
+        <button type="button" onclick="closeModal('modal-plan-cuotas')" class="btn-portal-icon" title="Cerrar">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+
+      <form id="form-create-plan-cuotas" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
+        <input type="hidden" id="cuota-id-edit" value="">
+
+        <!-- Fila 1: Entidad y Concepto -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Banco / Entidad Financiera</label>
+            <input type="text" id="cuota-entidad" required list="bancos-sugeridos" placeholder="Ej: BCP, BBVA, Interbank..." class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-violet-500">
+            <datalist id="bancos-sugeridos">
+              <option value="BCP">
+              <option value="BBVA">
+              <option value="Interbank">
+              <option value="Scotiabank">
+              <option value="Diners Club">
+              <option value="CMR Falabella">
+              <option value="Tarjeta Ripley">
+              <option value="BanBif">
+              <option value="Banco de la Nación">
+            </datalist>
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Concepto del Compromiso</label>
+            <input type="text" id="cuota-nombre" required placeholder="Ej: Laptop Trabajo, Moto Pulsar..." class="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-violet-500">
+          </div>
+        </div>
+
+        <!-- Fila 2: Cuota Fija Mensual Bancaria (CAMPO PRINCIPAL) y N° de Cuotas -->
+        <div class="p-3.5 rounded-xl bg-violet-50/70 dark:bg-violet-950/20 border border-violet-200/80 dark:border-violet-800/60 space-y-2">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="font-bold text-violet-900 dark:text-violet-200">Cuota Fija Mensual (Banco)</label>
+                <span class="text-[9px] font-bold text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/60 px-1.5 py-0.2 rounded">Real Bancario</span>
+              </div>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center font-bold text-slate-400 font-mono text-xs">S/</span>
+                <input type="number" id="cuota-monto-mensual" step="0.01" min="0.01" required placeholder="0.00" class="w-full pl-8 pr-3 py-2 border border-violet-300 dark:border-violet-700 rounded-lg bg-white dark:bg-slate-900 text-violet-800 dark:text-violet-200 font-mono font-black text-sm outline-none focus:ring-2 focus:ring-violet-500">
+              </div>
+              <span class="text-[9px] text-slate-500 dark:text-slate-400 mt-1 block">Digita el monto exacto liquidado por tu banco</span>
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Número de Cuotas (N)</label>
+              <input type="number" id="cuota-num-cuotas" min="1" max="120" required placeholder="12" class="w-full py-2 px-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-mono font-bold text-sm outline-none focus:ring-2 focus:ring-violet-500">
+              <span class="text-[9px] text-slate-500 dark:text-slate-400 mt-1 block">Plazo total pactado</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fila 3: Fechas y Día de Pago -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Primer Vencimiento</label>
+            <input type="date" id="cuota-fecha-inicio" required class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none">
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Día de Cobro (Mes)</label>
+            <input type="number" id="cuota-dia-pago" min="1" max="31" value="15" required class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-mono font-bold outline-none">
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Categoría</label>
+            <select id="cuota-categoria" class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none">
+              <option value="ELECTRONICO" selected>Electrónico / Equipo</option>
+              <option value="VEHICULO">Vehículo / Transporte</option>
+              <option value="EDUCACION">Educación / Estudio</option>
+              <option value="HOGAR">Hogar / Muebles</option>
+              <option value="SALUD">Salud / Bienestar</option>
+              <option value="OTRO">Otro Compromiso</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Fila 4: Monto Total y Método de Pago -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Monto Total / Capital (Ref.)</label>
+            <input type="number" id="cuota-monto-total" step="0.01" min="0" placeholder="Opcional (Ej. 4500.00)" class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-mono outline-none">
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Método de Débito</label>
+            <select id="cuota-metodo-pago" class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none">
+              <option value="Débito Automático" selected>Débito Automático</option>
+              <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+              <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+              <option value="Ventanilla / Agente">Ventanilla / Agente</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Botón opcional de ayuda: Comparar con cálculo teórico -->
+        <div class="pt-1">
+          <button type="button" onclick="toggleComparadorTeorico()" class="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-200 flex items-center gap-1.5 transition">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            <span>Verificar / Comparar con cálculo teórico (Informativo)</span>
+            <span id="icon-toggle-teorico" class="text-[10px]">▼</span>
+          </button>
+          <div id="box-comparador-teorico" class="hidden mt-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 text-[11px]">
+            <p class="text-slate-500 dark:text-slate-400">Este cálculo es puramente referencial y <strong>nunca</strong> sobreescribe el monto pactado con tu banco:</p>
+            <div class="grid grid-cols-2 gap-2 text-slate-600 dark:text-slate-300 font-mono">
+              <div>Total comprometido: <strong id="teorico-total-comp" class="text-slate-900 dark:text-slate-100">S/ 0.00</strong></div>
+              <div>Cuota pura sin interés: <strong id="teorico-cuota-pura" class="text-slate-900 dark:text-slate-100">S/ 0.00</strong></div>
+            </div>
+            <div id="teorico-diferencia" class="text-[10px] text-amber-600 dark:text-amber-400 font-medium"></div>
+          </div>
+        </div>
+
+        </div>
+        <!-- Footer Acciones -->
+        <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-end gap-2.5">
+          <button type="button" onclick="closeModal('modal-plan-cuotas')" class="btn-portal-secondary">Cancelar</button>
+          <button type="submit" id="btn-submit-plan-cuotas" class="btn-portal-primary">Guardar Plan de Crédito</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MICRO-MODAL: CONCILIACIÓN MANUAL (AJUSTE ESTIMADO VS. REAL)            -->
+  <!-- ===================================================================== -->
+  <div id="modal-conciliar-transaccion"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-conciliar-transaccion-card" class="portal-surface elevation-3 w-full max-w-md max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+
+      <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <!-- Cabecera -->
+      <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-cyan-50/80 dark:bg-cyan-950/30">
+        <div class="flex items-center gap-2">
+          <span class="w-7 h-7 rounded-lg bg-cyan-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+            <svg class="portal-icon-sm text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+          <div>
+            <h3 class="font-bold text-xs text-slate-800 dark:text-slate-100">Conciliar Movimiento</h3>
+            <span class="text-[10px] text-cyan-700 dark:text-cyan-300 font-mono">Ajuste Estimado vs. Real</span>
+          </div>
+        </div>
+        <button type="button" onclick="closeModal('modal-conciliar-transaccion')" class="btn-portal-icon" title="Cerrar">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Formulario Conciliación -->
+      <form id="form-conciliar-transaccion" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
+        <input type="hidden" id="conciliar-id-mov" value="">
+        <input type="hidden" id="conciliar-id-gasto" value="">
+        <input type="hidden" id="conciliar-id-ingreso" value="">
+        <input type="hidden" id="conciliar-tipo" value="GASTO">
+
+        <!-- Detalle de la transacción -->
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-1">
+          <div class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">Transacción Programada</div>
+          <div id="conciliar-concepto-texto" class="font-bold text-slate-800 dark:text-slate-100 text-xs truncate">--</div>
+          <div class="flex items-baseline justify-between text-[11px] font-mono pt-1 text-slate-500">
+            <span>Monto Original Estimado:</span>
+            <strong id="conciliar-monto-estimado" class="text-slate-700 dark:text-slate-200 text-xs">S/ 0.00</strong>
+          </div>
+        </div>
+
+        <!-- Monto Real Liquidado -->
+        <div>
+          <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">
+            Monto Real Liquidado por el Banco (S/)
+          </label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center font-bold text-slate-400 font-mono text-xs">S/</span>
+            <input type="number" id="conciliar-monto-real" step="0.01" min="0" required placeholder="0.00" class="w-full pl-8 pr-3 py-2 border border-cyan-300 dark:border-cyan-700 rounded-xl bg-white dark:bg-slate-900 text-cyan-800 dark:text-cyan-200 font-mono font-black text-sm outline-none focus:ring-2 focus:ring-cyan-500">
+          </div>
+          <span class="text-[9px] text-slate-400 dark:text-slate-500 mt-1 block">Ajusta por céntimos, cargos por portes, comisiones o TC</span>
+        </div>
+
+        <!-- Fecha Real y Medio de Pago -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Fecha de Liquidación</label>
+            <input type="date" id="conciliar-fecha-real" required class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none">
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Medio / Cuenta Real</label>
+            <select id="conciliar-metodo-pago" class="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none">
+              <option value="BCP" selected>BCP</option>
+              <option value="BBVA">BBVA</option>
+              <option value="Interbank">Interbank</option>
+              <option value="Scotiabank">Scotiabank</option>
+              <option value="Yape / Plin">Yape / Plin</option>
+              <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+              <option value="Efectivo">Efectivo</option>
+            </select>
+          </div>
+        </div>
+
+        </div>
+        <!-- Botones de Acción -->
+        <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-end gap-2.5">
+          <button type="button" onclick="closeModal('modal-conciliar-transaccion')" class="btn-portal-secondary">Cancelar</button>
+          <button type="submit" id="btn-submit-conciliacion" class="btn-portal-primary flex items-center gap-1.5">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Confirmar Conciliación</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: ATAJOS DE TECLADO Y CONFIGURACIÓN INTERACTIVA                 -->

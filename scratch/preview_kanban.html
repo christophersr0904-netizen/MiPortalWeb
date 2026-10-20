@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laboratorio Visual Kanban — Cobalt Aerodynamic (A.2.2)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cobalt: {
+              canvas: '#040711',
+              surface: '#0D1526',
+              surfaceHover: '#131e36',
+              border: 'rgba(30, 41, 59, 0.4)',
+              accent: '#38bdf8'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+          },
+          boxShadow: {
+            'portal-sm': '0 4px 12px -2px rgba(2, 6, 23, 0.35)',
+            'portal': '0 10px 25px -5px rgba(2, 6, 23, 0.5), 0 8px 10px -6px rgba(2, 6, 23, 0.5)',
+            'portal-lg': '0 20px 35px -8px rgba(2, 6, 23, 0.65), 0 10px 15px -7px rgba(2, 6, 23, 0.5)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    .portal-surface {
+      background-color: #0D1526;
+      border: 1px solid rgba(51, 65, 85, 0.4);
+      box-shadow: 0 10px 25px -5px rgba(2, 6, 23, 0.5);
+    }
+    .light .portal-surface {
+      background-color: #ffffff;
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      box-shadow: 0 10px 25px -5px rgba(148, 163, 184, 0.2);
+    }
+    .portal-icon-sm {
+      width: 13px;
+      height: 13px;
+      stroke-width: 1.75;
+    }
+    .portal-icon {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.75;
+    }
+    .portal-icon-lg {
+      width: 20px;
+      height: 20px;
+      stroke-width: 1.75;
+    }
+
+    /* Custom subtle scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.4);
+    }
+  </style>
+</head>
+<body class="bg-[#040711] text-slate-200 transition-colors duration-200 min-h-screen font-sans antialiased selection:bg-sky-500/20 selection:text-sky-300">
+
+  <!-- Header Sticky del Laboratorio Visual -->
+  <header class="sticky top-0 z-40 bg-[#0D1526]/90 backdrop-blur-md border-b border-slate-800/80 px-6 py-3.5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
+        <i data-lucide="layers" class="portal-icon"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-bold text-white tracking-tight">Laboratorio Visual Kanban — Cobalt Aerodynamic A.2.2</h1>
+          <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-sky-950/60 text-sky-400 border border-sky-800/50">Sandbox Offline</span>
+        </div>
+        <p class="text-[11px] text-slate-400">Prototipado de micro-interfaz, variantes de densidad y modales para aprobación</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <!-- Selector de Modo Oscuro / Claro -->
+      <button id="btn-theme-toggle" onclick="toggleTheme()" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700/60 transition-all cursor-pointer shadow-xs">
+        <i id="theme-icon" data-lucide="sun" class="portal-icon-sm text-amber-400"></i>
+        <span id="theme-text">Modo Claro</span>
+      </button>
+
+      <!-- Badge de Precedencia -->
+      <div class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-mono bg-indigo-950/40 text-indigo-300 border border-indigo-800/50">
+        <i data-lucide="shield-check" class="portal-icon-sm text-indigo-400"></i>
+        <span>SYSTEM_RULES.md</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-12">
+
+    <!-- ========================================================================= -->
+    <!-- SECCIÓN 1: PROPUESTAS DE TARJETA KANBAN (3 VARIANTES) -->
+    <!-- ========================================================================= -->
+    <section class="space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="layout-grid" class="portal-icon text-sky-400"></i>
+            1. Propuestas de Rediseño de Tarjeta Kanban
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Tres aproximaciones ergonómicas que eliminan el chip de prioridad redundante y destacan el micro-icono de Tipo de Trabajo.</p>
+        </div>
+        <div class="flex items-center gap-1.5 text-[11px] font-mono text-slate-400 bg-slate-900/60 px-2.5 py-1 rounded-lg border border-slate-800/60">
+          <i data-lucide="info" class="portal-icon-sm text-sky-400"></i>
+          <span>Cobalt Aerodynamic • Lucide Lineal • Font-Mono</span>
+        </div>
+      </div>
+
+      <!-- Grid de 3 Columnas lado a lado -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- ------------------------------------------------------------------- -->
+        <!-- VARIANTE A: ULTRA MINIMALISTA -->
+        <!-- ------------------------------------------------------------------- -->
+        <div class="space-y-2.5">
+          <div class="flex items-center justify-between px-1">
+            <span class="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+              Variante A: Ultra Minimalista
+            </span>
+            <span class="text-[10px] font-mono text-slate-500">Enfoque tipográfico</span>
+          </div>
+
+          <!-- Card Component -->
+          <div class="portal-surface rounded-2xl p-4 relative overflow-hidden group hover:border-slate-700/80 transition-all duration-200 shadow-portal hover:shadow-portal-lg hover:-translate-y-0.5 cursor-pointer">
+            <!-- Barra lateral de prioridad continua (Rose = P1 Urgente) -->
+            <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500 group-hover:w-2 transition-all duration-150"></div>
+
+            <!-- Cabecera de la Tarjeta -->
+            <div class="flex items-center justify-between gap-2 pl-1">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="font-mono text-[10px] font-bold text-slate-400 bg-slate-800/80 dark:bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700/60 tracking-wider">TAR-104</span>
+                
+                <!-- Micro-icono de Tipo de Trabajo (DeepWork = Brain) -->
+                <span class="p-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 inline-flex items-center justify-center shrink-0" title="Tipo de Trabajo: DeepWork">
+                  <i data-lucide="brain" class="portal-icon-sm"></i>
+                </span>
+
+                <!-- MAV sutil si aplica -->
+                <span class="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-rose-950/40 text-rose-300 border border-rose-800/60 flex items-center gap-1">
+                  <span class="w-1 h-1 rounded-full bg-rose-400"></span>MAV
+                </span>
+              </div>
+
+              <!-- Micro-acciones flotantes en hover -->
+              <div class="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+                <button type="button" class="p-1 text-slate-400 hover:text-sky-300 hover:bg-slate-800/60 rounded-md transition" title="Ver detalles">
+                  <i data-lucide="external-link" class="portal-icon-sm"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Título Principal Despejado -->
+            <div class="mt-2.5 pl-1">
+              <h3 class="text-sm font-semibold text-slate-100 leading-snug hover:text-sky-300 transition-colors line-clamp-2">
+                Arquitectura de base vectorial y tokenización semántica
+              </h3>
+              
+              <!-- Micro-Breadcrumb de Proyecto e Hito -->
+              <div class="text-[11px] text-indigo-400 font-medium truncate flex items-center gap-1 mt-1">
+                <i data-lucide="folder" class="portal-icon-sm shrink-0"></i>
+                <span class="truncate">Portal Web 2.0</span>
+                <span class="text-slate-600">›</span>
+                <span class="text-slate-400 truncate">Hito 04: Motor de UI</span>
+              </div>
+            </div>
+
+            <!-- Subtareas compactas embebidas -->
+            <div class="mt-3 pl-1 pt-2.5 border-t border-slate-800/70 flex items-center justify-between text-[11px]">
+              <div class="flex items-center gap-2">
+                <div class="w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div class="bg-sky-400 h-full rounded-full" style="width: 66%"></div>
+                </div>
+                <span class="font-mono text-[10px] text-slate-400 tabular-nums font-semibold">2/3</span>
+              </div>
+
+              <!-- Fecha y Horas mono tabular -->
+              <div class="flex items-center gap-2 font-mono text-[10px] text-slate-400 tabular-nums">
+                <span class="inline-flex items-center gap-1 text-slate-400">
+                  <i data-lucide="calendar" class="portal-icon-sm text-slate-500"></i>
+                  12 Oct
+                </span>
+                <span class="inline-flex items-center gap-1 text-slate-400 bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-700/40">
+                  <i data-lucide="clock" class="portal-icon-sm text-slate-500"></i>
+                  3.5h
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-900/40 border border-slate-800/60 rounded-xl text-[11px] text-slate-400 space-y-1">
+            <div class="font-semibold text-slate-300">Puntos Clave Variante A:</div>
+            <p>• Máximo espacio para el título y reducción drástica de ruido visual.</p>
+            <p>• Barra de prioridad vertical lateral como único canal cromático de urgencia.</p>
+            <p>• Icono de DeepWork minimalista sin etiquetas de texto largas.</p>
+          </div>
+        </div>
+
+        <!-- ------------------------------------------------------------------- -->
+        <!-- VARIANTE B: MODULAR / ESTRUCTURADA -->
+        <!-- ------------------------------------------------------------------- -->
+        <div class="space-y-2.5">
+          <div class="flex items-center justify-between px-1">
+            <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+              Variante B: Modular Estructurada
+            </span>
+            <span class="text-[10px] font-mono text-slate-500">Balance y slots</span>
+          </div>
+
+          <!-- Card Component -->
+          <div class="portal-surface rounded-2xl p-4 relative overflow-hidden group hover:border-slate-700/80 transition-all duration-200 shadow-portal hover:shadow-portal-lg hover:-translate-y-0.5 cursor-pointer">
+            <!-- Barra lateral de prioridad continua (Amber = P2 Media) -->
+            <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-amber-500 group-hover:w-2 transition-all duration-150"></div>
+
+            <!-- Fila Superior: Código, Tipo, y Notas Vinculadas -->
+            <div class="flex items-center justify-between gap-1.5 pl-1">
+              <div class="flex items-center gap-1.5">
+                <span class="font-mono text-[10px] font-bold text-slate-400 bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-700/60">TAR-088</span>
+                
+                <!-- Micro-icono de Tipo de Trabajo (Operativa = Wrench) -->
+                <span class="p-1 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 inline-flex items-center justify-center shrink-0" title="Tipo de Trabajo: Operativa">
+                  <i data-lucide="wrench" class="portal-icon-sm"></i>
+                </span>
+
+                <!-- Micro-badge Notas Vinculadas -->
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-purple-950/40 text-purple-300 border border-purple-800/60">
+                  <i data-lucide="file-text" class="portal-icon-sm text-purple-400"></i>
+                  <span class="font-mono tabular-nums text-[9px]">2</span>
+                </span>
+              </div>
+
+              <!-- Botón rápido de acción con chevron hacia adelante -->
+              <button type="button" class="text-[10px] font-semibold text-sky-400 hover:text-sky-300 bg-sky-950/30 hover:bg-sky-950/60 px-2 py-0.5 rounded-md border border-sky-800/50 inline-flex items-center gap-1 transition">
+                <span>Mover</span>
+                <i data-lucide="arrow-right" class="portal-icon-sm"></i>
+              </button>
+            </div>
+
+            <!-- Título y breadcrumb -->
+            <div class="mt-2.5 pl-1">
+              <h3 class="text-sm font-semibold text-slate-100 leading-snug line-clamp-2">
+                Refactorización del servicio de serialización en Google Apps Script
+              </h3>
+              <div class="text-[11px] text-slate-400 font-medium truncate flex items-center gap-1 mt-1">
+                <i data-lucide="git-branch" class="portal-icon-sm text-slate-500 shrink-0"></i>
+                <span class="truncate">Infraestructura Core</span>
+              </div>
+            </div>
+
+            <!-- Chips de Metadatos en Fila Modular Inferior -->
+            <div class="mt-3 pl-1 pt-2 border-t border-slate-800/70 flex items-center justify-between gap-1 flex-wrap">
+              <!-- Horas Reales vs Estimadas en font-mono -->
+              <span class="inline-flex items-center gap-1 text-[10px] font-mono tabular-nums px-2 py-0.5 rounded-md bg-slate-800/60 text-slate-300 border border-slate-700/60">
+                <i data-lucide="clock" class="portal-icon-sm text-slate-400"></i>
+                1.5h / 2.0h
+              </span>
+
+              <!-- Badge de Fecha con alerta si está próxima -->
+              <span class="inline-flex items-center gap-1 text-[10px] font-mono tabular-nums px-2 py-0.5 rounded-md bg-amber-950/30 text-amber-300 border border-amber-800/50">
+                <i data-lucide="alert-circle" class="portal-icon-sm text-amber-400"></i>
+                Mañana
+              </span>
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-900/40 border border-slate-800/60 rounded-xl text-[11px] text-slate-400 space-y-1">
+            <div class="font-semibold text-slate-300">Puntos Clave Variante B:</div>
+            <p>• Disposición modular clara: cabecera técnica, título y barra de estado inferior.</p>
+            <p>• Indicador interactivo rápido para avanzar la tarjeta de columna con un clic.</p>
+            <p>• Agrupación simétrica de badges numéricos y notas vinculadas.</p>
+          </div>
+        </div>
+
+        <!-- ------------------------------------------------------------------- -->
+        <!-- VARIANTE C: COMPACT FOCUS -->
+        <!-- ------------------------------------------------------------------- -->
+        <div class="space-y-2.5">
+          <div class="flex items-center justify-between px-1">
+            <span class="text-xs font-bold text-teal-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-teal-400"></span>
+              Variante C: Compact Focus
+            </span>
+            <span class="text-[10px] font-mono text-slate-500">Alta Densidad Visual</span>
+          </div>
+
+          <!-- Card Component (Ultra densa) -->
+          <div class="portal-surface rounded-xl p-3 relative overflow-hidden group hover:border-slate-700/80 transition-all duration-200 shadow-portal hover:shadow-portal-lg hover:-translate-y-0.5 cursor-pointer">
+            <!-- Barra lateral de prioridad continua (Slate = P3 Baja) -->
+            <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-slate-400 group-hover:w-2 transition-all duration-150"></div>
+
+            <div class="pl-1 space-y-1.5">
+              <!-- Fila integrada de metadatos en una sola línea -->
+              <div class="flex items-center justify-between text-[10px]">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono font-bold text-slate-400 bg-slate-800/80 px-1 py-0.2 rounded border border-slate-700/60">TAR-031</span>
+                  
+                  <!-- Micro-icono Automática (Bot) -->
+                  <span class="p-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 inline-flex items-center justify-center shrink-0" title="Tipo de Trabajo: Automática">
+                    <i data-lucide="bot" class="portal-icon-sm"></i>
+                  </span>
+
+                  <span class="text-indigo-400 font-medium truncate max-w-[120px]">Finanzas</span>
+                </div>
+
+                <!-- Fecha y tiempo ultra compactos -->
+                <span class="font-mono text-slate-400 tabular-nums">15 Oct • 1h</span>
+              </div>
+
+              <!-- Título conciso con mayor peso tipográfico -->
+              <h3 class="text-xs font-semibold text-slate-100 leading-snug line-clamp-2">
+                Conciliación bancaria mensual y balance de flujo proyectado
+              </h3>
+
+              <!-- Barra de avance de subtareas compacta -->
+              <div class="pt-1 flex items-center justify-between text-[10px] text-slate-400">
+                <span class="inline-flex items-center gap-1 font-mono text-emerald-400">
+                  <i data-lucide="check" class="portal-icon-sm"></i>
+                  3/3 Listas
+                </span>
+                <span class="text-[9px] text-slate-500 font-mono uppercase">Completado</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-900/40 border border-slate-800/60 rounded-xl text-[11px] text-slate-400 space-y-1">
+            <div class="font-semibold text-slate-300">Puntos Clave Variante C:</div>
+            <p>• Máxima densidad: permite ver hasta un 40% más de tarjetas en pantalla sin scroll.</p>
+            <p>• Ideal para usuarios con alto volumen de tareas diarias.</p>
+            <p>• Altura comprimida a menos de 95px manteniendo todos los datos clave.</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- SECCIÓN 2: PROPUESTAS DE CUADRO DE DETALLE / MODAL (2 VARIANTES) -->
+    <!-- ========================================================================= -->
+    <section class="space-y-4 pt-4 border-t border-slate-800">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="maximize-2" class="portal-icon text-indigo-400"></i>
+            2. Propuestas para el Modal / Detalle de Tarea Flow
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Dos filosofías de diagramación para el modal de edición profunda, ambas 100% alineadas con Cobalt Aerodynamic.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="openModalPreview('modal-v1')" class="px-3 py-1.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs font-semibold flex items-center gap-1.5 transition">
+            <i data-lucide="eye" class="portal-icon-sm"></i> Probar V1 Flotante
+          </button>
+          <button type="button" onclick="openModalPreview('modal-v2')" class="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-semibold flex items-center gap-1.5 transition">
+            <i data-lucide="eye" class="portal-icon-sm"></i> Probar V2 Flotante
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview embebido de ambas variantes -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+
+        <!-- ------------------------------------------------------------------- -->
+        <!-- MODAL VARIANTE 1: DOS COLUMNAS ASIMÉTRICAS -->
+        <!-- ------------------------------------------------------------------- -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+              Variante 1: Dos Columnas (Productividad PMO)
+            </span>
+            <span class="text-[10px] font-mono text-slate-500">65% Edición / 35% Panel Inspector</span>
+          </div>
+
+          <!-- Maqueta interactiva embebida del Modal V1 -->
+          <div class="portal-surface rounded-2xl border border-slate-800 shadow-portal-lg overflow-hidden text-xs">
+            <!-- Modal Header -->
+            <div class="px-5 py-3.5 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="font-mono font-bold text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-xs">TAR-104</span>
+                <span class="text-xs font-semibold text-slate-400">Detalle de Tarea Flow</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="p-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20" title="DeepWork">
+                  <i data-lucide="brain" class="portal-icon-sm"></i>
+                </span>
+                <button type="button" class="p-1 text-slate-400 hover:text-white rounded-md"><i data-lucide="x" class="portal-icon-sm"></i></button>
+              </div>
+            </div>
+
+            <!-- Modal Body (2 Columnas) -->
+            <div class="grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+              <!-- Columna Izquierda (7 cols): Contenido, Título, Descripción, Subtareas -->
+              <div class="md:col-span-8 p-5 space-y-4">
+                <div class="space-y-1">
+                  <label class="text-[11px] font-semibold text-slate-400">Título de la Tarea</label>
+                  <input type="text" value="Arquitectura de base vectorial y tokenización semántica" class="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium text-xs focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500" readonly>
+                </div>
+
+                <!-- Subtareas / Checklists -->
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <label class="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                      <i data-lucide="check-square" class="portal-icon-sm text-sky-400"></i>
+                      Subtareas (2/3)
+                    </label>
+                    <span class="font-mono text-[10px] text-sky-400">66%</span>
+                  </div>
+                  
+                  <div class="space-y-1.5 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/80">
+                    <div class="flex items-center gap-2">
+                      <input type="checkbox" checked class="rounded border-slate-700 bg-slate-900 text-sky-500" disabled>
+                      <span class="text-slate-400 line-through text-[11px]">Diseño de paleta Cobalt A.2.2 en tokens</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <input type="checkbox" checked class="rounded border-slate-700 bg-slate-900 text-sky-500" disabled>
+                      <span class="text-slate-400 line-through text-[11px]">Homologación de micro-iconos de energía</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <input type="checkbox" class="rounded border-slate-700 bg-slate-900 text-sky-500" disabled>
+                      <span class="text-slate-200 text-[11px]">Creación del mockup sandbox en scratch/</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Notas y Checklist Vinculado -->
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                      <i data-lucide="file-text" class="portal-icon-sm text-purple-400"></i>
+                      Notas Vinculadas
+                    </span>
+                    <button class="text-[10px] text-sky-400 hover:text-sky-300">+ Vincular Nota</button>
+                  </div>
+                  <div class="p-2.5 rounded-xl bg-purple-950/20 border border-purple-900/40 text-[11px] text-purple-300 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <i data-lucide="bookmark" class="portal-icon-sm text-purple-400"></i>
+                      <span>Especificación técnica de Cobalt Aerodynamic</span>
+                    </div>
+                    <span class="font-mono text-[9px] text-purple-400">NOT-012</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Columna Derecha (4 cols): Inspector de Metadatos -->
+              <div class="md:col-span-4 p-5 bg-slate-900/40 space-y-4">
+                <!-- Estado Selector -->
+                <div class="space-y-1">
+                  <label class="text-[10px] font-mono uppercase text-slate-400">Columna Kanban</label>
+                  <div class="px-2.5 py-1.5 rounded-xl bg-blue-950/40 border border-blue-800/60 text-blue-300 font-semibold text-xs flex items-center justify-between">
+                    <span>03_En_Proceso</span>
+                    <i data-lucide="chevron-down" class="portal-icon-sm"></i>
+                  </div>
+                </div>
+
+                <!-- Proyecto e Hito -->
+                <div class="space-y-1">
+                  <label class="text-[10px] font-mono uppercase text-slate-400">Proyecto</label>
+                  <div class="text-[11px] text-slate-200 font-medium truncate bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                    Portal Web 2.0
+                  </div>
+                </div>
+
+                <!-- Selector de Tipo de Trabajo -->
+                <div class="space-y-1">
+                  <label class="text-[10px] font-mono uppercase text-slate-400">Tipo de Trabajo</label>
+                  <div class="flex items-center gap-1.5">
+                    <button class="flex-1 py-1 rounded-lg bg-purple-950/60 text-purple-300 border border-purple-800 font-bold text-[10px] flex items-center justify-center gap-1">
+                      <i data-lucide="brain" class="portal-icon-sm"></i> DeepWork
+                    </button>
+                    <button class="flex-1 py-1 rounded-lg bg-slate-900 text-slate-400 border border-slate-800 text-[10px] flex items-center justify-center gap-1">
+                      <i data-lucide="wrench" class="portal-icon-sm"></i> Operativa
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Estimación de Horas -->
+                <div class="space-y-1">
+                  <label class="text-[10px] font-mono uppercase text-slate-400">Horas Reales / Plan</label>
+                  <div class="flex items-center gap-2 font-mono text-xs text-slate-300">
+                    <input type="text" value="2.5" class="w-14 text-center bg-slate-950/60 border border-slate-800 rounded-lg py-1 tabular-nums" readonly>
+                    <span>/</span>
+                    <input type="text" value="3.5" class="w-14 text-center bg-slate-950/60 border border-slate-800 rounded-lg py-1 tabular-nums" readonly>
+                    <span class="text-slate-500">hrs</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-5 py-3 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between">
+              <span class="text-[10px] font-mono text-slate-500">Última sincronización: Hoy 02:45</span>
+              <div class="flex items-center gap-2">
+                <button class="px-3 py-1.5 rounded-xl text-slate-400 hover:text-white text-xs">Cerrar</button>
+                <button class="px-4 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs shadow-xs transition">Guardar Cambios</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ------------------------------------------------------------------- -->
+        <!-- MODAL VARIANTE 2: FLUJO VERTICAL LIMPIO CON PESTAÑAS -->
+        <!-- ------------------------------------------------------------------- -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+              Variante 2: Flujo Vertical con Tabs Integrados
+            </span>
+            <span class="text-[10px] font-mono text-slate-500">Lectura secuencial sin desbordamiento</span>
+          </div>
+
+          <!-- Maqueta interactiva embebida del Modal V2 -->
+          <div class="portal-surface rounded-2xl border border-slate-800 shadow-portal-lg overflow-hidden text-xs">
+            <!-- Modal Header con Chips integrados -->
+            <div class="px-5 py-3.5 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="font-mono font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-xs">TAR-104</span>
+                <span class="p-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20" title="DeepWork">
+                  <i data-lucide="brain" class="portal-icon-sm"></i>
+                </span>
+                <span class="text-[10px] font-mono tabular-nums text-slate-400">12 Octubre • 3.5h</span>
+              </div>
+              <button type="button" class="p-1 text-slate-400 hover:text-white rounded-md"><i data-lucide="x" class="portal-icon-sm"></i></button>
+            </div>
+
+            <!-- Título Hero prominente -->
+            <div class="px-5 pt-4 pb-2">
+              <input type="text" value="Arquitectura de base vectorial y tokenización semántica" class="w-full bg-transparent border-0 border-b border-transparent hover:border-slate-800 focus:border-purple-500 text-sm font-bold text-white focus:outline-none pb-1" readonly>
+            </div>
+
+            <!-- Tabs Segmentados de Navegación Rápida -->
+            <div class="px-5 flex items-center gap-2 border-b border-slate-800/80">
+              <button class="pb-2.5 font-bold text-xs text-purple-400 border-b-2 border-purple-400 inline-flex items-center gap-1.5">
+                <i data-lucide="list-checks" class="portal-icon-sm"></i>
+                Plan y Subtareas (3)
+              </button>
+              <button class="pb-2.5 font-medium text-xs text-slate-400 hover:text-slate-200 border-b-2 border-transparent inline-flex items-center gap-1.5">
+                <i data-lucide="file-text" class="portal-icon-sm"></i>
+                Notas (1)
+              </button>
+              <button class="pb-2.5 font-medium text-xs text-slate-400 hover:text-slate-200 border-b-2 border-transparent inline-flex items-center gap-1.5">
+                <i data-lucide="sliders" class="portal-icon-sm"></i>
+                Metadatos & Costos
+              </button>
+            </div>
+
+            <!-- Tab Content (Vista activa: Subtareas) -->
+            <div class="p-5 space-y-3 min-h-[190px]">
+              <div class="space-y-2">
+                <div class="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="portal-icon-sm text-emerald-400"></i>
+                    <span class="text-slate-300 text-[11px]">Diseño de paleta Cobalt A.2.2 en tokens</span>
+                  </div>
+                  <span class="font-mono text-[10px] text-slate-500">1.0h</span>
+                </div>
+                <div class="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 border border-slate-800">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="portal-icon-sm text-emerald-400"></i>
+                    <span class="text-slate-300 text-[11px]">Homologación de micro-iconos de energía</span>
+                  </div>
+                  <span class="font-mono text-[10px] text-slate-500">1.5h</span>
+                </div>
+                <div class="flex items-center justify-between p-2 rounded-xl bg-slate-950/60 border border-purple-900/40">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="circle" class="portal-icon-sm text-purple-400"></i>
+                    <span class="text-white text-[11px] font-semibold">Creación del mockup sandbox en scratch/</span>
+                  </div>
+                  <span class="font-mono text-[10px] text-purple-300 font-bold">1.0h</span>
+                </div>
+              </div>
+
+              <!-- Input para agregar paso rápido -->
+              <div class="flex items-center gap-2 pt-1">
+                <input type="text" placeholder="+ Agregar nuevo paso de ejecución..." class="flex-1 bg-slate-950/40 border border-slate-800/80 rounded-xl px-3 py-1.5 text-xs text-slate-300 placeholder-slate-500 focus:outline-none focus:border-purple-500" readonly>
+              </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-5 py-3 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between">
+              <div class="flex items-center gap-2 text-[10px] text-slate-400">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>Guardado automático reactivo</span>
+              </div>
+              <button class="px-4 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-xs transition">Listo</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- MODALES FLOTANTES COMPLETOS (DEMO INTERACTIVA) -->
+  <!-- ========================================================================= -->
+
+  <!-- Modal V1 Overlay -->
+  <div id="modal-v1" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="portal-surface rounded-2xl w-full max-w-3xl border border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div class="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="font-mono font-bold text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded border border-sky-800/60 text-xs">TAR-104</span>
+          <h3 class="text-sm font-bold text-white">Modal Variante 1 (Dos Columnas en Pantalla Completa)</h3>
+        </div>
+        <button onclick="closeModalPreview('modal-v1')" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800">
+          <i data-lucide="x" class="portal-icon"></i>
+        </button>
+      </div>
+      <div class="p-6 text-sm text-slate-300 space-y-4">
+        <p>Esta es la simulación del modal a tamaño real con el layout de dos columnas.</p>
+        <div class="p-4 bg-slate-950/60 rounded-xl border border-slate-800 font-mono text-xs text-sky-300">
+          • Permite editar título y checklist a la izquierda mientras a la derecha se monitorean horas, fechas, costos y proyecto.<br>
+          • No requiere cambiar de pestaña para alternar entre notas y estados.
+        </div>
+      </div>
+      <div class="px-6 py-3.5 bg-slate-900 border-t border-slate-800 flex justify-end">
+        <button onclick="closeModalPreview('modal-v1')" class="px-4 py-2 rounded-xl bg-sky-500 text-slate-950 font-bold text-xs">Entendido / Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal V2 Overlay -->
+  <div id="modal-v2" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="portal-surface rounded-2xl w-full max-w-xl border border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div class="px-6 py-4 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="font-mono font-bold text-purple-400 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800/60 text-xs">TAR-104</span>
+          <h3 class="text-sm font-bold text-white">Modal Variante 2 (Flujo Vertical Limpio)</h3>
+        </div>
+        <button onclick="closeModalPreview('modal-v2')" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800">
+          <i data-lucide="x" class="portal-icon"></i>
+        </button>
+      </div>
+      <div class="p-6 text-sm text-slate-300 space-y-4">
+        <p>Simulación del modal compacto con pestañas horizontales superiores.</p>
+        <div class="p-4 bg-slate-950/60 rounded-xl border border-slate-800 font-mono text-xs text-purple-300">
+          • Ideal para pantallas de laptops o visualización sin distracciones laterales.<br>
+          • Mantiene el foco en el flujo actual (checklist, notas o parámetros).
+        </div>
+      </div>
+      <div class="px-6 py-3.5 bg-slate-900 border-t border-slate-800 flex justify-end">
+        <button onclick="closeModalPreview('modal-v2')" class="px-4 py-2 rounded-xl bg-purple-600 text-white font-bold text-xs">Entendido / Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Inicializar iconos Lucide
+    lucide.createIcons();
+
+    // Conmutador de Tema Claro / Oscuro
+    function toggleTheme() {
+      const html = document.documentElement;
+      const isDark = html.classList.contains('dark');
+      const icon = document.getElementById('theme-icon');
+      const text = document.getElementById('theme-text');
+
+      if (isDark) {
+        html.classList.remove('dark');
+        html.classList.add('light');
+        document.body.classList.remove('bg-[#040711]', 'text-slate-200');
+        document.body.classList.add('bg-slate-100', 'text-slate-800');
+        icon.setAttribute('data-lucide', 'moon');
+        icon.classList.remove('text-amber-400');
+        icon.classList.add('text-indigo-600');
+        text.textContent = 'Modo Oscuro';
+      } else {
+        html.classList.remove('light');
+        html.classList.add('dark');
+        document.body.classList.remove('bg-slate-100', 'text-slate-800');
+        document.body.classList.add('bg-[#040711]', 'text-slate-200');
+        icon.setAttribute('data-lucide', 'sun');
+        icon.classList.remove('text-indigo-600');
+        icon.classList.add('text-amber-400');
+        text.textContent = 'Modo Claro';
+      }
+      lucide.createIcons();
+    }
+
+    // Modal Overlays
+    function openModalPreview(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+    }
+
+    function closeModalPreview(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# Ignorar carpeta scratch y herramientas locales
+scratch/**
+scratch/
+*.md
+.git/**
+.gitignore

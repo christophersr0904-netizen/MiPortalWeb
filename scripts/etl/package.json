@@ -1,0 +1,19 @@
+{
+  "name": "pmo-etl-pipeline",
+  "version": "1.0.0",
+  "description": "Pipeline ETL para migracion de Google Sheets / Apps Script hacia PostgreSQL / Supabase",
+  "main": "extract_transform_load.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node extract_transform_load.js",
+    "test": "node --check extract_transform_load.js"
+  },
+  "keywords": [
+    "etl",
+    "postgresql",
+    "supabase",
+    "migration"
+  ],
+  "author": "Antigravity Agent",
+  "license": "MIT"
+}

@@ -1,0 +1,20 @@
+{
+  "search.exclude": {
+    "**/legacy_gas": true,
+    "**/node_modules": true,
+    "**/dist": true
+  },
+  "files.watcherExclude": {
+    "**/legacy_gas/**": true,
+    "**/node_modules/**": true,
+    "**/dist/**": true
+  },
+  "typescript.tsserver.watchOptions": {
+    "watchFile": "useFsEvents",
+    "watchDirectory": "useFsEvents",
+    "fallbackPolling": "dynamicPriorityPolling",
+    "synchronousWatchDirectory": true,
+    "excludeDirectories": ["**/node_modules", "**/legacy_gas", "**/dist"]
+  },
+  "css.lint.unknownAtRules": "ignore"
+}

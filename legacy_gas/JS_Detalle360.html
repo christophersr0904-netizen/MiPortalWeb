@@ -1,0 +1,2647 @@
+<!--
+ * ============================================================================
+ * ARCHIVO: JS_Detalle360.html
+ * SISTEMA: PMO Personal Modular & Gestión Integral de Vida
+ * ============================================================================
+-->
+<script>
+  function abrirDetalle360(idProyecto) {
+    var idBuscado = String(idProyecto || '').trim().toUpperCase();
+    var p = state.proyectos.find(function (x) {
+      return String(x.ID_Proyecto || '').trim().toUpperCase() === idBuscado;
+    });
+    if (!p) return;
+
+    state.proyectoDetalleActivo = p;
+
+    document.getElementById('det-idProyecto').textContent = p.ID_Proyecto;
+    document.getElementById('det-nombreProyecto').textContent = p.Nombre_Proyecto;
+    document.getElementById('det-tipoIniciativa').textContent = p.Tipo_Iniciativa || 'General';
+    var stLimpio = String(p.Estado_Proyecto || 'Backlog');
+    if (stLimpio.indexOf('_') !== -1) stLimpio = stLimpio.substring(stLimpio.indexOf('_') + 1);
+    document.getElementById('det-estadoProyecto').textContent = stLimpio.replace(/_/g, ' ');
+    document.getElementById('det-northStarOKR').textContent = p.North_Star_OKR || 'Sin objetivo especificado.';
+    document.getElementById('det-criteriosDoD').textContent = p.Criterios_Aceptacion_DoD || 'Sin criterios especificados.';
+    document.getElementById('det-fechaInicio').textContent = p.Fecha_Inicio_Plan ? ('Inicio: ' + String(p.Fecha_Inicio_Plan).split('T')[0]) : 'Inicio: -';
+    document.getElementById('det-fechaFin').textContent = p.Fecha_Fin_Plan ? ('Fin: ' + String(p.Fecha_Fin_Plan).split('T')[0]) : 'Fin: -';
+
+    var elBadgeNotasProy = document.getElementById('det-badge-notas-proyecto');
+    if (elBadgeNotasProy) {
+      elBadgeNotasProy.innerHTML = (typeof generarBadgeNotasVinculadas === 'function')
+        ? generarBadgeNotasVinculadas(p.ID_Proyecto, 'PROYECTO')
+        : '';
+    }
+
+    actualizarBentoKPIsProyecto(p);
+    actualizarSubpestañasPorFeatureFlags(p);
+    cambiarSubpestana360('wbs');
+    actualizarBannerCPM360(p);
+    actualizarFichaGobernanza360(p);
+    renderizarEVMDetalle360(p);
+    renderCascadaHitos(p.ID_Proyecto);
+    cambiarVistaGlobal('detalle');
+
+    setTimeout(function () {
+      if (typeof renderGrafoRedProyecto === 'function') {
+        renderGrafoRedProyecto(p.ID_Proyecto);
+      }
+      if (window.networkDetalle360 && typeof window.networkDetalle360.fit === 'function') {
+        window.networkDetalle360.redraw();
+        window.networkDetalle360.fit();
+      }
+      if (window.chartDetalle360 && typeof window.chartDetalle360.resize === 'function') {
+        window.chartDetalle360.resize();
+      }
+      actualizarBannerCPM360(p);
+    }, 200);
+  }
+
+  function cerrarDetalle360() {
+    state.proyectoDetalleActivo = null;
+    cambiarVistaGlobal('portafolio');
+  }
+
+  function abrirModalCrearTareaProyDirecto() {
+    var proyId = state.proyectoDetalleActivo ? state.proyectoDetalleActivo.ID_Proyecto : '';
+    if (typeof abrirModalCrearTareaFlow === 'function') {
+      abrirModalCrearTareaFlow(proyId, '', '02_Por_Hacer');
+    } else if (typeof abrirModalCrearTarea === 'function') {
+      abrirModalCrearTarea(proyId, '', '02_Por_Hacer');
+    }
+  }
+
+  // ============================================================================
+  // CÁLCULO Y ACTUALIZACIÓN REACTIVA DEL GRID BENTO DE KPIS 360°
+  // ============================================================================
+  function actualizarBentoKPIsProyecto(p) {
+    var pObj = p;
+    if (!pObj || typeof pObj === 'string') {
+      var idPStr = typeof p === 'string' ? p.trim().toUpperCase() : '';
+      if (!idPStr && state.proyectoDetalleActivo) idPStr = String(state.proyectoDetalleActivo.ID_Proyecto || '').trim().toUpperCase();
+      if (!idPStr) {
+        var elDetId = document.getElementById('det-idProyecto');
+        if (elDetId && elDetId.textContent) idPStr = elDetId.textContent.trim().toUpperCase();
+      }
+      pObj = (state.proyectos || []).find(function (x) {
+        return String(x.ID_Proyecto || '').trim().toUpperCase() === idPStr;
+      }) || state.proyectoDetalleActivo;
+    }
+    if (!pObj) return;
+    p = pObj;
+    var idP = String(p.ID_Proyecto || '').trim().toUpperCase();
+
+    // 1. Tareas del proyecto (directas y asociadas a hitos)
+    var hitosProy = (state.hitos || []).filter(function (h) {
+      var hProy = String(h.ID_Proyecto || h.idProyecto || h.id_proyecto || '').trim().toUpperCase();
+      var hId = String(h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase();
+      return hProy === idP || (idP !== '' && hId.indexOf(idP) === 0);
+    });
+    var hitosIds = {};
+    hitosProy.forEach(function (h) {
+      var hid = String(h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase();
+      if (hid) hitosIds[hid] = true;
+    });
+
+    var tareasProy = (state.tareas || []).filter(function (t) {
+      var tProy = String(t.ID_Proyecto || t.idProyecto || t.id_proyecto || '').trim().toUpperCase();
+      var tHito = String(t.ID_Hito || t.idHito || t.id_hito || '').trim().toUpperCase();
+      return (tProy === idP) || (tHito && hitosIds[tHito]) || (tHito && tHito.indexOf(idP) === 0);
+    });
+
+    var tareasCompletadas = tareasProy.filter(function (t) {
+      var st = String(t.Estado_Tarea || '').toLowerCase();
+      return st.indexOf('04_') !== -1 || st.indexOf('completad') !== -1;
+    });
+
+    var fHoy = new Date().getTime();
+    var tareasVencidas = tareasProy.filter(function (t) {
+      var st = String(t.Estado_Tarea || '').toLowerCase();
+      var done = st.indexOf('04_') !== -1 || st.indexOf('completad') !== -1;
+      if (done) return false;
+      if (!t.Fecha_Programada) return false;
+      var fProg = new Date(String(t.Fecha_Programada).split(' ')[0]).getTime();
+      return !isNaN(fProg) && fProg < fHoy;
+    });
+
+    // 2. Cronograma Temporal y Días
+    var diasTotales = 0;
+    var diasTranscurridos = 0;
+    var diasRestantes = null;
+    var pctTiempo = 0;
+    var fInicioValid = false;
+    var fFinValid = false;
+
+    if (p.Fecha_Inicio_Plan && p.Fecha_Fin_Plan) {
+      var fIni = new Date(String(p.Fecha_Inicio_Plan).split('T')[0]).getTime();
+      var fFin = new Date(String(p.Fecha_Fin_Plan).split('T')[0]).getTime();
+      if (!isNaN(fIni) && !isNaN(fFin) && fFin >= fIni) {
+        fInicioValid = true;
+        fFinValid = true;
+        diasTotales = Math.max(1, Math.round((fFin - fIni) / (1000 * 60 * 60 * 24)));
+        diasTranscurridos = Math.max(0, Math.round((fHoy - fIni) / (1000 * 60 * 60 * 24)));
+        diasRestantes = Math.round((fFin - fHoy) / (1000 * 60 * 60 * 24));
+        pctTiempo = Math.min(Math.max(Math.round((diasTranscurridos / diasTotales) * 100), 0), 100);
+      }
+    }
+
+    var barTiempoEl = document.getElementById('det-tiempo-transcurrido-bar');
+    if (barTiempoEl) barTiempoEl.style.width = pctTiempo + '%';
+
+    var diasBadgeEl = document.getElementById('det-tiempo-dias-badge');
+    if (diasBadgeEl) {
+      if (fInicioValid && fFinValid) {
+        diasBadgeEl.textContent = Math.min(diasTranscurridos, diasTotales) + ' / ' + diasTotales + ' días';
+      } else {
+        diasBadgeEl.textContent = 'Sin fechas límite';
+      }
+    }
+
+    var pctTiempoLabelEl = document.getElementById('det-tiempo-pct-label');
+    if (pctTiempoLabelEl) pctTiempoLabelEl.textContent = pctTiempo + '% tiempo';
+
+    // 3. KPI 1: Salud Operativa (Semáforo dinámico)
+    var healthDotColor = 'bg-emerald-500';
+    var healthTitle = 'En Plazo';
+    var healthDesc = '0 tareas retrasadas';
+    var healthBadgeClass = 'badge-sem-emerald';
+
+    if (tareasVencidas.length > 2) {
+      healthDotColor = 'bg-rose-500';
+      healthTitle = 'Crítico';
+      healthDesc = tareasVencidas.length + ' tareas vencidas';
+      healthBadgeClass = 'badge-sem-rose';
+    } else if (tareasVencidas.length > 0) {
+      healthDotColor = 'bg-amber-500';
+      healthTitle = 'Precaución';
+      healthDesc = tareasVencidas.length + (tareasVencidas.length === 1 ? ' tarea retrasada' : ' tareas retrasadas');
+      healthBadgeClass = 'badge-sem-amber';
+    }
+
+    var kpiHealthIcon = document.getElementById('det-kpi-health-icon');
+    if (kpiHealthIcon) {
+      kpiHealthIcon.className = 'w-2.5 h-2.5 rounded-full inline-block ' + healthDotColor;
+      kpiHealthIcon.textContent = '';
+    }
+    var kpiHealthTitle = document.getElementById('det-kpi-health-title');
+    if (kpiHealthTitle) kpiHealthTitle.textContent = healthTitle;
+    var kpiHealthDesc = document.getElementById('det-kpi-health-desc');
+    if (kpiHealthDesc) kpiHealthDesc.textContent = healthDesc;
+
+    var detHealthStatus = document.getElementById('det-healthStatus');
+    if (detHealthStatus) {
+      detHealthStatus.className = 'w-1.5 h-1.5 rounded-full inline-block ' + healthDotColor;
+      detHealthStatus.textContent = '';
+    }
+    var detHealthTxt = document.getElementById('det-health-txt');
+    if (detHealthTxt) detHealthTxt.textContent = healthTitle;
+    var detBadgeHealth = document.getElementById('det-badge-health');
+    if (detBadgeHealth) detBadgeHealth.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5 ' + healthBadgeClass;
+
+    // 4. KPI 2: Ejecución Presupuestaria (Burn Rate)
+    var pt = parseFloat(p.Presupuesto_Tope) || 0;
+    var ac = parseFloat(p.Costo_Ejecutado_Real_PEN) || 0;
+    var moneda = p.Moneda_Base || 'PEN';
+    var burnRatePct = (pt > 0) ? Math.round((ac / pt) * 100) : (ac > 0 ? 100 : 0);
+
+    var burnPctEl = document.getElementById('det-burnrate-pct');
+    if (burnPctEl) burnPctEl.textContent = burnRatePct + '%';
+
+    var burnBarEl = document.getElementById('det-burnrate-bar');
+    if (burnBarEl) {
+      burnBarEl.style.width = Math.min(burnRatePct, 100) + '%';
+      if (burnRatePct > 100) {
+        burnBarEl.className = 'h-full bg-rose-500 rounded-full transition-all duration-500';
+      } else if (burnRatePct >= 80) {
+        burnBarEl.className = 'h-full bg-amber-500 rounded-full transition-all duration-500';
+      } else {
+        burnBarEl.className = 'h-full bg-emerald-500 rounded-full transition-all duration-500';
+      }
+    }
+
+    var burnAlertEl = document.getElementById('det-burnrate-alert');
+    if (burnAlertEl) {
+      if (burnRatePct > 100) {
+        burnAlertEl.textContent = 'Sobregiro (+PEN ' + Math.round(ac - pt).toLocaleString() + ')';
+        burnAlertEl.className = 'text-[10px] font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400';
+      } else if (burnRatePct >= 80) {
+        burnAlertEl.textContent = 'Alerta: Consumo al ' + burnRatePct + '% del tope';
+        burnAlertEl.className = 'text-[10px] font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400';
+      } else {
+        burnAlertEl.textContent = 'Dentro del margen presupuestal';
+        burnAlertEl.className = 'text-[10px] font-medium text-emerald-600 dark:text-emerald-400';
+      }
+    }
+
+    var gastoRealEl = document.getElementById('det-gastoReal');
+    if (gastoRealEl) gastoRealEl.textContent = 'PEN ' + Number(ac).toLocaleString();
+    var presEl = document.getElementById('det-presupuesto');
+    if (presEl) presEl.textContent = moneda + ' ' + Number(pt).toLocaleString();
+
+    // 5. KPI 3: Progreso Físico / Cumplimiento (Con Anillo SVG)
+    var avances = (typeof calcularAvancesProyecto === 'function')
+      ? calcularAvancesProyecto(p)
+      : { avanceReal: Math.round((parseFloat(p.Avance_Real_Pct) || 0) * 100), avanceTotalProyectado: 100 };
+    var avReal = avances.avanceReal;
+
+    var ringEl = document.getElementById('det-progreso-ring');
+    if (ringEl) {
+      ringEl.setAttribute('stroke-dasharray', avReal + ', 100');
+    }
+    var progTxtEl = document.getElementById('det-progreso-pct-txt');
+    if (progTxtEl) progTxtEl.textContent = avReal + '%';
+
+    var ratioTareasEl = document.getElementById('det-tareas-ratio');
+    if (ratioTareasEl) {
+      ratioTareasEl.textContent = tareasCompletadas.length + ' / ' + tareasProy.length + ' Tareas';
+    }
+    var progDescEl = document.getElementById('det-progreso-desc');
+    if (progDescEl) {
+      progDescEl.textContent = 'Meta: ' + (avances.avanceTotalProyectado || avReal) + '% proyectado';
+    }
+
+    // 6. KPI 4: Compromisos & Saldo Remanente / CPI
+    var saldo = pt - ac;
+    var saldoEl = document.getElementById('det-saldo-disponible');
+    var saldoLabelEl = document.getElementById('det-compromisos-label');
+    if (saldoEl) {
+      saldoEl.textContent = 'PEN ' + Number(Math.abs(saldo)).toLocaleString();
+      if (saldo < 0) {
+        saldoEl.className = 'text-sm font-black font-mono text-rose-600 dark:text-rose-400';
+        if (saldoLabelEl) saldoLabelEl.textContent = 'Déficit presupuestario';
+      } else {
+        saldoEl.className = 'text-sm font-black font-mono text-slate-900 dark:text-slate-100';
+        if (saldoLabelEl) saldoLabelEl.textContent = 'Saldo disponible libre';
+      }
+    }
+
+    var ev = pt * (avReal / 100);
+    var cpiVal = (ac > 0 && pt > 0) ? (ev / ac) : 1.0;
+    var cpiEl = document.getElementById('det-cpi');
+    if (cpiEl) {
+      cpiEl.textContent = cpiVal.toFixed(2);
+      cpiEl.className = 'font-mono text-xs font-bold ' + (cpiVal >= 1.0 ? 'text-emerald-500' : 'text-rose-500');
+    }
+
+    // 7. KPI 5: Velocidad / Días Restantes / SPI
+    var diasMetaNum = document.getElementById('det-dias-restantes-num');
+    var diasMetaSub = document.getElementById('det-dias-restantes-sub');
+
+    var esCompletado = (String(p.Estado_Proyecto || '').toLowerCase().indexOf('completad') !== -1) || (avReal >= 100);
+
+    if (diasMetaNum) {
+      if (esCompletado) {
+        diasMetaNum.textContent = 'Finalizado';
+        diasMetaNum.className = 'text-base font-black font-mono text-emerald-600 dark:text-emerald-400 leading-tight';
+        if (diasMetaSub) diasMetaSub.textContent = 'Proyecto culminado';
+      } else if (diasRestantes === null) {
+        diasMetaNum.textContent = 'Sin meta';
+        diasMetaNum.className = 'text-base font-black font-mono text-slate-400 leading-tight';
+        if (diasMetaSub) diasMetaSub.textContent = 'Sin fecha límite';
+      } else if (diasRestantes < 0) {
+        diasMetaNum.textContent = Math.abs(diasRestantes) + 'd Vencido';
+        diasMetaNum.className = 'text-base font-black font-mono text-rose-600 dark:text-rose-400 leading-tight';
+        if (diasMetaSub) diasMetaSub.textContent = 'Límite superado';
+      } else {
+        diasMetaNum.textContent = diasRestantes + ' Días';
+        diasMetaNum.className = 'text-base font-black font-mono leading-tight ' +
+          (diasRestantes <= 7 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100');
+        if (diasMetaSub) diasMetaSub.textContent = 'Para la fecha meta';
+      }
+    }
+
+    var spiVal = 1.0;
+    if (fInicioValid && fFinValid && pt > 0 && pctTiempo > 0) {
+      var pv = pt * (pctTiempo / 100);
+      spiVal = (pv > 0) ? (ev / pv) : 1.0;
+    }
+    var spiEl = document.getElementById('det-spi');
+    if (spiEl) {
+      spiEl.textContent = spiVal.toFixed(2);
+      spiEl.className = 'font-mono text-xs font-bold ' + (spiVal >= 1.0 ? 'text-emerald-500' : 'text-rose-500');
+    }
+  }
+
+  // ============================================================================
+  // GESTIÓN DE COLAPSO Y ACORDEÓN DE HITOS (MEMORIA DE SESIÓN)
+  // ============================================================================
+  var hitosColapsados = {};
+
+  function toggleColapsarHito(idHito) {
+    if (!idHito) return;
+    hitosColapsados[idHito] = !hitosColapsados[idHito];
+    var body = document.getElementById('hito-body-' + idHito);
+    var chevron = document.getElementById('hito-chevron-' + idHito);
+    if (body) {
+      if (hitosColapsados[idHito]) {
+        body.classList.add('hidden');
+      } else {
+        body.classList.remove('hidden');
+      }
+    }
+    if (chevron) {
+      if (hitosColapsados[idHito]) {
+        chevron.classList.add('-rotate-90');
+      } else {
+        chevron.classList.remove('-rotate-90');
+      }
+    }
+  }
+
+  function expandirHito(idHito) {
+    if (!idHito) return;
+    hitosColapsados[idHito] = false;
+    var body = document.getElementById('hito-body-' + idHito);
+    var chevron = document.getElementById('hito-chevron-' + idHito);
+    if (body) body.classList.remove('hidden');
+    if (chevron) chevron.classList.remove('-rotate-90');
+  }
+
+  function toggleTodosLosHitos(expandir) {
+    var idProy = state.proyectoDetalleActivo ? state.proyectoDetalleActivo.ID_Proyecto : '';
+    if (!idProy) return;
+    var hitos = (state.hitos || []).filter(function (h) {
+      return String(h.ID_Proyecto || '').trim().toUpperCase() === String(idProy).trim().toUpperCase();
+    });
+    hitos.forEach(function (h) {
+      if (expandir) {
+        expandirHito(h.ID_Hito);
+      } else {
+        hitosColapsados[h.ID_Hito] = true;
+        var body = document.getElementById('hito-body-' + h.ID_Hito);
+        var chevron = document.getElementById('hito-chevron-' + h.ID_Hito);
+        if (body) body.classList.add('hidden');
+        if (chevron) chevron.classList.add('-rotate-90');
+      }
+    });
+  }
+
+  /**
+   * 4.5. Estructura Cascada de Hitos, Tareas y Gastos en Vista 360°
+   */
+  function leerCampoRegistro(obj, nombresCanon) {
+    if (!obj) return '';
+    var i, k, keys, compact, target;
+    for (i = 0; i < nombresCanon.length; i++) {
+      if (obj[nombresCanon[i]] !== undefined && obj[nombresCanon[i]] !== null && obj[nombresCanon[i]] !== '') {
+        return obj[nombresCanon[i]];
+      }
+    }
+    keys = Object.keys(obj);
+    for (i = 0; i < nombresCanon.length; i++) {
+      target = String(nombresCanon[i]).toLowerCase().replace(/[_\s]/g, '');
+      for (k = 0; k < keys.length; k++) {
+        compact = String(keys[k]).toLowerCase().replace(/[_\s]/g, '');
+        if (compact === target) return obj[keys[k]];
+      }
+    }
+    return '';
+  }
+
+  function normalizarGasto(g) {
+    var out = g || {};
+    out.ID_Gasto = String(leerCampoRegistro(out, ['ID_Gasto', 'ID_GASTO']) || '').trim();
+    out.ID_Hito = String(leerCampoRegistro(out, ['ID_Hito', 'ID_HITO']) || '').trim();
+    out.ID_Proyecto = String(leerCampoRegistro(out, ['ID_Proyecto', 'ID_PROYECTO']) || '').trim();
+    out.ID_Tarea = String(leerCampoRegistro(out, ['ID_Tarea', 'ID_TAREA']) || '').trim();
+    out.Descripcion_Gasto = String(leerCampoRegistro(out, ['Descripcion_Gasto', 'Descripcion', 'DESCRIPCION']) || '').trim();
+    out.Monto_Original = Number(leerCampoRegistro(out, ['Monto_Original', 'MONTO_ORIGINAL'])) || 0;
+    out.Moneda_Original = String(leerCampoRegistro(out, ['Moneda_Original', 'MONEDA_ORIGINAL', 'Moneda']) || 'PEN').trim();
+    out.Tipo_Cambio = Number(leerCampoRegistro(out, ['Tipo_Cambio', 'TIPO_CAMBIO'])) || 1;
+    var montoPen = Number(leerCampoRegistro(out, ['Monto_PEN', 'MONTO_PEN']));
+    out.Monto_PEN = montoPen || (out.Monto_Original * (out.Tipo_Cambio || 1)) || 0;
+    out.Fecha_Gasto = leerCampoRegistro(out, ['Fecha_Gasto', 'FECHA_GASTO']);
+    out.Metodo_Pago = String(leerCampoRegistro(out, ['Metodo_Pago', 'METODO_PAGO']) || 'Efectivo').trim();
+    out.Categoria_Gasto = String(leerCampoRegistro(out, ['Categoria_Gasto', 'Categoria', 'CATEGORIA_GASTO']) || 'General').trim();
+    out.Comprobante_URL = String(leerCampoRegistro(out, ['Comprobante_URL', 'comprobanteUrl', 'COMPROBANTE_URL', 'Url_Comprobante']) || '').trim();
+    return out;
+  }
+
+  function montoPenGasto(g) {
+    var n = parseFloat(g && g.Monto_PEN);
+    if (isFinite(n) && n !== 0) return n;
+    var orig = parseFloat(g && g.Monto_Original) || 0;
+    var tc = parseFloat(g && g.Tipo_Cambio) || 1;
+    if (isFinite(n)) return n || (orig * tc);
+    return orig * tc;
+  }
+
+  function gastoEncajaEnHito(g, hitoIdActual, idProyBuscado) {
+    if (!g) return false;
+    var gHito = String(g.ID_Hito || '').trim().toUpperCase();
+    var gProy = String(g.ID_Proyecto || '').trim().toUpperCase();
+    var targetHito = String(hitoIdActual || '').trim().toUpperCase();
+    var targetProy = String(idProyBuscado || '').trim().toUpperCase();
+
+    if (gHito && gHito === targetHito) return true;
+    if (!gHito && gProy === targetProy && targetHito === '') return true;
+
+    return false;
+  }
+
+  function gastoEsGeneralDeProyecto(g, idProyBuscado, idsHitosProy) {
+    if (!g) return false;
+    var gHito = String(g.ID_Hito || '').trim().toUpperCase();
+    var gProy = String(g.ID_Proyecto || '').trim().toUpperCase();
+    var targetProy = String(idProyBuscado || '').trim().toUpperCase();
+
+    if (!gProy && gHito) {
+      var hitoPadre = state.hitos.find(function (h) {
+        return String(h.ID_Hito || '').trim().toUpperCase() === gHito;
+      });
+      if (hitoPadre && hitoPadre.ID_Proyecto) {
+        gProy = String(hitoPadre.ID_Proyecto).trim().toUpperCase();
+      }
+    }
+
+    var perteneceAlProyecto = (gProy === targetProy) || (gHito !== '' && gHito.indexOf(targetProy) === 0);
+    if (!perteneceAlProyecto) return false;
+
+    if (!gHito || gHito === targetProy) return true;
+
+    return idsHitosProy.indexOf(gHito) === -1;
+  }
+
+  function construirHtmlListaGastos(lista) {
+    if (!lista || lista.length === 0) {
+      return '<div class="py-6 text-center text-slate-400 dark:text-slate-500 text-xs italic bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">' +
+        '<span>Sin egresos registrados en este hito.</span>' +
+        '</div>';
+    }
+    return '<div class="space-y-2">' + lista.map(function (g) {
+      var fGasto = g.Fecha_Gasto ? String(g.Fecha_Gasto).split('T')[0] : '-';
+      var metodo = g.Metodo_Pago || 'Efectivo';
+      var categoria = g.Categoria_Gasto || 'General';
+      var montoPen = montoPenGasto(g);
+      var idTarea = String(g.ID_Tarea || '').trim();
+      var desc = g.Descripcion_Gasto || '(Sin descripción)';
+      var idGasto = g.ID_Gasto || 'GAS';
+      var monOrig = g.Moneda_Original || 'PEN';
+      var montoOrig = g.Monto_Original || 0;
+      var compUrl = g.Comprobante_URL || '';
+
+      var detalleMonto = '';
+      if (monOrig !== 'PEN' && monOrig !== '') {
+        detalleMonto = '<span class="text-[10px] text-slate-400 dark:text-slate-500 font-mono tabular-nums">(' + monOrig + ' ' + Number(montoOrig).toLocaleString() + ')</span>';
+      }
+
+      var linkComprobante = '';
+      if (compUrl) {
+        linkComprobante = '<a href="' + compUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" ' +
+          'class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition shadow-2xs" title="Ver comprobante adjunto">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>' +
+          '<span>Comprobante</span>' +
+          '</a>';
+      }
+
+      var badgeNotasGasto = (typeof generarBadgeNotasVinculadas === 'function')
+        ? generarBadgeNotasVinculadas(idGasto, 'GASTO')
+        : '';
+
+      return '<div id="gasto-360-' + idGasto + '" class="portal-surface p-3 rounded-xl hover:elevation-hover flex flex-col gap-2 text-xs transition-all">' +
+        '<div class="flex items-start justify-between gap-2">' +
+        '<div class="flex items-start gap-1.5 min-w-0 flex-1 flex-wrap">' +
+        '<span class="font-mono tabular-nums text-[9px] font-bold bg-slate-900 dark:bg-slate-700 text-white px-1.5 py-0.5 rounded mt-0.5 shrink-0">' + idGasto + '</span>' +
+        badgeNotasGasto +
+        '<span class="font-bold text-slate-800 dark:text-slate-200 leading-snug line-clamp-2" title="' + desc + '">' + desc + '</span>' +
+        '</div>' +
+        '<div class="text-right shrink-0">' +
+        '<b class="font-mono tabular-nums font-black text-slate-900 dark:text-slate-100 block">PEN ' + Number(montoPen || 0).toLocaleString() + '</b>' +
+        detalleMonto +
+        '</div>' +
+        '</div>' +
+        '<div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 flex-wrap gap-1.5">' +
+        '<div class="flex items-center gap-1.5 flex-wrap">' +
+        '<span class="inline-flex items-center gap-1 font-mono tabular-nums"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg><span>' + fGasto + '</span></span>' +
+        '<span class="bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 font-semibold px-1.5 py-0.5 rounded inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg><span>' + categoria + '</span></span>' +
+        '<span class="bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded">' + metodo + '</span>' +
+        (idTarea
+          ? '<span class="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono tabular-nums font-bold px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600">asoc: ' + idTarea + '</span>'
+          : '<button type="button" onclick="abrirModalEditarGasto(\'' + idGasto + '\')" class="btn-portal-secondary text-[10px] py-0.5 px-1.5 text-amber-800 dark:text-amber-300 inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>Vincular Tarea</span></button>'
+        ) +
+        '</div>' +
+        '<div class="flex items-center gap-1.5">' +
+        linkComprobante +
+        '<button type="button" onclick="abrirModalEditarGasto(\'' + idGasto + '\')" class="btn-portal-icon" title="Editar Gasto"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+    }).join('') + '</div>';
+  }
+
+  function construirHtmlListaTareas(tareas, fHoy, gastosContexto) {
+    if (!tareas || tareas.length === 0) {
+      return '<div class="py-6 text-center text-slate-400 dark:text-slate-500 text-xs italic portal-surface rounded-xl border border-dashed border-slate-200 dark:border-slate-800">' +
+        '<span>Sin tareas vinculadas.</span>' +
+        '</div>';
+    }
+    gastosContexto = gastosContexto || [];
+    var fHoyMs = fHoy || new Date().getTime();
+
+    return '<div class="space-y-2.5">' + tareas.map(function (t) {
+      var isDone = (t.Estado_Tarea === '04_Completado');
+      var isProg = (t.Estado_Tarea === '03_En_Proceso');
+      var isDoing = (t.Estado_Tarea === '02_Por_Hacer');
+      var fProg = t.Fecha_Programada ? String(t.Fecha_Programada).split(' ')[0] : 'Sin fecha';
+      
+      var fProgTime = t.Fecha_Programada ? new Date(fProg).getTime() : NaN;
+      var estaVencida = (!isDone && !isNaN(fProgTime) && fProgTime < fHoyMs);
+
+      var estadoLabel = String(t.Estado_Tarea || 'Backlog');
+      if (estadoLabel.indexOf('_') !== -1) estadoLabel = estadoLabel.substring(estadoLabel.indexOf('_') + 1);
+      estadoLabel = estadoLabel.replace(/_/g, ' ');
+
+      var badgeEstado = isDone ? 'badge-sem-emerald' :
+        isProg ? 'badge-sem-indigo' :
+          isDoing ? 'badge-sem-amber' : 'badge-sem-slate';
+
+      var prioRaw = String(t.Prioridad || '02_P2_Media').toUpperCase();
+      var badgePrio = '';
+      var prioBarColor = 'bg-amber-500';
+      if (prioRaw.indexOf('ALTA') !== -1 || prioRaw.indexOf('P1') !== -1) {
+        badgePrio = '<span class="text-[9.5px] font-bold px-2 py-0.5 rounded-full badge-sem-rose border">Alta</span>';
+        prioBarColor = 'bg-rose-500';
+      } else if (prioRaw.indexOf('BAJA') !== -1 || prioRaw.indexOf('P3') !== -1) {
+        badgePrio = '<span class="text-[9.5px] font-medium px-2 py-0.5 rounded-full badge-sem-slate border">Baja</span>';
+        prioBarColor = 'bg-blue-500';
+      } else {
+        badgePrio = '<span class="text-[9.5px] font-medium px-2 py-0.5 rounded-full badge-sem-amber border">Media</span>';
+        prioBarColor = 'bg-amber-500';
+      }
+
+      var dep360Html = '';
+      var idDep360 = String(t.ID_Dependencia || '').trim();
+      if (idDep360 !== '' && !idDep360.includes('@google.com')) {
+        dep360Html = '<span class="text-[9px] badge-sem-indigo font-mono font-medium px-2 py-0.5 rounded-md border inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/></svg><span>Req: ' + idDep360 + '</span></span>';
+      }
+
+      var linkMaps = '';
+      var notasStr = String(t.Notas_Impedimentos || '');
+      var idxLugar = notasStr.indexOf('[Lugar:');
+      if (idxLugar !== -1) {
+        var finLugar = notasStr.indexOf(']', idxLugar);
+        var lugarNombre = finLugar !== -1 ? notasStr.substring(idxLugar + 7, finLugar) : 'Ver mapa';
+        linkMaps = '<a href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(lugarNombre) + '" target="_blank" onclick="event.stopPropagation()" class="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-600 hover:bg-indigo-50 hover:text-indigo-600 inline-flex items-center gap-1 transition truncate max-w-[130px]"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg><span>' + lugarNombre.substring(0, 15) + (lugarNombre.length > 15 ? '...' : '') + '</span></a>';
+      }
+
+      var pasosTar = (state.subtareas || []).filter(function (s) {
+        return String(s.Tipo_Padre || '').toUpperCase() === 'TAREA' && String(s.ID_Padre || '').trim() === String(t.ID_Tarea || '').trim();
+      });
+      var htmlPasos = '';
+      if (pasosTar.length > 0) {
+        var compPasos = pasosTar.filter(function (s) {
+          return s.Completada === true || s.Completado === true || String(s.Completada).toLowerCase() === 'true' || String(s.Completado).toLowerCase() === 'true';
+        }).length;
+        htmlPasos = '<span class="text-[10px] font-mono tabular-nums font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">✓ ' + compPasos + '/' + pasosTar.length + ' pasos</span>';
+      }
+
+      var montoGastadoTarea = 0;
+      try {
+        var idTarActual = String(t.ID_Tarea || '').trim().toUpperCase();
+        var listaGastosEvaluar = (Array.isArray(gastosContexto) && gastosContexto.length > 0)
+          ? gastosContexto
+          : (Array.isArray(state.gastos) ? state.gastos : []);
+
+        if (Array.isArray(listaGastosEvaluar) && listaGastosEvaluar.some(function (g) {
+          if (!g) return false;
+          var idEnt = String(g.ID_Entidad_Vinculada || g.ID_Tarea || g.idTarea || '').trim().toUpperCase();
+          return idEnt === idTarActual;
+        })) {
+          listaGastosEvaluar.forEach(function (g) {
+            if (!g) return;
+            var idEnt = String(g.ID_Entidad_Vinculada || g.ID_Tarea || g.idTarea || '').trim().toUpperCase();
+            if (idEnt === idTarActual) {
+              var mg = (typeof montoPenGasto === 'function')
+                ? (montoPenGasto(g) || 0)
+                : parseFloat(g.Monto_PEN || (g.Monto_Original * (g.Tipo_Cambio || 1)) || g.montoPEN || g.Monto_Moneda_Base || 0);
+              if (!isNaN(mg) && isFinite(mg)) montoGastadoTarea += mg;
+            }
+          });
+        } else if (t.Monto_Gasto_Asociado) {
+          montoGastadoTarea = parseFloat(t.Monto_Gasto_Asociado) || 0;
+        }
+      } catch (errGTar360) {
+        console.warn("[Detalle360] Fallo no bloqueante leyendo gastos para tarea " + t.ID_Tarea + ":", errGTar360);
+        montoGastadoTarea = 0;
+      }
+
+      var fechaHtml = estaVencida
+        ? '<span class="font-mono tabular-nums text-rose-600 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800/60 inline-flex items-center gap-1 text-[10px]"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg><span>' + fProg + '</span></span>'
+        : '<span class="font-mono tabular-nums text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-700/60 inline-flex items-center gap-1 text-[10px]"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg><span>' + fProg + '</span></span>';
+
+      var idTareaSanitizada = String(t.ID_Tarea || '').trim();
+      var badgeNotasTar = (typeof generarBadgeNotasVinculadas === 'function')
+        ? generarBadgeNotasVinculadas(idTareaSanitizada, 'TAREA')
+        : '';
+
+      return '<div id="tarjeta-360-' + t.ID_Tarea + '" onclick="abrirModalDetalleTarea(\'' + t.ID_Tarea + '\')" ' +
+        'class="portal-surface elevation-1 rounded-2xl p-3.5 pl-4 hover:elevation-hover transition-all duration-150 ease-out flex flex-col gap-2.5 text-xs cursor-pointer relative overflow-hidden select-none ' + (isDone ? 'opacity-80' : '') + '">' +
+        '<div class="absolute left-0 top-0 bottom-0 w-1.5 ' + prioBarColor + ' transition-all duration-150 group-hover:w-2"></div>' +
+        '<div class="flex items-start justify-between gap-2">' +
+        '<div class="flex items-start gap-2.5 min-w-0 flex-1">' +
+        '<button type="button" onclick="toggleCumplidoTarea(\'' + t.ID_Tarea + '\', event)" ' +
+        'class="h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 mt-0.5 ' + (isDone ? 'bg-emerald-500 border-emerald-500 text-white shadow-2xs' : 'border-slate-300 dark:border-slate-600 hover:border-indigo-500 bg-white dark:bg-slate-800') + '" title="' + (isDone ? 'Reabrir tarea' : 'Marcar tarea completada') + '">' +
+        (isDone ? '<span class="text-[10px] font-black">✓</span>' : '') +
+        '</button>' +
+        '<div class="min-w-0 flex-1">' +
+        '<div class="flex items-center gap-1.5 mb-1 flex-wrap">' +
+        '<span class="font-mono tabular-nums text-[9px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-700/60">' + t.ID_Tarea + '</span>' +
+        badgePrio +
+        badgeNotasTar +
+        (t.Responsable ? '<span class="text-[10px] text-slate-500 dark:text-slate-400 font-medium inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>' + t.Responsable + '</span></span>' : '') +
+        '</div>' +
+        '<span class="font-bold text-slate-900 dark:text-slate-100 leading-snug block line-clamp-2 ' + (isDone ? 'line-through text-slate-400 dark:text-slate-500' : '') + '">' + (t.Nombre_Tarea_Actividad || 'Sin título') + '</span>' +
+        '</div>' +
+        '</div>' +
+        '<span class="text-[9.5px] px-2 py-0.5 rounded-full font-medium border shrink-0 ' + badgeEstado + '">' + estadoLabel + '</span>' +
+        '</div>' +
+        '<!-- Pie: Metadatos hermanos independientes -->' +
+        '<div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex-wrap gap-1.5">' +
+        '<div class="flex items-center gap-1.5 flex-wrap">' +
+        dep360Html +
+        linkMaps +
+        htmlPasos +
+        fechaHtml +
+        '</div>' +
+        '<div class="flex items-center gap-2 ml-auto shrink-0">' +
+        (montoGastadoTarea > 0 ? '<span class="font-mono font-medium tabular-nums text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/60 text-[10px] shadow-2xs inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg><span>PEN ' + montoGastadoTarea.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '</span></span>' : '') +
+        '<button type="button" onclick="event.stopPropagation(); confirmarEliminarTarea(\'' + t.ID_Tarea + '\')" class="btn-portal-icon text-slate-400 hover:text-rose-600 dark:hover:text-rose-400" title="Eliminar tarea">' +
+        '<svg class="portal-icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>' +
+        '</button>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+    }).join('') + '</div>';
+  }
+
+  function renderBloqueGeneralProyecto(container, idProyecto, tareasGenerales, gastosGenerales, fHoy) {
+    if (!tareasGenerales) tareasGenerales = [];
+    if (!gastosGenerales) gastosGenerales = [];
+    if (tareasGenerales.length === 0 && gastosGenerales.length === 0) return;
+
+    var totalGastoGen = gastosGenerales.reduce(function (acc, cur) {
+      return acc + (montoPenGasto(cur) || 0);
+    }, 0);
+    if (!isFinite(totalGastoGen)) totalGastoGen = 0;
+
+    var htmlTareas = construirHtmlListaTareas(tareasGenerales, fHoy, gastosGenerales);
+    var htmlGastos = construirHtmlListaGastos(gastosGenerales);
+
+    var cardGen = document.createElement('div');
+    cardGen.id = 'card-generales-proyecto';
+    cardGen.className = 'portal-surface elevation-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700/80 overflow-hidden transition-all duration-300 w-full';
+
+    cardGen.innerHTML =
+      '<div class="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800 gap-3.5 bg-slate-50/40 dark:bg-slate-950/30">' +
+      '<div class="flex items-center gap-2.5 min-w-0 flex-1">' +
+      '<span class="font-mono text-[10px] font-extrabold bg-slate-700 text-white px-2 py-0.5 rounded tracking-wide">GENERAL</span>' +
+      '<h3 class="font-black text-slate-900 dark:text-slate-100 text-base leading-tight">Actividades y Egresos Generales (Sin hito asignado)</h3>' +
+      '</div>' +
+      '<div class="flex items-center gap-2 shrink-0 self-end md:self-center">' +
+      '<div class="text-right mr-2 hidden sm:block">' +
+      '<span class="text-[10px] text-slate-400 dark:text-slate-500 block uppercase font-bold">Total Egresos Gen.</span>' +
+      '<span class="text-xs font-mono tabular-nums font-black text-slate-900 dark:text-slate-100">PEN ' + Number(totalGastoGen || 0).toLocaleString() + '</span>' +
+      '</div>' +
+      '<button type="button" onclick="abrirModalCrearTareaProyDirecto()" class="btn-portal-primary text-xs px-2.5 py-1" title="Crear tarea general">' +
+      '+ Tarea' +
+      '</button>' +
+      '<button type="button" onclick="abrirModalCrearGasto(state.proyectoDetalleActivo ? state.proyectoDetalleActivo.ID_Proyecto : \'' + idProyecto + '\')" class="btn-portal-secondary text-xs px-2.5 py-1 text-emerald-700 dark:text-emerald-300" title="Registrar gasto general">' +
+      '+ Gasto' +
+      '</button>' +
+      '</div>' +
+      '</div>' +
+      '<div class="p-4 md:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5">' +
+      '<!-- COLUMNA IZQUIERDA: TAREAS (58% / col-span-7) -->' +
+      '<div class="lg:col-span-7 space-y-3">' +
+      '<div class="flex justify-between items-center px-1 pb-1 border-b border-slate-100 dark:border-slate-800">' +
+      '<span class="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg><span>Tareas del Proyecto (' + tareasGenerales.length + ')</span></span>' +
+      '<span class="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400">' + tareasGenerales.filter(function(t){ return String(t.Estado_Tarea || '').indexOf('04_') !== -1; }).length + ' de ' + tareasGenerales.length + ' hechas</span>' +
+      '</div>' +
+      htmlTareas +
+      '</div>' +
+      '<!-- COLUMNA DERECHA: GASTOS (42% / col-span-5) -->' +
+      '<div class="lg:col-span-5 space-y-3 border-t lg:border-t-0 lg:border-l lg:pl-5 border-slate-100 dark:border-slate-800">' +
+      '<div class="flex justify-between items-center px-1 pb-1 border-b border-slate-100 dark:border-slate-800">' +
+      '<span class="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg><span>Gastos del Proyecto (' + gastosGenerales.length + ')</span></span>' +
+      '<span class="text-xs font-mono tabular-nums font-black text-emerald-700 dark:text-emerald-400">PEN ' + Number(totalGastoGen || 0).toLocaleString() + '</span>' +
+      '</div>' +
+      htmlGastos +
+      (gastosGenerales.length > 0 ?
+        '<div class="pt-2 px-1 flex justify-between items-center text-xs font-mono tabular-nums font-bold text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800">' +
+        '<span>Total General:</span><span class="text-slate-900 dark:text-slate-100">PEN ' + Number(totalGastoGen || 0).toLocaleString() + '</span>' +
+        '</div>' : '') +
+      '</div>' +
+      '</div>';
+
+    container.appendChild(cardGen);
+  }
+
+  function renderBloqueGastosGenerales(container, gastosGenerales) {
+    var idProy = state.proyectoDetalleActivo ? state.proyectoDetalleActivo.ID_Proyecto : '';
+    renderBloqueGeneralProyecto(container, idProy, [], gastosGenerales, new Date().getTime());
+  }
+
+  function escapeHtmlDetalle(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function obtenerTipoElementoWBS(h) {
+    if (!h) return 'PAQUETE_TRABAJO';
+    var tipo = String(h.Tipo_Elemento_WBS || h.tipoElementoWbs || h.Tipo_Elemento || '').trim().toUpperCase();
+    if (tipo === 'PAQUETE_TRABAJO' || tipo === 'HITO_MARCADOR') return tipo;
+    var id = String(h.ID_Elemento_WBS || h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase();
+    if (id.startsWith('WP-')) return 'PAQUETE_TRABAJO';
+    if (id.startsWith('HIT-')) return 'HITO_MARCADOR';
+    return 'PAQUETE_TRABAJO';
+  }
+
+  function toggleCompletarMarcador(idHito) {
+    if (!idHito) return;
+    var idLimpio = String(idHito).trim().toUpperCase();
+    var hito = (state.hitos || []).find(function (h) {
+      var hid = String(h.ID_Elemento_WBS || h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase();
+      return hid === idLimpio;
+    });
+    if (!hito) return;
+
+    var estActual = String(hito.Estado_Hito || hito.Estado || '').toLowerCase();
+    var estaCompletado = estActual.indexOf('03_') !== -1 || estActual.indexOf('completad') !== -1;
+    var nuevoEstado = estaCompletado ? '01_Pendiente' : '03_Completado';
+    hito.Estado_Hito = nuevoEstado;
+    hito.Estado = nuevoEstado;
+
+    var idProy = hito.ID_Proyecto || hito.idProyecto || hito.id_proyecto;
+
+    recalcularAvanceCascada(null, idHito, idProy);
+    renderCascadaHitos(idProy);
+    if (typeof renderGrafoRedProyecto === 'function') {
+      try { renderGrafoRedProyecto(idProy); } catch (eGrafo) {}
+    }
+
+    if (typeof notificarUsuario === 'function') {
+      notificarUsuario(
+        nuevoEstado === '03_Completado' ? 'Checkpoint verificado y cerrado conforme a DoD' : 'Checkpoint marcado como pendiente',
+        'success'
+      );
+    }
+
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      try {
+        google.script.run
+          .ejecutarAccionRouter('updateHito', {
+            idHito: hito.ID_Elemento_WBS || hito.ID_Hito,
+            estadoHito: nuevoEstado
+          });
+      } catch (eSync) {}
+    }
+  }
+
+  /**
+   * Calcula la desviación en días para un elemento WBS/Hito en memoria:
+   * (fechaReal || fechaHoy) - fechaLimite, sin depender de fórmulas in-sheet.
+   */
+  function calcularDesviacionDiasHito(h, fHoy) {
+    if (!h) return 0;
+    var fLim = h.Fecha_Limite || h.Fecha_Limite_Plan || h.fechaLimite;
+    if (!fLim) return 0;
+    var strLim = String(fLim).includes('T') ? String(fLim).split('T')[0] : String(fLim);
+    var dLim = new Date(strLim);
+    if (isNaN(dLim.getTime())) return 0;
+
+    var fReal = h.Fecha_Real_Fin || h.fechaRealFin;
+    var dFin;
+    if (fReal) {
+      var strReal = String(fReal).includes('T') ? String(fReal).split('T')[0] : String(fReal);
+      dFin = new Date(strReal);
+    } else {
+      dFin = fHoy ? new Date(fHoy) : new Date();
+    }
+    if (isNaN(dFin.getTime())) dFin = new Date();
+
+    dLim.setHours(0, 0, 0, 0);
+    dFin.setHours(0, 0, 0, 0);
+    return Math.round((dFin.getTime() - dLim.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  function construirHtmlFilaHitoMarcador(h, pesosHitos, fHoy) {
+    var idHito = String(h.ID_Elemento_WBS || h.ID_Hito || '').trim();
+    var estH = String(h.Estado || h.Estado_Hito || '01_Pendiente').trim();
+    var esCompletado = estH.indexOf('03_') !== -1 || estH.toLowerCase().indexOf('completad') !== -1;
+    var fLim = h.Fecha_Limite_Plan ? String(h.Fecha_Limite_Plan).split('T')[0] : '-';
+    var pesoPct = Math.round((pesosHitos[idHito] || 0) * 100);
+    var dodText = String(h.Criterio_Aceptacion_DoD || h.criterioAceptacionDoD || '').trim();
+    var desvDias = (typeof h.Desviacion_Dias === 'number') ? h.Desviacion_Dias : calcularDesviacionDiasHito(h, fHoy);
+
+    var badgeNotas = (typeof generarBadgeNotasVinculadas === 'function')
+      ? generarBadgeNotasVinculadas(idHito, 'HITO')
+      : '';
+
+    var badgeDesv = '';
+    if (desvDias > 0 && !esCompletado) {
+      badgeDesv = '<span class="text-[10px] font-mono tabular-nums font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900/50">+' + desvDias + 'd retraso</span>';
+    } else if (desvDias > 0 && esCompletado) {
+      badgeDesv = '<span class="text-[10px] font-mono tabular-nums text-amber-600 dark:text-amber-400 font-medium">(' + desvDias + 'd desvío)</span>';
+    }
+
+    return '<div id="card-hito-' + idHito + '" class="portal-surface rounded-2xl border border-indigo-200/80 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/40 via-white to-slate-50 dark:from-slate-900/90 dark:via-slate-900/70 dark:to-indigo-950/30 p-3.5 md:p-4 shadow-2xs hover:shadow-xs transition-all w-full flex flex-col md:flex-row md:items-center justify-between gap-3.5">' +
+      '<div class="flex items-center gap-3 min-w-0 flex-1">' +
+      '  <div class="w-9 h-9 rounded-xl ' + (esCompletado ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/80 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950/80 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800') + ' flex items-center justify-center shrink-0 shadow-2xs">' +
+      '    <span class="text-base select-none">' + (esCompletado ? '🏁' : '💎') + '</span>' +
+      '  </div>' +
+      '  <div class="min-w-0 flex-1">' +
+      '    <div class="flex items-center gap-2 mb-1 flex-wrap">' +
+      '      <span class="font-mono tabular-nums text-[10px] font-extrabold bg-indigo-950 text-white dark:bg-indigo-900 px-2 py-0.5 rounded tracking-wide border border-indigo-800/60">' + idHito + '</span>' +
+      '      <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ' + (esCompletado ? 'badge-sem-emerald' : 'badge-sem-indigo') + '">' +
+      (esCompletado ? '✓ Checkpoint Cumplido' : 'Checkpoint de Control') +
+      '      </span>' +
+      '      <span class="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums inline-flex items-center gap-1">' +
+      '        <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>' +
+      '        <span>Límite: <b>' + fLim + '</b></span>' +
+      '      </span>' +
+      badgeDesv +
+      '      <span class="text-xs badge-sem-indigo font-mono tabular-nums font-bold px-2 py-0.5 rounded border inline-flex items-center gap-1">' +
+      '        <span>Peso: ' + pesoPct + '%</span>' +
+      '      </span>' +
+      '      <span class="text-xs font-mono tabular-nums font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700" title="Hito puro sin presupuesto operativo">' +
+      '        Costo: <b>$0.00 / S/ 0.00</b>' +
+      '      </span>' +
+      badgeNotas +
+      '    </div>' +
+      '    <div class="flex items-center gap-2 flex-wrap">' +
+      '      <h4 class="font-black text-slate-900 dark:text-slate-100 text-sm leading-tight truncate ' + (esCompletado ? 'line-through text-slate-400 dark:text-slate-500' : '') + '">' +
+      escapeHtmlDetalle(h.Nombre_Elemento || h.Nombre_Hito || '') +
+      '      </h4>' +
+      (dodText ? '      <span class="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-sm" title="Definition of Done: ' + escapeHtmlDetalle(dodText) + '">• <b>DoD:</b> ' + escapeHtmlDetalle(dodText) + '</span>' : '') +
+      '    </div>' +
+      '  </div>' +
+      '</div>' +
+      '<div class="flex items-center gap-2 shrink-0 self-end md:self-center">' +
+      '  <button type="button" onclick="toggleCompletarMarcador(\'' + idHito + '\')" class="btn-portal-secondary text-xs px-2.5 py-1.5 flex items-center gap-1.5 ' + (esCompletado ? 'text-emerald-700 dark:text-emerald-400 font-bold border-emerald-300 dark:border-emerald-700' : 'text-slate-700 dark:text-slate-300') + '" title="Validar o alternar cumplimiento del Checkpoint">' +
+      '    <span>' + (esCompletado ? '✓ Verificado' : '○ Validar Cierre DoD') + '</span>' +
+      '  </button>' +
+      '  <button type="button" onclick="confirmarEliminarHito(\'' + idHito + '\')" class="btn-portal-icon text-slate-400 hover:text-rose-600 dark:hover:text-rose-400" title="Eliminar marcador">' +
+      '    <svg class="portal-icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>' +
+      '  </button>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function renderCascadaHitos(idProyecto) {
+    var container = document.getElementById('contenedor-hitos-cascada');
+    if (!container) return;
+
+    var idProyBuscado = String(idProyecto || '').trim().toUpperCase();
+    if (!idProyBuscado) {
+      if (state.proyectoDetalleActivo && state.proyectoDetalleActivo.ID_Proyecto) {
+        idProyBuscado = String(state.proyectoDetalleActivo.ID_Proyecto).trim().toUpperCase();
+      } else {
+        var elDetId = document.getElementById('det-idProyecto');
+        if (elDetId && elDetId.textContent) {
+          idProyBuscado = elDetId.textContent.trim().toUpperCase();
+        } else if (state.selectedProjectId) {
+          idProyBuscado = String(state.selectedProjectId).trim().toUpperCase();
+        } else if (state.proyectoActivoId) {
+          idProyBuscado = String(state.proyectoActivoId).trim().toUpperCase();
+        }
+      }
+    }
+    if (!idProyBuscado) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = '';
+
+    var hitosProy = (state.hitos || []).filter(function (h) {
+      var idProyHito = String(h.ID_Proyecto || h.idProyecto || h.id_proyecto || '').trim().toUpperCase();
+      var idHito = String(h.ID_Elemento_WBS || h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase();
+      return idProyHito === idProyBuscado || (idProyBuscado !== '' && idHito.indexOf(idProyBuscado) === 0);
+    });
+
+    var idsHitosProy = hitosProy.map(function (h) {
+      return String(h.ID_Elemento_WBS || h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase();
+    });
+    var idsHitosSet = new Set(idsHitosProy);
+
+    var fHoy = new Date().getTime();
+
+    // Preconstrucción en memoria de Mapas Hash O(1) de Tareas y Gastos por Hito
+    const tareasPorHito = new Map();
+    const tareasGenerales = [];
+    const tareaIdToHitoMap = new Map();
+
+    (state.tareas || []).forEach(function (t) {
+      if (!t) return;
+      var tProy = String(t.ID_Proyecto || t.idProyecto || t.id_proyecto || '').trim().toUpperCase();
+      var tHito = String(t.ID_Hito || t.idHito || t.id_hito || '').trim().toUpperCase();
+      var idT = String(t.ID_Tarea || t.idTarea || '').trim().toUpperCase();
+
+      if (tHito && idsHitosSet.has(tHito)) {
+        if (!tareasPorHito.has(tHito)) tareasPorHito.set(tHito, []);
+        tareasPorHito.get(tHito).push(t);
+        if (idT) tareaIdToHitoMap.set(idT, tHito);
+      } else if (
+        (tProy === idProyBuscado && (!tHito || !idsHitosSet.has(tHito))) ||
+        (tHito && !idsHitosSet.has(tHito) && tHito.indexOf(idProyBuscado) === 0)
+      ) {
+        tareasGenerales.push(t);
+      }
+    });
+
+    const gastosPorHito = new Map();
+    const gastosGenerales = [];
+
+    (state.gastos || []).forEach(function (g) {
+      if (!g) return;
+      var gNorm = normalizarGasto(g);
+      var gHito = String(gNorm.ID_Hito || '').trim().toUpperCase();
+      var gTarea = String(gNorm.ID_Tarea || gNorm.ID_Entidad_Vinculada || '').trim().toUpperCase();
+
+      if (!gHito && gTarea && tareaIdToHitoMap.has(gTarea)) {
+        gHito = tareaIdToHitoMap.get(gTarea);
+      }
+
+      if (gHito && idsHitosSet.has(gHito)) {
+        if (!gastosPorHito.has(gHito)) gastosPorHito.set(gHito, []);
+        gastosPorHito.get(gHito).push(gNorm);
+      } else if (gastoEsGeneralDeProyecto(gNorm, idProyBuscado, idsHitosProy)) {
+        gastosGenerales.push(gNorm);
+      }
+    });
+
+    // CASO 1: Si no se registran hitos específicos en el proyecto
+    if (hitosProy.length === 0) {
+      var avisoSinHitos = document.createElement('div');
+      avisoSinHitos.className = 'portal-surface p-4 rounded-2xl border border-dashed border-indigo-200 dark:border-indigo-800/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-600 dark:text-slate-300 text-xs font-medium';
+      avisoSinHitos.innerHTML =
+        '<div class="flex items-center gap-2">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>' +
+        '<span>No se registran hitos específicos en este proyecto. Puedes crear paquetes de trabajo e hitos para estructurar tu WBS con "+ Nuevo Hito", o gestionar tareas y gastos directamente.</span>' +
+        '</div>' +
+        '<button type="button" onclick="abrirModalCrearHito()" class="btn-portal-primary text-xs shrink-0 flex items-center gap-1.5 shadow-xs">' +
+        '<span>+ Nuevo Hito</span>' +
+        '</button>';
+      container.appendChild(avisoSinHitos);
+
+      // Renderizar el bloque general manteniendo las 2 columnas intactas (Tareas col-span-7 / Gastos col-span-5)
+      renderBloqueGeneralProyecto(container, idProyBuscado, tareasGenerales, gastosGenerales, fHoy);
+      return;
+    }
+
+    // CASO 2: Si hay hitos registrados -> Agrupación por Fase_Asociada (Nivel 1)
+    var hitosOrdenados = (typeof ordenarHitosCronologicamente === 'function')
+      ? ordenarHitosCronologicamente(hitosProy)
+      : hitosProy;
+    var pesosHitos = (typeof obtenerPesosEfectivosHitos === 'function')
+      ? obtenerPesosEfectivosHitos(idProyBuscado, hitosOrdenados, (state.tareas || []))
+      : {};
+
+    var fasesMap = new Map();
+    var fasesOrden = [];
+
+    hitosOrdenados.forEach(function (h) {
+      var rawFase = String(h.Fase_Asociada || h.faseAsociada || h.Fase || '').trim();
+      var faseKey = rawFase || 'Fase General';
+
+      if (!fasesMap.has(faseKey)) {
+        fasesMap.set(faseKey, {
+          nombre: faseKey,
+          paquetes: [],
+          marcadores: [],
+          pesoTotal: 0
+        });
+        fasesOrden.push(faseKey);
+      }
+
+      var idClave = String(h.ID_Elemento_WBS || h.ID_Hito || '').trim();
+      var tipoWbs = obtenerTipoElementoWBS(h);
+      var peso = pesosHitos[idClave] || 0;
+      var grupo = fasesMap.get(faseKey);
+      grupo.pesoTotal += peso;
+
+      if (tipoWbs === 'HITO_MARCADOR') {
+        grupo.marcadores.push(h);
+      } else {
+        grupo.paquetes.push(h);
+      }
+    });
+
+        // Ordenamiento determinista de fases según ciclo de vida canónico
+    function normalizarTextoFase(str) {
+      return String(str || '').trim().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function extraerIndiceFase(faseStr) {
+      var s = String(faseStr || '').trim();
+      var m = s.match(/^(?:f|fase\s*)?0*(\d+)(?:[_\s.:\-)].*|$)/i);
+      if (m && m[1]) {
+        return parseInt(m[1], 10);
+      }
+      return null;
+    }
+
+    var cicloVidaEstandar = [
+      'iniciacion',
+      'planificacion',
+      'diseno',
+      'ejecucion',
+      'procura',
+      'construccion',
+      'validacion',
+      'pruebas',
+      'cierre'
+    ];
+
+    function obtenerIndiceCicloVida(faseStr) {
+      var norm = normalizarTextoFase(faseStr);
+      for (var i = 0; i < cicloVidaEstandar.length; i++) {
+        if (norm.indexOf(cicloVidaEstandar[i]) !== -1) {
+          return i;
+        }
+      }
+      return -1;
+    }
+
+    fasesOrden.sort(function (a, b) {
+      var idxA = extraerIndiceFase(a);
+      var idxB = extraerIndiceFase(b);
+      if (idxA !== null && idxB !== null) {
+        if (idxA !== idxB) return idxA - idxB;
+      } else if (idxA !== null) {
+        return -1;
+      } else if (idxB !== null) {
+        return 1;
+      }
+
+      var cA = obtenerIndiceCicloVida(a);
+      var cB = obtenerIndiceCicloVida(b);
+      if (cA !== -1 && cB !== -1) {
+        if (cA !== cB) return cA - cB;
+      } else if (cA !== -1) {
+        return -1;
+      } else if (cB !== -1) {
+        return 1;
+      }
+
+      return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    var fragmentHitos = document.createDocumentFragment();
+
+    fasesOrden.forEach(function (faseKey, idxFase) {
+      var grupo = fasesMap.get(faseKey);
+      var faseContainer = document.createElement('div');
+      faseContainer.className = 'wbs-fase-seccion space-y-4 mb-6 p-4 md:p-5 rounded-2xl bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 shadow-2xs';
+
+      var pctPesoFase = Math.round(grupo.pesoTotal * 100);
+      var countWP = grupo.paquetes.length;
+      var countHit = grupo.marcadores.length;
+      var totalEntregablesFase = countWP + countHit;
+      var textoContadorFase = totalEntregablesFase === 1 ? '1 entregable' : totalEntregablesFase + ' entregables';
+      if (countWP > 0 && countHit > 0) {
+        textoContadorFase = countWP + ' WP • ' + countHit + ' hitos';
+      }
+      var nombreFaseEsc = escapeHtmlDetalle(grupo.nombre).replace(/'/g, "\\'");
+
+      // Banner Header de Fase (Nivel 1 WBS) - Elevación Cobalt A.2.2 y Gradientes Semánticos
+      var gradienteFase = 'bg-gradient-to-r from-sky-500 to-indigo-600 shadow-sm shadow-indigo-500/20';
+      if (idxFase === 1) {
+        gradienteFase = 'bg-gradient-to-r from-indigo-500 to-purple-600 shadow-sm shadow-purple-500/20';
+      } else if (idxFase === 2) {
+        gradienteFase = 'bg-gradient-to-r from-purple-500 to-pink-600 shadow-sm shadow-pink-500/20';
+      } else if (idxFase >= 3) {
+        gradienteFase = 'bg-gradient-to-r from-emerald-500 to-teal-600 shadow-sm shadow-emerald-500/20';
+      }
+
+      var bannerFase = document.createElement('div');
+      bannerFase.className = 'flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-200/70 dark:border-slate-800/70';
+      bannerFase.innerHTML =
+        '<div class="flex items-center gap-2.5 min-w-0 flex-1">' +
+        '  <span class="inline-flex items-center justify-center min-w-[2.2rem] px-2 h-7 rounded-lg ' + gradienteFase + ' text-white font-mono font-black text-[11px] border border-white/20 tracking-tight shrink-0 shadow-xs">F' + (idxFase + 1) + '</span>' +
+        '  <div class="min-w-0 flex-1">' +
+        '    <div class="flex items-center gap-2 flex-wrap">' +
+        '      <h3 class="font-black text-slate-900 dark:text-slate-100 text-sm md:text-base leading-tight truncate">' + escapeHtmlDetalle(grupo.nombre) + '</h3>' +
+        '      <span class="text-xs text-slate-500 dark:text-slate-400 font-mono font-medium">(' + textoContadorFase + ')</span>' +
+        '    </div>' +
+        '  </div>' +
+        '</div>' +
+        '<div class="flex items-center gap-2 shrink-0 flex-wrap">' +
+        '  <span class="text-xs badge-sem-indigo font-mono tabular-nums font-bold px-2.5 py-1 rounded-xl border flex items-center gap-1.5 shadow-2xs">' +
+        '    <span>Peso: <b>' + pctPesoFase + '%</b></span>' +
+        '  </span>' +
+        '  <button type="button" onclick="abrirModalCrearHitoFase(\'' + nombreFaseEsc + '\')" class="btn-portal-secondary text-xs px-2.5 py-1 flex items-center gap-1 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/60 bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 shadow-2xs cursor-pointer active:scale-95 transition-all" title="Crear entregable en esta fase">' +
+        '    <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>' +
+        '    <span>Entregable</span>' +
+        '  </button>' +
+        '</div>';
+      faseContainer.appendChild(bannerFase);
+
+      // 1. Paquetes de Trabajo (WP) de la Fase
+      if (grupo.paquetes.length > 0) {
+        var contenedorPaquetes = document.createElement('div');
+        contenedorPaquetes.className = 'space-y-4';
+
+        grupo.paquetes.forEach(function (h) {
+          var hitoIdActual = String(h.ID_Elemento_WBS || h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase();
+
+          // Consulta O(1) en los mapas hash
+          var tareasHito = tareasPorHito.get(hitoIdActual) || [];
+          var gastosHito = gastosPorHito.get(hitoIdActual) || [];
+
+          var totalGastoHito = 0;
+          for (var ig = 0; ig < gastosHito.length; ig++) {
+            totalGastoHito += (montoPenGasto(gastosHito[ig]) || 0);
+          }
+          if (!isFinite(totalGastoHito)) totalGastoHito = 0;
+
+          // Métricas Bottom-Up: Presupuesto Estimado vs Real Ejecutado por Tareas
+          var presEstimadoHito = parseFloat(h.Presupuesto_Asignado || h.Costo_Estimado || h.Presupuesto_Estimado_PEN || 0);
+          var realEjecutadoHito = 0;
+          if (h.Costo_Ejecutado_Real_PEN !== undefined && h.Costo_Ejecutado_Real_PEN !== null) {
+            realEjecutadoHito = parseFloat(h.Costo_Ejecutado_Real_PEN) || 0;
+          } else {
+            for (var ig2 = 0; ig2 < gastosHito.length; ig2++) {
+              var gItem = gastosHito[ig2];
+              var est = String(gItem.Estado_Pago || gItem.Estado || '').toLowerCase();
+              var mod = String(gItem.Modalidad || gItem.modalidad || '');
+              var esReal = est === 'pagado' || mod === 'Real / Ejecutado' || gItem.Conciliado === true;
+              if (esReal) {
+                var mReal = parseFloat(gItem.Monto_Moneda_Base || gItem.Monto_PEN || gItem.montoPEN || gItem.Monto_Original || 0);
+                if (!isNaN(mReal) && isFinite(mReal)) {
+                  realEjecutadoHito += mReal;
+                }
+              }
+            }
+          }
+
+          var varianzaHito = presEstimadoHito > 0 ? (presEstimadoHito - realEjecutadoHito) : 0;
+          var pctConsumidoHito = presEstimadoHito > 0 ? Math.round((realEjecutadoHito / presEstimadoHito) * 100) : (realEjecutadoHito > 0 ? 100 : 0);
+
+          var semaforoHito = h.Semaforo_Financiero || (presEstimadoHito > 0 ? (pctConsumidoHito > 100 ? 'ROJO' : (pctConsumidoHito >= 80 ? 'AMBAR' : 'VERDE')) : 'VERDE');
+          var semBadgeClass = 'badge-sem-emerald';
+          var semIcon = '<span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-0.5"></span>';
+          if (semaforoHito === 'AMBAR') {
+            semBadgeClass = 'badge-sem-amber';
+            semIcon = '<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mr-0.5"></span>';
+          } else if (semaforoHito === 'ROJO') {
+            semBadgeClass = 'badge-sem-rose';
+            semIcon = '<span class="inline-block w-1.5 h-1.5 rounded-full bg-rose-500 mr-0.5"></span>';
+          }
+
+          var htmlTareas = construirHtmlListaTareas(tareasHito, fHoy, gastosHito);
+          var htmlGastos = construirHtmlListaGastos(gastosHito);
+
+          var hitoLimpio = String(h.Estado || h.Estado_Hito || 'Pendiente');
+          if (hitoLimpio.indexOf('_') !== -1) hitoLimpio = hitoLimpio.substring(hitoLimpio.indexOf('_') + 1);
+
+          var pctHito = 0;
+          if (typeof calcularAvanceHito === 'function') {
+            pctHito = calcularAvanceHito(h);
+          } else {
+            var tareasCompletasHito = tareasHito.filter(function (t) {
+              return String(t.Estado_Tarea || '').toLowerCase().indexOf('completad') !== -1 ||
+                     String(t.Estado_Tarea || '').indexOf('04_') !== -1;
+            }).length;
+            pctHito = tareasHito.length > 0 ? Math.round((tareasCompletasHito / tareasHito.length) * 100) : 0;
+          }
+
+          var idHitoKey = String(h.ID_Elemento_WBS || h.ID_Hito || '').trim();
+          var cardHito = document.createElement('div');
+          cardHito.id = 'card-hito-' + idHitoKey;
+          cardHito.className = 'portal-surface elevation-1 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 overflow-hidden transition-all duration-300 w-full';
+
+          var badgeNotasHito = (typeof generarBadgeNotasVinculadas === 'function')
+            ? generarBadgeNotasVinculadas(idHitoKey, 'HITO')
+            : '';
+
+          var estaColapsado = hitosColapsados[idHitoKey] === true;
+          var nomElem = h.Nombre_Elemento || h.Nombre_Hito || '';
+          var desvDiasWP = (typeof h.Desviacion_Dias === 'number') ? h.Desviacion_Dias : calcularDesviacionDiasHito(h, fHoy);
+          var badgeDesvWP = '';
+          if (desvDiasWP > 0 && h.Estado_Hito !== '03_Completado' && h.Estado !== '03_Completado') {
+            badgeDesvWP = '<span class="text-[10px] font-mono tabular-nums font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900/50">+' + desvDiasWP + 'd retraso</span>';
+          }
+
+          cardHito.innerHTML =
+            '<div class="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800 gap-3.5 bg-slate-50/50 dark:bg-slate-950/40">' +
+            '<div class="flex items-start gap-3 min-w-0 flex-1">' +
+            '<button type="button" onclick="toggleColapsarHito(\'' + idHitoKey + '\')" class="btn-portal-icon mt-0.5" title="Expandir o contraer paquete de trabajo">' +
+            '<svg id="hito-chevron-' + idHitoKey + '" class="portal-icon-sm transition-transform duration-300 ' + (estaColapsado ? '-rotate-90' : '') + '" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>' +
+            '</button>' +
+            '<div class="min-w-0 flex-1">' +
+            '<div class="flex items-center gap-2 mb-1.5 flex-wrap">' +
+            '<span class="font-mono tabular-nums text-[10px] font-extrabold bg-slate-900 dark:bg-slate-800 text-white dark:text-slate-200 px-2 py-0.5 rounded tracking-wide border border-transparent dark:border-slate-700/60">' + idHitoKey + '</span>' +
+            '<span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border bg-sky-50 dark:bg-sky-950/70 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/60">📦 Paquete WP</span>' +
+            '<span class="text-xs px-2.5 py-0.5 rounded-full font-bold border ' + (h.Estado_Hito === '03_Completado' || h.Estado === '03_Completado' ? 'badge-sem-emerald' : ((h.Estado_Hito === '02_En_Proceso' || h.Estado === '02_En_Progreso') ? 'badge-sem-amber' : 'badge-sem-slate')) + '">' +
+            hitoLimpio +
+            '</span>' +
+            '<span class="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg><span>Límite: <b>' + (h.Fecha_Limite_Plan ? String(h.Fecha_Limite_Plan).split('T')[0] : '-') + '</b></span></span>' +
+            badgeDesvWP +
+            '<span class="text-xs badge-sem-indigo font-mono tabular-nums font-bold px-2 py-0.5 rounded border inline-flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg><span>Peso: ' + Math.round((pesosHitos[idHitoKey] || 0) * 100) + '%</span></span>' +
+            badgeNotasHito +
+            '</div>' +
+            '<h3 class="font-black text-slate-900 dark:text-slate-100 text-base leading-tight truncate">' + escapeHtmlDetalle(nomElem) + '</h3>' +
+            '<div class="flex items-center gap-2 mt-2 w-full max-w-xs">' +
+            '<div class="flex-1 bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">' +
+            '<div id="hito-progreso-bar-' + idHitoKey + '" class="bg-indigo-600 dark:bg-indigo-500 h-full rounded-full transition-all duration-300" style="width: ' + pctHito + '%"></div>' +
+            '</div>' +
+            '<span id="hito-progreso-badge-' + idHitoKey + '" class="text-[11px] font-mono tabular-nums font-black text-indigo-600 dark:text-indigo-400 shrink-0">' + pctHito + '%</span>' +
+            '</div>' +
+            '</div>' +
+            '</div>' +
+            '<div class="flex items-center gap-1.5 shrink-0 self-end md:self-center flex-wrap">' +
+            '<!-- KPI PANEL CONTROL FINANCIERO -->' +
+            '<div class="px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 shadow-2xs text-right mr-0.5 flex flex-col justify-center min-w-[170px]">' +
+            '  <div class="flex items-center justify-between gap-2 text-[10px] font-mono tabular-nums">' +
+            '    <span class="text-slate-400 dark:text-slate-500 font-bold uppercase">Est vs Real:</span>' +
+            '    <span class="font-bold text-slate-700 dark:text-slate-300">S/ ' + (presEstimadoHito > 0 ? presEstimadoHito.toLocaleString('es-PE', {minimumFractionDigits: 1, maximumFractionDigits: 1}) : '-') + ' | <b class="' + (realEjecutadoHito > presEstimadoHito && presEstimadoHito > 0 ? 'text-rose-600 dark:text-rose-400 font-black' : 'text-emerald-600 dark:text-emerald-400 font-bold') + '">S/ ' + realEjecutadoHito.toLocaleString('es-PE', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + '</b></span>' +
+            '  </div>' +
+            '  <div class="flex items-center justify-between gap-1.5 text-[9.5px] font-mono tabular-nums mt-0.5">' +
+            '    <span class="' + (varianzaHito >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-rose-600 dark:text-rose-400 font-extrabold') + '">' + (presEstimadoHito > 0 ? (varianzaHito >= 0 ? 'Ahorro +S/' + varianzaHito.toFixed(1) : 'Desvío -S/' + Math.abs(varianzaHito).toFixed(1)) : 'Sin Techo') + '</span>' +
+            '    <span class="px-1.5 py-0.5 rounded-md border text-[9px] font-bold flex items-center gap-1 ' + semBadgeClass + '">' + semIcon + ' ' + (presEstimadoHito > 0 ? pctConsumidoHito + '%' : (realEjecutadoHito > 0 ? '100%' : '0%')) + '</span>' +
+            '  </div>' +
+            '</div>' +
+            '<!-- BUTTON GROUP WP COMPACTO -->' +
+            '<div class="inline-flex items-center gap-1 p-0.5 rounded-xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 shadow-2xs">' +
+            '  <button type="button" onclick="abrirModalCrearTareaConHito(\'' + idHitoKey + '\')" class="btn-portal-primary text-[11px] px-2 py-1 flex items-center gap-1 shadow-2xs active:scale-95 transition-all" title="Crear tarea en este paquete de trabajo">' +
+            '    <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>' +
+            '    <span>Tarea</span>' +
+            '  </button>' +
+            '  <button type="button" onclick="desglosarTareasPaqueteIA(\'' + idHitoKey + '\', \'' + escapeHtmlDetalle(nomElem).replace(/'/g, "\\'") + '\')" class="btn-portal-secondary text-[11px] px-2 py-1 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/50 dark:bg-indigo-950/40 hover:bg-indigo-100 flex items-center gap-1 shadow-2xs active:scale-95 transition-all" title="Desglosar tareas atómicas con IA">' +
+            '    <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>' +
+            '    <span>IA</span>' +
+            '  </button>' +
+            '  <button type="button" onclick="abrirModalCrearGastoConHito(\'' + idHitoKey + '\')" class="btn-portal-secondary text-[11px] px-2 py-1 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 flex items-center gap-1 shadow-2xs active:scale-95 transition-all" title="Registrar gasto en este paquete de trabajo">' +
+            '    <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>' +
+            '    <span>Gasto</span>' +
+            '  </button>' +
+            '  <button type="button" onclick="confirmarEliminarHito(\'' + idHitoKey + '\')" class="btn-portal-icon p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 active:scale-95 transition-all" title="Eliminar paquete de trabajo">' +
+            '    <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>' +
+            '  </button>' +
+            '</div>' +
+            '</div>' +
+            '</div>' +
+            '<div id="hito-body-' + idHitoKey + '" class="p-4 md:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 transition-all duration-300 ' + (estaColapsado ? 'hidden' : '') + '">' +
+            '<!-- COLUMNA IZQUIERDA: TAREAS (58% / col-span-7) -->' +
+            '<div class="lg:col-span-7 space-y-3">' +
+            '<div class="flex justify-between items-center px-1 pb-1 border-b border-slate-100 dark:border-slate-800">' +
+            '<span class="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg><span>Tareas del Paquete (' + tareasHito.length + ')</span></span>' +
+            '<span class="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400">' + tareasHito.filter(function(t){ return String(t.Estado_Tarea || '').indexOf('04_') !== -1; }).length + ' de ' + tareasHito.length + ' hechas</span>' +
+            '</div>' +
+            htmlTareas +
+            '</div>' +
+            '<!-- COLUMNA DERECHA: GASTOS (42% / col-span-5) -->' +
+            '<div class="lg:col-span-5 space-y-3 border-t lg:border-t-0 lg:border-l lg:pl-5 border-slate-100 dark:border-slate-800">' +
+            '<div class="flex justify-between items-center px-1 pb-1 border-b border-slate-100 dark:border-slate-800">' +
+            '<span class="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg><span>Gastos Imputados (' + gastosHito.length + ')</span></span>' +
+            '<span class="text-xs font-mono tabular-nums font-black text-emerald-700 dark:text-emerald-400">PEN ' + Number(totalGastoHito || 0).toLocaleString() + '</span>' +
+            '</div>' +
+            htmlGastos +
+            (gastosHito.length > 0 ?
+              '<div class="pt-2 px-1 flex justify-between items-center text-xs font-mono tabular-nums font-bold text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800">' +
+              '<span>Total Paquete:</span><span class="text-slate-900 dark:text-slate-100">PEN ' + Number(totalGastoHito || 0).toLocaleString() + '</span>' +
+              '</div>' : '') +
+            '</div>' +
+            '</div>';
+          contenedorPaquetes.appendChild(cardHito);
+        });
+
+        faseContainer.appendChild(contenedorPaquetes);
+      }
+
+      // 2. Hitos Marcadores (HIT) de la Fase
+      if (grupo.marcadores.length > 0) {
+        var contenedorMarcadores = document.createElement('div');
+        contenedorMarcadores.className = 'space-y-2.5 pt-2 border-t border-dashed border-slate-200 dark:border-slate-800/80';
+        var tituloMarcadores = document.createElement('div');
+        tituloMarcadores.className = 'text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 px-1';
+        tituloMarcadores.innerHTML = '<span>💎 Checkpoints de Control Transversales (' + countHit + ')</span>';
+        contenedorMarcadores.appendChild(tituloMarcadores);
+
+        grupo.marcadores.forEach(function (h) {
+          var filaMarcador = document.createElement('div');
+          filaMarcador.innerHTML = construirHtmlFilaHitoMarcador(h, pesosHitos, fHoy);
+          contenedorMarcadores.appendChild(filaMarcador.firstElementChild);
+        });
+
+        faseContainer.appendChild(contenedorMarcadores);
+      }
+
+      fragmentHitos.appendChild(faseContainer);
+    });
+
+    container.appendChild(fragmentHitos);
+
+    // Renderizar tareas y gastos generales (si existen) al final de la cascada
+    if (tareasGenerales.length > 0 || gastosGenerales.length > 0) {
+      renderBloqueGeneralProyecto(container, idProyBuscado, tareasGenerales, gastosGenerales, fHoy);
+    }
+  }
+
+  /**
+   * 4.6. Configuración Visual y Renderizado de Actividades Personales y Hábitos (Google Tasks / Notion Style)
+   */
+  var CATEGORIAS_VIDA_CONFIG = {
+    'SALUD_DEPORTE': {
+      clave: 'SALUD_DEPORTE',
+      nombre: 'Deporte & Salud',
+      icono: '🏃',
+      colorBarra: 'bg-emerald-500',
+      badgeClase: 'bg-emerald-50 text-emerald-600 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/50',
+      accentBorder: 'hover:border-emerald-300 dark:hover:border-emerald-700/60'
+    },
+    'DESARROLLO_ESTUDIO': {
+      clave: 'DESARROLLO_ESTUDIO',
+      nombre: 'Estudio & Mente',
+      icono: '📚',
+      colorBarra: 'bg-blue-500',
+      badgeClase: 'bg-blue-50 text-blue-600 border-blue-200/80 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800/50',
+      accentBorder: 'hover:border-blue-300 dark:hover:border-blue-700/60'
+    },
+    'LABORAL_HONORARIO': {
+      clave: 'LABORAL_HONORARIO',
+      nombre: 'Trabajo & Carrera',
+      icono: '💼',
+      colorBarra: 'bg-violet-500',
+      badgeClase: 'bg-violet-50 text-violet-600 border-violet-200/80 dark:bg-violet-950/40 dark:text-violet-400 dark:border-violet-800/50',
+      accentBorder: 'hover:border-violet-300 dark:hover:border-violet-700/60'
+    },
+    'FINANZAS_TRAMITES': {
+      clave: 'FINANZAS_TRAMITES',
+      nombre: 'Finanzas & Admin',
+      icono: '💳',
+      colorBarra: 'bg-purple-500',
+      badgeClase: 'bg-purple-50 text-purple-600 border-purple-200/80 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-800/50',
+      accentBorder: 'hover:border-purple-300 dark:hover:border-purple-700/60'
+    },
+    'SOCIAL_FAMILIA': {
+      clave: 'SOCIAL_FAMILIA',
+      nombre: 'Social & Familia',
+      icono: '👥',
+      colorBarra: 'bg-amber-500',
+      badgeClase: 'bg-amber-50 text-amber-600 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/50',
+      accentBorder: 'hover:border-amber-300 dark:hover:border-amber-700/60'
+    },
+    'PERSONAL_DESCANSO': {
+      clave: 'PERSONAL_DESCANSO',
+      nombre: 'Personal & Relax',
+      icono: '🧘',
+      colorBarra: 'bg-pink-500',
+      badgeClase: 'bg-pink-50 text-pink-600 border-pink-200/80 dark:bg-pink-950/40 dark:text-pink-400 dark:border-pink-800/50',
+      accentBorder: 'hover:border-pink-300 dark:hover:border-pink-700/60'
+    }
+  };
+
+  // ============================================================================
+  // MOTOR DE PROPAGACIÓN DE AVANCE CONTINUO EN CASCADA
+  // Pasos -> Tarea -> Hito -> Proyecto (Bottom-up Reactivo)
+  // ============================================================================
+
+  var _syncProyTimers = {};
+  function debouncedSyncProyectoAvance(idProyecto, avancePctDecimal) {
+    if (!_syncProyTimers) _syncProyTimers = {};
+    if (_syncProyTimers[idProyecto]) clearTimeout(_syncProyTimers[idProyecto]);
+    _syncProyTimers[idProyecto] = setTimeout(function () {
+      callBackend('updateProyecto', {
+        idProyecto: idProyecto,
+        avanceRealPct: avancePctDecimal,
+        datos: { Avance_Real_Pct: avancePctDecimal }
+      }, function (res) {
+        if (res && res.success) {
+          console.log('[Cascada sync OK] Proyecto ' + idProyecto + ': ' + Math.round(avancePctDecimal * 100) + '%');
+        }
+      }, function (err) {
+        console.warn('[Cascada sync warning]:', err);
+      }, { silent: true });
+    }, 1200);
+  }
+
+  function calcularAvanceTarea(t) {
+    if (!t) return 0;
+    var tareaObj = (typeof t === 'string')
+      ? (state.tareas || []).find(function (x) { return String(x.ID_Tarea || '').trim() === String(t).trim(); })
+      : t;
+    if (!tareaObj) return 0;
+
+    var idTar = String(tareaObj.ID_Tarea || '').trim();
+    var pasos = (state.subtareas || []).filter(function (s) {
+      return String(s.Tipo_Padre || '').toUpperCase() === 'TAREA' && String(s.ID_Padre || '').trim() === idTar;
+    });
+
+    if (pasos.length > 0) {
+      var comp = pasos.filter(function (s) {
+        return s.Completada === true || s.Completado === true || String(s.Completada).toLowerCase() === 'true' || String(s.Completado).toLowerCase() === 'true';
+      }).length;
+      var pct = Math.round((comp / pasos.length) * 100);
+      return Math.min(Math.max(pct, 0), 100);
+    }
+
+    var est = String(tareaObj.Estado_Tarea || '').toLowerCase();
+    if (est.indexOf('04_') !== -1 || est.indexOf('completad') !== -1) return 100;
+    if (est.indexOf('03_') !== -1 || est.indexOf('proceso') !== -1) return 50;
+    return 0;
+  }
+
+  function calcularAvanceHito(h) {
+    if (!h) return 0;
+    var hitoObj = (typeof h === 'string')
+      ? (state.hitos || []).find(function (x) {
+          var xId = String(x.ID_Elemento_WBS || x.ID_Hito || '').trim().toUpperCase();
+          return xId === String(h).trim().toUpperCase();
+        })
+      : h;
+    if (!hitoObj) return 0;
+
+    var tipoWbs = (typeof obtenerTipoElementoWBS === 'function') ? obtenerTipoElementoWBS(hitoObj) : 'PAQUETE_TRABAJO';
+    var estH = String(hitoObj.Estado || hitoObj.Estado_Hito || '').toLowerCase();
+    var esDone = estH.indexOf('03_') !== -1 || estH.indexOf('completad') !== -1;
+
+    // Para HITO_MARCADOR: Checkpoint puro de duración cero y sin tareas operativas.
+    // El avance es 100% si está completado conforme a DoD y 0% si está pendiente.
+    if (tipoWbs === 'HITO_MARCADOR') {
+      return esDone ? 100 : 0;
+    }
+
+    var idH = String(hitoObj.ID_Elemento_WBS || hitoObj.ID_Hito || hitoObj.idHito || hitoObj.id_hito || '').trim().toUpperCase();
+    var tareasHito = (state.tareas || []).filter(function (t) {
+      return String(t.ID_Hito || t.idHito || t.id_hito || '').trim().toUpperCase() === idH;
+    });
+
+    if (tareasHito.length > 0) {
+      var suma = tareasHito.reduce(function (acc, t) {
+        return acc + calcularAvanceTarea(t);
+      }, 0);
+      var pctHito = Math.round(suma / tareasHito.length);
+      return Math.min(Math.max(pctHito, 0), 100);
+    }
+
+    if (esDone) return 100;
+    return 0;
+  }
+
+  /**
+   * Ordena hitos cronológicamente según:
+   * 1. Fecha_Limite_Plan (más temprana primero)
+   * 2. Fase_Asociada (orden natural / alfanumérico)
+   * 3. ID_Hito (orden alfanumérico)
+   */
+  function ordenarHitosCronologicamente(hitos) {
+    if (!hitos || !Array.isArray(hitos)) return [];
+    return hitos.slice().sort(function (a, b) {
+      var fA = a.Fecha_Limite_Plan ? new Date(String(a.Fecha_Limite_Plan).split('T')[0]).getTime() : NaN;
+      var fB = b.Fecha_Limite_Plan ? new Date(String(b.Fecha_Limite_Plan).split('T')[0]).getTime() : NaN;
+      var validA = !isNaN(fA);
+      var validB = !isNaN(fB);
+      if (validA && validB && fA !== fB) {
+        return fA - fB;
+      }
+      if (validA && !validB) return -1;
+      if (!validA && validB) return 1;
+
+      var faseA = String(a.Fase_Asociada || '').trim().toLowerCase();
+      var faseB = String(b.Fase_Asociada || '').trim().toLowerCase();
+      if (faseA !== faseB) {
+        return faseA.localeCompare(faseB, undefined, { numeric: true, sensitivity: 'base' });
+      }
+
+      var idA = String(a.ID_Hito || '').trim();
+      var idB = String(b.ID_Hito || '').trim();
+      return idA.localeCompare(idB, undefined, { numeric: true });
+    });
+  }
+
+  /**
+   * Determina los pesos relativos efectivos de los hitos del proyecto:
+   * Criterio C: Si existen pesos manuales en BBDD_Hitos (con suma > 0), se normalizan al 100% (1.0).
+   * Criterio A: Si las tareas tienen Horas_Estimadas (con suma > 0), peso = Horas Tareas Hito / Horas Totales Proyecto.
+   * Criterio B: Fallback equitativo automático = 1 / N_hitos.
+   * Devuelve un diccionario { [ID_Hito]: pesoDecimal } donde la suma de pesos es exactamente 1.0 (100%).
+   */
+  function obtenerPesosEfectivosHitos(idP, hitosProy, tareasProy) {
+    if (!hitosProy || hitosProy.length === 0) return {};
+
+    // Criterio C: Normalización anti-desbordamiento para pesos manuales en BBDD
+    var manualWeights = {};
+    var totalManual = 0;
+    var hasManual = false;
+
+    hitosProy.forEach(function (h) {
+      var rawVal = (h.Peso_Ponderado_Pct !== undefined && h.Peso_Ponderado_Pct !== null && h.Peso_Ponderado_Pct !== '')
+        ? h.Peso_Ponderado_Pct
+        : ((h.Peso_Ponderado !== undefined && h.Peso_Ponderado !== null && h.Peso_Ponderado !== '')
+          ? h.Peso_Ponderado
+          : h.Peso);
+      var val = parseFloat(rawVal);
+      if (!isNaN(val) && val > 0) {
+        manualWeights[h.ID_Hito] = val;
+        totalManual += val;
+        hasManual = true;
+      } else {
+        manualWeights[h.ID_Hito] = 0;
+      }
+    });
+
+    if (hasManual && totalManual > 0) {
+      var pesosManualesNorm = {};
+      hitosProy.forEach(function (h) {
+        pesosManualesNorm[h.ID_Hito] = manualWeights[h.ID_Hito] / totalManual;
+      });
+      return pesosManualesNorm;
+    }
+
+    // Criterio A: Cálculo por esfuerzo (Horas Estimadas de tareas asociadas)
+    var horasPorHito = {};
+    var totalHoras = 0;
+
+    hitosProy.forEach(function (h) {
+      var idH = String(h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase();
+      var tareasHito = (tareasProy || []).filter(function (t) {
+        return String(t.ID_Hito || t.idHito || t.id_hito || '').trim().toUpperCase() === idH;
+      });
+      var sumHoras = tareasHito.reduce(function (acc, t) {
+        var hEst = parseFloat(t.Horas_Estimadas);
+        return acc + (!isNaN(hEst) && hEst > 0 ? hEst : 0);
+      }, 0);
+      horasPorHito[h.ID_Hito] = sumHoras;
+      totalHoras += sumHoras;
+    });
+
+    if (totalHoras > 0) {
+      var pesosHoras = {};
+      hitosProy.forEach(function (h) {
+        pesosHoras[h.ID_Hito] = horasPorHito[h.ID_Hito] / totalHoras;
+      });
+      return pesosHoras;
+    }
+
+    // Criterio B: Fallback equitativo automático (1 / N)
+    var pesoEquitativo = 1 / hitosProy.length;
+    var pesosEquitativos = {};
+    hitosProy.forEach(function (h) {
+      pesosEquitativos[h.ID_Hito] = pesoEquitativo;
+    });
+    return pesosEquitativos;
+  }
+
+  /**
+   * Motor Jerárquico de Avance Real y Proyección "% Meta"
+   * Erradica incrementos arbitrarios (+20%).
+   * % Meta = (Suma de Pesos de Hitos ya completados al 100%) + (Peso del Hito Activo en Curso)
+   */
+  function calcularAvancesProyecto(p) {
+    if (!p) return { avanceReal: 0, avanceTotalProyectado: 0 };
+    var proyObj = (typeof p === 'string')
+      ? (state.proyectos || []).find(function (x) { return String(x.ID_Proyecto || '').trim().toUpperCase() === String(p).trim().toUpperCase(); })
+      : p;
+    if (!proyObj) return { avanceReal: 0, avanceTotalProyectado: 0 };
+
+    var idP = String(proyObj.ID_Proyecto || '').trim().toUpperCase();
+
+    var hitosProy = (state.hitos || []).filter(function (h) {
+      return String(h.ID_Proyecto || h.idProyecto || h.id_proyecto || '').trim().toUpperCase() === idP;
+    });
+    var hitosIds = {};
+    hitosProy.forEach(function (h) {
+      var hid = String(h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase();
+      if (hid) hitosIds[hid] = true;
+    });
+
+    var tareasProy = (state.tareas || []).filter(function (t) {
+      var tProy = String(t.ID_Proyecto || t.idProyecto || t.id_proyecto || '').trim().toUpperCase();
+      var tHito = String(t.ID_Hito || t.idHito || t.id_hito || '').trim().toUpperCase();
+      return (tProy === idP) || (tHito && hitosIds[tHito]) || (tHito && tHito.indexOf(idP) === 0);
+    });
+
+    // Caso 1: Proyecto con Hitos
+    if (hitosProy.length > 0) {
+      var hitosOrdenados = ordenarHitosCronologicamente(hitosProy);
+      var pesos = obtenerPesosEfectivosHitos(idP, hitosOrdenados, tareasProy);
+
+      var avanceRealSuma = 0;
+      var pesoCompletados = 0;
+      var hitoActivo = null;
+
+      hitosOrdenados.forEach(function (h) {
+        var avH = calcularAvanceHito(h);
+        var pesoH = pesos[h.ID_Hito] || 0;
+
+        avanceRealSuma += (avH * pesoH);
+
+        if (avH >= 100) {
+          pesoCompletados += (pesoH * 100);
+        } else if (!hitoActivo) {
+          hitoActivo = { hito: h, peso: pesoH, avance: avH };
+        }
+      });
+
+      var metaCalculada = 0;
+      if (!hitoActivo) {
+        // Todos los hitos se encuentran cumplidos al 100%
+        metaCalculada = 100;
+      } else {
+        metaCalculada = pesoCompletados + (hitoActivo.peso * 100);
+      }
+
+      var avRealFinal = Math.min(Math.max(Math.round(avanceRealSuma), 0), 100);
+      var avMetaFinal = Math.min(Math.max(Math.round(metaCalculada), avRealFinal), 100);
+
+      return {
+        avanceReal: avRealFinal,
+        avanceTotalProyectado: avMetaFinal
+      };
+    }
+
+    // Caso 2: Proyecto sin Hitos pero con Tareas directas
+    if (tareasProy.length > 0) {
+      var sumaTar = tareasProy.reduce(function (acc, t) {
+        return acc + calcularAvanceTarea(t);
+      }, 0);
+      var avTarReal = Math.round(sumaTar / tareasProy.length);
+      var tareasComp = tareasProy.filter(function (t) {
+        return calcularAvanceTarea(t) >= 100;
+      }).length;
+      var metaTasks = (tareasComp === tareasProy.length)
+        ? 100
+        : Math.round(((tareasComp + 1) / tareasProy.length) * 100);
+
+      var realFinal = Math.min(Math.max(avTarReal, 0), 100);
+      var metaFinal = Math.min(Math.max(metaTasks, realFinal), 100);
+      return {
+        avanceReal: realFinal,
+        avanceTotalProyectado: metaFinal
+      };
+    }
+
+    // Caso 3: Proyecto sin Hitos ni Tareas (Fallback directo a Avance_Real_Pct)
+    var avDirecto = Math.min(Math.max(Math.round((parseFloat(proyObj.Avance_Real_Pct) || 0) * 100), 0), 100);
+    return {
+      avanceReal: avDirecto,
+      avanceTotalProyectado: avDirecto
+    };
+  }
+
+  function calcularAvanceProyectoCascada(p) {
+    var res = calcularAvancesProyecto(p);
+    return res ? res.avanceReal : 0;
+  }
+
+  function recalcularAvanceCascada(idTarea, idHito, idProyecto) {
+    var tareaObj = idTarea
+      ? (state.tareas || []).find(function (t) { return String(t.ID_Tarea || '').trim() === String(idTarea).trim(); })
+      : null;
+
+    if (tareaObj) {
+      if (!idHito) idHito = tareaObj.ID_Hito || tareaObj.idHito || tareaObj.id_hito;
+      if (!idProyecto) idProyecto = tareaObj.ID_Proyecto || tareaObj.idProyecto || tareaObj.id_proyecto;
+    }
+
+    var hitoObj = idHito
+      ? (state.hitos || []).find(function (h) { return String(h.ID_Hito || h.idHito || h.id_hito || '').trim().toUpperCase() === String(idHito).trim().toUpperCase(); })
+      : null;
+
+    if (hitoObj && !idProyecto) {
+      idProyecto = hitoObj.ID_Proyecto || hitoObj.idProyecto || hitoObj.id_proyecto;
+    }
+
+    var proyObj = idProyecto
+      ? (state.proyectos || []).find(function (p) { return String(p.ID_Proyecto || '').trim().toUpperCase() === String(idProyecto).trim().toUpperCase(); })
+      : null;
+
+    // 1. Tarea
+    if (tareaObj) {
+      var pctTar = calcularAvanceTarea(tareaObj);
+      if (typeof actualizarWidgetSubtareasEnTarjetaDOM === 'function') {
+        actualizarWidgetSubtareasEnTarjetaDOM(tareaObj.ID_Tarea);
+      }
+      if (typeof taskFlowState !== 'undefined' && taskFlowState && taskFlowState.idTarea === tareaObj.ID_Tarea) {
+        var badgePasos = document.getElementById('task-flow-pasos-progreso-badge');
+        var barPasos = document.getElementById('task-flow-pasos-progreso-bar');
+        var pasosTar = (state.subtareas || []).filter(function (s) {
+          return String(s.Tipo_Padre || '').toUpperCase() === 'TAREA' && String(s.ID_Padre || '').trim() === tareaObj.ID_Tarea;
+        });
+        var compPasos = pasosTar.filter(function (s) {
+          return s.Completada === true || s.Completado === true || String(s.Completada).toLowerCase() === 'true' || String(s.Completado).toLowerCase() === 'true';
+        }).length;
+        if (badgePasos) badgePasos.textContent = compPasos + '/' + pasosTar.length + ' pasos (' + pctTar + '%)';
+        if (barPasos) barPasos.style.width = pctTar + '%';
+      }
+    }
+
+    // 2. Hito
+    if (hitoObj) {
+      var pctH = calcularAvanceHito(hitoObj);
+      var barHito = document.getElementById('hito-progreso-bar-' + hitoObj.ID_Hito);
+      var badgeHito = document.getElementById('hito-progreso-badge-' + hitoObj.ID_Hito);
+      if (barHito) barHito.style.width = pctH + '%';
+      if (badgeHito) badgeHito.textContent = pctH + '%';
+    }
+
+    // 3. Proyecto
+    if (proyObj) {
+      var avances = calcularAvancesProyecto(proyObj);
+      proyObj.Avance_Real_Pct = avances.avanceReal / 100;
+
+      if (state.proyectoDetalleActivo && String(state.proyectoDetalleActivo.ID_Proyecto || '').trim().toUpperCase() === String(proyObj.ID_Proyecto).trim().toUpperCase()) {
+        actualizarBentoKPIsProyecto(proyObj);
+      }
+
+      try {
+        renderSidebarProyectos();
+      } catch (eSidebar) {}
+
+      try {
+        if (typeof renderKPIsPortafolio === 'function') {
+          renderKPIsPortafolio();
+        }
+      } catch (eKPI) {}
+
+      debouncedSyncProyectoAvance(proyObj.ID_Proyecto, proyObj.Avance_Real_Pct);
+    }
+  }
+
+  // ============================================================================
+  // GESTIÓN DE SUBPESTAÑAS ERGONÓMICAS EN VISTA DETALLADA 360°
+  // ============================================================================
+  function cambiarSubpestana360(tabId) {
+    var validTabs = ['wbs', 'evm', 'tradeoff', 'gobernanza'];
+    if (validTabs.indexOf(tabId) === -1) tabId = 'wbs';
+
+    validTabs.forEach(function (t) {
+      var btn = document.getElementById('tab-btn-' + t);
+      var panel = document.getElementById('subtab-panel-' + t);
+      if (btn) {
+        if (t === tabId) {
+          btn.className = 'px-4 py-3 text-xs md:text-sm font-bold border-b-2 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 flex items-center gap-2 transition-colors';
+        } else {
+          btn.className = 'px-4 py-3 text-xs md:text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 flex items-center gap-2 transition-colors';
+        }
+      }
+      if (panel) {
+        if (t === tabId) {
+          panel.classList.remove('hidden');
+        } else {
+          panel.classList.add('hidden');
+        }
+      }
+    });
+
+    if (tabId === 'wbs') {
+      setTimeout(function () {
+        if (typeof window.networkDetalle360 !== 'undefined' && window.networkDetalle360 && typeof window.networkDetalle360.redraw === 'function') {
+          window.networkDetalle360.redraw();
+          window.networkDetalle360.fit();
+        }
+      }, 150);
+    } else if (tabId === 'evm') {
+      if (state.proyectoDetalleActivo) {
+        renderizarEVMDetalle360(state.proyectoDetalleActivo);
+      }
+    } else if (tabId === 'tradeoff') {
+      if (state.proyectoDetalleActivo) {
+        inicializarOActualizarTradeOff(state.proyectoDetalleActivo);
+      }
+    } else if (tabId === 'gobernanza') {
+      if (state.proyectoDetalleActivo) {
+        actualizarFichaGobernanza360(state.proyectoDetalleActivo);
+      }
+    }
+  }
+
+  // ============================================================================
+  // FEATURE FLAGS DINÁMICOS (LIGHT / MEDIUM / HEAVY)
+  // ============================================================================
+  function actualizarSubpestañasPorFeatureFlags(p) {
+    if (!p) return;
+    var arq = String(p.Arquetipo_Proyecto || '').toUpperCase();
+    var mag = String(p.Magnitud_Complejidad || '').toUpperCase();
+
+    var isLight = arq.indexOf('1') !== -1 || arq.indexOf('LIGHT') !== -1 || mag === 'BAJA' || mag === 'MICRO';
+    var isHeavy = arq.indexOf('3') !== -1 || arq.indexOf('HEAVY') !== -1 || arq.indexOf('TRANSFORMAC') !== -1 || mag === 'ALTA' || mag === 'MUY ALTA';
+    var isMedium = !isLight && !isHeavy;
+
+    var btnWbs = document.getElementById('tab-btn-wbs');
+    var btnEvm = document.getElementById('tab-btn-evm');
+    var btnTradeOff = document.getElementById('tab-btn-tradeoff');
+    var btnGob = document.getElementById('tab-btn-gobernanza');
+
+    if (btnWbs) btnWbs.classList.remove('hidden');
+    if (btnGob) btnGob.classList.remove('hidden');
+
+    if (isLight) {
+      if (btnEvm) btnEvm.classList.add('hidden');
+      if (btnTradeOff) btnTradeOff.classList.add('hidden');
+    } else if (isMedium) {
+      if (btnEvm) btnEvm.classList.remove('hidden');
+      if (btnTradeOff) btnTradeOff.classList.add('hidden');
+    } else {
+      // Heavy: todas las subpestañas activas
+      if (btnEvm) btnEvm.classList.remove('hidden');
+      if (btnTradeOff) btnTradeOff.classList.remove('hidden');
+    }
+  }
+
+  // ============================================================================
+  // BANNER DE RUTA CRÍTICA (CPM) EN SUBPESTAÑA 1
+  // ============================================================================
+  function actualizarBannerCPM360(p) {
+    if (!p) return;
+    var idP = String(p.ID_Proyecto || '').trim().toUpperCase();
+    var tareasProy = (state.tareas || []).filter(function (t) {
+      var tProy = String(t.ID_Proyecto || t.idProyecto || '').trim().toUpperCase();
+      return tProy === idP;
+    });
+
+    var depMap = (typeof wbsState !== 'undefined' && wbsState && wbsState.dependenciesMap) ? wbsState.dependenciesMap : {};
+    var cpm = (typeof window.calcularCPMCanoico === 'function')
+      ? window.calcularCPMCanoico(tareasProy, depMap)
+      : { criticalTaskIds: [], maxProjectDuration: 0, criticalTasksCount: 0 };
+
+    var elCount = document.getElementById('cpm-tasks-count');
+    var elDur = document.getElementById('cpm-duration-label');
+    var elBadge = document.getElementById('cpm-status-badge');
+
+    if (elCount) elCount.textContent = (cpm.criticalTasksCount || 0) + ' actividades';
+    if (elDur) elDur.textContent = (cpm.maxProjectDuration || 0) + ' días estimados';
+    if (elBadge) {
+      if (cpm.criticalTasksCount > 0) {
+        elBadge.textContent = 'Ruta Crítica Identificada (' + cpm.criticalTasksCount + ')';
+        elBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20';
+      } else {
+        elBadge.textContent = 'Sin Tareas Críticas';
+        elBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-slate-500/10 text-slate-500 border border-slate-500/20';
+      }
+    }
+  }
+
+  // ============================================================================
+  // MOTOR DE GESTIÓN DE VALOR GANADO (EVM) EN TIEMPO REAL - SUBPESTAÑA 2
+  // ============================================================================
+  function renderizarEVMDetalle360(p) {
+    if (!p) return;
+    var bac = parseFloat(p.Presupuesto_Tope) || 0;
+    var ac = parseFloat(p.Costo_Ejecutado_Real_PEN) || 0;
+    var cc = 0;
+    var idP = String(p.ID_Proyecto || '').trim().toUpperCase();
+    (state.gastos || []).forEach(function (g) {
+      var gProy = String(g.ID_Proyecto || '').trim().toUpperCase();
+      var gSt = String(g.Estado_Pago || g.Estado || '').toUpperCase();
+      if (gProy === idP && (gSt.indexOf('PEND') !== -1 || gSt.indexOf('COMPROMET') !== -1)) {
+        cc += parseFloat(g.Monto_PEN || g.Monto || 0) || 0;
+      }
+    });
+
+    var avances = (typeof calcularAvancesProyecto === 'function')
+      ? calcularAvancesProyecto(p)
+      : { avanceReal: Math.round((parseFloat(p.Avance_Real_Pct) || 0) * 100) };
+    var avRealPct = (avances.avanceReal || 0) / 100;
+    var ev = bac * avRealPct;
+
+    var fHoy = new Date().getTime();
+    var pctTiempo = 0;
+    if (p.Fecha_Inicio_Plan && p.Fecha_Fin_Plan) {
+      var fIni = new Date(String(p.Fecha_Inicio_Plan).split('T')[0]).getTime();
+      var fFin = new Date(String(p.Fecha_Fin_Plan).split('T')[0]).getTime();
+      if (!isNaN(fIni) && !isNaN(fFin) && fFin > fIni) {
+        var dTot = Math.max(1, (fFin - fIni) / (1000 * 60 * 60 * 24));
+        var dTrans = Math.max(0, (fHoy - fIni) / (1000 * 60 * 60 * 24));
+        pctTiempo = Math.min(Math.max(dTrans / dTot, 0), 1);
+      }
+    } else {
+      pctTiempo = avRealPct;
+    }
+    var pv = bac * pctTiempo;
+
+    var cv = ev - ac;
+    var sv = ev - pv;
+    var cpi = (ac > 0) ? (ev / ac) : 1.0;
+    var spi = (pv > 0) ? (ev / pv) : 1.0;
+    var eac = (cpi > 0) ? (bac / cpi) : (ac + (bac - ev));
+    var vac = bac - eac;
+    var moneda = p.Moneda_Base || 'PEN';
+
+    var elBac = document.getElementById('evm-bac-val');
+    if (elBac) elBac.textContent = moneda + ' ' + Math.round(bac).toLocaleString();
+    var elPv = document.getElementById('evm-pv-val');
+    if (elPv) elPv.textContent = moneda + ' ' + Math.round(pv).toLocaleString();
+    var elEv = document.getElementById('evm-ev-val');
+    if (elEv) elEv.textContent = moneda + ' ' + Math.round(ev).toLocaleString();
+    var elAc = document.getElementById('evm-ac-val');
+    if (elAc) elAc.textContent = moneda + ' ' + Math.round(ac).toLocaleString();
+    var elCc = document.getElementById('evm-cc-val');
+    if (elCc) elCc.textContent = moneda + ' ' + Math.round(cc).toLocaleString();
+    var elEac = document.getElementById('evm-eac-val');
+    if (elEac) elEac.textContent = moneda + ' ' + Math.round(eac).toLocaleString();
+
+    var elCv = document.getElementById('evm-cv-val');
+    if (elCv) {
+      elCv.textContent = (cv >= 0 ? '+' : '') + moneda + ' ' + Math.round(cv).toLocaleString();
+      elCv.className = 'font-mono text-sm font-bold ' + (cv >= 0 ? 'text-emerald-500' : 'text-rose-500');
+    }
+    var elSv = document.getElementById('evm-sv-val');
+    if (elSv) {
+      elSv.textContent = (sv >= 0 ? '+' : '') + moneda + ' ' + Math.round(sv).toLocaleString();
+      elSv.className = 'font-mono text-sm font-bold ' + (sv >= 0 ? 'text-emerald-500' : 'text-rose-500');
+    }
+    var elCpi = document.getElementById('evm-cpi-val');
+    if (elCpi) {
+      elCpi.textContent = cpi.toFixed(2);
+      elCpi.className = 'font-mono text-sm font-bold ' + (cpi >= 0.95 ? 'text-emerald-500' : (cpi >= 0.85 ? 'text-amber-500' : 'text-rose-500'));
+    }
+    var elSpi = document.getElementById('evm-spi-val');
+    if (elSpi) {
+      elSpi.textContent = spi.toFixed(2);
+      elSpi.className = 'font-mono text-sm font-bold ' + (spi >= 0.95 ? 'text-emerald-500' : (spi >= 0.85 ? 'text-amber-500' : 'text-rose-500'));
+    }
+
+    var elDiag = document.getElementById('evm-diagnostico-pmo');
+    if (elDiag) {
+      var diagTxt = '';
+      if (cpi >= 0.95 && spi >= 0.95) {
+        diagTxt = '🟢 Saludable: El proyecto avanza conforme al cronograma y dentro del presupuesto establecido (EAC estimada: ' + moneda + ' ' + Math.round(eac).toLocaleString() + ').';
+      } else if (cpi >= 0.95 && spi < 0.95) {
+        diagTxt = '🟡 Retraso en Cronograma: Costo controlado (CPI=' + cpi.toFixed(2) + '), pero el avance físico marcha rezagado respecto a lo planificado (SPI=' + spi.toFixed(2) + ').';
+      } else if (cpi < 0.95 && spi >= 0.95) {
+        diagTxt = '🟡 Sobrecosto Moderado: Buen ritmo de ejecución operativa (SPI=' + spi.toFixed(2) + '), pero con sobreconsumo financiero (CPI=' + cpi.toFixed(2) + '). Variación proyectada VAC: ' + moneda + ' ' + Math.round(vac).toLocaleString() + '.';
+      } else {
+        diagTxt = '🔴 Estado Crítico: Doble desviación en costo y cronograma (CPI=' + cpi.toFixed(2) + ', SPI=' + spi.toFixed(2) + '). Se recomienda convocar auditoría de gobernanza inmediata.';
+      }
+      elDiag.textContent = diagTxt;
+    }
+
+    dibujarCurvaSSVG(bac, pv, ev, ac, pctTiempo, avRealPct);
+  }
+
+  // ============================================================================
+  // RENDERIZADO VECTORIAL DE CURVA S EN SVG (SUBPESTAÑA 2)
+  // ============================================================================
+  function dibujarCurvaSSVG(bac, pv, ev, ac, pctTiempo, avRealPct) {
+    var svg = document.getElementById('evm-curva-s-svg');
+    if (!svg) return;
+
+    var w = 500;
+    var h = 200;
+    var padLeft = 45;
+    var padRight = 20;
+    var padTop = 20;
+    var padBottom = 35;
+
+    var chartW = w - padLeft - padRight;
+    var chartH = h - padTop - padBottom;
+
+    var maxCosto = Math.max(bac, ac, pv, ev, 1);
+    var pvPoints = [];
+    var steps = 20;
+    for (var i = 0; i <= steps; i++) {
+      var t = i / steps;
+      var sVal = 3 * t * t - 2 * t * t * t;
+      var x = padLeft + t * chartW;
+      var y = (padTop + chartH) - (sVal * bac / maxCosto) * chartH;
+      pvPoints.push(x.toFixed(1) + ',' + y.toFixed(1));
+    }
+    var pvPathD = 'M ' + pvPoints.join(' L ');
+
+    var evX = padLeft + Math.min(Math.max(pctTiempo, 0), 1) * chartW;
+    var evY = (padTop + chartH) - Math.min(ev / maxCosto, 1) * chartH;
+    var evPathD = 'M ' + padLeft + ',' + (padTop + chartH) + ' Q ' + ((padLeft + evX) / 2) + ',' + (padTop + chartH) + ' ' + evX.toFixed(1) + ',' + evY.toFixed(1);
+
+    var acY = (padTop + chartH) - Math.min(ac / maxCosto, 1.2) * chartH;
+    var acPathD = 'M ' + padLeft + ',' + (padTop + chartH) + ' L ' + evX.toFixed(1) + ',' + acY.toFixed(1);
+    var nowX = evX.toFixed(1);
+
+    var svgContent = '';
+    svgContent += '<line x1="' + padLeft + '" y1="' + (padTop + chartH) + '" x2="' + (w - padRight) + '" y2="' + (padTop + chartH) + '" stroke="currentColor" class="text-slate-300 dark:text-slate-700" stroke-width="1"/>';
+    svgContent += '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + padLeft + '" y2="' + (padTop + chartH) + '" stroke="currentColor" class="text-slate-300 dark:text-slate-700" stroke-width="1"/>';
+
+    [0.25, 0.5, 0.75, 1.0].forEach(function (g) {
+      var gy = (padTop + chartH) - g * chartH;
+      svgContent += '<line x1="' + padLeft + '" y1="' + gy + '" x2="' + (w - padRight) + '" y2="' + gy + '" stroke="currentColor" class="text-slate-200 dark:text-slate-800" stroke-dasharray="3,3" stroke-width="1"/>';
+      svgContent += '<text x="' + (padLeft - 6) + '" y="' + (gy + 3) + '" text-anchor="end" class="text-[9px] fill-slate-400 font-mono">' + Math.round(g * 100) + '%</text>';
+    });
+
+    svgContent += '<line x1="' + nowX + '" y1="' + padTop + '" x2="' + nowX + '" y2="' + (padTop + chartH) + '" stroke="#6366f1" stroke-dasharray="2,2" stroke-width="1.5"/>';
+    svgContent += '<text x="' + nowX + '" y="' + (padTop + chartH + 15) + '" text-anchor="middle" class="text-[9px] font-bold fill-indigo-500 font-mono">HOY (' + Math.round(pctTiempo * 100) + '%)</text>';
+
+    svgContent += '<path d="' + pvPathD + '" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4,4"/>';
+    svgContent += '<path d="' + evPathD + '" fill="none" stroke="#10b981" stroke-width="3"/>';
+    svgContent += '<path d="' + acPathD + '" fill="none" stroke="#f59e0b" stroke-width="2.5"/>';
+
+    svgContent += '<circle cx="' + nowX + '" cy="' + evY.toFixed(1) + '" r="4" fill="#10b981"/>';
+    svgContent += '<circle cx="' + nowX + '" cy="' + acY.toFixed(1) + '" r="4" fill="#f59e0b"/>';
+
+    svg.innerHTML = svgContent;
+  }
+
+  // ============================================================================
+  // SUBPESTAÑA 3: MATRIZ DE DECISIÓN PONDERADA (TRADE-OFF ANALYSIS)
+  // ============================================================================
+  var tradeOffLocal = {
+    criterios: [
+      { id: 'c1', nombre: 'Valor de Negocio / ROI', peso: 30 },
+      { id: 'c2', nombre: 'Factibilidad Técnica & Plazo', peso: 25 },
+      { id: 'c3', nombre: 'Eficiencia Presupuestal', peso: 25 },
+      { id: 'c4', nombre: 'Riesgo & Mitigación', peso: 20 }
+    ],
+    alternativas: [
+      { id: 'a1', nombre: 'Opción 1: Enfoque Modular Escalable' },
+      { id: 'a2', nombre: 'Opción 2: Desarrollo Rápido / MVP' },
+      { id: 'a3', nombre: 'Opción 3: Contratación de Solución Externa' }
+    ],
+    matriz: {
+      'a1': { 'c1': 4, 'c2': 4, 'c3': 3, 'c4': 4 },
+      'a2': { 'c1': 3, 'c2': 5, 'c3': 4, 'c4': 2 },
+      'a3': { 'c1': 3, 'c2': 3, 'c3': 2, 'c4': 4 }
+    }
+  };
+
+  function inicializarOActualizarTradeOff(p) {
+    if (!p) return;
+    var inpTitulo = document.getElementById('tradeoff-titulo-input');
+    if (inpTitulo && !inpTitulo.value) {
+      inpTitulo.value = 'Trade-Off: ' + (p.Nombre_Proyecto || 'Evaluación Arquitectónica');
+    }
+    renderizarCriteriosTradeOff();
+    renderizarMatrizTableTradeOff();
+    recalcularScoresTradeOff();
+    cargarHistorialTradeOff(p.ID_Proyecto);
+  }
+
+  function renderizarCriteriosTradeOff() {
+    var cont = document.getElementById('tradeoff-criterios-container');
+    if (!cont) return;
+    var html = '';
+    tradeOffLocal.criterios.forEach(function (c) {
+      html += '<div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs">';
+      html += '  <span class="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[200px]">' + c.nombre + '</span>';
+      html += '  <div class="flex items-center gap-1.5">';
+      html += '    <input type="number" min="0" max="100" step="5" value="' + c.peso + '" onchange="actualizarPesoCriterioTradeOff(\'' + c.id + '\', this.value)" class="w-16 px-2 py-1 text-center font-mono font-bold rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500">';
+      html += '    <span class="font-bold text-slate-400">%</span>';
+      html += '  </div>';
+      html += '</div>';
+    });
+    cont.innerHTML = html;
+  }
+
+  function actualizarPesoCriterioTradeOff(critId, nuevoPeso) {
+    var pVal = parseFloat(nuevoPeso) || 0;
+    var crit = tradeOffLocal.criterios.find(function (c) { return c.id === critId; });
+    if (crit) crit.peso = pVal;
+    recalcularScoresTradeOff();
+  }
+
+  function renderizarMatrizTableTradeOff() {
+    var thead = document.getElementById('tradeoff-matriz-table-header');
+    var tbody = document.getElementById('tradeoff-matriz-table-body');
+    if (!thead || !tbody) return;
+
+    var htmlTh = '<tr><th class="p-2 text-left font-bold text-slate-500 uppercase">Alternativa</th>';
+    tradeOffLocal.criterios.forEach(function (c) {
+      htmlTh += '<th class="p-2 text-center font-bold text-slate-500 uppercase">' + c.nombre + ' (' + c.peso + '%)</th>';
+    });
+    htmlTh += '<th class="p-2 text-center font-bold text-indigo-600 dark:text-indigo-400 uppercase">Score Ponderado</th></tr>';
+    thead.innerHTML = htmlTh;
+
+    var htmlTb = '';
+    tradeOffLocal.alternativas.forEach(function (alt) {
+      htmlTb += '<tr class="border-b border-slate-100 dark:border-slate-800/60">';
+      htmlTb += '  <td class="p-2 font-medium text-slate-800 dark:text-slate-200">' + alt.nombre + '</td>';
+      tradeOffLocal.criterios.forEach(function (c) {
+        var val = (tradeOffLocal.matriz[alt.id] && tradeOffLocal.matriz[alt.id][c.id]) ? tradeOffLocal.matriz[alt.id][c.id] : 3;
+        htmlTb += '  <td class="p-2 text-center">';
+        htmlTb += '    <select onchange="actualizarNotaTradeOff(\'' + alt.id + '\', \'' + c.id + '\', this.value)" class="px-2 py-1 text-xs font-mono font-bold rounded bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500">';
+        for (var i = 1; i <= 5; i++) {
+          htmlTb += '      <option value="' + i + '" ' + (i === val ? 'selected' : '') + '>' + i + ' - ' + (i === 5 ? 'Excelente' : i === 4 ? 'Bueno' : i === 3 ? 'Aceptable' : i === 2 ? 'Deficiente' : 'Crítico') + '</option>';
+        }
+        htmlTb += '    </select>';
+        htmlTb += '  </td>';
+      });
+      htmlTb += '  <td class="p-2 text-center font-mono font-bold text-sm text-indigo-600 dark:text-indigo-400" id="tradeoff-score-' + alt.id + '">-</td>';
+      htmlTb += '</tr>';
+    });
+    tbody.innerHTML = htmlTb;
+  }
+
+  function actualizarNotaTradeOff(altId, critId, valor) {
+    if (!tradeOffLocal.matriz[altId]) tradeOffLocal.matriz[altId] = {};
+    tradeOffLocal.matriz[altId][critId] = parseFloat(valor) || 3;
+    recalcularScoresTradeOff();
+  }
+
+  function recalcularScoresTradeOff() {
+    var sumaPesos = tradeOffLocal.criterios.reduce(function (acc, c) { return acc + (parseFloat(c.peso) || 0); }, 0);
+    var elSum = document.getElementById('tradeoff-peso-sum');
+    var elAlert = document.getElementById('tradeoff-peso-alert');
+    if (elSum) elSum.textContent = Math.round(sumaPesos) + '%';
+    if (elAlert) {
+      if (Math.round(sumaPesos) !== 100) {
+        elAlert.classList.remove('hidden');
+        elAlert.textContent = 'Atención: La suma de pesos debe ser exactamente 100% (actual: ' + Math.round(sumaPesos) + '%).';
+      } else {
+        elAlert.classList.add('hidden');
+      }
+    }
+
+    var factor = (sumaPesos > 0) ? (1 / sumaPesos) : 0.01;
+    var mejorAlt = null;
+    var maxScore = -1;
+
+    tradeOffLocal.alternativas.forEach(function (alt) {
+      var scoreAlt = 0;
+      tradeOffLocal.criterios.forEach(function (c) {
+        var nota = (tradeOffLocal.matriz[alt.id] && tradeOffLocal.matriz[alt.id][c.id]) ? tradeOffLocal.matriz[alt.id][c.id] : 3;
+        scoreAlt += (parseFloat(c.peso) || 0) * nota * factor;
+      });
+      var elScore = document.getElementById('tradeoff-score-' + alt.id);
+      if (elScore) elScore.textContent = scoreAlt.toFixed(2) + ' / 5.0';
+
+      if (scoreAlt > maxScore) {
+        maxScore = scoreAlt;
+        mejorAlt = alt;
+      }
+    });
+
+    var elGanadorNombre = document.getElementById('tradeoff-ganador-nombre');
+    var elGanadorScore = document.getElementById('tradeoff-ganador-score');
+    var elGanadorRazon = document.getElementById('tradeoff-ganador-razon');
+
+    if (mejorAlt && maxScore >= 0) {
+      if (elGanadorNombre) elGanadorNombre.textContent = mejorAlt.nombre;
+      if (elGanadorScore) elGanadorScore.textContent = maxScore.toFixed(2) + ' / 5.0';
+      if (elGanadorRazon) elGanadorRazon.textContent = 'Esta opción maximiza los criterios prioritarios ponderados conforme al arquetipo del proyecto.';
+    }
+  }
+
+  function guardarDecisionTradeOffActiva() {
+    if (!state.proyectoDetalleActivo) return;
+    var sumaPesos = tradeOffLocal.criterios.reduce(function (acc, c) { return acc + (parseFloat(c.peso) || 0); }, 0);
+    if (Math.round(sumaPesos) !== 100) {
+      if (typeof mostrarNotificacionToast === 'function') {
+        mostrarNotificacionToast('Error: Los pesos de los criterios deben sumar exactamente 100%.', 'error');
+      } else {
+        alert('Error: Los pesos deben sumar 100%.');
+      }
+      return;
+    }
+
+    var inpTitulo = document.getElementById('tradeoff-titulo-input');
+    var titulo = (inpTitulo && inpTitulo.value.trim()) ? inpTitulo.value.trim() : 'Decisión Multicriterio PMO';
+    var p = state.proyectoDetalleActivo;
+
+    var payload = {
+      idProyecto: p.ID_Proyecto,
+      tituloDecision: titulo,
+      arquetipoActivo: p.Arquetipo_Proyecto || 'Corporativo',
+      criterios: tradeOffLocal.criterios,
+      alternativas: tradeOffLocal.alternativas,
+      matriz: tradeOffLocal.matriz
+    };
+
+    var btn = document.getElementById('tradeoff-btn-guardar');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Guardando en Sheets...';
+    }
+
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Guardar Decisión en BBDD';
+          }
+          if (res && res.success) {
+            if (typeof mostrarNotificacionToast === 'function') {
+              mostrarNotificacionToast('✅ Decisión registrada exitosamente: ' + (res.alternativaRecomendada || ''), 'success');
+            }
+            cargarHistorialTradeOff(p.ID_Proyecto);
+          } else {
+            var msg = (res && res.error) ? res.error : 'Error desconocido al guardar';
+            if (typeof mostrarNotificacionToast === 'function') {
+              mostrarNotificacionToast('❌ ' + msg, 'error');
+            }
+          }
+        })
+        .withFailureHandler(function (err) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Guardar Decisión en BBDD';
+          }
+          if (typeof mostrarNotificacionToast === 'function') {
+            mostrarNotificacionToast('❌ Error de conexión: ' + err, 'error');
+          }
+        })
+        .guardarDecisionTradeOff(payload);
+    } else {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Guardar Decisión en BBDD';
+      }
+      if (typeof mostrarNotificacionToast === 'function') {
+        mostrarNotificacionToast('✅ Decisión guardada en sesión (modo local)', 'success');
+      }
+    }
+  }
+
+  function cargarHistorialTradeOff(idProyecto) {
+    if (!idProyecto) return;
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res && res.success && res.decisiones) {
+            renderHistorialTradeOff(res.decisiones);
+          }
+        })
+        .obtenerDecisionesTradeOff({ idProyecto: idProyecto });
+    }
+  }
+
+  function renderHistorialTradeOff(decisiones) {
+    var tbody = document.getElementById('tradeoff-historial-tbody');
+    if (!tbody) return;
+    if (!decisiones || decisiones.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="p-3 text-center text-slate-400">Sin decisiones registradas para este proyecto.</td></tr>';
+      return;
+    }
+    var html = '';
+    decisiones.forEach(function (d) {
+      html += '<tr class="border-b border-slate-100 dark:border-slate-800/60">';
+      html += '  <td class="p-2 font-mono text-[11px] text-slate-400">' + (d.ID_Decision || '-') + '</td>';
+      html += '  <td class="p-2 font-medium text-slate-800 dark:text-slate-200">' + (d.Titulo_Decision || '-') + '</td>';
+      html += '  <td class="p-2 font-bold text-indigo-600 dark:text-indigo-400">' + (d.Alternativa_Recomendada || '-') + '</td>';
+      html += '  <td class="p-2 font-mono font-bold text-center">' + (parseFloat(d.Score_Ganador) || 0).toFixed(2) + '</td>';
+      html += '  <td class="p-2 font-mono text-[11px] text-slate-400 text-right">' + (String(d.Fecha_Registro || '').split('T')[0] || '-') + '</td>';
+      html += '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  // ============================================================================
+  // SUBPESTAÑA 4: FICHA DE GOBERNANZA & AUDITORÍA PMO
+  // ============================================================================
+  function actualizarFichaGobernanza360(p) {
+    if (!p) return;
+    var elFrec = document.getElementById('det-frecuencia-revision');
+    if (elFrec) elFrec.textContent = p.Frecuencia_Revision || 'Semanal (Viernes PMO)';
+    var elComp = document.getElementById('det-audit-complejidad');
+    if (elComp) elComp.textContent = p.Magnitud_Complejidad || 'MEDIA';
+    var elArq = document.getElementById('det-audit-arquetipo');
+    if (elArq) elArq.textContent = p.Arquetipo_Proyecto || 'Corporativo';
+    var elResp = document.getElementById('det-audit-responsable');
+    if (elResp) elResp.textContent = p.Lider_Proyecto || p.Responsable || 'PMO / Christopher';
+    var elDrive = document.getElementById('det-audit-enlace-drive');
+    if (elDrive) {
+      var urlDrive = p.Enlace_Carpeta_Drive || '';
+      if (urlDrive && urlDrive.indexOf('http') === 0) {
+        elDrive.href = urlDrive;
+        elDrive.classList.remove('pointer-events-none', 'opacity-50');
+      } else {
+        elDrive.href = '#';
+        elDrive.classList.add('pointer-events-none', 'opacity-50');
+      }
+    }
+    var elNorth = document.getElementById('det-northStarOKR');
+    if (elNorth) elNorth.textContent = p.North_Star_OKR || 'Sin objetivo estratégico registrado.';
+    var elDoD = document.getElementById('det-criteriosDoD');
+    if (elDoD) elDoD.textContent = p.Criterios_Aceptacion_DoD || 'Sin criterios DoD registrados.';
+  }
+
+  /**
+   * =========================================================================
+   * ASISTENTE DE IA: COMPLETAR WBS Y DESGLOSE DE TAREAS ATÓMICAS
+   * =========================================================================
+   */
+  function abrirModalAsistenteWbsIA() {
+    var p = state.proyectoDetalleActivo;
+    if (!p) {
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('warning', 'Proyecto requerido', 'Selecciona un proyecto activo para consultar a la IA.');
+      }
+      return;
+    }
+
+    var idProy = p.ID_Proyecto;
+    var hitosProy = (state.hitos || []).filter(function (h) {
+      return String(h.ID_Proyecto || '').trim() === String(idProy).trim();
+    });
+
+    var elementosExistentes = hitosProy.map(function (h) {
+      return {
+        id: h.ID_Elemento_WBS || h.ID_Hito,
+        nombre: h.Nombre_Elemento || h.Nombre_Hito,
+        tipo: h.Tipo_Elemento_WBS || (String(h.ID_Hito || '').startsWith('WP-') ? 'PAQUETE_TRABAJO' : 'HITO_MARCADOR'),
+        fase: h.Fase_Asociada || 'General'
+      };
+    });
+
+    var contexto = {
+      idProyecto: idProy,
+      nombreProyecto: p.Nombre_Proyecto || '',
+      arquetipo: p.Arquetipo_Proyecto || p.Arquetipo || '1_Infraestructura',
+      descripcion: p.North_Star_OKR || p.Descripcion || '',
+      criteriosDoD: p.Criterios_Aceptacion_DoD || '',
+      elementosExistentes: elementosExistentes
+    };
+
+    if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('info', 'Consultando a Gemini', 'Analizando proyecto y vacíos en el WBS...');
+    }
+
+    callBackend('sugerirEstructuraWbsFaltanteIA', contexto, function (res) {
+      if (res && res.success && res.data) {
+        mostrarModalSugerenciasWbsIA(res.data, contexto);
+      } else {
+        if (typeof mostrarToastOperativo === 'function') {
+          mostrarToastOperativo('error', 'Error en IA', (res && res.error) || 'No se pudieron generar sugerencias.');
+        }
+      }
+    }, function (err) {
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('error', 'Error de Conexión', (err && err.message) || 'Error de red con el asistente de IA.');
+      }
+    });
+  }
+
+  function mostrarModalSugerenciasWbsIA(dataIA, contexto) {
+    var modal = document.getElementById('modal-ia-completar-wbs');
+    if (!modal) return;
+
+    var container = document.getElementById('contenedor-sugerencias-wbs-ia');
+    var analisisEl = document.getElementById('analisis-wbs-ia');
+    if (analisisEl) {
+      analisisEl.textContent = dataIA.analisis || 'Sugerencias para completar el ciclo de vida del proyecto según su arquetipo.';
+    }
+
+    var sugerencias = dataIA.elementosSugeridos || [];
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (sugerencias.length === 0) {
+      container.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">No se detectaron vacíos significativos en el WBS actual. ¡Estructura completa!</div>';
+    } else {
+      sugerencias.forEach(function (elem, idx) {
+        var card = document.createElement('div');
+        card.className = 'p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-2xs space-y-2';
+        var esWP = (elem.tipoElementoWBS || elem.tipo) === 'PAQUETE_TRABAJO';
+
+        card.innerHTML =
+          '<div class="flex items-start justify-between gap-3">' +
+          '  <label class="flex items-center gap-2 cursor-pointer">' +
+          '    <input type="checkbox" checked class="check-sugerencia-wbs w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" data-idx="' + idx + '">' +
+          '    <div>' +
+          '      <span class="text-xs font-black text-slate-900 dark:text-slate-100">' + escapeHtmlDetalle(elem.nombre) + '</span>' +
+          '      <div class="flex items-center gap-1.5 mt-0.5">' +
+          '        <span class="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded ' + (esWP ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300') + '">' + (esWP ? '📦 WP' : '🏁 HITO') + '</span>' +
+          '        <span class="text-[10px] text-slate-500 font-medium">Fase: <b>' + escapeHtmlDetalle(elem.fase || 'General') + '</b></span>' +
+          '      </div>' +
+          '    </div>' +
+          '  </label>' +
+          '  <span class="text-xs font-mono tabular-nums text-slate-600 dark:text-slate-400 font-bold shrink-0">' + (esWP ? 'S/ ' + (parseFloat(elem.presupuestoEstimado) || 0).toFixed(2) : '$0.00') + '</span>' +
+          '</div>' +
+          (elem.justificacion ? '<p class="text-[11px] text-slate-500 dark:text-slate-400 pl-6">' + escapeHtmlDetalle(elem.justificacion) + '</p>' : '') +
+          (elem.criterioDoD ? '<div class="text-[10px] bg-slate-50 dark:bg-slate-800/50 p-2 rounded border border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-300 ml-6"><b>DoD:</b> ' + escapeHtmlDetalle(elem.criterioDoD) + '</div>' : '');
+
+        container.appendChild(card);
+      });
+    }
+
+    window._sugerenciasWbsCache = sugerencias;
+    openModal('modal-ia-completar-wbs');
+  }
+
+  function desglosarTareasPaqueteIA(idHito, nomHito) {
+    var p = state.proyectoDetalleActivo;
+    if (!p) return;
+
+    var hito = (state.hitos || []).find(function (h) {
+      return String(h.ID_Elemento_WBS || h.ID_Hito || '').trim() === String(idHito).trim();
+    });
+
+    var contexto = {
+      idProyecto: p.ID_Proyecto,
+      nombreProyecto: p.Nombre_Proyecto,
+      arquetipo: p.Arquetipo_Proyecto || p.Arquetipo || '1_Infraestructura',
+      idHito: idHito,
+      nombreHito: nomHito || (hito ? hito.Nombre_Elemento || hito.Nombre_Hito : ''),
+      criterioDoD: hito ? (hito.Criterio_Aceptacion_DoD || hito.Criterio_DoD || '') : ''
+    };
+
+    if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('info', 'Consultando a Gemini', 'Desglosando paquete en tareas atómicas...');
+    }
+
+    callBackend('sugerirDesgloseTareasPaqueteIA', contexto, function (res) {
+      if (res && res.success && res.data) {
+        mostrarModalSugerenciasTareasIA(res.data, contexto);
+      } else {
+        if (typeof mostrarToastOperativo === 'function') {
+          mostrarToastOperativo('error', 'Error en IA', (res && res.error) || 'No se pudieron desglosar tareas.');
+        }
+      }
+    }, function (err) {
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('error', 'Error de Red', (err && err.message) || 'Error al conectar con la IA.');
+      }
+    });
+  }
+
+  function mostrarModalSugerenciasTareasIA(dataIA, contexto) {
+    var modal = document.getElementById('modal-ia-desglose-tareas');
+    if (!modal) return;
+
+    var titleEl = document.getElementById('titulo-paquete-ia-desglose');
+    if (titleEl) titleEl.textContent = contexto.nombreHito || 'Paquete de Trabajo';
+
+    var container = document.getElementById('contenedor-sugerencias-tareas-ia');
+    var analisisEl = document.getElementById('analisis-tareas-ia');
+    if (analisisEl) {
+      analisisEl.textContent = dataIA.analisis || 'Tareas atómicas recomendadas para garantizar el criterio DoD del paquete.';
+    }
+
+    var tareas = dataIA.tareas || [];
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (tareas.length === 0) {
+      container.innerHTML = '<div class="p-4 text-center text-xs text-slate-500">No se pudieron generar tareas específicas para este paquete.</div>';
+    } else {
+      tareas.forEach(function (t, idx) {
+        var card = document.createElement('div');
+        card.className = 'p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-2xs space-y-1.5';
+
+        card.innerHTML =
+          '<div class="flex items-start justify-between gap-3">' +
+          '  <label class="flex items-center gap-2 cursor-pointer">' +
+          '    <input type="checkbox" checked class="check-sugerencia-tarea w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" data-idx="' + idx + '">' +
+          '    <div>' +
+          '      <span class="text-xs font-black text-slate-900 dark:text-slate-100">' + escapeHtmlDetalle(t.titulo) + '</span>' +
+          '      <div class="flex items-center gap-2 mt-0.5">' +
+          '        <span class="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono font-bold">~' + (t.tiempoEstimadoHoras || 2) + 'h</span>' +
+          '        <span class="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">' + escapeHtmlDetalle(t.prioridad || 'Media') + '</span>' +
+          '      </div>' +
+          '    </div>' +
+          '  </label>' +
+          '</div>' +
+          (t.descripcion ? '<p class="text-[11px] text-slate-500 dark:text-slate-400 pl-6">' + escapeHtmlDetalle(t.descripcion) + '</p>' : '');
+
+        container.appendChild(card);
+      });
+    }
+
+    window._sugerenciasTareasCache = {
+      idHito: contexto.idHito,
+      idProyecto: contexto.idProyecto,
+      tareas: tareas
+    };
+    openModal('modal-ia-desglose-tareas');
+  }
+
+  function aplicarSugerenciasWbsIA() {
+    var checks = document.querySelectorAll('.check-sugerencia-wbs:checked');
+    if (!checks || checks.length === 0) {
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('warning', 'Selección vacía', 'Por favor selecciona al menos un entregable para insertar.');
+      }
+      return;
+    }
+
+    var cache = window._sugerenciasWbsCache || [];
+    var p = state.proyectoDetalleActivo;
+    if (!p) return;
+
+    var seleccionados = [];
+    checks.forEach(function (c) {
+      var idx = parseInt(c.getAttribute('data-idx'), 10);
+      if (cache[idx]) seleccionados.push(cache[idx]);
+    });
+
+    closeModal('modal-ia-completar-wbs');
+    if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('info', 'Insertando Entregables', 'Guardando ' + seleccionados.length + ' elementos en la base de datos...');
+    }
+
+    var insertados = 0;
+    seleccionados.forEach(function (elem) {
+      var payload = {
+        idProyecto: p.ID_Proyecto,
+        tipoElementoWbs: elem.tipoElementoWBS || elem.tipo || 'PAQUETE_TRABAJO',
+        nombreHito: elem.nombre,
+        faseAsociada: elem.fase || 'Ejecucion',
+        presupuestoAsignado: parseFloat(elem.presupuestoEstimado) || 0.0,
+        criterioDod: elem.criterioDoD || '',
+        pesoPct: parseFloat(elem.pesoPonderadoPct || elem.peso) || 0.15,
+        estadoHito: '01_Pendiente'
+      };
+
+      callBackend('createHito', payload, function (res) {
+        insertados++;
+        if (res && res.success && res.data) {
+          if (!state.hitos) state.hitos = [];
+          state.hitos.push(res.data);
+        }
+        if (insertados === seleccionados.length) {
+          if (typeof renderCascadaHitos === 'function') renderCascadaHitos(p.ID_Proyecto);
+          if (typeof actualizarBentoKPIsProyecto === 'function') actualizarBentoKPIsProyecto(p.ID_Proyecto);
+          if (typeof mostrarToastOperativo === 'function') {
+            mostrarToastOperativo('success', 'WBS Actualizado', 'Se agregaron ' + seleccionados.length + ' entregables al proyecto.');
+          }
+        }
+      }, function () {
+        insertados++;
+        if (insertados === seleccionados.length && typeof renderCascadaHitos === 'function') {
+          renderCascadaHitos(p.ID_Proyecto);
+        }
+      }, { silent: true });
+    });
+  }
+
+  function aplicarSugerenciasTareasIA() {
+    var checks = document.querySelectorAll('.check-sugerencia-tarea:checked');
+    if (!checks || checks.length === 0) {
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('warning', 'Selección vacía', 'Por favor selecciona al menos una tarea para insertar.');
+      }
+      return;
+    }
+
+    var cacheObj = window._sugerenciasTareasCache || {};
+    var tareas = cacheObj.tareas || [];
+    var idHito = cacheObj.idHito;
+    var idProyecto = cacheObj.idProyecto;
+    var p = state.proyectoDetalleActivo;
+
+    var seleccionadas = [];
+    checks.forEach(function (c) {
+      var idx = parseInt(c.getAttribute('data-idx'), 10);
+      if (tareas[idx]) seleccionadas.push(tareas[idx]);
+    });
+
+    closeModal('modal-ia-desglose-tareas');
+    if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('info', 'Insertando Tareas', 'Guardando ' + seleccionadas.length + ' tareas en el paquete de trabajo...');
+    }
+
+    var insertadas = 0;
+    seleccionadas.forEach(function (t) {
+      var payload = {
+        idProyecto: idProyecto,
+        idHito: idHito,
+        nombreTarea: t.titulo,
+        descripcion: t.descripcion || '',
+        tiempoEstimadoHoras: parseFloat(t.tiempoEstimadoHoras) || 2,
+        prioridad: t.prioridad || 'Media',
+        estadoTarea: '01_Pendiente'
+      };
+
+      callBackend('createTarea', payload, function (res) {
+        insertadas++;
+        if (res && res.success && res.data) {
+          if (!state.tareas) state.tareas = [];
+          state.tareas.push(res.data);
+        }
+        if (insertadas === seleccionadas.length) {
+          if (typeof renderCascadaHitos === 'function' && p) renderCascadaHitos(p.ID_Proyecto);
+          if (typeof renderKanban === 'function') renderKanban();
+          if (typeof mostrarToastOperativo === 'function') {
+            mostrarToastOperativo('success', 'Tareas Creadas', 'Se agregaron ' + seleccionadas.length + ' tareas al paquete de trabajo.');
+          }
+        }
+      }, function () {
+        insertadas++;
+        if (insertadas === seleccionadas.length && typeof renderCascadaHitos === 'function' && p) {
+          renderCascadaHitos(p.ID_Proyecto);
+        }
+      }, { silent: true });
+    });
+  }
+
+
+  // Exposición global para interoperabilidad y reactividad universal
+  window.abrirDetalle360 = abrirDetalle360;
+  window.cerrarDetalle360 = cerrarDetalle360;
+  window.renderCascadaHitos = renderCascadaHitos;
+  window.actualizarBentoKPIsProyecto = actualizarBentoKPIsProyecto;
+  window.toggleCompletarMarcador = toggleCompletarMarcador;
+  window.obtenerTipoElementoWBS = obtenerTipoElementoWBS;
+  window.calcularDesviacionDiasHito = calcularDesviacionDiasHito;
+  window.calcularAvancesProyecto = typeof calcularAvancesProyecto === 'function' ? calcularAvancesProyecto : null;
+
+  window.cambiarSubpestana360 = cambiarSubpestana360;
+  window.actualizarSubpestañasPorFeatureFlags = actualizarSubpestañasPorFeatureFlags;
+  window.actualizarBannerCPM360 = actualizarBannerCPM360;
+  window.renderizarEVMDetalle360 = renderizarEVMDetalle360;
+  window.dibujarCurvaSSVG = dibujarCurvaSSVG;
+  window.guardarDecisionTradeOffActiva = guardarDecisionTradeOffActiva;
+  window.actualizarFichaGobernanza360 = actualizarFichaGobernanza360;
+  window.recalcularScoresTradeOff = recalcularScoresTradeOff;
+  window.actualizarPesoCriterioTradeOff = actualizarPesoCriterioTradeOff;
+  window.actualizarNotaTradeOff = actualizarNotaTradeOff;
+  window.abrirModalCrearHitoFase = function(fase) { if (typeof window.abrirModalCrearHito === "function") { window.abrirModalCrearHito(); var inF = document.getElementById("hito-faseAsociada"); if (inF && fase) inF.value = fase; } };
+  window.abrirModalAsistenteWbsIA = abrirModalAsistenteWbsIA;
+  window.desglosarTareasPaqueteIA = desglosarTareasPaqueteIA;
+  window.aplicarSugerenciasWbsIA = aplicarSugerenciasWbsIA;
+  window.aplicarSugerenciasTareasIA = aplicarSugerenciasTareasIA;
+</script>

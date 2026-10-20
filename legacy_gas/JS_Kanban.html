@@ -1,0 +1,3265 @@
+<!--
+ * ============================================================================
+ * ARCHIVO: JS_Kanban.html
+ * SISTEMA: PMO Personal Modular & Gestión Integral de Vida
+ * ============================================================================
+-->
+<script>
+  // ============================================================================
+  // SECCIÓN 4: MANIPULACIÓN DEL DOM Y RENDERIZADO (Kanban y Vista 360°)
+  // ============================================================================
+
+  /**
+   * 4.0.0. Normalizador robusto de Estado_Tarea para sincronización con el tablero Kanban.
+   * Contempla códigos numéricos, slugs, textos con espacios y variaciones tipográficas.
+   */
+  function normalizarEstadoTarea(rawState) {
+    if (!rawState || String(rawState).trim() === '') return '01_Backlog';
+    var st = String(rawState).trim().toLowerCase();
+
+    // 05 o Archivado / Cancelado / Descartado -> Excluido del tablero activo
+    if (st === '05' || st === '05_archivado' || st.indexOf('archiva') !== -1 || st.indexOf('cancel') !== -1 || st.indexOf('descart') !== -1) {
+      return null;
+    }
+
+    // 04_Completado: '04_Completado', 'Completado', 'Completada', 'Done', 'Finalizado', '04', 'terminado', 'terminada', 'hecho'
+    if (st === '04' || st === '04_completado' || st.indexOf('complet') !== -1 || st.indexOf('finaliz') !== -1 || st.indexOf('done') !== -1 || st.indexOf('termin') !== -1 || st.indexOf('hecho') !== -1) {
+      return '04_Completado';
+    }
+
+    // 03_En_Proceso: '03_En_Proceso', 'En Proceso', 'En_Proceso', 'In Progress', '03', 'curso', 'haciendo'
+    if (st === '03' || st === '03_en_proceso' || st.indexOf('proceso') !== -1 || st.indexOf('progress') !== -1 || st.indexOf('curso') !== -1 || st.indexOf('haciendo') !== -1) {
+      return '03_En_Proceso';
+    }
+
+    // 02_Por_Hacer: '02_Por_Hacer', 'Por Hacer', 'Por_Hacer', 'To Do', '02', 'todo'
+    if (st === '02' || st === '02_por_hacer' || st.indexOf('hacer') !== -1 || st.indexOf('to do') !== -1 || st === 'todo') {
+      return '02_Por_Hacer';
+    }
+
+    // 01_Backlog: '01_Backlog', 'Backlog', '01', 'Pendiente', 'iniciar'
+    if (st === '01' || st === '01_backlog' || st.indexOf('backlog') !== -1 || st.indexOf('pendiente') !== -1 || st.indexOf('iniciar') !== -1) {
+      return '01_Backlog';
+    }
+
+    // Fallback de seguridad: cualquier estado no reconocido se coloca en '01_Backlog' en lugar de descartarlo
+    return '01_Backlog';
+  }
+
+  /**
+   * 4.0.0b. Inyección condicional de esqueletos de carga visual tipo shimmer
+   * Si las columnas de tareas no tienen hijos o no hay caché previa,
+   * inyecta 2 tarjetas skeleton por columna con siluetas de título, badge y fecha usando '.skeleton-box'.
+   */
+  function renderKanbanSkeletons() {
+    var cols = ['col-backlog', 'col-por-hacer', 'col-en-proceso', 'col-completado'];
+    var skeletonCard =
+      '<div class="kanban-skeleton-card kanban-card bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 pl-4 shadow-xs space-y-2.5 pointer-events-none select-none">' +
+      '  <div class="flex items-center justify-between gap-2">' +
+      '    <div class="skeleton-box h-4 w-16 rounded-md"></div>' +
+      '    <div class="skeleton-box h-4 w-12 rounded-md"></div>' +
+      '  </div>' +
+      '  <div class="space-y-1.5 py-1">' +
+      '    <div class="skeleton-box h-3.5 w-4/5 rounded"></div>' +
+      '    <div class="skeleton-box h-3 w-1/2 rounded"></div>' +
+      '  </div>' +
+      '  <div class="pt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between">' +
+      '    <div class="skeleton-box h-3.5 w-20 rounded-md"></div>' +
+      '    <div class="skeleton-box h-3.5 w-8 rounded-md"></div>' +
+      '  </div>' +
+      '</div>';
+
+    cols.forEach(function (colId) {
+      var col = document.getElementById(colId);
+      if (!col) return;
+      var tarjetasReales = col.querySelectorAll('.kanban-card:not(.kanban-skeleton-card)');
+      if (tarjetasReales.length === 0) {
+        col.innerHTML = skeletonCard + skeletonCard;
+      }
+    });
+  }
+  window.renderKanbanSkeletons = renderKanbanSkeletons;
+
+  /**
+   * 4.0.0c. Renderizador central de columnas Kanban con datos reales
+   * Limpia los contenedores (innerHTML = '') automáticamente a través de kanban.render.
+   */
+  function renderKanbanColumns(tareas) {
+    if (typeof kanban !== 'undefined' && kanban && typeof kanban.render === 'function') {
+      kanban.render(tareas || state.tareas || []);
+    }
+  }
+  window.renderKanbanColumns = renderKanbanColumns;
+
+  /**
+   * 4.0.1. Verifica si un elemento DOM es una tarjeta Kanban actualmente montada y visible
+   */
+  function esTarjetaVisibleEnKanban(el) {
+    if (!el || !el.isConnected) return false;
+    if (el.classList.contains('kanban-skeleton-card')) return false;
+    var colContenedora = el.closest('#col-backlog, #col-por-hacer, #col-en-proceso, #col-completado');
+    if (!colContenedora) return false;
+    if (el.classList.contains('hidden') || el.style.display === 'none' || el.style.visibility === 'hidden') {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * 4.0.2. Busca de forma segura una tarjeta Kanban por ID en el DOM visible de las 4 columnas
+   */
+  function buscarTarjetaVisibleKanban(idTarea) {
+    if (!idTarea) return null;
+    var idNorm = String(idTarea).trim().toUpperCase();
+    var selector = '#col-backlog [data-id-tarea="' + idNorm + '"], ' +
+      '#col-por-hacer [data-id-tarea="' + idNorm + '"], ' +
+      '#col-en-proceso [data-id-tarea="' + idNorm + '"], ' +
+      '#col-completado [data-id-tarea="' + idNorm + '"]';
+    var el = document.querySelector(selector);
+    if (el && esTarjetaVisibleEnKanban(el)) {
+      return el;
+    }
+    var fallback = document.getElementById('kanban-card-' + idNorm);
+    if (fallback && esTarjetaVisibleEnKanban(fallback)) {
+      return fallback;
+    }
+    return null;
+  }
+
+  /**
+   * 4.0.3. Obtiene todas las tarjetas Kanban actualmente montadas y visibles en las columnas
+   */
+  function obtenerTarjetasVisiblesKanban() {
+    var columnas = ['col-backlog', 'col-por-hacer', 'col-en-proceso', 'col-completado'];
+    var tarjetas = [];
+    columnas.forEach(function (colId) {
+      var col = document.getElementById(colId);
+      if (col) {
+        var cards = col.querySelectorAll('.kanban-card');
+        for (var i = 0; i < cards.length; i++) {
+          if (esTarjetaVisibleEnKanban(cards[i])) {
+            tarjetas.push(cards[i]);
+          }
+        }
+      }
+    });
+    return tarjetas;
+  }
+
+  /**
+   * 4.0.4. Obtiene de forma recursiva todos los IDs de las tareas predecesoras (hacia atrás)
+   */
+  function obtenerCadenaPredecesoras(idTarea, visitados) {
+    visitados = visitados || new Set();
+    if (!idTarea) return visitados;
+    var idNorm = String(idTarea || '').trim().toUpperCase();
+    var t = (state.tareas || []).find(function (x) {
+      return String(x && x.ID_Tarea || '').trim().toUpperCase() === idNorm;
+    });
+
+    if (!t || !t.ID_Dependencia) return visitados;
+
+    var rawDep = String(t.ID_Dependencia || '').trim().toUpperCase();
+    if (!rawDep || rawDep === '' || rawDep.indexOf('@GOOGLE.COM') !== -1) return visitados;
+
+    var deps = rawDep.split(/[,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (deps.length === 0) return visitados;
+
+    deps.forEach(function (depId) {
+      if (depId && depId.indexOf('@GOOGLE.COM') === -1 && !visitados.has(depId)) {
+        visitados.add(depId);
+        obtenerCadenaPredecesoras(depId, visitados);
+      }
+    });
+    return visitados;
+  }
+  var obtenerAncestrosTarea = obtenerCadenaPredecesoras;
+
+  /**
+   * 4.0.5. Obtiene de forma recursiva todos los IDs de las tareas sucesoras (hacia adelante)
+   */
+  function obtenerCadenaSucesoras(idTarea, visitados) {
+    visitados = visitados || new Set();
+    if (!idTarea) return visitados;
+    var idNorm = String(idTarea || '').trim().toUpperCase();
+
+    (state.tareas || []).forEach(function (t) {
+      if (!t || !t.ID_Dependencia) return;
+      var rawDep = String(t.ID_Dependencia || '').trim().toUpperCase();
+      if (!rawDep || rawDep === '' || rawDep.indexOf('@GOOGLE.COM') !== -1) return;
+
+      var deps = rawDep.split(/[,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+      var tId = String(t.ID_Tarea || '').trim().toUpperCase();
+      if (deps.indexOf(idNorm) !== -1 && !visitados.has(tId)) {
+        visitados.add(tId);
+        obtenerCadenaSucesoras(tId, visitados);
+      }
+    });
+    return visitados;
+  }
+  var obtenerDescendientesTarea = obtenerCadenaSucesoras;
+
+  /**
+   * 4.0.6. Limpia todas las clases de trazabilidad y restablece la vista Kanban normal
+   */
+  function limpiarTrazabilidadKanban() {
+    var todas = document.querySelectorAll('.kanban-card-item, .kanban-card');
+    for (var i = 0; i < todas.length; i++) {
+      todas[i].classList.remove(
+        'kanban-card-foco',
+        'kanban-card-predecesora',
+        'kanban-card-sucesora',
+        'kanban-card-atenuada',
+        'opacity-30',
+        'ring-2', 'ring-indigo-500', 'ring-amber-500', 'ring-emerald-500'
+      );
+    }
+
+    var badges = document.querySelectorAll('.kanban-etiqueta-relacion, .kanban-dep-floating-info');
+    for (var b = 0; b < badges.length; b++) {
+      badges[b].remove();
+    }
+  }
+
+  /**
+   * 4.0.7. Motor de trazabilidad visual blindado de dependencias (Sin tarjetas fantasma)
+   */
+  function activarResaltadoDependencias(idTarea) {
+    limpiarTrazabilidadKanban();
+
+    var idNorm = String(idTarea || '').trim().toUpperCase();
+    if (!idNorm) return;
+
+    var cardPrincipal = document.getElementById('kanban-card-' + idNorm);
+    if (!cardPrincipal || !cardPrincipal.isConnected) {
+      cardPrincipal = buscarTarjetaVisibleKanban(idNorm);
+    }
+    if (!cardPrincipal) return;
+
+    var todasVisibles = obtenerTarjetasVisiblesKanban();
+    var ancestrosSet = obtenerCadenaPredecesoras(idNorm);
+    var descendientesSet = obtenerCadenaSucesoras(idNorm);
+
+    var tarjetasResaltadas = new Set([cardPrincipal]);
+    var predecesorasVisibles = [];
+    var predecesorasOcultas = [];
+    var sucesorasVisibles = [];
+    var sucesorasOcultas = [];
+
+    // Clasificar predecesoras
+    ancestrosSet.forEach(function (idAnc) {
+      var idTarget = String(idAnc || '').trim().toUpperCase();
+      var elAnc = document.getElementById('kanban-card-' + idTarget);
+      if (elAnc && esTarjetaVisibleEnKanban(elAnc)) {
+        predecesorasVisibles.push({ id: idTarget, el: elAnc });
+        tarjetasResaltadas.add(elAnc);
+      } else {
+        predecesorasOcultas.push(idTarget);
+      }
+    });
+
+    // Clasificar sucesoras
+    descendientesSet.forEach(function (idDes) {
+      var idTarget = String(idDes || '').trim().toUpperCase();
+      var elDes = document.getElementById('kanban-card-' + idTarget);
+      if (elDes && esTarjetaVisibleEnKanban(elDes)) {
+        sucesorasVisibles.push({ id: idTarget, el: elDes });
+        tarjetasResaltadas.add(elDes);
+      } else {
+        sucesorasOcultas.push(idTarget);
+      }
+    });
+
+    // 1. Atenuación estricta y segura: solo a tarjetas que existan en el DOM y sean hermanas visibles
+    todasVisibles.forEach(function (card) {
+      if (!tarjetasResaltadas.has(card)) {
+        card.classList.add('kanban-card-atenuada');
+      }
+    });
+
+    // 2. Resaltar la tarjeta activa con foco y elevación Z moderna
+    cardPrincipal.classList.remove('kanban-card-atenuada');
+    cardPrincipal.classList.add('kanban-card-foco');
+
+    // 3. Resaltar Predecesoras Visibles (Borde Ámbar + banner integrado superior)
+    predecesorasVisibles.forEach(function (item) {
+      var el = item.el;
+      if (!el) return;
+      el.classList.remove('kanban-card-atenuada');
+      el.classList.add('kanban-card-predecesora');
+      var badge = document.createElement('div');
+      badge.className = 'kanban-etiqueta-relacion flex items-center justify-between text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 bg-amber-500 text-white shadow-xs pointer-events-none transition-all duration-200';
+      badge.innerHTML = '<span>⚡ Predecesora</span><span class="text-[9px] opacity-90 uppercase tracking-wider font-mono">' + item.id + '</span>';
+      el.insertBefore(badge, el.firstChild);
+    });
+
+    // 4. Resaltar Sucesoras Visibles (Borde Esmeralda + banner integrado superior)
+    sucesorasVisibles.forEach(function (item) {
+      var el = item.el;
+      if (!el) return;
+      el.classList.remove('kanban-card-atenuada');
+      el.classList.add('kanban-card-sucesora');
+      var badge = document.createElement('div');
+      badge.className = 'kanban-etiqueta-relacion flex items-center justify-between text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 bg-emerald-600 text-white shadow-xs pointer-events-none transition-all duration-200';
+      badge.innerHTML = '<span class="inline-flex items-center gap-1"><svg class="w-2.5 h-2.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg><span>Sucesora</span></span><span class="text-[9px] opacity-90 uppercase tracking-wider font-mono">' + item.id + '</span>';
+      el.insertBefore(badge, el.firstChild);
+    });
+
+    // 5. Dependencias ocultas por filtros cruzados: renderizar micro-badge informativo exclusivamente dentro de la tarjeta activa
+    if (predecesorasOcultas.length > 0 || sucesorasOcultas.length > 0) {
+      var floatingInfo = document.createElement('div');
+      floatingInfo.className = 'kanban-dep-floating-info pointer-events-none mt-2 pt-2 border-t border-indigo-200/60 dark:border-indigo-800/60 flex flex-col gap-1 transition-all duration-200';
+
+      predecesorasOcultas.forEach(function (idDep) {
+        var item = document.createElement('div');
+        item.className = 'inline-flex items-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/70 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800/80 font-medium shadow-2xs';
+        item.innerHTML = '<svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/></svg><span>Predecesora <b class="font-mono">' + idDep + '</b> (oculta por filtros)</span>';
+        floatingInfo.appendChild(item);
+      });
+
+      sucesorasOcultas.forEach(function (idDep) {
+        var item = document.createElement('div');
+        item.className = 'inline-flex items-center gap-1.5 text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/80 font-medium shadow-2xs';
+        item.innerHTML = '<svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></svg><span>Sucesora <b class="font-mono">' + idDep + '</b> (oculta por filtros)</span>';
+        floatingInfo.appendChild(item);
+      });
+
+      cardPrincipal.appendChild(floatingInfo);
+    }
+  }
+  var destacarRelacionesTarea = activarResaltadoDependencias;
+
+
+  /**
+   * 4.0.4. Actualiza los contadores numéricos de cada columna Kanban
+   */
+  /**
+   * 4.0.4. Actualiza los contadores numéricos de las columnas Kanban
+   * Admite opcionalmente un array con los IDs o estados de las columnas afectadas
+   */
+  function actualizarContadoresKanban(colIds) {
+    var colMap = {
+      '01_Backlog': 'col-backlog',
+      '02_Por_Hacer': 'col-por-hacer',
+      '03_En_Proceso': 'col-en-proceso',
+      '04_Completado': 'col-completado'
+    };
+    var keys = Object.keys(colMap);
+    if (Array.isArray(colIds) && colIds.length > 0) {
+      keys = keys.filter(function (k) {
+        return colIds.indexOf(k) !== -1 || colIds.indexOf(colMap[k]) !== -1;
+      });
+    }
+    keys.forEach(function (k) {
+      var colEl = document.getElementById(colMap[k]);
+      var badge = document.getElementById('count-' + k);
+      var tabBadge = document.getElementById('badge-tab-' + k);
+      if (colEl && badge) {
+        var cards = colEl.querySelectorAll('.kanban-card:not(.kanban-skeleton-card)');
+        var count = 0;
+        for (var i = 0; i < cards.length; i++) {
+          var c = cards[i];
+          c.classList.remove('hidden', 'opacity-0');
+          if (c.style.display === 'none') c.style.display = '';
+          if (c.style.visibility === 'hidden') c.style.visibility = '';
+          count++;
+        }
+        badge.textContent = count;
+        if (tabBadge) tabBadge.textContent = count;
+      }
+    });
+  }
+
+  /**
+   * 4.0.5. Muestra u oculta placeholders en columnas vacías
+   * Admite opcionalmente un array con los IDs o estados de las columnas afectadas
+   */
+  function actualizarEstadosVaciosKanban(colIds) {
+    var colMap = {
+      '01_Backlog': {
+        id: 'col-backlog',
+        label: 'Sin tareas en Backlog',
+        iconSvg: '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>'
+      },
+      '02_Por_Hacer': {
+        id: 'col-por-hacer',
+        label: 'Nada pendiente por hacer',
+        iconSvg: '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>'
+      },
+      '03_En_Proceso': {
+        id: 'col-en-proceso',
+        label: 'Sin tareas en curso',
+        iconSvg: '<svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
+      },
+      '04_Completado': {
+        id: 'col-completado',
+        label: 'Aún no hay completadas',
+        iconSvg: '<svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>'
+      }
+    };
+    var keys = Object.keys(colMap);
+    if (Array.isArray(colIds) && colIds.length > 0) {
+      keys = keys.filter(function (k) {
+        return colIds.indexOf(k) !== -1 || colIds.indexOf(colMap[k].id) !== -1;
+      });
+    }
+    keys.forEach(function (k) {
+      var info = colMap[k];
+      var colEl = document.getElementById(info.id);
+      if (!colEl) return;
+      if (colEl.querySelector('.kanban-skeleton-card')) return;
+      var cards = colEl.querySelectorAll('.kanban-card:not(.kanban-skeleton-card)');
+      var emptyEl = colEl.querySelector('.kanban-empty-placeholder');
+      if (cards.length === 0) {
+        if (!emptyEl) {
+          emptyEl = document.createElement('div');
+          emptyEl.className = 'kanban-empty-placeholder py-8 px-4 flex flex-col items-center justify-center text-center border border-dashed border-slate-200/80 dark:border-slate-800 rounded-xl my-2 pointer-events-none select-none';
+          emptyEl.innerHTML =
+            '<div class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto mb-2 text-slate-400 dark:text-slate-500 border border-slate-200/60 dark:border-slate-700/60">' +
+            info.iconSvg +
+            '</div>' +
+            '<span class="text-xs font-medium text-slate-600 dark:text-slate-400">' + info.label + '</span>';
+          colEl.appendChild(emptyEl);
+        }
+      } else {
+        if (emptyEl && emptyEl.parentNode) {
+          emptyEl.parentNode.removeChild(emptyEl);
+        }
+      }
+    });
+  }
+
+  /**
+   * 4.1. Motor reactivo del Tablero Kanban
+   */
+  /**
+   * Generador defensivo estricto de tarjeta Kanban (crearTarjetaKanbanHTML).
+   * Utiliza (state.tareas || []) y valida gastos con Array.isArray(state.gastos) && state.gastos.some(...).
+   * Ningún fallo en la lectura de gastos interrumpe el renderizado de título, prioridad, horas y subtareas.
+   */
+  function crearTarjetaKanbanHTML(tarea) {
+    if (!tarea) return null;
+    var card = document.createElement("div");
+    var idTareaActual = String(tarea.ID_Tarea || tarea.idTarea || "").trim();
+    card.id = "kanban-card-" + idTareaActual;
+    card.draggable = true;
+    card.className = "kanban-card group relative p-3 rounded-xl border border-slate-800/80 bg-slate-900/90 select-none cursor-grab active:cursor-grabbing text-xs space-y-2.5 transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-md animate-fadeIn overflow-hidden";
+    card.dataset.taskId = idTareaActual;
+    card.dataset.depId = String(tarea.ID_Dependencia || "").trim();
+    card.setAttribute("data-id-tarea", idTareaActual);
+
+    // Indicador visual de elemento archivado (>10 días completado)
+    if (typeof esElementoArchivado === "function" && esElementoArchivado(tarea)) {
+      card.classList.add("opacity-60", "border-dashed");
+    }
+
+    // Conexión de eventos de hover para trazabilidad visual de precedencias
+    card.onmouseenter = function () {
+      if (typeof activarResaltadoDependencias === "function") {
+        activarResaltadoDependencias(idTareaActual);
+      }
+    };
+
+    card.onmouseleave = function () {
+      if (typeof limpiarTrazabilidadKanban === "function") {
+        limpiarTrazabilidadKanban();
+      }
+    };
+
+    card.addEventListener("dragstart", function (e) {
+      draggedTaskId = idTareaActual;
+      if (e.dataTransfer) {
+        e.dataTransfer.setData("text/plain", draggedTaskId);
+        e.dataTransfer.effectAllowed = "move";
+      }
+      card.classList.add("card-dragging", "opacity-60", "transition-shadow", "shadow-lg");
+    });
+
+    card.addEventListener("dragend", function () {
+      card.classList.remove("card-dragging", "opacity-60", "transition-shadow", "shadow-lg", "opacity-40", "scale-95", "rotate-1", "shadow-2xl", "border-indigo-500", "ring-2", "ring-indigo-400");
+      draggedTaskId = null;
+      if (typeof limpiarEstilosDropzone === "function") limpiarEstilosDropzone();
+      if (typeof removerDropPlaceholder === "function") removerDropPlaceholder();
+    });
+
+    // -------------------------------------------------------------------------
+    // ZONA 1: CÁLCULOS DE PRIORIDAD, ENERGÍA Y CABECERA MINIMALISTA
+    // -------------------------------------------------------------------------
+    var prioridadRaw = String(tarea.Prioridad_Eisenhower || "02_P2_Media");
+    var colorBarra = "bg-amber-400";
+    var prioDotClass = "bg-amber-400";
+
+    if (prioridadRaw.indexOf("01_P1") !== -1 || prioridadRaw.toLowerCase().indexOf("alta") !== -1 || prioridadRaw.toLowerCase().indexOf("urgente") !== -1) {
+      colorBarra = "bg-rose-500";
+      prioDotClass = "bg-rose-500";
+    } else if (prioridadRaw.indexOf("02_P2") !== -1 || prioridadRaw.toLowerCase().indexOf("media") !== -1) {
+      colorBarra = "bg-amber-400";
+      prioDotClass = "bg-amber-400";
+    } else if (prioridadRaw.indexOf("03_P3") !== -1 || prioridadRaw.toLowerCase().indexOf("baja") !== -1) {
+      colorBarra = "bg-emerald-400";
+      prioDotClass = "bg-emerald-400";
+    } else if (prioridadRaw.indexOf("04_P4") !== -1 || prioridadRaw.toLowerCase().indexOf("delegar") !== -1) {
+      colorBarra = "bg-slate-600";
+      prioDotClass = "bg-slate-500";
+    }
+
+    // Micro-icono SVG limpio de Nivel_Energia_Requerido (sin contenedor gigante)
+    var energiaRaw = String(tarea.Nivel_Energia_Requerido || "Media_Operativa");
+    var canonicalEnergia = "Media_Operativa";
+    var microIconoEnergia = '<span title="Tipo de Trabajo: Operativa" class="inline-flex items-center text-sky-400 shrink-0"><svg class="portal-icon-sm" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>';
+
+    if (energiaRaw.indexOf("Alta") !== -1 || energiaRaw.indexOf("DeepWork") !== -1 || energiaRaw.indexOf("Estrategica") !== -1) {
+      canonicalEnergia = "Alta_DeepWork";
+      microIconoEnergia = '<span title="Tipo de Trabajo: DeepWork" class="inline-flex items-center text-purple-400 shrink-0"><svg class="portal-icon-sm" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>';
+    } else if (energiaRaw.indexOf("Baja") !== -1 || energiaRaw.indexOf("Automatica") !== -1 || energiaRaw.indexOf("Admin") !== -1) {
+      canonicalEnergia = "Baja_Automatica";
+      microIconoEnergia = '<span title="Tipo de Trabajo: Automática" class="inline-flex items-center text-slate-400 shrink-0"><svg class="portal-icon-sm" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span>';
+    }
+
+    // Atributos data-* obligatorios en la tarjeta para reactividad y filtrado
+    card.dataset.prioridad = prioridadRaw;
+    card.setAttribute("data-prioridad", prioridadRaw);
+    card.dataset.energia = canonicalEnergia;
+    card.setAttribute("data-energia", canonicalEnergia);
+    card.setAttribute("data-tipo-trabajo", canonicalEnergia);
+
+    // Estado normalizado
+    var isDone = (normalizarEstadoTarea(tarea.Estado_Tarea) === "04_Completado");
+
+    // Botones ghost de archivar y eliminar rápido
+    var btnArchivarRapido = '<button type="button" onclick="event.stopPropagation(); confirmarArchivarTarea(\'' + idTareaActual + '\')" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800/60 rounded-md shrink-0" title="Archivar tarea">' +
+      '<svg class="portal-icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>' +
+      '</button>';
+
+    var btnEliminarRapido = '<button type="button" onclick="event.stopPropagation(); confirmarEliminarTarea(\'' + idTareaActual + '\')" class="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800/60 rounded-md shrink-0" title="Eliminar tarea permanentemente">' +
+      '<svg class="portal-icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>' +
+      '</button>';
+
+    var badgeNotasHtml = (typeof generarBadgeNotasVinculadas === "function")
+      ? generarBadgeNotasVinculadas(idTareaActual, "TAREA")
+      : "";
+
+    // -------------------------------------------------------------------------
+    // ZONA 2: TÍTULO Y WIDGET DE SUBTAREAS PROCEDURALES
+    // -------------------------------------------------------------------------
+    var helperEscape = typeof escapeHtml === "function" ? escapeHtml : function (s) {
+      if (!s) return "";
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    };
+
+    var subtareasHtml = "";
+    try {
+      subtareasHtml = (typeof renderWidgetSubtareasTarjeta === "function")
+        ? renderWidgetSubtareasTarjeta(idTareaActual)
+        : "";
+    } catch (errSub) {
+      console.warn("[Kanban] Fallo no bloqueante en subtareas de tarea " + idTareaActual + ":", errSub);
+      subtareasHtml = "";
+    }
+
+    // -------------------------------------------------------------------------
+    // ZONA 3: RIEL SECUENCIAL DE METADATOS (MICRO-CHIPS ESTILO BENTO)
+    // Orden Canónico: 1. [Req: TAR-XXX] -> 2. [Fecha Límite] -> 3. [Horas] -> 4. [Gasto]
+    // -------------------------------------------------------------------------
+    var idDep = String(tarea.ID_Dependencia || "").trim();
+    var depItemHtml = "";
+    if (idDep && !idDep.includes("@google.com") && idDep.toUpperCase().startsWith("TAR-")) {
+      var depTarea = (state.tareas || []).find(function (dt) {
+        return dt && String(dt.ID_Tarea || dt.idTarea || "").trim().toUpperCase() === idDep.toUpperCase();
+      });
+      var depTitulo = depTarea ? (depTarea.Nombre_Tarea_Actividad || idDep) : idDep;
+      depItemHtml = '<span class="bg-amber-950/30 text-amber-300 border border-amber-800/40 px-1.5 py-0.5 rounded-md flex items-center gap-1 truncate max-w-[150px]" title="Requiere: ' + helperEscape(depTitulo) + '">' +
+        '<svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>' +
+        '<span>↳ Req: ' + helperEscape(idDep) + '</span>' +
+        '</span>';
+    }
+
+    var fProgRaw = "";
+    if (tarea.Fecha_Programada) {
+      var fProgStr = String(tarea.Fecha_Programada).trim();
+      if (fProgStr.indexOf("T") !== -1) {
+        fProgRaw = fProgStr.split("T")[0];
+      } else if (fProgStr.indexOf(" ") !== -1) {
+        fProgRaw = fProgStr.split(" ")[0];
+      } else {
+        fProgRaw = fProgStr;
+      }
+    }
+    var horaProg = formatHoraLimpia(tarea.Hora_Inicio);
+    if (horaProg === "--:--") horaProg = "";
+    var esVencida = false;
+
+    if (fProgRaw && !isDone) {
+      try {
+        var hoyStr = new Date().toISOString().split("T")[0];
+        if (fProgRaw.length >= 10 && fProgRaw.substring(0, 10) < hoyStr) {
+          esVencida = true;
+        }
+      } catch (eDate) {
+        esVencida = false;
+      }
+    }
+
+    var fechaLabel = fProgRaw ? (typeof formatFechaHumana === "function" ? formatFechaHumana(fProgRaw) : fProgRaw) : "Sin fecha";
+    if (horaProg && horaProg !== "00:00") {
+      fechaLabel += ' • ' + horaProg;
+    }
+
+    var fechaChipClass = esVencida
+      ? "bg-rose-950/30 text-rose-300 border border-rose-800/50 font-semibold flex items-center gap-1"
+      : "bg-slate-800/60 text-slate-300 border border-slate-700/50 flex items-center gap-1";
+
+    var fechaItemHtml = '<span class="' + fechaChipClass + ' px-1.5 py-0.5 rounded-md" title="' + (esVencida ? "Tarea vencida" : "Fecha programada") + '">' +
+      '<svg class="w-3 h-3 shrink-0 ' + (esVencida ? "text-rose-400" : "text-slate-400") + '" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M16 2v4M8 2v4M3 10h18"/></svg>' +
+      '<span>' + fechaLabel + '</span>' +
+      '</span>';
+
+    var hEstimadas = parseFloat(tarea.Horas_Estimadas) || 1.0;
+    var hReales = parseFloat(tarea.Horas_Reales) || 0.0;
+    var horasItemHtml = '<span class="bg-slate-800/60 text-slate-300 border border-slate-700/50 px-1.5 py-0.5 rounded-md flex items-center gap-1" title="Horas Reales: ' + hReales + 'h / Horas Estimadas: ' + hEstimadas + 'h">' +
+      '<svg class="w-3 h-3 shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/></svg>' +
+      '<span>' + hReales + 'h / ' + hEstimadas + 'h</span>' +
+      '</span>';
+
+    // Gastos acumulados desde state.gastos (sin leer columna inexistente en tarea)
+    var gastosTareaTotal = 0;
+    try {
+      if (Array.isArray(state.gastos) && state.gastos.some(function (g) {
+        if (!g) return false;
+        var idEnt = String(g.ID_Entidad_Vinculada || g.ID_Tarea || g.idTarea || "").trim().toUpperCase();
+        return idEnt === idTareaActual.toUpperCase();
+      })) {
+        state.gastos.forEach(function (g) {
+          if (!g) return;
+          var idEnt = String(g.ID_Entidad_Vinculada || g.ID_Tarea || g.idTarea || "").trim().toUpperCase();
+          if (idEnt === idTareaActual.toUpperCase()) {
+            var m = parseFloat(g.Monto_PEN || (g.Monto_Original * (g.Tipo_Cambio || 1)) || g.montoPEN || g.Monto_Moneda_Base || 0);
+            if (!isNaN(m) && isFinite(m)) {
+              gastosTareaTotal += m;
+            }
+          }
+        });
+      }
+    } catch (errGastos) {
+      console.warn("[Kanban] Fallo no bloqueante leyendo gastos para tarea " + idTareaActual + ":", errGastos);
+      gastosTareaTotal = 0;
+    }
+
+    var gastoItemHtml = "";
+    if (gastosTareaTotal > 0) {
+      gastoItemHtml = '<span class="bg-emerald-950/30 text-emerald-300 border border-emerald-800/40 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-0.5" title="Gasto imputado a esta tarea">' +
+        '<span>S/ ' + gastosTareaTotal.toFixed(2) + '</span>' +
+        '</span>';
+    }
+
+    var esRutaCritica = false;
+    try {
+      if (typeof wbsState !== 'undefined' && wbsState.cpmResult && wbsState.cpmResult.rutaCriticaSet) {
+        esRutaCritica = wbsState.cpmResult.rutaCriticaSet.has(idTareaActual);
+      }
+    } catch (eCpm) { esRutaCritica = false; }
+
+    var cpmBadgeHtml = esRutaCritica
+      ? '<span class="inline-flex items-center gap-1 bg-amber-500/15 text-amber-500 border border-amber-500/40 px-1.5 py-0.5 rounded-md font-bold text-[9px] shrink-0" title="Ruta Crítica CPM (Holgura = 0). Todo retraso desplaza la fecha fin."><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span><span>Ruta Crítica</span></span>'
+      : '';
+
+    var rielMetadatosHtml =
+      '<div class="flex items-center flex-wrap gap-1.5 text-[10px] font-mono mb-2">' +
+      (cpmBadgeHtml ? cpmBadgeHtml : "") +
+      (depItemHtml ? depItemHtml : "") +
+      fechaItemHtml +
+      horasItemHtml +
+      (gastoItemHtml ? gastoItemHtml : "") +
+      '</div>';
+
+    // -------------------------------------------------------------------------
+    // ZONA 4: PERTENENCIA JERÁRQUICA OBLIGATORIA (PROYECTO › PAQUETE/HITO)
+    // -------------------------------------------------------------------------
+    // --- RESOLUCIÓN JERÁRQUICA CANÓNICA: Tarea -> Paquete (WP/HIT) -> Proyecto (PRO) ---
+
+    // 1. Obtener la clave del Paquete/Hito desde la tarea
+    var idHitoKey = String(tarea.ID_Hito || tarea.idHito || tarea.id_hito || '').trim();
+
+    // 2. Buscar el Paquete/Hito en state.hitos
+    var hitoObj = (state.hitos || []).find(function (h) {
+      if (!h) return false;
+      var idH = String(h.ID_Hito || h.idHito || h.ID_Elemento_WBS || h.id || '').trim();
+      return idH.toUpperCase() === idHitoKey.toUpperCase();
+    });
+
+    // 3. Obtener el ID del Proyecto ÚNICAMENTE desde el hitoObj (NUNCA desde la tarea)
+    var idProyDesdeHito = hitoObj ? String(hitoObj.ID_Proyecto || hitoObj.idProyecto || hitoObj.id_proyecto || '').trim() : '';
+
+    // 4. Buscar el Proyecto matriz en state.proyectos
+    var proyObj = (state.proyectos || []).find(function (p) {
+      if (!p) return false;
+      var idP = String(p.ID_Proyecto || p.idProyecto || p.id_proyecto || p.id || '').trim();
+      return idP.toUpperCase() === idProyDesdeHito.toUpperCase();
+    });
+
+    // 5. Extraer Nombres Reales Definitivos (Sin mezclar jamás con el título o ID de la tarea)
+    var nombreProy = proyObj 
+      ? (proyObj.Nombre_Proyecto || proyObj.nombre || proyObj.nombreProyecto) 
+      : (idProyDesdeHito || 'Sin Proyecto');
+
+    var faseTexto = hitoObj 
+      ? String(hitoObj.Fase_Asociada || hitoObj.faseAsociada || hitoObj.fase || '').trim() 
+      : '';
+
+    var nombrePaquete = hitoObj 
+      ? (hitoObj.Nombre_Hito || hitoObj.Nombre_Elemento || hitoObj.nombreHito || hitoObj.nombre) 
+      : (idHitoKey || 'General');
+
+    // Salvaguarda final: Si por algún motivo nombreProy quedó con el título o ID de la tarea, forzar 'Sin Proyecto'
+    var tituloTareaActual = String(tarea.Nombre_Tarea_Actividad || tarea.nombreTarea || '').trim();
+    if (nombreProy === tituloTareaActual || nombreProy.toUpperCase().startsWith('TAR-')) {
+      nombreProy = idProyDesdeHito || 'Sin Proyecto';
+    }
+
+    var faseBadgeHtml = faseTexto
+      ? '<span class="text-slate-600">›</span>' +
+        '<span class="text-indigo-400/90 font-medium truncate max-w-[85px]" title="Fase: ' + helperEscape(faseTexto) + '">' + helperEscape(faseTexto) + '</span>'
+      : '';
+
+    var pertenenciaJerarquicaHtml =
+      '<div class="hidden md:flex items-center gap-1.5 text-[11px] text-slate-400 truncate pt-2 border-t border-slate-800/70" title="' + helperEscape(nombreProy) + (faseTexto ? ' › ' + helperEscape(faseTexto) : '') + ' › ' + helperEscape(nombrePaquete) + '">' +
+      '<svg class="w-3 h-3 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>' +
+      '<span class="text-slate-300 font-semibold truncate max-w-[110px]">' + helperEscape(nombreProy) + '</span>' +
+      faseBadgeHtml +
+      '<span class="text-slate-600">›</span>' +
+      '<svg class="w-3 h-3 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>' +
+      '<span class="text-slate-400 truncate">' + helperEscape(nombrePaquete) + '</span>' +
+      '</div>';
+
+    // -------------------------------------------------------------------------
+    // ZONA 5: BOTONERA DE ACCIONES RÁPIDAS (FOOTER INFERIOR HOMOGÉNEO H-7)
+    // -------------------------------------------------------------------------
+    var estadoActualNorm = normalizarEstadoTarea(tarea.Estado_Tarea) || "01_Backlog";
+    var quickActionsHtml = "";
+
+    if (estadoActualNorm === "01_Backlog") {
+      quickActionsHtml =
+        '<div class="pt-2 border-t border-slate-800/70 flex items-center justify-end">' +
+        '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idTareaActual + '\', \'02_Por_Hacer\', event)" class="w-full h-7 rounded-lg bg-slate-800/50 hover:bg-indigo-950/40 text-indigo-300 border border-slate-700/50 flex items-center justify-center gap-1.5 transition-all shadow-2xs font-bold text-[10px]" title="Mover a Por Hacer">' +
+        '<span class="tracking-wide">A Por Hacer</span><span class="font-bold">→</span>' +
+        '</button>' +
+        '</div>';
+    } else if (estadoActualNorm === "02_Por_Hacer") {
+      quickActionsHtml =
+        '<div class="pt-2 border-t border-slate-800/70 flex items-center justify-between gap-1.5">' +
+        '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idTareaActual + '\', \'01_Backlog\', event)" class="h-7 px-2.5 rounded-lg bg-slate-800/30 text-slate-400 hover:text-slate-200 border border-slate-700/30 text-[10px] font-semibold transition shrink-0 flex items-center justify-center gap-1" title="Retroceder a Backlog">' +
+        '<span>←</span><span>Backlog</span>' +
+        '</button>' +
+        '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idTareaActual + '\', \'03_En_Proceso\', event)" class="h-7 flex-1 px-2.5 rounded-lg bg-amber-950/30 hover:bg-amber-900/50 text-amber-300 border border-amber-800/40 font-bold text-[10px] flex items-center justify-center gap-1.5 transition-all shadow-2xs" title="Iniciar tarea (Mover a En Proceso)">' +
+        '<span class="tracking-wide">Iniciar</span><span>⚡</span><span class="font-bold">→</span>' +
+        '</button>' +
+        '</div>';
+    } else if (estadoActualNorm === "03_En_Proceso") {
+      quickActionsHtml =
+        '<div class="pt-2 border-t border-slate-800/70 flex items-center justify-between gap-1.5">' +
+        '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idTareaActual + '\', \'02_Por_Hacer\', event)" class="h-7 px-2.5 rounded-lg bg-slate-800/30 text-slate-400 hover:text-slate-200 border border-slate-700/30 text-[10px] font-semibold transition shrink-0 flex items-center justify-center gap-1" title="Retroceder a Por Hacer">' +
+        '<span>←</span><span>Por Hacer</span>' +
+        '</button>' +
+        '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idTareaActual + '\', \'04_Completado\', event)" class="h-7 flex-1 px-2.5 rounded-lg bg-emerald-950/30 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-800/40 font-bold text-[10px] flex items-center justify-center gap-1.5 transition-all shadow-2xs" title="Finalizar tarea (Mover a Completado)">' +
+        '<span class="tracking-wide">Completar</span><span class="font-black text-[11px] leading-none">✓</span>' +
+        '</button>' +
+        '</div>';
+    } else if (estadoActualNorm === "04_Completado") {
+      quickActionsHtml =
+        '<div class="pt-2 border-t border-slate-800/70 flex items-center justify-end">' +
+        '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idTareaActual + '\', \'03_En_Proceso\', event)" class="w-full h-7 rounded-lg bg-slate-800/30 hover:bg-slate-800/60 text-slate-400 hover:text-amber-300 border border-slate-700/30 text-[10px] font-semibold flex items-center justify-center gap-1.5 transition" title="Reabrir tarea a En Proceso">' +
+        '<span class="text-xs font-bold">↶</span><span>Reabrir tarea a En Proceso</span>' +
+        '</button>' +
+        '</div>';
+    }
+
+    // -------------------------------------------------------------------------
+    // ENSAMBLAJE HTML COMPLETO DE LA TARJETA
+    // -------------------------------------------------------------------------
+    card.innerHTML =
+      '<!-- Barra lateral de prioridad continua en borde izquierdo -->' +
+      '<div class="absolute left-0 top-0 bottom-0 w-1.5 ' + colorBarra + ' transition-all duration-150 group-hover:w-2"></div>' +
+
+      '<!-- Zona 1: Cabecera Minimalista (ID, Micro-icono Energía, Notas, Botones Ghost) -->' +
+      '<div class="flex items-center justify-between gap-1.5">' +
+      '<div class="flex items-center gap-1.5 flex-wrap min-w-0">' +
+      '<span class="font-mono text-[10px] text-slate-400 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700/60">' + (idTareaActual || "TAR-NEW") + '</span>' +
+      microIconoEnergia +
+      '<span class="kanban-badge-notas-slot" data-id-tarea="' + idTareaActual + '">' + badgeNotasHtml + '</span>' +
+      '</div>' +
+      '<div class="flex items-center gap-0.5 shrink-0">' +
+      btnArchivarRapido +
+      btnEliminarRapido +
+      '</div>' +
+      '</div>' +
+
+      '<!-- Zona 2: Título y Widget de Subtareas Procedurales -->' +
+      '<div class="pt-0.5 space-y-1">' +
+      '<h4 onclick="abrirModalDetalleTarea(\'' + idTareaActual + '\')" class="text-[13px] font-semibold text-slate-100 hover:text-indigo-300 leading-snug line-clamp-2 cursor-pointer transition ' + (isDone ? "line-through text-slate-400 dark:text-slate-500" : "") + '" title="' + helperEscape(tarea.Nombre_Tarea_Actividad || "Sin título") + '">' +
+      helperEscape(tarea.Nombre_Tarea_Actividad || "Sin título") +
+      '</h4>' +
+      '<div class="procedural-widget-container">' + subtareasHtml + '</div>' +
+      '</div>' +
+
+      '<!-- Zona 3: Riel Secuencial de Metadatos Bento [Req] -> [Fecha] -> [Horas] -> [Gasto] -->' +
+      rielMetadatosHtml +
+
+      '<!-- Zona 4: Pertenencia Jerárquica Obligatoria (Proyecto › Paquete) -->' +
+      pertenenciaJerarquicaHtml +
+
+      '<!-- Zona 5: Botonera de Acciones Rápidas (Compacta h-7) -->' +
+      quickActionsHtml;
+
+    return card;
+  }
+
+  var kanban = {
+    columns: {
+      '01_Backlog': document.getElementById('col-backlog'),
+      '02_Por_Hacer': document.getElementById('col-por-hacer'),
+      '03_En_Proceso': document.getElementById('col-en-proceso'),
+      '04_Completado': document.getElementById('col-completado')
+    },
+    normalizeState: function (rawState) {
+      return normalizarEstadoTarea(rawState);
+    },
+    createCardElement: function (item) {
+      if (!item) return null;
+      var idItem = String(item.ID_Tarea || item.ID_Actividad || "").trim();
+      var isActivity = idItem.startsWith("ACT-") || !!item.ID_Actividad || (item.Tipo_Compromiso != null);
+      if (isActivity) {
+        return this.createActivityCardElement(item);
+      }
+      return this.createTaskCardElement(item);
+    },
+
+    createActivityCardElement: function (act) {
+      if (!act) return null;
+      var idAct = String(act.ID_Actividad || act.ID_Tarea || "").trim();
+      var card = document.createElement("div");
+      card.id = "kanban-card-" + idAct;
+      card.draggable = true;
+      card.className = "kanban-card kanban-card-item bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-3.5 pl-4 shadow-xs hover:shadow-md transition-all duration-150 ease-out hover:-translate-y-0.5 cursor-grab active:cursor-grabbing group relative overflow-hidden text-xs space-y-2.5 select-none animate-fadeIn";
+      card.dataset.taskId = idAct;
+      card.dataset.isActivity = "true";
+      card.setAttribute("data-id-tarea", idAct);
+
+      // Indicador visual de elemento archivado (>10 días completado)
+      if (typeof esElementoArchivado === "function" && esElementoArchivado(act)) {
+        card.classList.add("opacity-60", "border-dashed");
+      }
+
+      card.addEventListener("dragstart", function (e) {
+        draggedTaskId = idAct;
+        if (e.dataTransfer) {
+          e.dataTransfer.setData("text/plain", draggedTaskId);
+          e.dataTransfer.effectAllowed = "move";
+        }
+        card.classList.add("card-dragging", "opacity-60", "transition-shadow", "shadow-lg");
+      });
+
+      card.addEventListener("dragend", function () {
+        card.classList.remove("card-dragging", "opacity-60", "transition-shadow", "shadow-lg", "opacity-40", "scale-95", "rotate-1", "shadow-2xl", "border-indigo-500", "ring-2", "ring-indigo-400");
+        draggedTaskId = null;
+        limpiarEstilosDropzone();
+        removerDropPlaceholder();
+      });
+
+      // 1. Color y acento según Categoría de Vida
+      var cat = String(act.Categoria_Vida || "PERSONAL").toUpperCase();
+      var catIcon = "👤";
+      var catNombre = "Personal";
+      var colorBarra = "bg-slate-400";
+      var badgeCatClasses = "bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700";
+
+      if (cat.indexOf("SALUD") !== -1 || cat.indexOf("FITNESS") !== -1) {
+        catIcon = "🏃‍♂️";
+        catNombre = "Salud";
+        colorBarra = "bg-emerald-500";
+        badgeCatClasses = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60";
+      } else if (cat.indexOf("FINANZAS") !== -1) {
+        catIcon = "💰";
+        catNombre = "Finanzas";
+        colorBarra = "bg-teal-500";
+        badgeCatClasses = "bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 border border-teal-200 dark:border-teal-800/60";
+      } else if (cat.indexOf("CARRERA") !== -1 || cat.indexOf("PROFESIONAL") !== -1) {
+        catIcon = "💼";
+        catNombre = "Carrera";
+        colorBarra = "bg-blue-500";
+        badgeCatClasses = "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60";
+      } else if (cat.indexOf("ESTUDIO") !== -1 || cat.indexOf("DESARROLLO") !== -1 || cat.indexOf("INTELECTUAL") !== -1) {
+        catIcon = "📚";
+        catNombre = "Estudio";
+        colorBarra = "bg-indigo-500";
+        badgeCatClasses = "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60";
+      } else if (cat.indexOf("RELACIONES") !== -1 || cat.indexOf("FAMILIA") !== -1) {
+        catIcon = "👨‍👩‍👧";
+        catNombre = "Familia";
+        colorBarra = "bg-rose-500";
+        badgeCatClasses = "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60";
+      } else if (cat.indexOf("ESPIRITUAL") !== -1) {
+        catIcon = "🧘";
+        catNombre = "Espiritual";
+        colorBarra = "bg-purple-500";
+        badgeCatClasses = "bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60";
+      }
+
+      // 2. Racha: solo si es mayor a cero para evitar sobrecarga
+      var racha = parseInt(act.Racha_Actual, 10) || 0;
+      var rachaHtml = (racha > 0)
+        ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-black bg-gradient-to-r from-amber-500/15 via-orange-500/20 to-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-300/80 dark:border-amber-600/50 shadow-2xs shrink-0" title="Racha activa: ' + racha + ' días">' +
+        '<svg class="portal-icon-sm text-amber-500 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><span class="font-mono tabular-nums tracking-tight">' + racha + ' d</span>' +
+        '</span>'
+        : '';
+
+      // 3. Frecuencia si no es diaria
+      var tipoComp = String(act.Tipo_Compromiso || "HABITUAL").toUpperCase();
+      var freq = String(act.Frecuencia_Ciclo || "DIARIA").toUpperCase();
+      var freqHtml = (tipoComp === "HABITUAL" && freq !== "DIARIA")
+        ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/50 dark:border-slate-700/50 shrink-0">' + freq + '</span>'
+        : '';
+
+      // 4. Prioridad (Atributo de datos y barra lateral Cobalt Aerodynamic)
+      var prioRaw = String(act.Prioridad_Eisenhower || "02_P2_Media");
+      card.dataset.prioridad = prioRaw;
+      card.setAttribute("data-prioridad", prioRaw);
+
+      var estadoNorm = kanban.normalizeState(act.Estado || act.Estado_Tarea);
+      var isDone = (estadoNorm === "04_Completado");
+      var nombreAct = act.Nombre_Actividad || act.Nombre_Tarea_Actividad || act.Nombre_Tarea || "Actividad Personal";
+
+      // 5. Gasto asociado con programación defensiva estricta
+      var montoGasto = 0;
+      try {
+        if (Array.isArray(state.gastos) && state.gastos.some(function (g) {
+          if (!g) return false;
+          var idEnt = String(g.ID_Entidad_Vinculada || g.ID_Tarea || g.idTarea || g.ID_Actividad || "").trim().toUpperCase();
+          return idEnt === idAct.toUpperCase();
+        })) {
+          state.gastos.forEach(function (g) {
+            if (!g) return;
+            var idEnt = String(g.ID_Entidad_Vinculada || g.ID_Tarea || g.idTarea || g.ID_Actividad || "").trim().toUpperCase();
+            if (idEnt === idAct.toUpperCase()) {
+              var m = parseFloat(g.Monto_PEN || (g.Monto_Original * (g.Tipo_Cambio || 1)) || g.montoPEN || g.Monto_Moneda_Base || 0);
+              if (!isNaN(m) && isFinite(m)) {
+                montoGasto += m;
+              }
+            }
+          });
+        } else if (act.Monto_Gasto_Asociado) {
+          montoGasto = parseFloat(act.Monto_Gasto_Asociado) || 0;
+        }
+      } catch (errGAct) {
+        console.warn("[Kanban] Fallo no bloqueante leyendo gastos para actividad " + idAct + ":", errGAct);
+        montoGasto = parseFloat(act.Monto_Gasto_Asociado) || 0;
+      }
+      var gastoHtml = "";
+      if (montoGasto > 0) {
+        gastoHtml = '<span class="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 shadow-2xs shrink-0" title="Gasto asociado">' +
+          '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>S/ ' + montoGasto.toFixed(2) +
+          '</span>';
+      }
+
+      // 6. Horario y Calendar (DOS ELEMENTOS INDEPENDIENTES, NUNCA ANIDADOS)
+      var fProgRaw = act.Fecha_Programada ? String(act.Fecha_Programada).split("T")[0].split(" ")[0] : "";
+      var horaProg = formatHoraLimpia(act.Hora_Inicio);
+      if (horaProg === "--:--") horaProg = "";
+      var fechaLabel = (fProgRaw ? formatFechaHumana(fProgRaw) : "Sin fecha") + (horaProg ? ' • <svg class="portal-icon-sm shrink-0 inline-block align-middle" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + horaProg : "");
+      var duracion = (act.Duracion_Horas !== undefined && act.Duracion_Horas !== null && act.Duracion_Horas !== "" && !isNaN(parseFloat(act.Duracion_Horas)))
+        ? parseFloat(act.Duracion_Horas)
+        : 1.0;
+      var durHtml = (duracion === 0)
+        ? '<span class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/40" title="Tarea puntual (0 hrs)">Puntual</span>'
+        : '<span class="inline-flex items-center gap-1 text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60" title="Duración: ' + duracion + 'h"><svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' + duracion + 'h</span>';
+
+      // 6. Fecha y Duración (sin badges redundantes 'Google' ni 'Detalles')
+      var calDot = '';
+
+      // 7. Transiciones One-Click
+      var quickActionsHtml = '';
+      if (estadoNorm === "01_Backlog") {
+        quickActionsHtml = '<div class="pt-2 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-end gap-1.5">' +
+          '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idAct + '\', \'02_Por_Hacer\', event)" class="w-full py-1 px-2.5 rounded-lg bg-blue-50/90 dark:bg-blue-950/40 hover:bg-blue-600 hover:text-white text-blue-700 dark:text-blue-300 font-bold text-[10px] border border-blue-200/80 dark:border-blue-900/60 flex items-center justify-center gap-1.5 transition-all shadow-2xs group/qa" title="Mover a Por Hacer">' +
+          '<span class="tracking-wide">A Por Hacer</span><span class="font-bold transition-transform group-hover/qa:translate-x-0.5">→</span>' +
+          '</button>' +
+          '</div>';
+      } else if (estadoNorm === "02_Por_Hacer") {
+        quickActionsHtml = '<div class="pt-2 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between gap-1.5">' +
+          '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idAct + '\', \'01_Backlog\', event)" class="py-1 px-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-semibold transition border border-transparent hover:border-slate-200 dark:hover:border-slate-700 shrink-0" title="Mover a Backlog">' +
+          '<span class="text-xs mr-0.5">←</span><span class="hidden sm:inline">Backlog</span>' +
+          '</button>' +
+          '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idAct + '\', \'03_En_Proceso\', event)" class="flex-1 py-1 px-2.5 rounded-lg bg-amber-50/90 dark:bg-amber-950/40 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-300 font-bold text-[10px] border border-amber-200/80 dark:border-amber-900/60 flex items-center justify-center gap-1.5 transition-all shadow-2xs group/qa" title="Iniciar">' +
+          '<span class="tracking-wide">Iniciar</span><span class="transition-transform group-hover/qa:scale-110">⚡</span><span class="font-bold transition-transform group-hover/qa:translate-x-0.5">→</span>' +
+          '</button>' +
+          '</div>';
+      } else if (estadoNorm === "03_En_Proceso") {
+        quickActionsHtml = '<div class="pt-2 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between gap-1.5">' +
+          '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idAct + '\', \'02_Por_Hacer\', event)" class="py-1 px-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-semibold transition border border-transparent hover:border-slate-200 dark:hover:border-slate-700 shrink-0" title="Regresar a Por Hacer">' +
+          '<span class="text-xs mr-0.5">←</span><span class="hidden sm:inline">Por Hacer</span>' +
+          '</button>' +
+          '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idAct + '\', \'04_Completado\', event)" class="flex-1 py-1 px-2.5 rounded-lg bg-emerald-50/90 dark:bg-emerald-950/40 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-300 font-bold text-[10px] border border-emerald-200/80 dark:border-emerald-800/80 flex items-center justify-center gap-1.5 transition-all shadow-2xs group/qa" title="Completar">' +
+          '<span class="tracking-wide">Completar</span><span class="font-black text-[11px] leading-none">✓</span>' +
+          '</button>' +
+          '</div>';
+      } else if (estadoNorm === "04_Completado") {
+        quickActionsHtml = '<div class="pt-2 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-end gap-1.5">' +
+          '<button type="button" onclick="transicionarEstadoTareaRapido(\'' + idAct + '\', \'03_En_Proceso\', event)" class="w-full py-1 px-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-[10px] font-semibold border border-dashed border-slate-200 dark:border-slate-700/80 flex items-center justify-center gap-1.5 transition-all" title="Reabrir">' +
+          '<span class="text-xs font-bold">↶</span><span>Reabrir</span>' +
+          '</button>' +
+          '</div>';
+      }
+
+      var badgeNotasHtml = (typeof generarBadgeNotasVinculadas === "function")
+        ? generarBadgeNotasVinculadas(idAct, "ACTIVIDAD")
+        : "";
+
+      card.innerHTML =
+        '<div class="absolute left-0 top-0 bottom-0 w-1.5 ' + colorBarra + ' transition-all duration-150 group-hover:w-2"></div>' +
+        '<div class="flex items-center justify-between gap-1.5">' +
+        '<div class="flex items-center gap-1.5 flex-wrap min-w-0">' +
+        '<span class="font-mono text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-700/60">' + idAct + '</span>' +
+        '<span class="text-[9.5px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ' + badgeCatClasses + '">' + catIcon + ' ' + catNombre + '</span>' +
+        rachaHtml +
+        freqHtml +
+        badgeNotasHtml +
+        '</div>' +
+        '<div class="flex items-center gap-0.5 shrink-0">' +
+        '<button type="button" onclick="event.stopPropagation(); abrirModalEditarActividadPersonal(\'' + idAct + '\')" class="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-md shrink-0 transition" title="Editar actividad">' +
+        '<svg class="portal-icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>' +
+        '</button>' +
+        '</div>' +
+        '</div>' +
+        '<!-- Cuerpo: Título y Micro-breadcrumb -->' +
+        '<div class="flex items-start gap-2.5 pt-0.5">' +
+        '<div class="min-w-0 flex-1">' +
+        '<h4 onclick="abrirModalEditarActividadPersonal(\'' + idAct + '\')" class="text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2 leading-snug cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition ' + (isDone ? "line-through text-slate-400 dark:text-slate-500" : "") + '" title="' + nombreAct + '">' +
+        nombreAct +
+        '</h4>' +
+        '<div class="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate flex items-center gap-1 mt-0.5">' +
+        '<span class="inline-flex items-center gap-1"><svg class="portal-icon-sm text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Actividad Personal</span>' +
+        '</div>' +
+        '</div>' +
+        '</div>' +
+        (gastoHtml ? '<div class="pt-0.5">' + gastoHtml + '</div>' : "") +
+        '<div class="procedural-widget-container">' + renderWidgetSubtareasTarjeta(idAct) + '</div>' +
+        '<!-- Pie de la tarjeta: Fecha limpia -->' +
+        '<div class="pt-2 border-t border-slate-100 dark:border-slate-700/60">' +
+        '<div class="flex items-center justify-between gap-1.5">' +
+        '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg font-mono tabular-nums text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60" title="Fecha programada">' +
+        '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0 2 2v12a2 2 0 0 0 2 2z"></path></svg>' +
+        '<span>' + fechaLabel + '</span>' +
+        '</span>' +
+        durHtml +
+        '</div>' +
+        '</div>' +
+        quickActionsHtml;
+
+      return card;
+    },
+
+    createTaskCardElement: function (tarea) {
+      return crearTarjetaKanbanHTML(tarea);
+    },
+    crearTarjetaKanbanHTML: function (tarea) {
+      return crearTarjetaKanbanHTML(tarea);
+    },
+    render: function (tareas) {
+      var self = this;
+      var cols = {
+        '01_Backlog': document.getElementById('col-backlog'),
+        '02_Por_Hacer': document.getElementById('col-por-hacer'),
+        '03_En_Proceso': document.getElementById('col-en-proceso'),
+        '04_Completado': document.getElementById('col-completado')
+      };
+      var hayColumnas = Object.keys(cols).some(function (k) { return !!cols[k]; });
+      if (!hayColumnas) return;
+      limpiarTrazabilidadKanban();
+      Object.keys(cols).forEach(function (k) { if (cols[k]) cols[k].innerHTML = ''; });
+
+      var fragments = {
+        '01_Backlog': document.createDocumentFragment(),
+        '02_Por_Hacer': document.createDocumentFragment(),
+        '03_En_Proceso': document.createDocumentFragment(),
+        '04_Completado': document.createDocumentFragment()
+      };
+
+      (tareas || []).forEach(function (t) {
+        try {
+          var rawSt = t.ID_Actividad ? (t.Estado || t.Estado_Tarea) : t.Estado_Tarea;
+          var colKey = self.normalizeState(rawSt);
+          if (!colKey) return;
+          var frag = fragments[colKey];
+          if (frag && cols[colKey]) {
+            var cardEl = self.createCardElement(t);
+            if (cardEl) {
+              cardEl.classList.remove('hidden', 'opacity-0', 'kanban-card-atenuada', 'card-dragging');
+              cardEl.style.display = '';
+              cardEl.style.visibility = '';
+              cardEl.style.opacity = '';
+              frag.appendChild(cardEl);
+            }
+          }
+        } catch (errCard) {
+          console.error('[Kanban card render error]:', errCard, t);
+        }
+      });
+
+      Object.keys(cols).forEach(function (k) {
+        if (cols[k] && fragments[k]) {
+          cols[k].appendChild(fragments[k]);
+        }
+      });
+
+      actualizarContadoresKanban();
+      actualizarEstadosVaciosKanban();
+      if (typeof AOS !== 'undefined') {
+        AOS.refresh();
+      }
+    }
+  };
+
+
+  /**
+   * 5.0.b. Validación Poka-Yoke estricta: Definition of Done (DoD)
+   * Verifica si una tarea tiene checklist/subtareas procedurales incompletas.
+   */
+  function validarDoDSubtareasCompletas(idTarea) {
+    if (!idTarea) return { valido: true, total: 0, completadas: 0, pendientes: 0 };
+    var idNorm = String(idTarea).trim().toUpperCase();
+    var subtareas = (state.subtareas || []).filter(function (s) {
+      var idP = String(s.ID_Padre_Vinculado || s.ID_Padre || s.idPadre || s.ID_Tarea_Padre || '').trim().toUpperCase();
+      return idP === idNorm;
+    });
+    if (subtareas.length === 0) return { valido: true, total: 0, completadas: 0, pendientes: 0 };
+    var completadas = subtareas.filter(function (s) {
+      return s.Completado === true || s.completado === true || String(s.Completado).toLowerCase() === 'true' || String(s.Completado) === '1' || String(s.Completado) === 'Sí';
+    }).length;
+    var pendientes = subtareas.length - completadas;
+    return {
+      valido: pendientes === 0,
+      total: subtareas.length,
+      completadas: completadas,
+      pendientes: pendientes
+    };
+  }
+  window.validarDoDSubtareasCompletas = validarDoDSubtareasCompletas;
+
+  /**
+   * 5.1. Transición rápida de estado en tarjeta (Quick Action) con Toast SweetAlert2
+   */
+  function transicionarEstadoTareaRapido(idTarea, nuevoEstado, ev) {
+    if (ev) {
+      ev.stopPropagation();
+      ev.preventDefault();
+    }
+    var idNorm = String(idTarea || '').trim();
+    var isActivity = idNorm.startsWith('ACT-');
+    var item = isActivity
+      ? (state.actividadesPersonales || []).find(function (a) { return String(a.ID_Actividad || a.ID_Tarea || '').trim() === idNorm; })
+      : (state.tareas || []).find(function (t) { return String(t.ID_Tarea || '').trim() === idNorm; });
+
+    if (!item) return;
+    var estadoActual = isActivity ? (item.Estado || item.Estado_Tarea) : item.Estado_Tarea;
+    if (String(estadoActual || '').trim() === String(nuevoEstado || '').trim()) return;
+
+    // Poka-Yoke Estricto DoD: Bloqueo si hay subtareas incompletas al transicionar a 04_Completado
+    if (!isActivity && nuevoEstado === '04_Completado') {
+      var checkDoD = validarDoDSubtareasCompletas(idNorm);
+      if (!checkDoD.valido) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'warning',
+            title: 'DoD Incompleto (Poka-Yoke)',
+            html: '<div class="text-xs text-slate-600 dark:text-slate-300 space-y-2 text-left">' +
+              '<p>Esta tarea tiene <b>' + checkDoD.pendientes + ' de ' + checkDoD.total + '</b> subtareas o pasos pendientes en su checklist.</p>' +
+              '<p class="text-indigo-600 dark:text-indigo-400 font-semibold">Por gobernanza PMO, debes verificar el 100% de los pasos antes de marcarla como completada.</p>' +
+              '</div>',
+            confirmButtonColor: '#4f46e5'
+          });
+        }
+        return;
+      }
+    }
+
+    var nombre = isActivity ? (item.Nombre_Actividad || item.Nombre_Tarea_Actividad || idNorm) : (item.Nombre_Tarea_Actividad || idNorm);
+    var labelsEstado = {
+      '01_Backlog': 'Backlog',
+      '02_Por_Hacer': 'Por Hacer',
+      '03_En_Proceso': 'En Proceso',
+      '04_Completado': 'Completado'
+    };
+    var labelNuevo = labelsEstado[nuevoEstado] || nuevoEstado;
+
+    // Actualización reactiva y optimista unificada
+    persistirEstadoTareaKanban(idNorm, nuevoEstado);
+
+    // Toast minimalista de SweetAlert2
+    if (typeof Swal !== 'undefined') {
+      var Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 1500,
+        timerProgressBar: true,
+        didOpen: function (toast) {
+          toast.onmouseenter = Swal.stopTimer;
+          toast.onmouseleave = Swal.resumeTimer;
+        }
+      });
+
+      var toastIcon = (nuevoEstado === '04_Completado') ? 'success' : 'info';
+      Toast.fire({
+        icon: toastIcon,
+        title: 'Estado actualizado',
+        text: '"' + (nombre.length > 28 ? nombre.substring(0, 25) + '...' : nombre) + '" → ' + labelNuevo
+      });
+    }
+  }
+
+  /**
+   * 5.1.1. Mueve o actualiza una tarjeta en el DOM a 60 fps sin reconstruir todo el tablero
+   */
+  function moverTarjetaDOM(item, estadoPrevio, targetState) {
+    if (!item) return;
+    var idItem = String(item.ID_Tarea || item.ID_Actividad || '').trim();
+    var cardExistente = document.getElementById('kanban-card-' + idItem) ||
+      document.querySelector('[data-id-tarea="' + idItem + '"]') ||
+      document.querySelector('[data-task-id="' + idItem + '"]');
+
+    var targetNorm = normalizarEstadoTarea(targetState);
+    if (!targetNorm) {
+      if (cardExistente && cardExistente.parentNode) {
+        cardExistente.classList.add('transition-all', 'duration-200', 'opacity-0', 'scale-90');
+        setTimeout(function () {
+          if (cardExistente.parentNode) cardExistente.parentNode.removeChild(cardExistente);
+          var cols = [normalizarEstadoTarea(estadoPrevio)].filter(Boolean);
+          actualizarContadoresKanban(cols);
+          actualizarEstadosVaciosKanban(cols);
+        }, 200);
+      }
+      return;
+    }
+
+    var colMap = {
+      '01_Backlog': 'col-backlog',
+      '02_Por_Hacer': 'col-por-hacer',
+      '03_En_Proceso': 'col-en-proceso',
+      '04_Completado': 'col-completado'
+    };
+
+    var colDestinoId = colMap[targetNorm];
+    var colDestino = colDestinoId ? document.getElementById(colDestinoId) : null;
+    if (!colDestino) return;
+
+    // Crear la tarjeta con su nuevo estado y controles de transición actualizados
+    var nuevaCard = kanban.createCardElement(item);
+    if (!nuevaCard) return;
+    nuevaCard.classList.add('transition-all', 'duration-300');
+
+    if (cardExistente && cardExistente.parentNode) {
+      if (cardExistente.parentNode === colDestino) {
+        // La tarjeta ya fue reubicada optimísticamente en la columna destino
+        cardExistente.parentNode.replaceChild(nuevaCard, cardExistente);
+      } else {
+        cardExistente.parentNode.removeChild(cardExistente);
+        colDestino.appendChild(nuevaCard);
+      }
+    } else {
+      colDestino.appendChild(nuevaCard);
+    }
+
+    // Actualizar únicamente los contadores y placeholders de las columnas afectadas
+    var colAfectadas = [normalizarEstadoTarea(estadoPrevio), targetNorm].filter(Boolean);
+    actualizarContadoresKanban(colAfectadas);
+    actualizarEstadosVaciosKanban(colAfectadas);
+
+    if (typeof AOS !== 'undefined') {
+      AOS.refreshHard();
+    }
+  }
+
+  /**
+   * 5.2. Persistencia Inmediata de Estado en Kanban (Drag & Drop, Quick Actions y Checks)
+   */
+  function persistirEstadoTareaKanban(idTarea, targetState) {
+    var idBuscado = String(idTarea || '').trim();
+    var isActivity = idBuscado.startsWith('ACT-');
+
+    if (isActivity) {
+      var act = (state.actividadesPersonales || []).find(function (a) {
+        return String(a.ID_Actividad || a.ID_Tarea || '').trim() === idBuscado;
+      });
+      if (!act) return;
+      var estadoPrevioAct = act.Estado || act.Estado_Tarea || '02_Por_Hacer';
+      if (String(estadoPrevioAct).trim() === String(targetState).trim()) return;
+
+      act.Estado = targetState;
+      act.Estado_Tarea = targetState;
+
+      // Actualización optimista inmediata en el DOM
+      moverTarjetaDOM(act, estadoPrevioAct, targetState);
+
+      function revertirActividadLocal() {
+        act.Estado = estadoPrevioAct;
+        act.Estado_Tarea = estadoPrevioAct;
+        try {
+          moverTarjetaDOM(act, targetState, estadoPrevioAct);
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'error',
+              title: 'Error de sincronización',
+              text: 'No se pudo guardar el estado de la actividad en el servidor.',
+              confirmButtonColor: '#4f46e5'
+            });
+          }
+        } catch (errRollback) {
+          console.error('[Rollback actividad err]:', errRollback);
+        }
+      }
+
+      callBackend(
+        'updateestadoactividadpersonal',
+        {
+          idActividad: idBuscado,
+          // Indica si la actividad debe incrementar su racha al completarse
+          incrementarRacha: targetState === '04_Completado',
+          id: idBuscado,
+          nuevoEstado: targetState
+        },
+        function (res) {
+          if (!res || (res.success !== true && res.success !== 'true')) {
+            console.error('[Kanban act persist err]:', res && res.error);
+            revertirActividadLocal();
+          } else if (res.repetida) {
+            // Hábito cíclico: actualizar racha, nueva fecha y reubicar en Por Hacer
+            act.Racha_Actual = res.racha || (act.Racha_Actual + 1);
+            act.Fecha_Programada = res.nuevaFecha || act.Fecha_Programada;
+            act.Estado = res.nuevoEstado || '02_Por_Hacer';
+            act.Estado_Tarea = act.Estado;
+            moverTarjetaDOM(act, targetState, act.Estado);
+            if (typeof Swal !== 'undefined') {
+              var Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2500,
+                timerProgressBar: true
+              });
+              Toast.fire({
+                icon: 'success',
+                title: '¡Hábito registrado!',
+                text: 'Racha: ' + act.Racha_Actual + ' días. Siguiente fecha: ' + act.Fecha_Programada
+              });
+            }
+          }
+        },
+        function (err) {
+          console.error('[Kanban act red fallback]:', err);
+          revertirActividadLocal();
+        },
+        { silent: true }
+      );
+      return;
+    }
+
+    var tarea = (state.tareas || []).find(function (t) {
+      return String(t.ID_Tarea || '').trim() === idBuscado;
+    });
+    if (!tarea) return;
+    if (String(tarea.Estado_Tarea || '').trim() === String(targetState || '').trim()) return;
+
+    var estadoPrevio = tarea.Estado_Tarea;
+    tarea.Estado_Tarea = targetState;
+
+    // Actualización inmediata del DOM a 60 fps sin destruir las demás tarjetas
+    moverTarjetaDOM(tarea, estadoPrevio, targetState);
+
+    // Propagar avance en cascada (Pasos -> Tarea -> Hito -> Proyecto)
+    try {
+      if (typeof recalcularAvanceCascada === 'function') {
+        recalcularAvanceCascada(idBuscado, tarea.ID_Hito, tarea.ID_Proyecto);
+      }
+    } catch (errCascada) {
+      console.error('[Kanban cascada sync]:', errCascada);
+    }
+
+    // Actualizar sidebar de proyectos e información financiera sin re-renderizar todo el kanban
+    try {
+      renderSidebarProyectos();
+      if (state.proyectoDetalleActivo) {
+        renderCascadaHitos(String(state.proyectoDetalleActivo.ID_Proyecto || '').trim());
+      }
+      recalcularGastoVisible();
+    } catch (errRender) {
+      console.error('[Kanban sync lateral]:', errRender);
+    }
+
+    function revertirEstadoLocal() {
+      tarea.Estado_Tarea = estadoPrevio;
+      try {
+        moverTarjetaDOM(tarea, targetState, estadoPrevio);
+        if (typeof recalcularAvanceCascada === 'function') {
+          recalcularAvanceCascada(idBuscado, tarea.ID_Hito, tarea.ID_Proyecto);
+        }
+        renderSidebarProyectos();
+        if (state.proyectoDetalleActivo) {
+          renderCascadaHitos(String(state.proyectoDetalleActivo.ID_Proyecto || '').trim());
+        }
+        recalcularGastoVisible();
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error de sincronización',
+            text: 'No se pudo guardar el nuevo estado en el servidor. Se restauró a su estado original.',
+            confirmButtonColor: '#4f46e5'
+          });
+        }
+      } catch (errRevert) {
+        console.error('[Kanban rollback]:', errRevert);
+      }
+    }
+
+    var payloadUpdate = {
+      idTarea: idBuscado,
+      ID_Tarea: idBuscado,
+      id: idBuscado,
+      datos: {
+        Estado_Tarea: targetState
+      },
+      Estado_Tarea: targetState,
+      nuevoEstado: targetState
+    };
+
+    callBackend(
+      'updateTarea',
+      payloadUpdate,
+      function (res) {
+        if (!res || (res.success !== true && res.success !== 'true')) {
+          console.error('[Kanban persistencia backend]:', res && res.error);
+          revertirEstadoLocal();
+        }
+      },
+      function (err) {
+        console.error('[Kanban red fallback]:', err);
+        revertirEstadoLocal();
+      },
+      { silent: true }
+    );
+  }
+  var persistirEstadoKanbanUnificado = persistirEstadoTareaKanban;
+
+  var dropPlaceholderEl = null;
+
+  function obtenerOCrearPlaceholder() {
+    if (!dropPlaceholderEl) {
+      dropPlaceholderEl = document.createElement('div');
+      dropPlaceholderEl.id = 'kanban-drop-placeholder';
+      dropPlaceholderEl.className = 'kanban-drop-placeholder border-2 border-dashed border-indigo-400/80 bg-indigo-50/40 dark:bg-indigo-950/30 rounded-xl h-14 my-2 transition-all pointer-events-none flex items-center justify-center text-xs font-semibold text-indigo-500';
+      dropPlaceholderEl.innerHTML = '<span class="flex items-center gap-1.5"><span class="animate-bounce">↓</span> Soltar aquí</span>';
+    }
+    return dropPlaceholderEl;
+  }
+
+  function removerDropPlaceholder() {
+    if (dropPlaceholderEl && dropPlaceholderEl.parentNode) {
+      dropPlaceholderEl.parentNode.removeChild(dropPlaceholderEl);
+    }
+  }
+
+  function limpiarEstilosDropzone() {
+    document.querySelectorAll('.kanban-col-container').forEach(function (col) {
+      col.classList.remove(
+        'kanban-dropzone-active',
+        'bg-indigo-50/40',
+        'dark:bg-slate-800/40',
+        'border-2',
+        'border-dashed',
+        'border-indigo-400',
+        'rounded-2xl'
+      );
+    });
+  }
+
+  function obtenerElementoTrasCursor(container, y) {
+    var draggableElements = Array.prototype.slice.call(container.querySelectorAll('.kanban-card:not(.card-dragging)'));
+    return draggableElements.reduce(function (closest, child) {
+      var box = child.getBoundingClientRect();
+      var offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
+
+  /**
+   * 5.3. Configuración de los Listeners de Arrastre (Drag & Drop fluido a 60fps)
+   */
+  function setupDragAndDropKanban() {
+    var containers = document.querySelectorAll('.kanban-col-container');
+    containers.forEach(function (col) {
+      if (col.dataset.dndReady === "true") return;
+      col.dataset.dndReady = "true";
+      var colBody = col.querySelector('.kanban-col-body');
+
+      col.addEventListener('dragenter', function (e) {
+        e.preventDefault();
+      });
+
+      col.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+
+        // Estilo activo exacto solicitado
+        col.classList.add(
+          'kanban-dropzone-active',
+          'bg-indigo-50/40',
+          'dark:bg-slate-800/40',
+          'border-2',
+          'border-dashed',
+          'border-indigo-400',
+          'rounded-2xl'
+        );
+
+        if (colBody) {
+          var placeholder = obtenerOCrearPlaceholder();
+          var afterElement = obtenerElementoTrasCursor(colBody, e.clientY);
+          if (!afterElement) {
+            colBody.appendChild(placeholder);
+          } else if (afterElement !== placeholder) {
+            colBody.insertBefore(placeholder, afterElement);
+          }
+        }
+      });
+
+      col.addEventListener('dragleave', function (e) {
+        var rect = col.getBoundingClientRect();
+        if (e.clientX < rect.left || e.clientX >= rect.right || e.clientY < rect.top || e.clientY >= rect.bottom) {
+          col.classList.remove(
+            'kanban-dropzone-active',
+            'bg-indigo-50/40',
+            'dark:bg-slate-800/40',
+            'border-2',
+            'border-dashed',
+            'border-indigo-400',
+            'rounded-2xl'
+          );
+        }
+      });
+
+      col.addEventListener('drop', function (e) {
+        e.preventDefault();
+        limpiarEstilosDropzone();
+        var idTarea = (e.dataTransfer ? e.dataTransfer.getData('text/plain') : null) || draggedTaskId;
+        var targetState = col.getAttribute('data-state');
+
+        // Determinar posición exacta según el placeholder antes de removerlo
+        var insertBeforeTarget = null;
+        if (dropPlaceholderEl && dropPlaceholderEl.parentNode) {
+          insertBeforeTarget = dropPlaceholderEl.nextSibling;
+        }
+        removerDropPlaceholder();
+        draggedTaskId = null;
+
+        if (!idTarea || !targetState) return;
+
+        var idNorm = String(idTarea || '').trim();
+        var tarjetaArrastrada = document.getElementById('kanban-card-' + idNorm) ||
+          document.querySelector('[data-id-tarea="' + idNorm + '"]') ||
+          document.querySelector('[data-task-id="' + idNorm + '"]');
+
+        if (!tarjetaArrastrada) return;
+
+        // 1. Remover clases de arrastre y opacidad inmediatamente (0ms)
+        tarjetaArrastrada.classList.remove('card-dragging', 'is-dragging', 'opacity-60', 'opacity-50', 'opacity-40', 'opacity-30', 'scale-95');
+        tarjetaArrastrada.style.opacity = '';
+        tarjetaArrastrada.style.transform = '';
+
+        // Identificar columna y estado de origen
+        var colMap = {
+          '01_Backlog': 'col-backlog',
+          '02_Por_Hacer': 'col-por-hacer',
+          '03_En_Proceso': 'col-en-proceso',
+          '04_Completado': 'col-completado'
+        };
+
+        var parentAnterior = tarjetaArrastrada.parentNode;
+        var nextSiblingAnterior = tarjetaArrastrada.nextSibling;
+        var colOrigenCont = tarjetaArrastrada.closest('.kanban-col-container, [data-state]');
+        var estadoOrigenRaw = colOrigenCont ? colOrigenCont.getAttribute('data-state') : null;
+        if (!estadoOrigenRaw && parentAnterior) {
+          for (var k in colMap) {
+            if (colMap[k] === parentAnterior.id) { estadoOrigenRaw = k; break; }
+          }
+        }
+        var estadoOrigen = normalizarEstadoTarea(estadoOrigenRaw);
+        var estadoDestino = normalizarEstadoTarea(targetState);
+
+        // Poka-Yoke Estricto DoD: Bloqueo de arrastre a Completado si hay subtareas pendientes
+        var isActivity = idNorm.startsWith('ACT-');
+        if (!isActivity && estadoDestino === '04_Completado') {
+          var checkDoDDrop = validarDoDSubtareasCompletas(idNorm);
+          if (!checkDoDDrop.valido) {
+            if (typeof Swal !== 'undefined') {
+              var ToastDoD = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000,
+                timerProgressBar: true
+              });
+              ToastDoD.fire({
+                icon: 'warning',
+                title: 'DoD Incompleto (Poka-Yoke)',
+                text: 'Faltan ' + checkDoDDrop.pendientes + ' de ' + checkDoDDrop.total + ' subtareas por completar antes de cerrar.'
+              });
+            }
+            return;
+          }
+        }
+
+        var destinoColumna = col.querySelector('.kanban-col-body') || document.getElementById(colMap[estadoDestino]) || col;
+
+        // Si ya estaba en la misma columna y misma posición, retornar
+        if (estadoOrigen === estadoDestino && tarjetaArrastrada.parentNode === destinoColumna) {
+          return;
+        }
+
+        // 2. Ejecutar destinoColumna.appendChild(tarjetaArrastrada) de forma SÍNCRONA e INSTANTÁNEA
+        if (insertBeforeTarget && insertBeforeTarget.parentNode === destinoColumna) {
+          destinoColumna.insertBefore(tarjetaArrastrada, insertBeforeTarget);
+        } else {
+          destinoColumna.appendChild(tarjetaArrastrada);
+        }
+
+        // 3. Decrementar en 1 el número de la columna de origen e incrementar en 1 el de la columna destino (DOM local)
+        if (estadoOrigen && estadoOrigen !== estadoDestino) {
+          var badgeOri = document.getElementById('count-' + estadoOrigen);
+          if (badgeOri) {
+            var valOri = parseInt(badgeOri.textContent, 10) || 0;
+            badgeOri.textContent = Math.max(0, valOri - 1);
+          }
+        }
+        if (estadoDestino && estadoOrigen !== estadoDestino) {
+          var badgeDest = document.getElementById('count-' + estadoDestino);
+          if (badgeDest) {
+            var valDest = parseInt(badgeDest.textContent, 10) || 0;
+            badgeDest.textContent = valDest + 1;
+          }
+        }
+        actualizarEstadosVaciosKanban([estadoOrigen, estadoDestino]);
+
+        // Actualizar estado local en memoria
+        var isActivity = idNorm.startsWith('ACT-');
+        var item = isActivity
+          ? (state.actividadesPersonales || []).find(function (a) { return String(a.ID_Actividad || a.ID_Tarea || '').trim() === idNorm; })
+          : (state.tareas || []).find(function (t) { return String(t.ID_Tarea || '').trim() === idNorm; });
+
+        if (item) {
+          if (isActivity) {
+            item.Estado = estadoDestino;
+            item.Estado_Tarea = estadoDestino;
+          } else {
+            item.Estado_Tarea = estadoDestino;
+          }
+        }
+
+        // 4. Cero llamadas a renderizarKanban(), cero esperas.
+
+        // Función de reversión a columna anterior solo si Apps Script falla
+        function revertirTarjetaColumna() {
+          if (parentAnterior) {
+            if (nextSiblingAnterior && nextSiblingAnterior.parentNode === parentAnterior) {
+              parentAnterior.insertBefore(tarjetaArrastrada, nextSiblingAnterior);
+            } else {
+              parentAnterior.appendChild(tarjetaArrastrada);
+            }
+          }
+          if (item) {
+            if (isActivity) {
+              item.Estado = estadoOrigen;
+              item.Estado_Tarea = estadoOrigen;
+            } else {
+              item.Estado_Tarea = estadoOrigen;
+            }
+          }
+          if (estadoOrigen && estadoOrigen !== estadoDestino) {
+            var bOri = document.getElementById('count-' + estadoOrigen);
+            if (bOri) bOri.textContent = (parseInt(bOri.textContent, 10) || 0) + 1;
+          }
+          if (estadoDestino && estadoOrigen !== estadoDestino) {
+            var bDest = document.getElementById('count-' + estadoDestino);
+            if (bDest) bDest.textContent = Math.max(0, (parseInt(bDest.textContent, 10) || 0) - 1);
+          }
+          actualizarEstadosVaciosKanban([estadoOrigen, estadoDestino]);
+
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'error',
+              title: 'Error de sincronización',
+              text: 'No se pudo mover la tarjeta. Se restauró a su columna anterior.',
+              confirmButtonColor: '#4f46e5'
+            });
+          }
+        }
+
+        // 5. Disparar persistencia en segundo plano (fire-and-forget)
+        if (isActivity) {
+          callBackend('updateestadoactividadpersonal', {
+            idActividad: idNorm,
+            id: idNorm,
+            incrementarRacha: estadoDestino === '04_Completado',
+            nuevoEstado: estadoDestino
+          }, function (res) {
+            if (!res || (res.success !== true && res.success !== 'true')) {
+              revertirTarjetaColumna();
+            }
+          }, function (err) {
+            revertirTarjetaColumna();
+          }, { silent: true });
+        } else {
+          callBackend('updateTarea', {
+            idTarea: idNorm,
+            ID_Tarea: idNorm,
+            id: idNorm,
+            datos: { Estado_Tarea: estadoDestino },
+            Estado_Tarea: estadoDestino,
+            nuevoEstado: estadoDestino
+          }, function (res) {
+            if (!res || (res.success !== true && res.success !== 'true')) {
+              revertirTarjetaColumna();
+            }
+          }, function (err) {
+            revertirTarjetaColumna();
+          }, { silent: true });
+        }
+
+        // Actualizaciones accesorias en segundo plano
+        try {
+          if (!isActivity && item && typeof recalcularAvanceCascada === 'function') {
+            recalcularAvanceCascada(idNorm, item.ID_Hito, item.ID_Proyecto);
+          }
+          if (typeof renderSidebarProyectos === 'function') renderSidebarProyectos();
+        } catch (eCasc) {}
+      });
+    });
+  }
+
+  /**
+   * 5.4. Alternador de cumplimiento (Check redondo en tarjeta)
+   */
+  function toggleCumplidoTarea(idTarea, ev) {
+    if (ev) ev.stopPropagation();
+    var idBuscado = String(idTarea || '').trim();
+    if (idBuscado.startsWith('ACT-')) {
+      var act = (state.actividadesPersonales || []).find(function (a) {
+        return String(a.ID_Actividad || a.ID_Tarea || '').trim() === idBuscado;
+      });
+      if (!act) return;
+      var estadoAct = normalizarEstadoTarea(act.Estado || act.Estado_Tarea);
+      var nuevoEstadoAct = (estadoAct === '04_Completado') ? '02_Por_Hacer' : '04_Completado';
+      persistirEstadoTareaKanban(idBuscado, nuevoEstadoAct);
+      return;
+    }
+    var tarea = (state.tareas || []).find(function (t) { return String(t.ID_Tarea || '').trim() === idBuscado; });
+    if (!tarea) return;
+    var nuevoEstado = (normalizarEstadoTarea(tarea.Estado_Tarea) === '04_Completado') ? '02_Por_Hacer' : '04_Completado';
+    persistirEstadoTareaKanban(idBuscado, nuevoEstado);
+  }
+
+  /**
+   * 5.4.1. Confirmación de archivo de tarea con SweetAlert2
+   */
+  function confirmarArchivarTarea(idTarea) {
+    var idNorm = String(idTarea || '').trim();
+    var tar = (state.tareas || []).find(function (t) { return String(t.ID_Tarea || '').trim() === idNorm; });
+    var nombreTar = tar ? (tar.Nombre_Tarea_Actividad || idNorm) : idNorm;
+
+    Swal.fire({
+      title: '¿Archivar Tarea?',
+      text: '¿Deseas archivar la tarea "' + nombreTar + '"? Ya no se mostrará en el flujo activo del tablero Kanban.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, archivar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#64748b',
+      buttonsStyling: true,
+      customClass: {
+        confirmButton: 'bg-red-600 text-white font-bold px-4 py-2.5 rounded-xl shadow-md hover:bg-red-700 transition focus:ring-2 focus:ring-red-400 mr-2',
+        cancelButton: 'bg-slate-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-sm hover:bg-slate-600 transition focus:ring-2 focus:ring-slate-300'
+      },
+      reverseButtons: true,
+      focusCancel: true
+    }).then(function (result) {
+      if (result.isConfirmed) {
+        persistirEstadoTareaKanban(idNorm, '05_Archivado');
+        closeModal('modal-detalle-tarea');
+        Swal.fire({
+          icon: 'success',
+          title: 'Tarea Archivada',
+          text: 'La tarea ha sido archivada correctamente.',
+          confirmButtonColor: '#4f46e5',
+          buttonsStyling: true,
+          customClass: {
+            confirmButton: 'bg-indigo-600 text-white font-bold px-5 py-2.5 rounded-xl shadow-md hover:bg-indigo-700 transition focus:ring-2 focus:ring-indigo-400'
+          }
+        });
+      }
+    });
+  }
+
+  function confirmarArchivarTareaDesdeModal() {
+    var idTar = (document.getElementById('modal-tar-id-input') ? document.getElementById('modal-tar-id-input').value : '') ||
+      (document.getElementById('task-flow-id') ? document.getElementById('task-flow-id').value : '');
+    if (idTar) {
+      confirmarArchivarTarea(idTar);
+    }
+  }
+
+
+  function actualizarBannerFiltrosKanban(mostrando, total, hayFiltros, filtroHitoActivo) {
+    var btnLimpiar = document.getElementById('btn-limpiar-filtros-kanban');
+    var badgeFiltro = document.getElementById('badge-filtro-activo-resumen');
+
+    if (hayFiltros) {
+      if (btnLimpiar) {
+        btnLimpiar.classList.remove('hidden');
+        btnLimpiar.classList.add('inline-flex');
+      }
+      if (badgeFiltro) {
+        badgeFiltro.innerHTML = '<svg class="portal-icon-sm shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Filtro activo: ' + mostrando + ' de ' + total + ' tareas</span>';
+        badgeFiltro.classList.remove('hidden');
+        badgeFiltro.classList.add('flex');
+      }
+    } else {
+      if (btnLimpiar) {
+        btnLimpiar.classList.add('hidden');
+        btnLimpiar.classList.remove('inline-flex');
+      }
+      if (badgeFiltro) {
+        badgeFiltro.classList.add('hidden');
+        badgeFiltro.classList.remove('flex');
+      }
+    }
+  }
+
+  /**
+   * 6.8. Controladores de Filtro de Contexto y Filtro Temporal de Kanban
+   */
+  function setKanbanContextFilter(filtro, skipApply) {
+    state.kanbanContextFilter = filtro || 'TODOS';
+
+    try {
+      localStorage.setItem('pmo_kanban_context_filter', state.kanbanContextFilter);
+    } catch (eStorage) {
+      console.warn('[setKanbanContextFilter] Error guardando en localStorage:', eStorage);
+    }
+
+    var btnTodos = document.getElementById('btn-context-todos');
+    var btnProy = document.getElementById('btn-context-proyectos');
+    var btnPers = document.getElementById('btn-context-personal');
+
+    var badgeTodos = document.getElementById('badge-context-todos');
+    var badgeProy = document.getElementById('badge-context-proyectos');
+    var badgePers = document.getElementById('badge-context-personal');
+
+    var activeBtnClass = 'px-2.5 py-1 rounded-md text-xs font-bold transition-all duration-200 flex items-center gap-1.5 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-slate-700';
+    var inactiveBtnClass = 'px-2.5 py-1 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 border border-transparent';
+
+    var activeBadgeClass = 'text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-extrabold border border-indigo-200 dark:border-indigo-800/60';
+    var inactiveBadgeClass = 'text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold border border-transparent';
+
+    if (btnTodos) btnTodos.className = (state.kanbanContextFilter === 'TODOS') ? activeBtnClass : inactiveBtnClass;
+    if (btnProy) btnProy.className = (state.kanbanContextFilter === 'PROYECTOS') ? activeBtnClass : inactiveBtnClass;
+    if (btnPers) btnPers.className = (state.kanbanContextFilter === 'PERSONAL') ? activeBtnClass : inactiveBtnClass;
+
+    if (badgeTodos) badgeTodos.className = (state.kanbanContextFilter === 'TODOS') ? activeBadgeClass : inactiveBadgeClass;
+    if (badgeProy) badgeProy.className = (state.kanbanContextFilter === 'PROYECTOS') ? activeBadgeClass : inactiveBadgeClass;
+    if (badgePers) badgePers.className = (state.kanbanContextFilter === 'PERSONAL') ? activeBadgeClass : inactiveBadgeClass;
+
+    if (!skipApply) {
+      aplicarFiltrosCruzados();
+    }
+  }
+
+  function setKanbanTimeFilter(filtro, skipApply) {
+    filtro = (filtro || 'TODO').toUpperCase();
+    state.kanbanTimeFilter = filtro;
+
+    // 1. Persistir última selección en localStorage('pmo_kanban_time_filter')
+    try {
+      localStorage.setItem('pmo_kanban_time_filter', filtro);
+    } catch (eStorage) {
+      console.warn('[setKanbanTimeFilter] No se pudo guardar en localStorage:', eStorage);
+    }
+
+    // 2. Actualizar visualmente la cápsula compacta
+    var iconMap = { 'TODO': '🌐', 'HOY': '⚡', 'SEMANA': '📅', 'MES': '🗓️' };
+    var textMap = { 'TODO': 'Todo', 'HOY': 'Hoy', 'SEMANA': 'Semana', 'MES': 'Mes' };
+
+    var labelIcon = document.getElementById('label-time-active-icon');
+    var labelText = document.getElementById('label-time-active-text');
+    if (labelIcon) {
+      labelIcon.classList.remove('text-amber-500', 'text-indigo-500', 'text-purple-500');
+      if (filtro === 'HOY') labelIcon.classList.add('text-amber-500');
+      else if (filtro === 'SEMANA') labelIcon.classList.add('text-indigo-500');
+      else if (filtro === 'MES') labelIcon.classList.add('text-purple-500');
+      if (!labelIcon.querySelector('svg')) labelIcon.textContent = iconMap[filtro] || '⏱️';
+    }
+    if (labelText) labelText.textContent = textMap[filtro] || filtro;
+
+    // 3. Actualizar checkmarks y estilos de las opciones en el popover
+    var opciones = ['TODO', 'HOY', 'SEMANA', 'MES'];
+    for (var i = 0; i < opciones.length; i++) {
+      var op = opciones[i];
+      var checkEl = document.getElementById('check-time-' + op.toLowerCase());
+      var btnEl = document.getElementById('btn-time-' + op.toLowerCase());
+      if (checkEl) {
+        if (op === filtro) {
+          checkEl.classList.remove('hidden');
+        } else {
+          checkEl.classList.add('hidden');
+        }
+      }
+      if (btnEl) {
+        if (op === filtro) {
+          btnEl.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer';
+        } else {
+          btnEl.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer';
+        }
+      }
+    }
+
+    // 4. Cerrar popover para interacciones móviles / tap
+    var popover = document.getElementById('popover-time-filter');
+    if (popover) {
+      popover.classList.remove('time-popover-open');
+    }
+
+    if (!skipApply) {
+      aplicarFiltrosCruzados();
+    }
+  }
+
+  /**
+   * Alterna la visibilidad de los micro-popovers de filtros Kanban (soporte tap para móviles)
+   */
+  function toggleFilterPopover(e, popoverId) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    var targetPopover = document.getElementById(popoverId);
+    if (!targetPopover) return;
+
+    var isAlreadyOpen = targetPopover.classList.contains('filter-popover-open');
+
+    // Cerrar cualquier otro popover abierto
+    document.querySelectorAll('.kanban-hover-popover').forEach(function (p) {
+      p.classList.remove('filter-popover-open', 'time-popover-open');
+    });
+
+    // Validar si el botón asociado está deshabilitado
+    var associatedBtn;
+    if (e && e.currentTarget) {
+      associatedBtn = e.currentTarget;
+    } else if (e && e.target) {
+      associatedBtn = e.target.closest('button');
+    }
+    if (associatedBtn && (associatedBtn.disabled || associatedBtn.hasAttribute('disabled'))) {
+      return;
+    }
+
+    if (!isAlreadyOpen) {
+      targetPopover.classList.add('filter-popover-open');
+    }
+  }
+
+  function toggleTimeFilterDropdown(e) {
+    toggleFilterPopover(e, 'popover-time-filter');
+  }
+
+  // Cerrar popover flotante al tocar o hacer clic fuera de los contenedores
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.kanban-hover-popover-container')) {
+      document.querySelectorAll('.kanban-hover-popover').forEach(function (p) {
+        p.classList.remove('filter-popover-open', 'time-popover-open');
+      });
+    }
+  });
+
+  function updateCapsuleVisual(btnEl, isActive) {
+    if (!btnEl) return;
+    if (isActive) {
+      btnEl.className = 'filter-ghost-btn active inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold text-sky-400 dark:text-sky-300 bg-sky-500/10 border border-sky-500/30 shadow-[0_0_12px_rgba(56,189,248,0.18)] transition-all duration-150 cursor-pointer shrink-0';
+      btnEl.setAttribute('data-active', 'true');
+    } else {
+      btnEl.className = 'filter-ghost-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 bg-transparent border border-transparent transition-all duration-150 cursor-pointer shrink-0';
+      btnEl.removeAttribute('data-active');
+    }
+  }
+
+  function sanitizeFilterLabel(texto) {
+    if (!texto) return '';
+    return texto.replace(/^[^a-zA-Z0-9ÁÉÍÓÚáéíóúÑñ]+/, '').trim();
+  }
+
+  function setKanbanPrioridadFilter(valor, skipApply) {
+    valor = (valor || '').trim();
+    state.filtros.prioridadTarea = valor;
+    var inputEl = document.getElementById('filter-prioridad-tarea');
+    if (inputEl) inputEl.value = valor;
+
+    var lbl = document.getElementById('label-prio-active-text');
+    var btn = document.getElementById('btn-prio-capsule');
+    var popover = document.getElementById('popover-filter-prio');
+
+    var textoSeleccionado = '';
+    var vLow = valor.toLowerCase();
+
+    if (popover) {
+      var botones = popover.querySelectorAll('button');
+      botones.forEach(function (btnOpt) {
+        var optVal = (btnOpt.getAttribute('data-val') || btnOpt.getAttribute('onclick') || '').toLowerCase();
+        var optId = (btnOpt.id || '').toLowerCase();
+        var clone = btnOpt.cloneNode(true);
+        var chk = clone.querySelector('[id^="check-"], [class*="check-"]');
+        if (chk) chk.remove();
+        var textoBoton = clone.textContent.trim();
+
+        // Evaluar coincidencia real con la opción del desplegable
+        var isSelected = false;
+        if (!valor) {
+          if (optVal.indexOf("''") !== -1 || optVal.indexOf('""') !== -1 || optVal.indexOf('todas') !== -1 || optId.indexOf('todas') !== -1) {
+            isSelected = true;
+          }
+        } else {
+          if (optVal.indexOf(vLow) !== -1 || optId.indexOf(vLow) !== -1 || textoBoton.toLowerCase().indexOf(vLow) !== -1) {
+            isSelected = true;
+          }
+        }
+
+        var realCheck = btnOpt.querySelector('[id^="check-"], [class*="check-"]');
+        if (realCheck) {
+          if (isSelected) realCheck.classList.remove('hidden');
+          else realCheck.classList.add('hidden');
+        }
+
+        if (isSelected) {
+          btnOpt.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-sky-500/10 text-sky-400 dark:text-sky-300 cursor-pointer';
+          textoSeleccionado = sanitizeFilterLabel(textoBoton);
+        } else {
+          btnOpt.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 cursor-pointer';
+        }
+      });
+      popover.classList.remove('filter-popover-open');
+    }
+
+    if (lbl) {
+      lbl.textContent = textoSeleccionado || (valor ? valor : 'Prioridad');
+    }
+    var iconPrio = document.getElementById('label-prio-active-icon');
+    if (iconPrio) {
+      if (valor === '01_P1_Alta') {
+        iconPrio.innerHTML = '<svg class="portal-icon-sm shrink-0 text-rose-500 fill-rose-500/20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>';
+      } else if (valor === '02_P2_Media') {
+        iconPrio.innerHTML = '<svg class="portal-icon-sm shrink-0 text-amber-500 fill-amber-500/20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>';
+      } else if (valor === '03_P3_Baja') {
+        iconPrio.innerHTML = '<svg class="portal-icon-sm shrink-0 text-emerald-500 fill-emerald-500/20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>';
+      } else if (valor === '04_P4') {
+        iconPrio.innerHTML = '<svg class="portal-icon-sm shrink-0 text-slate-400 fill-slate-400/20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg>';
+      } else {
+        iconPrio.innerHTML = '<svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>';
+      }
+    }
+    if (typeof updateCapsuleVisual === 'function') updateCapsuleVisual(btn, !!valor);
+
+    if (!skipApply && typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+  }
+
+  function setKanbanEnergiaFilter(valor, skipApply) {
+    valor = (valor || '').trim();
+    state.filtros.energiaTarea = valor;
+    var inputEl = document.getElementById('filter-energia-tarea');
+    if (inputEl) inputEl.value = valor;
+
+    var lbl = document.getElementById('label-energia-active-text');
+    var btn = document.getElementById('btn-energia-capsule');
+    var popover = document.getElementById('popover-filter-energia');
+
+    var textoSeleccionado = '';
+    var vLow = valor.toLowerCase();
+
+    if (popover) {
+      var botones = popover.querySelectorAll('button');
+      botones.forEach(function (btnOpt) {
+        var optVal = (btnOpt.getAttribute('data-val') || btnOpt.getAttribute('onclick') || '').toLowerCase();
+        var optId = (btnOpt.id || '').toLowerCase();
+        var clone = btnOpt.cloneNode(true);
+        var chk = clone.querySelector('[id^="check-"], [class*="check-"]');
+        if (chk) chk.remove();
+        var textoBoton = clone.textContent.trim();
+
+        var isSelected = false;
+        if (!valor) {
+          if (optVal.indexOf("''") !== -1 || optVal.indexOf('""') !== -1 || optVal.indexOf('todas') !== -1 || optId.indexOf('todas') !== -1) {
+            isSelected = true;
+          }
+        } else {
+          if (optVal.indexOf(vLow) !== -1 || optId.indexOf(vLow) !== -1 || textoBoton.toLowerCase().indexOf(vLow) !== -1) {
+            isSelected = true;
+          }
+        }
+
+        var realCheck = btnOpt.querySelector('[id^="check-"], [class*="check-"]');
+        if (realCheck) {
+          if (isSelected) realCheck.classList.remove('hidden');
+          else realCheck.classList.add('hidden');
+        }
+
+        if (isSelected) {
+          btnOpt.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-sky-500/10 text-sky-400 dark:text-sky-300 cursor-pointer';
+          textoSeleccionado = sanitizeFilterLabel(textoBoton);
+        } else {
+          btnOpt.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 cursor-pointer';
+        }
+      });
+      popover.classList.remove('filter-popover-open');
+    }
+
+    if (lbl) {
+      lbl.textContent = textoSeleccionado || (valor ? valor : 'Tipo');
+    }
+    var iconEnergia = document.getElementById('label-energia-active-icon');
+    if (iconEnergia) {
+      if (valor === 'Alta_DeepWork') {
+        iconEnergia.innerHTML = '<svg class="portal-icon-sm shrink-0 text-purple-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M12 18v4"/><path d="M12 5V2"/></svg>';
+      } else if (valor === 'Media_Operativa') {
+        iconEnergia.innerHTML = '<svg class="portal-icon-sm shrink-0 text-blue-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+      } else if (valor === 'Baja_Automatica') {
+        iconEnergia.innerHTML = '<svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>';
+      } else {
+        iconEnergia.innerHTML = '<svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 14.14 14.14"/></svg>';
+      }
+    }
+    if (typeof updateCapsuleVisual === 'function') updateCapsuleVisual(btn, !!valor);
+
+    if (!skipApply && typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+  }
+
+  function setKanbanPlazoFilter(valor, skipApply) {
+    valor = (valor || '').trim();
+    state.filtros.plazoTarea = valor;
+    var inputEl = document.getElementById('filter-plazo-tarea');
+    if (inputEl) inputEl.value = valor;
+
+    var lbl = document.getElementById('label-plazo-active-text');
+    var btn = document.getElementById('btn-plazo-capsule');
+    var popover = document.getElementById('popover-filter-plazo');
+
+    var textoSeleccionado = '';
+    var vLow = valor.toLowerCase();
+
+    if (popover) {
+      var botones = popover.querySelectorAll('button');
+      botones.forEach(function (btnOpt) {
+        var optVal = (btnOpt.getAttribute('data-val') || btnOpt.getAttribute('onclick') || '').toLowerCase();
+        var optId = (btnOpt.id || '').toLowerCase();
+        var clone = btnOpt.cloneNode(true);
+        var chk = clone.querySelector('[id^="check-"], [class*="check-"]');
+        if (chk) chk.remove();
+        var textoBoton = clone.textContent.trim();
+
+        var isSelected = false;
+        if (!valor) {
+          if (optVal.indexOf("''") !== -1 || optVal.indexOf('""') !== -1 || optVal.indexOf('todos') !== -1 || optId.indexOf('todos') !== -1) {
+            isSelected = true;
+          }
+        } else {
+          if (optVal.indexOf(vLow) !== -1 || optId.indexOf(vLow) !== -1 || textoBoton.toLowerCase().indexOf(vLow) !== -1) {
+            isSelected = true;
+          }
+        }
+
+        var realCheck = btnOpt.querySelector('[id^="check-"], [class*="check-"]');
+        if (realCheck) {
+          if (isSelected) realCheck.classList.remove('hidden');
+          else realCheck.classList.add('hidden');
+        }
+
+        if (isSelected) {
+          btnOpt.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-sky-500/10 text-sky-400 dark:text-sky-300 cursor-pointer';
+          textoSeleccionado = sanitizeFilterLabel(textoBoton);
+        } else {
+          btnOpt.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 cursor-pointer';
+        }
+      });
+      popover.classList.remove('filter-popover-open');
+    }
+
+    if (lbl) {
+      lbl.textContent = textoSeleccionado || (valor ? valor : 'Vencimiento');
+    }
+    var iconPlazo = document.getElementById('label-plazo-active-icon');
+    if (iconPlazo) {
+      if (valor === 'vencidas') {
+        iconPlazo.innerHTML = '<svg class="portal-icon-sm shrink-0 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+      } else if (valor === 'hoy') {
+        iconPlazo.innerHTML = '<svg class="portal-icon-sm shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+      } else if (valor === '7dias') {
+        iconPlazo.innerHTML = '<svg class="portal-icon-sm shrink-0 text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>';
+      } else if (valor === 'sin_fecha') {
+        iconPlazo.innerHTML = '<svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="m3 3 18 18"/></svg>';
+      } else {
+        iconPlazo.innerHTML = '<svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/></svg>';
+      }
+    }
+    if (typeof updateCapsuleVisual === 'function') updateCapsuleVisual(btn, !!valor);
+
+    if (!skipApply && typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+  }
+
+  function setKanbanDependenciaFilter(valor, skipApply) {
+    valor = (valor || '').trim();
+    state.filtros.dependenciaTarea = valor;
+    var inputEl = document.getElementById('filter-dependencia-tarea');
+    if (inputEl) inputEl.value = valor;
+
+    var lbl = document.getElementById('label-dep-active-text');
+    var btn = document.getElementById('btn-dep-capsule');
+    var popover = document.getElementById('popover-filter-dep');
+
+    var textoSeleccionado = '';
+    var vLow = valor.toLowerCase();
+
+    if (popover) {
+      var botones = popover.querySelectorAll('button');
+      botones.forEach(function (btnOpt) {
+        var optVal = (btnOpt.getAttribute('data-val') || btnOpt.getAttribute('onclick') || '').toLowerCase();
+        var optId = (btnOpt.id || '').toLowerCase();
+        var clone = btnOpt.cloneNode(true);
+        var chk = clone.querySelector('[id^="check-"], [class*="check-"]');
+        if (chk) chk.remove();
+        var textoBoton = clone.textContent.trim();
+
+        var isSelected = false;
+        if (!valor) {
+          if (optVal.indexOf("''") !== -1 || optVal.indexOf('""') !== -1 || optVal.indexOf('todos') !== -1 || optId.indexOf('todos') !== -1) {
+            isSelected = true;
+          }
+        } else {
+          if (optVal.indexOf(vLow) !== -1 || optId.indexOf(vLow) !== -1 || textoBoton.toLowerCase().indexOf(vLow) !== -1) {
+            isSelected = true;
+          }
+        }
+
+        var realCheck = btnOpt.querySelector('[id^="check-"], [class*="check-"]');
+        if (realCheck) {
+          if (isSelected) realCheck.classList.remove('hidden');
+          else realCheck.classList.add('hidden');
+        }
+
+        if (isSelected) {
+          btnOpt.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-sky-500/10 text-sky-400 dark:text-sky-300 cursor-pointer';
+          textoSeleccionado = sanitizeFilterLabel(textoBoton);
+        } else {
+          btnOpt.className = 'w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 cursor-pointer';
+        }
+      });
+      popover.classList.remove('filter-popover-open');
+    }
+
+    if (lbl) {
+      lbl.textContent = textoSeleccionado || (valor ? valor : 'Bloqueos');
+    }
+    var iconDep = document.getElementById('label-dep-active-icon');
+    if (iconDep) {
+      if (valor === 'con_dep') {
+        iconDep.innerHTML = '<svg class="portal-icon-sm shrink-0 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.8 17 5 19 5a1 1 0 0 1 1 1z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+      } else if (valor === 'sin_dep') {
+        iconDep.innerHTML = '<svg class="portal-icon-sm shrink-0 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+      } else {
+        iconDep.innerHTML = '<svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/></svg>';
+      }
+    }
+    if (typeof updateCapsuleVisual === 'function') updateCapsuleVisual(btn, !!valor);
+
+    if (!skipApply && typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+  }
+
+  function setKanbanHitoFilter(idHito, skipApply) {
+    idHito = (idHito || '').trim();
+    state.filtros.hitoTarea = idHito;
+    var inputEl = document.getElementById('filter-hito-tarea');
+    if (inputEl) inputEl.value = idHito;
+
+    var lbl = document.getElementById('label-hito-active-text');
+    var btn = document.getElementById('btn-hito-capsule');
+    var iconHito = document.getElementById('label-hito-active-icon');
+
+    var idProy = state.selectedProjectId ? String(state.selectedProjectId).trim().toUpperCase() : null;
+    if (idProy === 'TODOS' || idProy === 'ALL' || idProy === '' || idProy === 'GLOBAL' || idProy === 'NULL') {
+      idProy = null;
+    }
+
+    if (!idProy) {
+      if (lbl) lbl.textContent = 'Hitos (Selecciona Proyecto)';
+      if (btn) {
+        btn.setAttribute('disabled', 'disabled');
+        btn.disabled = true;
+        btn.className = 'filter-ghost-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400 select-none max-w-[200px] opacity-40 cursor-not-allowed pointer-events-none transition-all duration-200';
+        btn.removeAttribute('data-active');
+      }
+      var containerEl = document.getElementById('container-filter-hito');
+      if (containerEl) containerEl.classList.remove('group/filter-hito');
+      if (iconHito) {
+        iconHito.innerHTML = '<svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>';
+      }
+    } else if (!idHito || idHito.toUpperCase() === 'TODOS') {
+      if (lbl) lbl.textContent = 'Todos los Hitos';
+      if (btn) {
+        btn.removeAttribute('disabled');
+        btn.disabled = false;
+        btn.className = 'filter-ghost-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 bg-transparent border border-transparent transition-all duration-150 cursor-pointer shrink-0';
+        btn.removeAttribute('data-active');
+      }
+      var containerEl = document.getElementById('container-filter-hito');
+      if (containerEl) containerEl.classList.add('group/filter-hito');
+      if (iconHito) {
+        iconHito.innerHTML = '<svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>';
+      }
+    } else {
+      if (btn) {
+        btn.removeAttribute('disabled');
+        btn.disabled = false;
+        btn.className = 'filter-ghost-btn active inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold text-sky-400 dark:text-sky-300 bg-sky-500/10 border border-sky-500/30 shadow-[0_0_12px_rgba(56,189,248,0.18)] transition-all duration-150 cursor-pointer shrink-0';
+        btn.setAttribute('data-active', 'true');
+      }
+      var containerEl = document.getElementById('container-filter-hito');
+      if (containerEl) containerEl.classList.add('group/filter-hito');
+      if (iconHito) {
+        iconHito.innerHTML = '<svg class="portal-icon-sm shrink-0 text-sky-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+      }
+    }
+
+    var textoHitoSeleccionado = '';
+    var popoverHitos = document.getElementById('lista-opciones-hitos-popover');
+    if (popoverHitos) {
+      popoverHitos.querySelectorAll('button').forEach(function (btnOpt) {
+        var optVal = (btnOpt.getAttribute('data-val') || btnOpt.getAttribute('data-hito-id') || '').trim();
+        var check = btnOpt.querySelector('.check-hito-indicator') || btnOpt.querySelector('.check-hito');
+        var isSelected = (!idHito && (!optVal || optVal.toUpperCase() === 'TODOS')) ||
+          (idHito && optVal && idHito.toUpperCase() === optVal.toUpperCase());
+        if (check) {
+          if (isSelected) check.classList.remove('hidden');
+          else check.classList.add('hidden');
+        }
+        if (isSelected) {
+          btnOpt.className = 'btn-opt-hito w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-sky-500/10 text-sky-400 dark:text-sky-300 cursor-pointer';
+          var cloneHito = btnOpt.cloneNode(true);
+          var chkH = cloneHito.querySelector('.check-hito-indicator, .check-hito');
+          if (chkH) chkH.remove();
+          textoHitoSeleccionado = sanitizeFilterLabel(cloneHito.textContent.trim());
+        } else {
+          btnOpt.className = 'btn-opt-hito w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 cursor-pointer';
+        }
+      });
+    }
+
+    if (idProy && idHito && lbl) {
+      if (textoHitoSeleccionado) {
+        textoHitoSeleccionado = textoHitoSeleccionado.replace(/🎯/g, '').trim();
+        lbl.textContent = textoHitoSeleccionado.length > 20 ? textoHitoSeleccionado.substring(0, 20) + '…' : textoHitoSeleccionado;
+      } else {
+        var hitoObj = (state.hitos || []).find(function (h) {
+          var hId = String(h.id || h.idHito || h.ID_Hito || '').trim().toUpperCase();
+          return hId === idHito.toUpperCase();
+        });
+        var hitoNombre = hitoObj ? (hitoObj.nombre || hitoObj.nombreHito || hitoObj.Nombre_Hito || idHito) : idHito;
+        lbl.textContent = (hitoNombre.length > 20 ? hitoNombre.substring(0, 20) + '…' : hitoNombre);
+      }
+    }
+
+    var popover = document.getElementById('popover-filter-hito');
+    if (popover) popover.classList.remove('filter-popover-open');
+
+    if (!skipApply && typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+  }
+
+  function actualizarSelectorHitosKanban(preservarValor) {
+    var inputEl = document.getElementById('filter-hito-tarea');
+    var btnCapsule = document.getElementById('btn-hito-capsule');
+    var lblCapsule = document.getElementById('label-hito-active-text');
+    var listaEl = document.getElementById('lista-opciones-hitos-popover');
+    if (!inputEl) return;
+
+    var idProy = state.selectedProjectId ? String(state.selectedProjectId).trim().toUpperCase() : null;
+    if (idProy === 'TODOS' || idProy === 'ALL' || idProy === '' || idProy === 'GLOBAL' || idProy === 'NULL') {
+      idProy = null;
+    }
+
+    // Regla Canónica: Por defecto o si el proyecto es 'Todos', DESHABILITAR Hitos
+    if (!idProy) {
+      inputEl.value = '';
+      state.filtros.hitoTarea = '';
+      if (lblCapsule) lblCapsule.textContent = 'Hitos (Selecciona Proyecto)';
+      if (btnCapsule) {
+        btnCapsule.setAttribute('disabled', 'disabled');
+        btnCapsule.disabled = true;
+        btnCapsule.title = 'Selecciona un proyecto específico para activar el filtro de hitos';
+        btnCapsule.classList.remove('opacity-100', 'cursor-pointer');
+        btnCapsule.classList.add('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
+      }
+      var containerEl = document.getElementById('container-filter-hito');
+      if (containerEl) containerEl.classList.remove('group/filter-hito');
+      if (listaEl) {
+        listaEl.innerHTML = '<button type="button" onclick="setKanbanHitoFilter(\'\')" class="btn-opt-hito w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer" data-val="" data-hito-id=""><span class="flex items-center gap-1.5 select-none truncate"><span>Todos los Hitos</span></span><span class="text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0 check-hito-indicator hidden">✓</span></button><div class="px-2.5 py-2 text-[11px] text-slate-400 dark:text-slate-500 italic select-none" id="msg-hitos-popover-info">Selecciona un proyecto para ver sus hitos</div>';
+      }
+      updateCapsuleVisual(btnCapsule, false);
+      return;
+    }
+
+    // Filtrar hitos pertenecientes ÚNICAMENTE al proyecto seleccionado
+    var hitosProy = (state.hitos || []).filter(function (h) {
+      var hProy = String(h.idProyecto || h.ID_Proyecto || '').trim().toUpperCase();
+      return hProy === idProy;
+    });
+
+    // Caso B: El proyecto no tiene hitos registrados
+    if (hitosProy.length === 0) {
+      inputEl.value = '';
+      state.filtros.hitoTarea = '';
+      if (lblCapsule) lblCapsule.textContent = 'Sin Hitos Registrados';
+      if (btnCapsule) {
+        btnCapsule.setAttribute('disabled', 'disabled');
+        btnCapsule.disabled = true;
+        btnCapsule.title = 'El proyecto seleccionado no tiene hitos registrados';
+        btnCapsule.classList.remove('opacity-100', 'cursor-pointer');
+        btnCapsule.classList.add('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
+      }
+      var containerEl = document.getElementById('container-filter-hito');
+      if (containerEl) containerEl.classList.remove('group/filter-hito');
+      if (listaEl) {
+        listaEl.innerHTML = '<button type="button" onclick="setKanbanHitoFilter(\'\')" class="btn-opt-hito w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer" data-val="" data-hito-id=""><span class="flex items-center gap-1.5 select-none truncate"><span>Todos los Hitos</span></span><span class="text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0 check-hito-indicator hidden">✓</span></button><div class="px-2.5 py-2 text-[11px] text-slate-400 dark:text-slate-500 italic select-none" id="msg-hitos-popover-info">El proyecto no tiene hitos registrados</div>';
+      }
+      updateCapsuleVisual(btnCapsule, false);
+      return;
+    }
+
+    // Caso C: El proyecto tiene hitos -> habilitar cápsula y poblar popover
+    var containerEl = document.getElementById('container-filter-hito');
+    if (containerEl) containerEl.classList.add('group/filter-hito');
+
+    if (btnCapsule) {
+      btnCapsule.removeAttribute('disabled');
+      btnCapsule.disabled = false;
+      btnCapsule.title = 'Filtrar por hito del proyecto activo';
+      btnCapsule.classList.remove('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
+      btnCapsule.classList.add('opacity-100', 'cursor-pointer');
+    }
+
+    var hitosOrdenados = (typeof ordenarHitosCronologicamente === 'function')
+      ? ordenarHitosCronologicamente(hitosProy)
+      : hitosProy;
+
+    var valorAnterior = (preservarValor && inputEl.value) ? inputEl.value : '';
+    var existeValorAnterior = false;
+
+    var html = '';
+    html += '<button type="button" onclick="setKanbanHitoFilter(\'\')" class="btn-opt-hito w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer" data-val="" data-hito-id="" id="opt-hito-todos">';
+    html += '  <span class="flex items-center gap-1.5 truncate"><span>Todos los Hitos</span></span>';
+    html += '  <span class="text-xs text-indigo-600 dark:text-indigo-400 font-bold shrink-0 hidden check-hito-indicator">✓</span>';
+    html += '</button>';
+
+    hitosOrdenados.forEach(function (h) {
+      var idH = String(h.idHito || h.ID_Hito || '').trim();
+      var nomH = String(h.nombreHito || h.Nombre_Hito || 'Hito sin nombre').trim();
+      if (valorAnterior && idH.toUpperCase() === valorAnterior.toUpperCase()) {
+        existeValorAnterior = true;
+      }
+      html += '<button type="button" onclick="setKanbanHitoFilter(\'' + idH.replace(/'/g, "\\'") + '\')" class="btn-opt-hito w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer" data-val="' + idH.replace(/"/g, '&quot;') + '" data-hito-id="' + idH.replace(/"/g, '&quot;') + '">';
+      html += '  <span class="flex items-center gap-1.5 truncate" title="[' + idH + '] ' + nomH + '"><span class="text-[10px] font-mono text-indigo-500 dark:text-indigo-400 font-bold shrink-0">[' + idH + ']</span><span class="truncate">' + nomH + '</span></span>';
+      html += '  <span class="text-xs text-indigo-600 dark:text-indigo-400 font-bold shrink-0 hidden check-hito-indicator">✓</span>';
+      html += '</button>';
+    });
+
+    if (listaEl) {
+      listaEl.innerHTML = html;
+    }
+
+    if (preservarValor && existeValorAnterior) {
+      setKanbanHitoFilter(valorAnterior, true);
+    } else {
+      setKanbanHitoFilter('', true);
+    }
+  }
+
+  // Restaurar y sincronizar filtros guardados desde localStorage
+  function sincronizarFiltroTemporalDesdeStorage() {
+    try {
+      var saved = localStorage.getItem('pmo_kanban_time_filter');
+      if (saved && ['TODO', 'HOY', 'SEMANA', 'MES'].indexOf(saved.toUpperCase()) !== -1) {
+        setKanbanTimeFilter(saved.toUpperCase(), true);
+      } else {
+        setKanbanTimeFilter('TODO', true);
+      }
+      var savedSort = localStorage.getItem('pmo_kanban_sort_mode');
+      if (savedSort && typeof window.setSortModeKanban === 'function') {
+        window.setSortModeKanban(savedSort, true);
+      }
+      var savedContext = localStorage.getItem('pmo_kanban_context_filter');
+      if (savedContext && ['TODOS', 'PROYECTO', 'PERSONAL'].indexOf(savedContext.toUpperCase()) !== -1) {
+        setKanbanContextFilter(savedContext.toUpperCase(), true);
+      }
+    } catch (eStorageInit) {
+      setKanbanTimeFilter('TODO', true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', sincronizarFiltroTemporalDesdeStorage);
+  } else {
+    sincronizarFiltroTemporalDesdeStorage();
+  }
+
+  function aplicarFiltrosCruzados() {
+    var elHito = document.getElementById('filter-hito-tarea');
+    var elPrio = document.getElementById('filter-prioridad-tarea');
+    var elEnergia = document.getElementById('filter-energia-tarea');
+    var elPlazo = document.getElementById('filter-plazo-tarea');
+    var elDep = document.getElementById('filter-dependencia-tarea');
+    var elBuscar = document.getElementById('filter-buscar-tarea');
+
+    if (elHito) state.filtros.hitoTarea = (elHito.value || '').trim();
+    if (elPrio) state.filtros.prioridadTarea = elPrio.value;
+    if (elEnergia) state.filtros.energiaTarea = elEnergia.value;
+    if (elPlazo) state.filtros.plazoTarea = elPlazo.value;
+    if (elDep) state.filtros.dependenciaTarea = elDep.value;
+    if (elBuscar) {
+      state.filtros.buscarTarea = elBuscar.value.trim().toLowerCase();
+      var btnClear = document.getElementById('btn-clear-task-search');
+      if (btnClear) {
+        if (state.filtros.buscarTarea) btnClear.classList.remove('hidden');
+        else btnClear.classList.add('hidden');
+      }
+    }
+
+    var contextFilter = state.kanbanContextFilter || 'TODOS';
+    var timeFilter = state.kanbanTimeFilter || 'TODO';
+
+    // Pre-indexación en Map O(1) para resolución relacional ultrarrápida
+    var hitosMap = new Map();
+    (state.hitos || []).forEach(function (h) {
+      var idH = String(h.idHito || h.ID_Hito || h.id || '').trim().toUpperCase();
+      if (idH) {
+        var idProyH = String(h.idProyecto || h.ID_Proyecto || '').trim().toUpperCase();
+        var nomH = String(h.nombreHito || h.Nombre_Hito || h.nombre || '').trim();
+        hitosMap.set(idH, { idProyecto: idProyH, nombre: nomH });
+      }
+    });
+
+    var proysMap = new Map();
+    (state.proyectos || []).forEach(function (p) {
+      var idP = String(p.idProyecto || p.ID_Proyecto || p.id || '').trim().toUpperCase();
+      if (idP) {
+        proysMap.set(idP, p);
+      }
+    });
+
+    var selProy = state.selectedProjectId ? String(state.selectedProjectId).trim().toUpperCase() : null;
+    if (selProy === 'TODOS' || selProy === 'ALL' || selProy === '' || selProy === 'GLOBAL' || selProy === 'NULL') {
+      selProy = null;
+    }
+
+    // 1. Barrido acumulativo único para conteos de contexto y archivados (+10 días)
+    var countProyectos = 0;
+    var totalArchivadosKanban = 0;
+
+    (state.tareas || []).forEach(function (t) {
+      if (normalizarEstadoTarea(t.Estado_Tarea)) {
+        countProyectos++;
+      }
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(t)) {
+        totalArchivadosKanban++;
+      }
+    });
+
+    var countPersonal = 0;
+    (state.actividadesPersonales || []).forEach(function (a) {
+      if (normalizarEstadoTarea(a.Estado || a.Estado_Tarea)) {
+        countPersonal++;
+      }
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(a)) {
+        totalArchivadosKanban++;
+      }
+    });
+
+    var countTodos = countProyectos + countPersonal;
+
+    var badgeTodos = document.getElementById('badge-context-todos');
+    var badgeProy = document.getElementById('badge-context-proyectos');
+    var badgePers = document.getElementById('badge-context-personal');
+    if (badgeTodos) badgeTodos.textContent = countTodos;
+    if (badgeProy) badgeProy.textContent = countProyectos;
+    if (badgePers) badgePers.textContent = countPersonal;
+
+    var badgeHeaderArchivados = document.getElementById('badge-header-archivados');
+    if (badgeHeaderArchivados) {
+      badgeHeaderArchivados.textContent = totalArchivadosKanban;
+    }
+
+    var filtroTipo = (state.filtros.tipo && state.filtros.tipo !== 'Todos' && state.filtros.tipo !== 'TODOS') ? String(state.filtros.tipo).trim() : null;
+    var filtroHito = (state.filtros.hitoTarea && state.filtros.hitoTarea !== '') ? String(state.filtros.hitoTarea).trim() : null;
+    var filtroPrio = (state.filtros.prioridadTarea && state.filtros.prioridadTarea !== 'Todas' && state.filtros.prioridadTarea !== '') ? String(state.filtros.prioridadTarea).trim() : null;
+    var filtroEnergia = (state.filtros.energiaTarea && state.filtros.energiaTarea !== '') ? String(state.filtros.energiaTarea).trim() : null;
+    var filtroPlazo = (state.filtros.plazoTarea && state.filtros.plazoTarea !== '') ? String(state.filtros.plazoTarea).trim() : null;
+    var filtroDep = (state.filtros.dependenciaTarea && state.filtros.dependenciaTarea !== '') ? String(state.filtros.dependenciaTarea).trim() : null;
+    var filtroBuscar = (state.filtros.buscarTarea && state.filtros.buscarTarea !== '') ? state.filtros.buscarTarea : null;
+
+    // Fechas de referencia para filtrado temporal reactivo
+    var now = new Date();
+    var yHoy = now.getFullYear();
+    var mHoy = (now.getMonth() + 1 < 10 ? '0' : '') + (now.getMonth() + 1);
+    var dHoy = (now.getDate() < 10 ? '0' : '') + now.getDate();
+    var hoyStr = yHoy + '-' + mHoy + '-' + dHoy;
+
+    var dayOfWeek = now.getDay() || 7; // Lunes = 1, Domingo = 7
+    var startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - dayOfWeek + 1);
+    var endOfWeek = new Date(now);
+    endOfWeek.setDate(now.getDate() + (7 - dayOfWeek));
+
+    var yWStart = startOfWeek.getFullYear();
+    var mWStart = (startOfWeek.getMonth() + 1 < 10 ? '0' : '') + (startOfWeek.getMonth() + 1);
+    var dWStart = (startOfWeek.getDate() < 10 ? '0' : '') + startOfWeek.getDate();
+    var startOfWeekStr = yWStart + '-' + mWStart + '-' + dWStart;
+
+    var yWEnd = endOfWeek.getFullYear();
+    var mWEnd = (endOfWeek.getMonth() + 1 < 10 ? '0' : '') + (endOfWeek.getMonth() + 1);
+    var dWEnd = (endOfWeek.getDate() < 10 ? '0' : '') + endOfWeek.getDate();
+    var endOfWeekStr = yWEnd + '-' + mWEnd + '-' + dWEnd;
+
+    var startOfMonthStr = hoyStr.substring(0, 7) + '-01';
+    var nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    var endOfMonth = new Date(nextMonth - 1);
+    var yMEnd = endOfMonth.getFullYear();
+    var mMEnd = (endOfMonth.getMonth() + 1 < 10 ? '0' : '') + (endOfMonth.getMonth() + 1);
+    var dMEnd = (endOfMonth.getDate() < 10 ? '0' : '') + endOfMonth.getDate();
+    var endOfMonthStr = yMEnd + '-' + mMEnd + '-' + dMEnd;
+
+    // 2. Filtrar Tareas de Proyectos (si el contexto es TODOS o PROYECTOS)
+    var tareasFiltradas = [];
+    if (contextFilter === 'TODOS' || contextFilter === 'PROYECTOS') {
+      tareasFiltradas = (state.tareas || []).filter(function (t) {
+        var colDestino = normalizarEstadoTarea(t.Estado_Tarea);
+        if (!colDestino) return false;
+
+        // Regla estricta: todo objeto completado/conciliado con más de 10 días desaparece del canvas activo
+        if (typeof esElementoArchivado === 'function' && esElementoArchivado(t)) {
+          return false;
+        }
+
+        var idProyTarea = String(t.ID_Proyecto || '').trim().toUpperCase();
+        var idHitoTarea = String(t.ID_Hito || '').trim().toUpperCase();
+
+        if (!idProyTarea && idHitoTarea) {
+          var hitoAsoc = hitosMap.get(idHitoTarea);
+          if (hitoAsoc && hitoAsoc.idProyecto) {
+            idProyTarea = hitoAsoc.idProyecto;
+          } else if (idHitoTarea.indexOf('-H') !== -1) {
+            idProyTarea = idHitoTarea.substring(0, idHitoTarea.lastIndexOf('-H')).trim();
+          }
+        }
+
+        // Filtro por Proyecto seleccionado
+        if (selProy) {
+          var coincideDirecto = (idProyTarea === selProy);
+          var coincidePorHito = false;
+
+          if (!coincideDirecto && idHitoTarea) {
+            var hitoPadre = hitosMap.get(idHitoTarea);
+            if (hitoPadre && hitoPadre.idProyecto === selProy) {
+              coincidePorHito = true;
+            }
+          }
+
+          if (!coincideDirecto && !coincidePorHito) return false;
+        }
+
+        // Filtro por Hito específico
+        if (filtroHito) {
+          var idHitoTareaNorm = String(t.ID_Hito || '').trim().toUpperCase();
+          if (idHitoTareaNorm !== filtroHito.toUpperCase()) return false;
+        }
+
+        // Filtro por Cartera / Tipo de Iniciativa
+        if (filtroTipo && idProyTarea) {
+          var pPadre = proysMap.get(idProyTarea);
+          if (pPadre && pPadre.Tipo_Iniciativa !== filtroTipo) return false;
+        }
+
+        // Filtro de Prioridad Eisenhower
+        if (filtroPrio) {
+          var prioT = String(t.Prioridad_Eisenhower || '').toLowerCase();
+          if (filtroPrio === '01_P1_Alta') {
+            if (prioT.indexOf('01') === -1 && prioT.indexOf('p1') === -1 && prioT.indexOf('alta') === -1 && prioT.indexOf('urgente') === -1) return false;
+          } else if (filtroPrio === '02_P2_Media') {
+            if (prioT.indexOf('02') === -1 && prioT.indexOf('p2') === -1 && prioT.indexOf('media') === -1) return false;
+          } else if (filtroPrio === '03_P3_Baja') {
+            if (prioT.indexOf('03') === -1 && prioT.indexOf('p3') === -1 && prioT.indexOf('baja') === -1) return false;
+          } else if (filtroPrio === '04_P4') {
+            if (prioT.indexOf('04') === -1 && prioT.indexOf('p4') === -1) return false;
+          } else if (prioT.indexOf(filtroPrio.toLowerCase()) === -1) {
+            return false;
+          }
+        }
+
+        // Filtro de Tipo de Trabajo / Nivel de Energía (Homologación canónica)
+        if (filtroEnergia) {
+          var energT = String(t.Nivel_Energia_Requerido || '');
+          if (filtroEnergia === 'Alta_DeepWork' && energT.indexOf('Alta') === -1 && energT.indexOf('DeepWork') === -1 && energT.indexOf('Estrategica') === -1) return false;
+          if (filtroEnergia === 'Media_Operativa' && energT.indexOf('Media') === -1 && energT.indexOf('Operativa') === -1 && energT !== '') return false;
+          if (filtroEnergia === 'Baja_Automatica' && energT.indexOf('Baja') === -1 && energT.indexOf('Automatica') === -1 && energT.indexOf('Admin') === -1) return false;
+        }
+
+        // Filtro de Plazo / Vencimiento
+        var fechaT = t.Fecha_Programada ? String(t.Fecha_Programada).split('T')[0].split(' ')[0] : (t.Fecha_Fin_Plan ? String(t.Fecha_Fin_Plan).split('T')[0] : '');
+        var estaCompletada = (colDestino === '04_Completado');
+
+        if (filtroPlazo) {
+          if (filtroPlazo === 'vencidas') {
+            if (!fechaT || fechaT >= hoyStr || estaCompletada) return false;
+          } else if (filtroPlazo === 'hoy') {
+            if (fechaT !== hoyStr) return false;
+          } else if (filtroPlazo === '7dias') {
+            if (!fechaT) return false;
+            var dHoyDate = new Date(hoyStr);
+            var dFechaDate = new Date(fechaT);
+            var diffDays = Math.ceil((dFechaDate - dHoyDate) / (1000 * 60 * 60 * 24));
+            if (diffDays < 0 || diffDays > 7) return false;
+          } else if (filtroPlazo === 'sin_fecha') {
+            if (fechaT) return false;
+          }
+        }
+
+        // Filtro de Dependencias
+        if (filtroDep) {
+          var depId = String(t.ID_Dependencia || '').trim();
+          var tieneDep = depId !== '' && !depId.includes('@google.com');
+          if (filtroDep === 'con_dep' && !tieneDep) return false;
+          if (filtroDep === 'sin_dep' && tieneDep) return false;
+        }
+
+        // Buscador de Tareas
+        if (filtroBuscar) {
+          var idTarMatch = String(t.ID_Tarea || '').toLowerCase().indexOf(filtroBuscar) !== -1;
+          var nomTarMatch = String(t.Nombre_Tarea_Actividad || t.Nombre_Tarea || '').toLowerCase().indexOf(filtroBuscar) !== -1;
+          var descMatch = String(t.Descripcion_Entregable || t.Notas_Impedimentos || '').toLowerCase().indexOf(filtroBuscar) !== -1;
+          var respMatch = String(t.Responsable || t.Responsable_Ejecutor || '').toLowerCase().indexOf(filtroBuscar) !== -1;
+          if (!idTarMatch && !nomTarMatch && !descMatch && !respMatch) return false;
+        }
+
+        // Filtro Temporal Reactivo (Todo | Hoy | Esta Semana | Este Mes)
+        if (timeFilter === 'HOY') {
+          var esHoy = (fechaT === hoyStr);
+          var esEnProceso = (colDestino === '03_En_Proceso');
+          var esPorHacerHoyOVencida = (colDestino === '02_Por_Hacer' && (!fechaT || fechaT <= hoyStr));
+          if (!esHoy && !esEnProceso && !esPorHacerHoyOVencida) return false;
+        } else if (timeFilter === 'SEMANA') {
+          var enSemana = (fechaT >= startOfWeekStr && fechaT <= endOfWeekStr);
+          var pendienteAtrasada = (fechaT && fechaT < startOfWeekStr && !estaCompletada);
+          var enCurso = (colDestino === '03_En_Proceso');
+          if (!enSemana && !pendienteAtrasada && !enCurso) return false;
+        } else if (timeFilter === 'MES') {
+          var enMes = (fechaT >= startOfMonthStr && fechaT <= endOfMonthStr);
+          var pendienteAtrasadaMes = (fechaT && fechaT < startOfMonthStr && !estaCompletada);
+          var enCursoMes = (colDestino === '03_En_Proceso');
+          if (!enMes && !pendienteAtrasadaMes && !enCursoMes) return false;
+        }
+
+        return true;
+      });
+    }
+
+    // 3. Filtrar Actividades Personales (si el contexto es TODOS o PERSONAL, y no hay filtro restrictivo de proyecto o hito)
+    var actividadesFiltradas = [];
+    if ((contextFilter === 'TODOS' || contextFilter === 'PERSONAL') && !selProy && !filtroTipo && !filtroDep && !filtroHito) {
+      actividadesFiltradas = (state.actividadesPersonales || []).filter(function (a) {
+        var colDestino = normalizarEstadoTarea(a.Estado || a.Estado_Tarea);
+        if (!colDestino) return false;
+
+        // Regla estricta: todo objeto completado/conciliado con más de 10 días desaparece del canvas activo
+        if (typeof esElementoArchivado === 'function' && esElementoArchivado(a)) {
+          return false;
+        }
+
+        // Filtro de Prioridad Eisenhower
+        if (filtroPrio) {
+          var prioA = String(a.Prioridad_Eisenhower || '').toLowerCase();
+          if (filtroPrio === '01_P1_Alta') {
+            if (prioA.indexOf('01') === -1 && prioA.indexOf('p1') === -1 && prioA.indexOf('alta') === -1 && prioA.indexOf('urgente') === -1) return false;
+          } else if (filtroPrio === '02_P2_Media') {
+            if (prioA.indexOf('02') === -1 && prioA.indexOf('p2') === -1 && prioA.indexOf('media') === -1) return false;
+          } else if (filtroPrio === '03_P3_Baja') {
+            if (prioA.indexOf('03') === -1 && prioA.indexOf('p3') === -1 && prioA.indexOf('baja') === -1) return false;
+          } else if (filtroPrio === '04_P4') {
+            if (prioA.indexOf('04') === -1 && prioA.indexOf('p4') === -1) return false;
+          } else if (prioA.indexOf(filtroPrio.toLowerCase()) === -1) {
+            return false;
+          }
+        }
+
+        // Filtro de Plazo / Vencimiento
+        var fechaA = a.Fecha_Programada ? String(a.Fecha_Programada).split('T')[0].split(' ')[0] : '';
+        var estaCompletada = (colDestino === '04_Completado');
+
+        if (filtroPlazo) {
+          if (filtroPlazo === 'vencidas') {
+            if (!fechaA || fechaA >= hoyStr || estaCompletada) return false;
+          } else if (filtroPlazo === 'hoy') {
+            if (fechaA !== hoyStr) return false;
+          } else if (filtroPlazo === '7dias') {
+            if (!fechaA) return false;
+            var dHoyD = new Date(hoyStr);
+            var dFechaD = new Date(fechaA);
+            var diffDaysA = Math.ceil((dFechaD - dHoyD) / (1000 * 60 * 60 * 24));
+            if (diffDaysA < 0 || diffDaysA > 7) return false;
+          } else if (filtroPlazo === 'sin_fecha') {
+            if (fechaA) return false;
+          }
+        }
+
+        // Buscador de Tareas/Actividades
+        if (filtroBuscar) {
+          var idActMatch = String(a.ID_Actividad || a.ID_Tarea || '').toLowerCase().indexOf(filtroBuscar) !== -1;
+          var nomActMatch = String(a.Nombre_Actividad || a.Nombre_Tarea_Actividad || '').toLowerCase().indexOf(filtroBuscar) !== -1;
+          var catMatch = String(a.Categoria_Vida || '').toLowerCase().indexOf(filtroBuscar) !== -1;
+          var notasMatch = String(a.Notas_Checklist || '').toLowerCase().indexOf(filtroBuscar) !== -1;
+          if (!idActMatch && !nomActMatch && !catMatch && !notasMatch) return false;
+        }
+
+        // Filtro Temporal Reactivo (Todo | Hoy | Esta Semana | Este Mes)
+        var esHabitualDiario = (String(a.Tipo_Compromiso || '').toUpperCase() === 'HABITUAL' && (String(a.Frecuencia_Ciclo || '').toUpperCase() === 'DIARIA' || !a.Frecuencia_Ciclo));
+        var esHabitualSemanal = (String(a.Tipo_Compromiso || '').toUpperCase() === 'HABITUAL' && String(a.Frecuencia_Ciclo || '').toUpperCase() === 'SEMANAL');
+
+        if (timeFilter === 'HOY') {
+          var esHoy = (fechaA === hoyStr);
+          var esEnProceso = (colDestino === '03_En_Proceso');
+          var esPorHacerHoy = (colDestino === '02_Por_Hacer' && (!fechaA || fechaA <= hoyStr));
+          if (!esHoy && !esHabitualDiario && !esEnProceso && !esPorHacerHoy) return false;
+        } else if (timeFilter === 'SEMANA') {
+          var enSemana = (fechaA >= startOfWeekStr && fechaA <= endOfWeekStr);
+          var esHabitual = (esHabitualDiario || esHabitualSemanal);
+          var pendienteAtrasada = (fechaA && fechaA < startOfWeekStr && !estaCompletada);
+          var enCurso = (colDestino === '03_En_Proceso');
+          if (!enSemana && !esHabitual && !pendienteAtrasada && !enCurso) return false;
+        } else if (timeFilter === 'MES') {
+          var enMes = (fechaA >= startOfMonthStr && fechaA <= endOfMonthStr);
+          var esHabitoMes = (String(a.Tipo_Compromiso || '').toUpperCase() === 'HABITUAL');
+          var pendienteAtrasadaMes = (fechaA && fechaA < startOfMonthStr && !estaCompletada);
+          var enCursoMes = (colDestino === '03_En_Proceso');
+          if (!enMes && !esHabitoMes && !pendienteAtrasadaMes && !enCursoMes) return false;
+        }
+
+        return true;
+      });
+    }
+
+    // 4. Unificación de tarjetas para renderizado Kanban
+    var itemsCombinados = tareasFiltradas.concat(actividadesFiltradas);
+
+    var sortModeKanban = localStorage.getItem('pmo_kanban_sort_mode') || 'PRIORITY';
+    itemsCombinados.sort(function(a, b) {
+      if (sortModeKanban === 'DATE') {
+        var dA = String(a.Fecha_Programada || a.Fecha_Vencimiento || '9999-12-31');
+        var dB = String(b.Fecha_Programada || b.Fecha_Vencimiento || '9999-12-31');
+        return dA.localeCompare(dB);
+      } else if (sortModeKanban === 'ENERGY') {
+        var eA = String(a.Nivel_Energia || '03_Normal').toLowerCase();
+        var eB = String(b.Nivel_Energia || '03_Normal').toLowerCase();
+        return eA.localeCompare(eB);
+      } else if (sortModeKanban === 'HOURS') {
+        var hA = parseFloat(a.Horas_Estimadas || a.Horas_Planeadas) || 0;
+        var hB = parseFloat(b.Horas_Estimadas || b.Horas_Planeadas) || 0;
+        return hB - hA;
+      } else if (sortModeKanban === 'ALPHA') {
+        var nA = String(a.Nombre_Tarea_Actividad || a.Nombre_Actividad || a.Nombre_Tarea || '').toLowerCase();
+        var nB = String(b.Nombre_Tarea_Actividad || b.Nombre_Actividad || b.Nombre_Tarea || '').toLowerCase();
+        return nA.localeCompare(nB);
+      } else { // PRIORITY
+        var pA = String(a.Prioridad_Eisenhower || a.Prioridad || '04_P4').toLowerCase();
+        var pB = String(b.Prioridad_Eisenhower || b.Prioridad || '04_P4').toLowerCase();
+        return pA.localeCompare(pB);
+      }
+    });
+    var totalConsolidado = countTodos;
+
+    var hayFiltrosActivos = !!(selProy || filtroTipo || filtroHito || filtroPrio || filtroEnergia || filtroPlazo || filtroDep || filtroBuscar || contextFilter !== 'TODOS' || timeFilter !== 'TODO');
+    actualizarBannerFiltrosKanban(itemsCombinados.length, totalConsolidado, hayFiltrosActivos, filtroHito);
+
+    try {
+      kanban.render(itemsCombinados);
+    } catch (errKanban) {
+      console.error('[Kanban render err]:', errKanban);
+    }
+
+    try {
+      recalcularGastoVisible();
+    } catch (errGasto) {
+      console.error('[Gasto contextual err]:', errGasto);
+    }
+  }
+
+  function recalcularGastoVisible() {
+    var lblGasto = document.getElementById('lbl-gasto-contextual');
+    var lblTitulo = document.getElementById('lbl-gasto-contextual-titulo');
+    if (!lblGasto) return;
+
+    if (state.selectedProjectId) {
+      var p = (state.proyectos || []).find(function (x) {
+        return String(x.ID_Proyecto || '').trim().toUpperCase() === state.selectedProjectId;
+      });
+      var gasto = p ? (parseFloat(p.Costo_Ejecutado_Real_PEN) || 0) : 0;
+      if (lblTitulo) lblTitulo.textContent = 'Gasto Proy:';
+      lblGasto.textContent = 'PEN ' + gasto.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } else {
+      var total = (state.proyectos || []).reduce(function (acc, cur) {
+        return acc + (parseFloat(cur.Costo_Ejecutado_Real_PEN) || 0);
+      }, 0);
+      if (lblTitulo) lblTitulo.textContent = 'Gasto Global:';
+      lblGasto.textContent = 'PEN ' + total.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+  }
+
+
+  function toggleModoEnfoqueMav() {
+    // Deprecado en Fase 4.14: Modo MAV erradicado de Kanban
+  }
+  window.toggleModoEnfoqueMav = toggleModoEnfoqueMav;
+
+
+  function limpiarTodosLosFiltrosKanban() {
+    state.selectedProjectId = null;
+    state.proyectoActivoId = null;
+    delete state.modoEnfoqueMav;
+    try {
+      localStorage.removeItem('pmo_kanban_modo_mav');
+    } catch (eStorageClearMav) {}
+
+    if (!state.filtros) state.filtros = {};
+    delete state.filtros.mav;
+    delete state.filtros.esMav;
+    delete state.filtros.modoEnfoqueMav;
+    if (state.filtrosKanban) {
+      delete state.filtrosKanban.mav;
+      delete state.filtrosKanban.esMav;
+      delete state.filtrosKanban.modoEnfoqueMav;
+    }
+    state.filtros.tipo = '';
+    state.filtros.hitoTarea = '';
+    state.filtros.prioridadTarea = '';
+    state.filtros.energiaTarea = '';
+    state.filtros.plazoTarea = '';
+    state.filtros.dependenciaTarea = '';
+    state.filtros.buscarTarea = '';
+    state.filtros.busquedaSidebar = '';
+    state.filtros.categoriaVida = '';
+
+    setKanbanContextFilter('TODOS', true);
+    setKanbanTimeFilter('TODO', true);
+
+    var elBusquedaSidebar = document.getElementById('sidebar-search-proyectos');
+    if (elBusquedaSidebar) elBusquedaSidebar.value = '';
+    var btnClearSidebar = document.getElementById('btn-clear-search-sidebar');
+    if (btnClearSidebar) btnClearSidebar.classList.add('hidden');
+
+    setKanbanPrioridadFilter('', true);
+    setKanbanEnergiaFilter('', true);
+    setKanbanPlazoFilter('', true);
+    setKanbanDependenciaFilter('', true);
+    setKanbanHitoFilter('', true);
+
+    var elBuscar = document.getElementById('filter-buscar-tarea');
+    if (elBuscar) {
+      elBuscar.value = '';
+      elBuscar.blur();
+    }
+    var btnClearTask = document.getElementById('btn-clear-task-search');
+    if (btnClearTask) btnClearTask.classList.add('hidden');
+
+    document.querySelectorAll('.pill-tipo').forEach(function (btn) {
+      btn.className = (btn.dataset.tipo === '')
+        ? 'pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-600 text-white transition'
+        : 'pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-400 hover:text-white transition';
+    });
+
+    var lblActivo = document.getElementById('label-proyecto-activo');
+    if (lblActivo) {
+      lblActivo.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><span class="truncate">Vista Global</span>';
+      lblActivo.className = 'text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700 truncate max-w-[260px] inline-flex items-center gap-1.5 transition-all duration-200';
+    }
+
+    var badgeFiltro = document.getElementById('badge-filtro-activo-resumen');
+    if (badgeFiltro) {
+      badgeFiltro.classList.add('hidden');
+      badgeFiltro.classList.remove('flex');
+    }
+
+    var btnLimpiar = document.getElementById('btn-limpiar-filtros-kanban');
+    if (btnLimpiar) {
+      btnLimpiar.classList.add('hidden');
+      btnLimpiar.classList.remove('inline-flex', 'flex');
+    }
+
+    if (typeof actualizarBarraMetadatosProyectoKanban === 'function') {
+      actualizarBarraMetadatosProyectoKanban(null);
+    }
+
+    if (typeof actualizarSelectorHitosKanban === 'function') {
+      actualizarSelectorHitosKanban(false);
+    }
+
+    if (typeof renderSidebarProyectos === 'function') {
+      renderSidebarProyectos();
+    }
+    if (typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+  }
+  window.limpiarTodosLosFiltrosKanban = limpiarTodosLosFiltrosKanban;
+  window.limpiarFiltrosKanban = limpiarTodosLosFiltrosKanban;
+
+  function limpiarBusquedaTareas() {
+    state.filtros.buscarTarea = '';
+    var elBuscar = document.getElementById('filter-buscar-tarea');
+    if (elBuscar) elBuscar.value = '';
+    var btnClearTask = document.getElementById('btn-clear-task-search');
+    if (btnClearTask) btnClearTask.classList.add('hidden');
+    aplicarFiltrosCruzados();
+  }
+
+  /**
+   * Actualiza el modo de ordenamiento de Kanban y persiste en localStorage
+   */
+  window.setSortModeKanban = function (mode, skipApply) {
+    if (!mode) return;
+    localStorage.setItem('pmo_kanban_sort_mode', mode);
+    var iconMap = {
+      'PRIORITY': '<svg class="w-4 h-4 shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',
+      'DATE': '<svg class="w-4 h-4 shrink-0 text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/></svg>',
+      'ENERGY': '<svg class="w-4 h-4 shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+      'HOURS': '<svg class="w-4 h-4 shrink-0 text-teal-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+      'ALPHA': '<svg class="w-4 h-4 shrink-0 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M20 8h-5"/><path d="M15 10V6.5a2.5 2.5 0 0 1 5 0V10"/><path d="M15 14h5l-5 6h5"/></svg>'
+    };
+    var btnMain = document.getElementById('label-sort-kanban-icon');
+    if (btnMain) btnMain.innerHTML = iconMap[mode] || iconMap['PRIORITY'];
+
+    document.querySelectorAll('.btn-sort-kanban-opt').forEach(function (btn) {
+      if (btn.dataset.val === mode) {
+        btn.className = 'btn-sort-kanban-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 ring-1 ring-indigo-500';
+      } else {
+        btn.className = 'btn-sort-kanban-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500';
+      }
+    });
+
+    // Cerrar popover si está abierto
+    document.querySelectorAll('.kanban-hover-popover').forEach(function (p) {
+      p.classList.remove('filter-popover-open', 'time-popover-open');
+    });
+
+    if (!skipApply) {
+      aplicarFiltrosCruzados();
+    }
+  };
+
+  function limpiarFiltrosSecundarios() {
+    if (typeof window.limpiarFiltrosKanban === 'function') {
+      window.limpiarFiltrosKanban();
+    } else {
+      limpiarTodosLosFiltrosKanban();
+    }
+  }
+
+  window.limpiarTodosLosFiltrosKanban = limpiarTodosLosFiltrosKanban;
+  window.limpiarFiltrosSecundarios = limpiarFiltrosSecundarios;
+  window.limpiarBusquedaTareas = limpiarBusquedaTareas;
+  window.aplicarFiltrosCruzados = aplicarFiltrosCruzados;
+  window.renderKanban = aplicarFiltrosCruzados;
+  window.crearTarjetaKanbanHTML = crearTarjetaKanbanHTML;
+  window.setKanbanTimeFilter = setKanbanTimeFilter;
+  window.toggleTimeFilterDropdown = toggleTimeFilterDropdown;
+  window.toggleFilterPopover = toggleFilterPopover;
+  window.setKanbanPrioridadFilter = setKanbanPrioridadFilter;
+  window.setKanbanEnergiaFilter = setKanbanEnergiaFilter;
+  window.setKanbanPlazoFilter = setKanbanPlazoFilter;
+  window.setKanbanDependenciaFilter = setKanbanDependenciaFilter;
+  window.setKanbanHitoFilter = setKanbanHitoFilter;
+  window.actualizarSelectorHitosKanban = actualizarSelectorHitosKanban;
+  window.setKanbanContextFilter = setKanbanContextFilter;
+  window.filtrarPorPildoraTipo = filtrarPorPildoraTipo;
+
+  function filtrarPorPildoraTipo(tipo) {
+    state.filtros.tipo = tipo;
+    document.querySelectorAll('.pill-tipo').forEach(function (btn) {
+      btn.className = (btn.dataset.tipo === tipo)
+        ? 'pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-600 text-white'
+        : 'pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-400 hover:text-white';
+    });
+    if (typeof renderSidebarProyectos === 'function') renderSidebarProyectos();
+    aplicarFiltrosCruzados();
+  }
+
+  if (typeof window.limpiarBusquedaSidebar !== 'function') {
+    window.limpiarBusquedaSidebar = function () {
+      if (state && state.filtros) state.filtros.busquedaSidebar = '';
+      var input = document.getElementById('sidebar-search-proyectos');
+      if (input) input.value = '';
+      var clearBtn = document.getElementById('btn-clear-search-sidebar');
+      if (clearBtn) clearBtn.classList.add('hidden');
+      if (typeof renderSidebarProyectos === 'function') renderSidebarProyectos();
+    };
+  }
+
+  // Disparo inicial si las columnas existen en el DOM y no tienen tarjetas reales
+  if (typeof renderKanbanSkeletons === 'function') {
+    var _colTest = document.getElementById('col-backlog');
+    if (_colTest && _colTest.querySelectorAll('.kanban-card:not(.kanban-skeleton-card)').length === 0) {
+      renderKanbanSkeletons();
+    }
+  }
+
+  /* ===================================================================== */
+  /* CONTROLADORES RESPONSIVOS KANBAN MÓVIL (< 768px)                       */
+  /* ESTÁNDAR: COBALT AERODYNAMIC A.2.2                                    */
+  /* ===================================================================== */
+  function seleccionarColumnaKanbanMovil(colId) {
+    if (!colId) return;
+    // 1. Alternar visibilidad de las columnas
+    var cols = document.querySelectorAll('.kanban-col-container');
+    cols.forEach(function (col) {
+      if (col.getAttribute('data-state') === colId) {
+        col.classList.add('kanban-col-mobile-active');
+      } else {
+        col.classList.remove('kanban-col-mobile-active');
+      }
+    });
+
+    // 2. Alternar clases activas de las pestañas táctiles
+    var tabs = document.querySelectorAll('.kanban-tab-btn');
+    tabs.forEach(function (btn) {
+      var id = btn.id || '';
+      if (id === 'tab-col-' + colId) {
+        btn.classList.add('bg-white', 'dark:bg-slate-800', 'shadow-xs');
+        btn.classList.remove('text-slate-600', 'dark:text-slate-400');
+        if (colId === '01_Backlog') btn.classList.add('text-slate-700', 'dark:text-slate-200');
+        else if (colId === '02_Por_Hacer') btn.classList.add('text-blue-600', 'dark:text-blue-400');
+        else if (colId === '03_En_Proceso') btn.classList.add('text-amber-600', 'dark:text-amber-400');
+        else if (colId === '04_Completado') btn.classList.add('text-emerald-600', 'dark:text-emerald-400');
+      } else {
+        btn.classList.remove(
+          'bg-white', 'dark:bg-slate-800', 'shadow-xs',
+          'text-slate-700', 'dark:text-slate-200',
+          'text-blue-600', 'dark:text-blue-400',
+          'text-amber-600', 'dark:text-amber-400',
+          'text-emerald-600', 'dark:text-emerald-400'
+        );
+        btn.classList.add('text-slate-600', 'dark:text-slate-400');
+      }
+    });
+  }
+
+  function abrirModalFiltrosKanbanMovil() {
+    var modal = document.getElementById('modal-filtros-kanban-movil');
+    if (!modal) return;
+    actualizarPillsFiltrosMovil();
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+
+  function cerrarModalFiltrosKanbanMovil() {
+    var modal = document.getElementById('modal-filtros-kanban-movil');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+
+  function actualizarPillsFiltrosMovil() {
+    var prio = (document.getElementById('filter-prioridad-tarea') || {}).value || '';
+    var energia = (document.getElementById('filter-energia-tarea') || {}).value || '';
+    var plazo = (document.getElementById('filter-plazo-tarea') || {}).value || '';
+    var dep = (document.getElementById('filter-dependencia-tarea') || {}).value || '';
+
+    // Actualizar estilo activo en pills de prioridad
+    document.querySelectorAll('.pill-filtro-movil-prio').forEach(function(b) {
+      if ((b.getAttribute('data-val') || '') === prio) {
+        b.classList.add('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'border-indigo-400');
+        b.classList.remove('border-slate-200', 'dark:border-slate-700');
+      } else {
+        b.classList.remove('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'border-indigo-400');
+        b.classList.add('border-slate-200', 'dark:border-slate-700');
+      }
+    });
+
+    // Actualizar estilo activo en pills de energía
+    document.querySelectorAll('.pill-filtro-movil-energia').forEach(function(b) {
+      if ((b.getAttribute('data-val') || '') === energia) {
+        b.classList.add('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'border-indigo-400');
+        b.classList.remove('border-slate-200', 'dark:border-slate-700');
+      } else {
+        b.classList.remove('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'border-indigo-400');
+        b.classList.add('border-slate-200', 'dark:border-slate-700');
+      }
+    });
+
+    // Actualizar estilo activo en pills de plazo
+    document.querySelectorAll('.pill-filtro-movil-plazo').forEach(function(b) {
+      if ((b.getAttribute('data-val') || '') === plazo) {
+        b.classList.add('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'border-indigo-400');
+        b.classList.remove('border-slate-200', 'dark:border-slate-700');
+      } else {
+        b.classList.remove('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'border-indigo-400');
+        b.classList.add('border-slate-200', 'dark:border-slate-700');
+      }
+    });
+
+    // Actualizar estilo activo en pills de dependencia
+    document.querySelectorAll('.pill-filtro-movil-dep').forEach(function(b) {
+      if ((b.getAttribute('data-val') || '') === dep) {
+        b.classList.add('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'border-indigo-400');
+        b.classList.remove('border-slate-200', 'dark:border-slate-700');
+      } else {
+        b.classList.remove('bg-indigo-50', 'dark:bg-indigo-950/60', 'text-indigo-600', 'dark:text-indigo-400', 'border-indigo-400');
+        b.classList.add('border-slate-200', 'dark:border-slate-700');
+      }
+    });
+
+    // Actualizar badge contador en botón móvil de filtros
+    var activeCount = (prio ? 1 : 0) + (energia ? 1 : 0) + (plazo ? 1 : 0) + (dep ? 1 : 0);
+    var badgeFiltros = document.getElementById('badge-count-filtros-movil');
+    if (badgeFiltros) {
+      if (activeCount > 0) {
+        badgeFiltros.textContent = activeCount;
+        badgeFiltros.classList.remove('hidden');
+      } else {
+        badgeFiltros.classList.add('hidden');
+      }
+    }
+  }
+
+  window.seleccionarColumnaKanbanMovil = seleccionarColumnaKanbanMovil;
+  window.abrirModalFiltrosKanbanMovil = abrirModalFiltrosKanbanMovil;
+  window.cerrarModalFiltrosKanbanMovil = cerrarModalFiltrosKanbanMovil;
+  window.actualizarPillsFiltrosMovil = actualizarPillsFiltrosMovil;
+</script>

@@ -1,0 +1,2712 @@
+<!--
+ * ============================================================================
+ * ARCHIVO: JS_TareaFlow.html
+ * SISTEMA: PMO Personal Modular & Gestión Integral de Vida
+ * ============================================================================
+-->
+<script>
+  // ============================================================================
+  // CONTROLADOR DE TAREAS FLOW (CLICKUP / ASANA STYLE)
+  // Modal Inteligente: modal-tarea-flow
+  // ============================================================================
+
+  var taskFlowState = {
+    modo: 'CREAR', // 'CREAR' | 'EDITAR'
+    idTarea: '',
+    idProyecto: '',
+    idHito: '',
+    idDependencia: '',
+    estado: '02_Por_Hacer',
+    prioridad: '02_P2_Media',
+    energia: 'Media_Operativa',
+    fechaProgramada: '',
+    horaProgramada: '09:00',
+    horasEstimadas: 1.0,
+    horasReales: 0.0,
+    notas: '',
+    lugarEjecucion: '',
+    calAno: new Date().getFullYear(),
+    calMes: new Date().getMonth(),
+    diaSeleccionado: '',
+    pasosTemporales: []
+  };
+
+  function cerrarTodosDropdownsTaskFlow() {
+    var pryDd = document.getElementById('task-flow-pry-dropdown');
+    if (pryDd) pryDd.classList.add('hidden');
+    var hitDd = document.getElementById('task-flow-hit-dropdown');
+    if (hitDd) hitDd.classList.add('hidden');
+    var estDd = document.getElementById('task-flow-estado-dropdown');
+    if (estDd) estDd.classList.add('hidden');
+  }
+
+  function actualizarBentoHorasTaskFlow() {
+    var estEl = document.getElementById('task-flow-bento-horas-est');
+    var reaEl = document.getElementById('task-flow-bento-horas-rea');
+    if (estEl) estEl.textContent = (parseFloat(taskFlowState.horasEstimadas) || 0).toFixed(1) + 'h';
+    if (reaEl) reaEl.textContent = (parseFloat(taskFlowState.horasReales) || 0).toFixed(1) + 'h';
+  }
+
+  function actualizarPildorasJerarquiaTaskFlow() {
+    var pryLbl = document.getElementById('task-flow-pry-label');
+    var hitLbl = document.getElementById('task-flow-hit-label');
+    var pryVal = document.getElementById('task-flow-pry-val');
+    var hitVal = document.getElementById('task-flow-hit-val');
+    var btnPry = document.getElementById('task-flow-pry-btn');
+    var btnHit = document.getElementById('task-flow-hit-btn');
+
+    // Elementos WBS Info (Solo lectura para modo EDITAR)
+    var wbsInfoBox = document.getElementById('task-flow-wbs-info');
+    var wbsSelBox = document.getElementById('task-flow-wbs-selectors');
+    var wbsProyTxt = document.getElementById('task-flow-wbs-proy-text');
+    var wbsHitoTxt = document.getElementById('task-flow-wbs-hito-text');
+    var wbsFaseBox = document.getElementById('task-flow-wbs-fase-container');
+    var wbsFaseTxt = document.getElementById('task-flow-wbs-fase-text');
+
+    // 1. Resolución canónica WBS: Paquete (state.hitos) -> Proyecto (state.proyectos)
+    var idHitoKey = String(taskFlowState.idHito || '').trim();
+    var hito = (state.hitos || []).find(function (h) {
+      var hId = String(h.ID_Hito || h.ID_Elemento_WBS || '').trim().toUpperCase();
+      return hId === idHitoKey.toUpperCase();
+    });
+
+    var idProyKey = '';
+    if (hito && hito.ID_Proyecto) {
+      idProyKey = String(hito.ID_Proyecto).trim().toUpperCase();
+    } else if (taskFlowState.idProyecto) {
+      idProyKey = String(taskFlowState.idProyecto).trim().toUpperCase();
+    }
+    if (idProyKey) {
+      taskFlowState.idProyecto = idProyKey;
+    }
+
+    var proy = (state.proyectos || []).find(function (p) {
+      return String(p.ID_Proyecto || '').trim().toUpperCase() === idProyKey.toUpperCase();
+    });
+
+    // 2. Textos legibles y limpios
+    var nomProy = proy ? (proy.Nombre_Proyecto || 'Sin nombre') : (idProyKey || 'Sin Proyecto');
+    var txtProy = proy ? ('[' + proy.ID_Proyecto + '] ' + nomProy) : (idProyKey ? ('[' + idProyKey + '] ' + nomProy) : 'Seleccionar Proyecto');
+
+    var nomHito = hito ? (hito.Nombre_Hito || 'Sin nombre') : (idHitoKey || 'Sin Paquete');
+    var hitoIdDisplay = hito ? (hito.ID_Hito || hito.ID_Elemento_WBS || '') : idHitoKey;
+    var txtHito = hitoIdDisplay ? ('[' + hitoIdDisplay + '] ' + nomHito) : 'Seleccionar Hito';
+
+    var faseVal = (hito && (hito.Fase_Asociada || hito.Fase)) ? String(hito.Fase_Asociada || hito.Fase).trim() : '';
+
+    // 3. Alternar vista interactiva vs informativa según modo
+    if (taskFlowState.modo === 'EDITAR') {
+      if (wbsInfoBox) wbsInfoBox.classList.remove('hidden');
+      if (wbsSelBox) wbsSelBox.classList.add('hidden');
+
+      if (wbsProyTxt) {
+        wbsProyTxt.textContent = txtProy;
+        wbsProyTxt.title = txtProy;
+      }
+      if (wbsHitoTxt) {
+        wbsHitoTxt.textContent = txtHito;
+        wbsHitoTxt.title = txtHito;
+      }
+      if (wbsFaseBox) {
+        if (faseVal) {
+          wbsFaseBox.classList.remove('hidden');
+          wbsFaseBox.classList.add('inline-flex');
+          if (wbsFaseTxt) wbsFaseTxt.textContent = faseVal;
+        } else {
+          wbsFaseBox.classList.add('hidden');
+          wbsFaseBox.classList.remove('inline-flex');
+        }
+      }
+    } else {
+      // Modo CREAR
+      if (wbsInfoBox) wbsInfoBox.classList.add('hidden');
+      if (wbsSelBox) wbsSelBox.classList.remove('hidden');
+    }
+
+    // 4. Sincronizar selectores desplegables
+    if (pryLbl) {
+      pryLbl.textContent = txtProy;
+      pryLbl.title = txtProy;
+    }
+    if (btnPry) {
+      btnPry.title = txtProy + ' (Clic para cambiar proyecto)';
+    }
+    if (pryVal) pryVal.value = taskFlowState.idProyecto || '';
+
+    if (hitLbl) {
+      hitLbl.textContent = txtHito;
+      hitLbl.title = txtHito;
+    }
+    if (btnHit) {
+      btnHit.title = txtHito + ' (Clic para cambiar hito)';
+    }
+    if (hitVal) hitVal.value = taskFlowState.idHito || '';
+
+    // Sincronizar Bento Grid de horas
+    actualizarBentoHorasTaskFlow();
+  }
+
+  function toggleSelectorProyectoTaskFlow(event) {
+    if (event) event.stopPropagation();
+    var dd = document.getElementById('task-flow-pry-dropdown');
+    if (!dd) return;
+    if (!dd.classList.contains('hidden')) {
+      dd.classList.add('hidden');
+      return;
+    }
+    cerrarTodosDropdownsTaskFlow();
+    dd.classList.remove('hidden');
+
+    var proyectos = state.proyectos || [];
+    if (proyectos.length === 0) {
+      dd.innerHTML = '<div class="p-2 text-slate-400 italic">No hay proyectos registrados</div>';
+      return;
+    }
+    var html = proyectos.map(function (p) {
+      var isCur = String(p.ID_Proyecto || '').trim().toUpperCase() === String(taskFlowState.idProyecto || '').trim().toUpperCase();
+      return '<button type="button" onclick="seleccionarProyectoTaskFlow(\'' + p.ID_Proyecto + '\')" class="w-full text-left px-2.5 py-1.5 rounded-lg font-medium transition flex items-center justify-between ' +
+        (isCur ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300') + '">' +
+        '<span class="truncate pr-2">[' + p.ID_Proyecto + '] ' + (p.Nombre_Proyecto || 'Sin nombre') + '</span>' +
+        (isCur ? '<span>✓</span>' : '') +
+        '</button>';
+    }).join('');
+    dd.innerHTML = html;
+  }
+
+  function seleccionarProyectoTaskFlow(idProyecto) {
+    taskFlowState.idProyecto = idProyecto;
+    // Validar si el hito actual pertenece a este proyecto
+    if (taskFlowState.idHito) {
+      var hito = (state.hitos || []).find(function (h) {
+        return String(h.ID_Hito || '').trim().toUpperCase() === String(taskFlowState.idHito || '').trim().toUpperCase();
+      });
+      if (!hito || String(hito.ID_Proyecto || '').trim().toUpperCase() !== String(idProyecto).trim().toUpperCase()) {
+        taskFlowState.idHito = '';
+      }
+    }
+    // Limpiar dependencia si no pertenece al mismo proyecto
+    if (taskFlowState.idDependencia) {
+      var depTar = (state.tareas || []).find(function (t) {
+        return String(t.ID_Tarea || '').trim() === String(taskFlowState.idDependencia).trim();
+      });
+      if (!depTar || String(depTar.ID_Proyecto || '').trim().toUpperCase() !== String(idProyecto).trim().toUpperCase()) {
+        seleccionarDepTaskFlow('', '');
+      }
+    }
+    actualizarPildorasJerarquiaTaskFlow();
+    var dd = document.getElementById('task-flow-pry-dropdown');
+    if (dd) dd.classList.add('hidden');
+  }
+
+  function toggleSelectorHitoTaskFlow(event) {
+    if (event) event.stopPropagation();
+    var dd = document.getElementById('task-flow-hit-dropdown');
+    if (!dd) return;
+    if (!dd.classList.contains('hidden')) {
+      dd.classList.add('hidden');
+      return;
+    }
+    cerrarTodosDropdownsTaskFlow();
+    dd.classList.remove('hidden');
+
+    var idProyNorm = String(taskFlowState.idProyecto || '').trim().toUpperCase();
+    var hitos = (state.hitos || []).filter(function (h) {
+      if (!idProyNorm) return true;
+      return String(h.ID_Proyecto || '').trim().toUpperCase() === idProyNorm;
+    });
+
+    if (hitos.length === 0) {
+      dd.innerHTML = '<div class="p-2 text-slate-400 italic">' + (idProyNorm ? 'Sin hitos para este proyecto' : 'Selecciona un proyecto primero') + '</div>';
+      return;
+    }
+
+    var html = '<button type="button" onclick="seleccionarHitoTaskFlow(\'\')" class="w-full text-left px-2.5 py-1.5 rounded-lg font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition">-- Sin Hito (Directo a Proyecto) --</button>';
+    html += hitos.map(function (h) {
+      var isCur = String(h.ID_Hito || '').trim().toUpperCase() === String(taskFlowState.idHito || '').trim().toUpperCase();
+      return '<button type="button" onclick="seleccionarHitoTaskFlow(\'' + h.ID_Hito + '\')" class="w-full text-left px-2.5 py-1.5 rounded-lg font-medium transition flex items-center justify-between ' +
+        (isCur ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300') + '">' +
+        '<span class="truncate pr-2">[' + h.ID_Hito + '] ' + (h.Nombre_Hito || 'Hito') + '</span>' +
+        (isCur ? '<span>✓</span>' : '') +
+        '</button>';
+    }).join('');
+    dd.innerHTML = html;
+  }
+
+  function seleccionarHitoTaskFlow(idHito) {
+    taskFlowState.idHito = idHito;
+    if (idHito) {
+      var hito = (state.hitos || []).find(function (h) {
+        return String(h.ID_Hito || '').trim().toUpperCase() === String(idHito).trim().toUpperCase();
+      });
+      if (hito && hito.ID_Proyecto) {
+        taskFlowState.idProyecto = hito.ID_Proyecto;
+      }
+    }
+    actualizarPildorasJerarquiaTaskFlow();
+    var dd = document.getElementById('task-flow-hit-dropdown');
+    if (dd) dd.classList.add('hidden');
+  }
+
+  function toggleSelectorEstadoTaskFlow(event) {
+    if (event) event.stopPropagation();
+    var dd = document.getElementById('task-flow-estado-dropdown');
+    if (!dd) return;
+    if (!dd.classList.contains('hidden')) {
+      dd.classList.add('hidden');
+      return;
+    }
+    cerrarTodosDropdownsTaskFlow();
+    dd.classList.remove('hidden');
+  }
+
+  function seleccionarEstadoTaskFlow(nuevoEstado) {
+    taskFlowState.estado = nuevoEstado;
+    var btn = document.getElementById('task-flow-estado-btn');
+    var lbl = document.getElementById('task-flow-estado-label');
+    var valInput = document.getElementById('task-flow-estado-val');
+
+    var txtLimpio = String(nuevoEstado || '02_Por_Hacer');
+    if (txtLimpio.indexOf('_') !== -1) txtLimpio = txtLimpio.substring(txtLimpio.indexOf('_') + 1).replace(/_/g, ' ');
+
+    if (lbl) lbl.textContent = txtLimpio;
+    if (valInput) valInput.value = nuevoEstado;
+
+    if (btn) {
+      if (nuevoEstado === '04_Completado') {
+        btn.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border transition shadow-2xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60';
+      } else if (nuevoEstado === '03_En_Proceso') {
+        btn.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border transition shadow-2xs bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60';
+      } else if (nuevoEstado === '02_Por_Hacer') {
+        btn.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border transition shadow-2xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60';
+      } else {
+        btn.className = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border transition shadow-2xs bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+      }
+    }
+
+    var dd = document.getElementById('task-flow-estado-dropdown');
+    if (dd) dd.classList.add('hidden');
+  }
+
+  function fijarPrioridadTaskFlow(prio) {
+    var val = prio || '02_P2_Media';
+    taskFlowState.prioridad = val;
+
+    var lbl = document.getElementById('task-flow-chip-prioridad-label');
+    var btn = document.getElementById('task-flow-chip-prioridad');
+    var valInput = document.getElementById('task-flow-prioridad-val');
+
+    if (val === '01_P1_Alta') {
+      if (lbl) lbl.textContent = 'P1 Alta';
+      if (btn) btn.className = 'badge-sem-rose inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition shadow-2xs hover:scale-[1.02] active:scale-95 cursor-pointer';
+    } else if (val === '03_P3_Baja') {
+      if (lbl) lbl.textContent = 'P3 Baja';
+      if (btn) btn.className = 'badge-sem-slate inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition shadow-2xs hover:scale-[1.02] active:scale-95 cursor-pointer';
+    } else {
+      if (lbl) lbl.textContent = 'P2 Media';
+      if (btn) btn.className = 'badge-sem-amber inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition shadow-2xs hover:scale-[1.02] active:scale-95 cursor-pointer';
+    }
+
+    if (valInput) valInput.value = val;
+  }
+
+  function togglePrioridadTaskFlow(event) {
+    if (event) event.stopPropagation();
+    var ciclo = {
+      '02_P2_Media': '01_P1_Alta',
+      '01_P1_Alta': '03_P3_Baja',
+      '03_P3_Baja': '02_P2_Media'
+    };
+    var nuevo = ciclo[taskFlowState.prioridad] || '02_P2_Media';
+    fijarPrioridadTaskFlow(nuevo);
+  }
+
+  function toggleEnergiaTaskFlow(event) {
+    if (event) event.stopPropagation();
+    var ciclo = {
+      'Media_Operativa': 'Alta_Estrategica',
+      'Alta_Estrategica': 'Baja_Automatica',
+      'Baja_Automatica': 'Media_Operativa'
+    };
+    var nuevo = ciclo[taskFlowState.energia] || 'Media_Operativa';
+    taskFlowState.energia = nuevo;
+
+    var lbl = document.getElementById('task-flow-chip-energia-label');
+    var valInput = document.getElementById('task-flow-energia-val');
+
+    if (nuevo === 'Alta_Estrategica') {
+      if (lbl) lbl.textContent = 'Estratégica';
+    } else if (nuevo === 'Baja_Automatica') {
+      if (lbl) lbl.textContent = 'Automática';
+    } else {
+      if (lbl) lbl.textContent = 'Operativa';
+    }
+
+    if (valInput) valInput.value = nuevo;
+  }
+
+  function toggleMavTaskFlow(event) {
+    if (event) event.stopPropagation();
+    // MAV erradicado canónicamente de la interfaz y del modelo de datos
+  }
+
+  function actualizarChipMavDOM() {
+    // MAV erradicado canónicamente de la interfaz y del modelo de datos
+  }
+
+  // ----------------------------------------------------------------------------
+  // DATEPICKER POPOVER (CALENDAR, INDEPENDENT TIME, HOURS STEPPER - NO RECURRENCE)
+  // ----------------------------------------------------------------------------
+
+  function abrirDatePickerTaskFlow(event) {
+    if (event) event.stopPropagation();
+    cerrarTodosDropdownsTaskFlow();
+    var popover = document.getElementById('task-flow-datepicker-popover');
+    if (!popover) return;
+    popover.classList.remove('hidden');
+
+    var hoy = new Date();
+    if (taskFlowState.fechaProgramada) {
+      var p = taskFlowState.fechaProgramada.split(/[\sT]+/)[0].split('-');
+      if (p.length === 3) {
+        taskFlowState.calAno = parseInt(p[0], 10);
+        taskFlowState.calMes = parseInt(p[1], 10) - 1;
+        taskFlowState.diaSeleccionado = taskFlowState.fechaProgramada.split(/[\sT]+/)[0];
+      }
+    } else {
+      taskFlowState.calAno = hoy.getFullYear();
+      taskFlowState.calMes = hoy.getMonth();
+      var mesStr = String(hoy.getMonth() + 1).padStart(2, '0');
+      var diaStr = String(hoy.getDate()).padStart(2, '0');
+      taskFlowState.diaSeleccionado = hoy.getFullYear() + '-' + mesStr + '-' + diaStr;
+    }
+
+    renderDiasDatePickerTask(taskFlowState.calAno, taskFlowState.calMes);
+
+    var timeInp = document.getElementById('task-flow-picker-time-input');
+    if (timeInp) timeInp.value = taskFlowState.horaProgramada || '09:00';
+
+    fijarHorasEstimadasTask(taskFlowState.horasEstimadas || 1.0);
+  }
+
+  function cerrarDatePickerTaskFlow() {
+    var popover = document.getElementById('task-flow-datepicker-popover');
+    if (popover) popover.classList.add('hidden');
+  }
+
+  function navegarMesDatePickerTask(delta) {
+    taskFlowState.calMes += delta;
+    if (taskFlowState.calMes < 0) {
+      taskFlowState.calMes = 11;
+      taskFlowState.calAno--;
+    } else if (taskFlowState.calMes > 11) {
+      taskFlowState.calMes = 0;
+      taskFlowState.calAno++;
+    }
+    renderDiasDatePickerTask(taskFlowState.calAno, taskFlowState.calMes);
+  }
+
+  function irAHoyDatePickerTask() {
+    var hoy = new Date();
+    taskFlowState.calAno = hoy.getFullYear();
+    taskFlowState.calMes = hoy.getMonth();
+    var mesStr = String(hoy.getMonth() + 1).padStart(2, '0');
+    var diaStr = String(hoy.getDate()).padStart(2, '0');
+    taskFlowState.diaSeleccionado = hoy.getFullYear() + '-' + mesStr + '-' + diaStr;
+    renderDiasDatePickerTask(taskFlowState.calAno, taskFlowState.calMes);
+  }
+
+  function renderDiasDatePickerTask(ano, mes) {
+    var lblMesAno = document.getElementById('task-flow-cal-mes-ano');
+    var nombresMes = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    if (lblMesAno) {
+      lblMesAno.textContent = nombresMes[mes] + ' ' + ano;
+    }
+
+    var grid = document.getElementById('task-flow-cal-dias-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    var primerDiaSemana = new Date(ano, mes, 1).getDay();
+    // Ajustar domingo (0) al final (6)
+    var shift = primerDiaSemana === 0 ? 6 : (primerDiaSemana - 1);
+    var diasEnMes = new Date(ano, mes + 1, 0).getDate();
+
+    // Celdas vacías previas
+    for (var i = 0; i < shift; i++) {
+      var blank = document.createElement('div');
+      blank.className = 'h-8';
+      grid.appendChild(blank);
+    }
+
+    var hoyStr = new Date().toISOString().split('T')[0];
+
+    for (var d = 1; d <= diasEnMes; d++) {
+      var diaPadded = String(d).padStart(2, '0');
+      var mesPadded = String(mes + 1).padStart(2, '0');
+      var fechaStr = ano + '-' + mesPadded + '-' + diaPadded;
+
+      var btnDia = document.createElement('button');
+      btnDia.type = 'button';
+      btnDia.textContent = d;
+
+      var isSelected = (taskFlowState.diaSeleccionado === fechaStr);
+      var isToday = (fechaStr === hoyStr);
+
+      var baseCls = 'h-8 rounded-lg font-mono text-xs flex items-center justify-center transition font-semibold ';
+      if (isSelected) {
+        baseCls += 'bg-indigo-600 text-white font-bold shadow-xs hover:bg-indigo-700';
+      } else if (isToday) {
+        baseCls += 'border border-indigo-400 dark:border-indigo-500 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40';
+      } else {
+        baseCls += 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800';
+      }
+
+      btnDia.className = baseCls;
+      btnDia.onclick = (function (f) {
+        return function () {
+          seleccionarDiaTaskPicker(f);
+        };
+      })(fechaStr);
+
+      grid.appendChild(btnDia);
+    }
+  }
+
+  function seleccionarDiaTaskPicker(diaStr) {
+    taskFlowState.diaSeleccionado = diaStr;
+    renderDiasDatePickerTask(taskFlowState.calAno, taskFlowState.calMes);
+  }
+
+  function actualizarHoraTaskPicker(hora) {
+    taskFlowState.horaProgramada = hora || '09:00';
+  }
+
+  function fijarHorasEstimadasTask(horas) {
+    var h = parseFloat(horas) || 1.0;
+    taskFlowState.horasEstimadas = Math.max(0.5, h);
+    var lbl = document.getElementById('task-flow-horas-label');
+    var inp = document.getElementById('task-flow-picker-horas-input');
+    var valInp = document.getElementById('task-flow-horas-est-val');
+    if (lbl) lbl.textContent = taskFlowState.horasEstimadas.toFixed(1) + ' h';
+    if (inp) inp.value = taskFlowState.horasEstimadas;
+    if (valInp) valInp.value = taskFlowState.horasEstimadas;
+    actualizarBentoHorasTaskFlow();
+  }
+
+  function ajustarHorasEstimadasTask(delta) {
+    fijarHorasEstimadasTask((taskFlowState.horasEstimadas || 1.0) + delta);
+  }
+
+  function actualizarHorasManualTaskPicker(val) {
+    fijarHorasEstimadasTask(val);
+  }
+
+  function limpiarDatePickerTaskFlow() {
+    taskFlowState.diaSeleccionado = '';
+    taskFlowState.fechaProgramada = '';
+    var chipLbl = document.getElementById('task-flow-chip-datetime-label');
+    if (chipLbl) chipLbl.textContent = 'Fecha y Hora';
+    var valInp = document.getElementById('task-flow-fecha-val');
+    if (valInp) valInp.value = '';
+    cerrarDatePickerTaskFlow();
+  }
+
+  function aplicarDatePickerTaskFlow() {
+    var timeInp = document.getElementById('task-flow-picker-time-input');
+    if (timeInp) taskFlowState.horaProgramada = timeInp.value || '09:00';
+
+    if (taskFlowState.diaSeleccionado) {
+      taskFlowState.fechaProgramada = taskFlowState.diaSeleccionado;
+      var partes = taskFlowState.diaSeleccionado.split('-');
+      var mesesCortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      var txtFecha = partes[2] + ' ' + (mesesCortos[parseInt(partes[1], 10) - 1] || '') + ' • ' + (taskFlowState.horaProgramada || '09:00') + ' (' + (taskFlowState.horasEstimadas || 1.0) + 'h)';
+
+      var chipLbl = document.getElementById('task-flow-chip-datetime-label');
+      if (chipLbl) chipLbl.textContent = txtFecha;
+
+      var valF = document.getElementById('task-flow-fecha-val');
+      if (valF) valF.value = taskFlowState.diaSeleccionado;
+    } else {
+      var chipLblDef = document.getElementById('task-flow-chip-datetime-label');
+      if (chipLblDef) chipLblDef.textContent = 'Fecha y Hora';
+    }
+
+    var valH = document.getElementById('task-flow-hora-val');
+    if (valH) valH.value = taskFlowState.horaProgramada;
+
+    cerrarDatePickerTaskFlow();
+  }
+
+  // ----------------------------------------------------------------------------
+  // PREDECESORA POPOVER (GRAFO DE DEPENDENCIAS DEL MISMO PROYECTO)
+  // ----------------------------------------------------------------------------
+
+  function abrirDepPickerTaskFlow(event) {
+    if (event) event.stopPropagation();
+    cerrarTodosDropdownsTaskFlow();
+    var popover = document.getElementById('task-flow-dep-popover');
+    if (!popover) return;
+    if (!popover.classList.contains('hidden')) {
+      popover.classList.add('hidden');
+      return;
+    }
+    popover.classList.remove('hidden');
+
+    var searchInp = document.getElementById('task-flow-dep-search-input');
+    if (searchInp) {
+      searchInp.value = '';
+      setTimeout(function () { searchInp.focus(); }, 50);
+    }
+    renderListaPredecesorasTaskFlow('');
+  }
+
+  function cerrarDepPickerTaskFlow() {
+    var popover = document.getElementById('task-flow-dep-popover');
+    if (popover) popover.classList.add('hidden');
+  }
+
+  function filtrarListaPredecesorasTaskFlow(query) {
+    renderListaPredecesorasTaskFlow(query || '');
+  }
+
+  function renderListaPredecesorasTaskFlow(query) {
+    var container = document.getElementById('task-flow-dep-lista');
+    if (!container) return;
+    container.innerHTML = '';
+
+    var q = (query || '').trim().toLowerCase();
+    var idProyNorm = String(taskFlowState.idProyecto || '').trim().toUpperCase();
+
+    var candidatas = (state.tareas || []).filter(function (t) {
+      if (taskFlowState.idTarea && String(t.ID_Tarea || '').trim() === String(taskFlowState.idTarea).trim()) {
+        return false; // No depender de sí misma
+      }
+      if (idProyNorm) {
+        var tProy = String(t.ID_Proyecto || '').trim().toUpperCase();
+        var tHito = String(t.ID_Hito || '').trim().toUpperCase();
+        if (tProy !== idProyNorm && tHito.indexOf(idProyNorm) !== 0) return false;
+      }
+      if (q) {
+        var matchId = String(t.ID_Tarea || '').toLowerCase().indexOf(q) !== -1;
+        var matchNom = String(t.Nombre_Tarea_Actividad || '').toLowerCase().indexOf(q) !== -1;
+        return matchId || matchNom;
+      }
+      return true;
+    });
+
+    var fragment = document.createDocumentFragment();
+
+    // Opción Ninguna
+    var btnNinguna = document.createElement('button');
+    btnNinguna.type = 'button';
+    btnNinguna.className = 'w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 font-medium transition flex items-center justify-between text-xs';
+    btnNinguna.innerHTML = '<span>Ninguna (Sin predecesora)</span>' + (!taskFlowState.idDependencia ? '<span>✓</span>' : '');
+    btnNinguna.onclick = function () {
+      seleccionarDepTaskFlow('', '');
+    };
+    fragment.appendChild(btnNinguna);
+
+    if (candidatas.length === 0) {
+      var divVacio = document.createElement('div');
+      divVacio.className = 'p-2 text-slate-400 italic text-[11px]';
+      divVacio.textContent = idProyNorm ? 'No hay otras tareas en este proyecto' : 'Selecciona un proyecto primero';
+      fragment.appendChild(divVacio);
+      container.appendChild(fragment);
+      return;
+    }
+
+    candidatas.forEach(function (t) {
+      var isCur = String(t.ID_Tarea || '').trim() === String(taskFlowState.idDependencia || '').trim();
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'w-full text-left px-2.5 py-1.5 rounded-lg transition flex items-center justify-between text-xs ' +
+        (isCur ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800/60' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300');
+
+      var fProg = t.Fecha_Programada ? String(t.Fecha_Programada).split(/[\sT]+/)[0] : '-';
+      btn.innerHTML =
+        '<div class="flex items-center gap-1.5 truncate pr-2">' +
+        '<span class="font-mono text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded">' + t.ID_Tarea + '</span>' +
+        '<span class="truncate">' + (t.Nombre_Tarea_Actividad || 'Sin nombre') + '</span>' +
+        '<span class="text-[10px] text-slate-400 font-mono shrink-0">(' + fProg + ')</span>' +
+        '</div>' +
+        (isCur ? '<span class="shrink-0 text-amber-600 font-bold">✓</span>' : '');
+
+      btn.onclick = function () {
+        seleccionarDepTaskFlow(t.ID_Tarea, t.Nombre_Tarea_Actividad || '');
+      };
+      fragment.appendChild(btn);
+    });
+
+    container.appendChild(fragment);
+  }
+
+  function seleccionarDepTaskFlow(idDep, nombreDep) {
+    taskFlowState.idDependencia = idDep || '';
+    var lbl = document.getElementById('task-flow-chip-dependencia-label');
+    if (lbl) {
+      if (idDep) {
+        var displayNom = (nombreDep || '').length > 18 ? (nombreDep.substring(0, 18) + '...') : nombreDep;
+        lbl.textContent = idDep + ' - ' + displayNom;
+      } else {
+        lbl.textContent = 'Predecesora: Ninguna';
+      }
+    }
+
+    var valDep = document.getElementById('task-flow-dep-val');
+    if (valDep) valDep.value = idDep || '';
+
+    cerrarDepPickerTaskFlow();
+  }
+
+  // ----------------------------------------------------------------------------
+  // SECCIONES EXPANDIBLES (GASTO ASOCIADO Y LUGAR DE EJECUCIÓN)
+  // ----------------------------------------------------------------------------
+
+  function toggleGastoSectionTaskFlow(event) {
+    if (event) event.stopPropagation();
+    var sec = document.getElementById('task-flow-gasto-section');
+    if (!sec) return;
+    var isHidden = sec.classList.contains('hidden');
+    if (isHidden) {
+      sec.classList.remove('hidden');
+      cambiarTabGastoTaskFlow(taskFlowState.tabGasto || 'NUEVO');
+      renderGastosAsociadosTaskFlow();
+      var inp = document.getElementById('task-flow-gasto-monto');
+      if (inp) setTimeout(function () { inp.focus(); }, 50);
+      actualizarEquivalenciaGastoTaskFlow();
+    } else {
+      sec.classList.add('hidden');
+    }
+  }
+
+  // ----------------------------------------------------------------------------
+  // GESTIÓN ATÓMICA DE GASTO ASOCIADO (MODO DUAL: NUEVO VS VINCULAR)
+  // ----------------------------------------------------------------------------
+
+  function cambiarTabGastoTaskFlow(tab) {
+    taskFlowState.tabGasto = tab || 'NUEVO';
+    var btnNuevo = document.getElementById('task-tab-gasto-nuevo');
+    var btnVincular = document.getElementById('task-tab-gasto-vincular');
+    var panelNuevo = document.getElementById('task-panel-gasto-nuevo');
+    var panelVincular = document.getElementById('task-panel-gasto-vincular');
+
+    var clsActive = 'px-2.5 py-1 rounded-lg font-bold transition-all shadow-xs bg-emerald-600 text-white flex items-center gap-1 active:scale-95';
+    var clsInactive = 'px-2.5 py-1 rounded-lg font-medium text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-white transition-all flex items-center gap-1 active:scale-95';
+
+    if (btnNuevo) btnNuevo.className = (taskFlowState.tabGasto === 'NUEVO') ? clsActive : clsInactive;
+    if (btnVincular) btnVincular.className = (taskFlowState.tabGasto === 'VINCULAR') ? clsActive : clsInactive;
+
+    if (panelNuevo) {
+      if (taskFlowState.tabGasto === 'NUEVO') panelNuevo.classList.remove('hidden');
+      else panelNuevo.classList.add('hidden');
+    }
+    if (panelVincular) {
+      if (taskFlowState.tabGasto === 'VINCULAR') {
+        panelVincular.classList.remove('hidden');
+        var sInp = document.getElementById('task-flow-gasto-search-input');
+        if (sInp) {
+          sInp.value = '';
+          setTimeout(function () { sInp.focus(); }, 50);
+        }
+        renderGastosDisponiblesTaskFlow('');
+      } else {
+        panelVincular.classList.add('hidden');
+      }
+    }
+  }
+
+  function filtrarGastosParaVincularTaskFlow(query) {
+    renderGastosDisponiblesTaskFlow(query || '');
+  }
+
+  function renderGastosDisponiblesTaskFlow(query) {
+    var listEl = document.getElementById('task-flow-gastos-disponibles-list');
+    if (!listEl) return;
+
+    var q = String(query || '').toLowerCase().trim();
+    var idTarActual = String(taskFlowState.idTarea || '').trim();
+
+    var todos = state.gastos || [];
+    var filtrados = todos.filter(function (g) {
+      if (!q) return true;
+      var cod = String(g.ID_Gasto || '').toLowerCase();
+      var desc = String(g.Descripcion_Gasto || g.Descripcion || '').toLowerCase();
+      var cat = String(g.Categoria_Gasto || '').toLowerCase();
+      var monto = String(g.Monto_Original || g.Monto_PEN || '');
+      return cod.indexOf(q) !== -1 || desc.indexOf(q) !== -1 || cat.indexOf(q) !== -1 || monto.indexOf(q) !== -1;
+    });
+
+    if (filtrados.length === 0) {
+      listEl.innerHTML = '<div class="p-3 text-center text-slate-400 dark:text-slate-500 italic text-[11px]">No se encontraron gastos coincidentes en Finanzas.</div>';
+      return;
+    }
+
+    var sliceGastos = filtrados.slice(0, 25);
+    listEl.innerHTML = sliceGastos.map(function (g) {
+      var idG = g.ID_Gasto || '';
+      var isVinculado = (idTarActual && String(g.ID_Tarea || '').trim() === idTarActual) ||
+        ((taskFlowState.gastosVinculados || []).indexOf(idG) !== -1);
+
+      var mon = g.Moneda_Original || 'PEN';
+      var sim = (mon === 'USD') ? '$' : (mon === 'EUR' ? '€' : 'S/');
+      var mOrig = parseFloat(g.Monto_Original) || parseFloat(g.Monto_PEN) || 0;
+      var mPen = parseFloat(g.Monto_PEN || (mOrig * (g.Tipo_Cambio || 1)) || 0);
+      var fGasto = g.Fecha_Gasto ? String(g.Fecha_Gasto).split(/[\sT]+/)[0] : '';
+      var desc = g.Descripcion_Gasto || g.Descripcion || 'Sin concepto';
+      var cat = (g.Categoria_Gasto || 'General').replace(/_/g, ' ');
+
+      var estadoBtn = isVinculado
+        ? '<button type="button" onclick="desvincularGastoTaskFlow(\'' + idG + '\')" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 font-bold text-[10px] border border-rose-200 dark:border-rose-800 transition active:scale-95 shrink-0" title="Desvincular este gasto">✕ Desvincular</button>'
+        : '<button type="button" onclick="vincularGastoExistenteTaskFlow(\'' + idG + '\')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-2xs transition active:scale-95 shrink-0" title="Vincular a esta tarea">Vincular</button>';
+
+      var vinculadoOtra = (!isVinculado && g.ID_Tarea) ? '<span class="text-[9px] text-amber-600 dark:text-amber-400 font-mono">(Asignado a ' + g.ID_Tarea + ')</span>' : '';
+
+      return '<div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-700 transition shadow-2xs">' +
+        '<div class="min-w-0 flex-1">' +
+        '<div class="flex items-center gap-1.5 flex-wrap">' +
+        '<span class="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700">' + idG + '</span>' +
+        '<span class="text-[9px] text-slate-400 font-medium">' + fGasto + '</span>' +
+        '<span class="text-[9.5px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">' + cat + '</span>' +
+        vinculadoOtra +
+        '</div>' +
+        '<p class="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate mt-0.5" title="' + escapeHtmlAttr(desc) + '">' + desc + '</p>' +
+        '</div>' +
+        '<div class="text-right shrink-0">' +
+        '<p class="font-mono text-xs font-bold text-emerald-700 dark:text-emerald-300">' + sim + ' ' + mOrig.toFixed(2) + '</p>' +
+        (mon !== 'PEN' ? ('<p class="font-mono text-[9px] text-slate-400">≈ S/ ' + mPen.toFixed(2) + '</p>') : '') +
+        '</div>' +
+        '<div>' + estadoBtn + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function guardarGastoAtomicoTaskFlow() {
+    var inpMonto = document.getElementById('task-flow-gasto-monto');
+    var monto = inpMonto ? parseFloat(inpMonto.value) || 0 : 0;
+    if (monto <= 0) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Monto requerido',
+          text: 'Por favor ingresa un monto válido mayor a 0 para registrar el gasto.',
+          confirmButtonColor: '#059669'
+        });
+      }
+      if (inpMonto) inpMonto.focus();
+      return;
+    }
+
+    var inpMon = document.getElementById('task-flow-gasto-moneda');
+    var mon = inpMon ? inpMon.value : 'PEN';
+    var inpDesc = document.getElementById('task-flow-gasto-desc');
+    var inpTitulo = document.getElementById('task-flow-titulo');
+    var desc = (inpDesc && inpDesc.value.trim()) ? inpDesc.value.trim() : ('Gasto de tarea: ' + (inpTitulo ? inpTitulo.value.trim() : 'Sin título'));
+    var selCat = document.getElementById('task-flow-gasto-categoria');
+    var cat = selCat ? selCat.value : 'Servicios_Contratados';
+
+    // Asegurar ID de tarea de anclaje (si es nueva, genera DRAFT)
+    if (!taskFlowState.idTarea) {
+      taskFlowState.idTarea = 'TAR-DRAFT-' + Date.now();
+      var idInp = document.getElementById('task-flow-id');
+      if (idInp) idInp.value = taskFlowState.idTarea;
+    }
+    var idTarActual = taskFlowState.idTarea;
+
+    var tcUsd = (state.tipoCambioOficial && state.tipoCambioOficial.usd) || 3.75;
+    var tcEur = (state.tipoCambioOficial && state.tipoCambioOficial.eur) || 4.12;
+    var tcGasto = (mon === 'USD') ? tcUsd : (mon === 'EUR' ? tcEur : 1.0);
+    var mPen = (mon === 'PEN') ? monto : (monto * tcGasto);
+    var mUsd = (mon === 'USD') ? monto : (tcUsd > 0 ? (mPen / tcUsd) : 0);
+    var fProg = taskFlowState.fechaProgramada || new Date().toISOString().split('T')[0];
+
+    var tempIdGasto = 'GAS-TMP-' + Date.now();
+    var nuevoGasto = {
+      ID_Gasto: tempIdGasto,
+      ID_Transaccion: tempIdGasto,
+      ID_Proyecto: taskFlowState.idProyecto || '',
+      ID_Hito: taskFlowState.idHito || '',
+      ID_Tarea: idTarActual,
+      ID_Entidad_Vinculada: idTarActual,
+      Clasificacion_Origen: 'Proyecto',
+      Tipo_Entidad: 'Tarea',
+      Tipo_Gasto: 'Tarea Proyecto',
+      tipoGasto: 'Tarea Proyecto',
+      Fecha_Gasto: fProg,
+      Fecha_Registro: fProg,
+      Descripcion_Gasto: desc,
+      Descripcion: desc,
+      Concepto: desc,
+      concepto: desc,
+      Categoria_Gasto: cat,
+      Categoria: cat,
+      categoria: cat,
+      Moneda_Original: mon,
+      monedaOriginal: mon,
+      Monto_Original: monto,
+      montoOriginal: monto,
+      Tipo_Cambio: tcGasto,
+      tipoCambio: tcGasto,
+      Monto_PEN: mPen,
+      montoPEN: mPen,
+      Monto_Moneda_Base: mPen,
+      Monto_USD: mUsd,
+      Modalidad: 'Real / Ejecutado',
+      modalidad: 'Real / Ejecutado',
+      Metodo_Pago: 'Transferencia Bancaria',
+      Estado_Pago: 'Pagado',
+      Estado: 'Pagado',
+      _isOptimistic: true
+    };
+
+    if (!state.gastos) state.gastos = [];
+    state.gastos.unshift(nuevoGasto);
+
+    if (!taskFlowState.gastosVinculados) taskFlowState.gastosVinculados = [];
+    taskFlowState.gastosVinculados.push(tempIdGasto);
+
+    // Limpiar inputs
+    if (inpMonto) inpMonto.value = '';
+    if (inpDesc) inpDesc.value = '';
+    actualizarEquivalenciaGastoTaskFlow();
+
+    // Recalcular monto total en state.tareas y refrescar DOM inmediatamente
+    var totalRestanteTar = (state.gastos || []).reduce(function (acc, x) {
+      if (String(x.ID_Tarea || '').trim() === String(idTarActual).trim() ||
+          (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.indexOf(x.ID_Gasto) !== -1)) {
+        return acc + (parseFloat(x.Monto_PEN || x.Monto_Original) || 0);
+      }
+      return acc;
+    }, 0);
+    var tObj = (state.tareas || []).find(function (t) {
+      return String(t.ID_Tarea || '').trim() === String(idTarActual).trim();
+    });
+    if (tObj) {
+      tObj.Monto_Gasto_Asociado = totalRestanteTar;
+      tObj.Costo_Real_Imputado = totalRestanteTar;
+    }
+    if (typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+
+    // Actualizar vista de confirmados
+    renderGastosAsociadosTaskFlow();
+
+    // Notificación Toast inmediata
+    if (typeof notificarCreacion === 'function') {
+      notificarCreacion('Gasto', desc, 'm');
+    } else if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('success', 'Gasto registrado de inmediato', desc);
+    }
+
+    // Persistencia silenciosa e independiente en backend (CERO dependencias)
+    var btnGuardar = document.getElementById('task-btn-guardar-gasto-inmediato');
+    if (btnGuardar) {
+      btnGuardar.disabled = true;
+      btnGuardar.innerHTML = '<span>Guardando...</span>';
+    }
+
+    function revertirGastoAtomico(motivo) {
+      if (btnGuardar) {
+        btnGuardar.disabled = false;
+        btnGuardar.innerHTML = '<span>Guardar Gasto</span>';
+      }
+      console.warn('[Fallo en gasto atómico]:', motivo);
+      // 1. Remover de state.gastos
+      var idxG = (state.gastos || []).findIndex(function (g) { return g.ID_Gasto === tempIdGasto; });
+      if (idxG !== -1) {
+        state.gastos.splice(idxG, 1);
+      }
+      // 2. Remover de taskFlowState.gastosVinculados
+      if (Array.isArray(taskFlowState.gastosVinculados)) {
+        var idxVin = taskFlowState.gastosVinculados.indexOf(tempIdGasto);
+        if (idxVin !== -1) {
+          taskFlowState.gastosVinculados.splice(idxVin, 1);
+        }
+      }
+      // 3. Recalcular montos en tareas
+      var totalRestanteTar = (state.gastos || []).reduce(function (acc, x) {
+        if (String(x.ID_Tarea || '').trim() === String(idTarActual).trim() ||
+            (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.indexOf(x.ID_Gasto) !== -1)) {
+          return acc + (parseFloat(x.Monto_PEN || x.Monto_Original) || 0);
+        }
+        return acc;
+      }, 0);
+      var tObj = (state.tareas || []).find(function (t) {
+        return String(t.ID_Tarea || '').trim() === String(idTarActual).trim();
+      });
+      if (tObj) {
+        tObj.Monto_Gasto_Asociado = totalRestanteTar;
+        tObj.Costo_Real_Imputado = totalRestanteTar;
+      }
+      if (typeof aplicarFiltrosCruzados === 'function') {
+        aplicarFiltrosCruzados();
+      }
+      renderGastosAsociadosTaskFlow();
+      if (typeof renderTableroFinanciero === 'function') renderTableroFinanciero();
+      if (typeof actualizarMetricasDashboard === 'function') actualizarMetricasDashboard();
+
+      // 4. Notificar error visualmente
+      if (typeof notificarUsuario === 'function') {
+        notificarUsuario('No se pudo registrar el gasto en el servidor. Se revirtió el registro temporal.', 'error');
+      } else if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error al Registrar Gasto',
+          text: 'No se pudo guardar el gasto en el servidor. Se revirtió el cambio.',
+          toast: true,
+          position: 'top-end',
+          timer: 4000,
+          showConfirmButton: false
+        });
+      }
+    }
+
+    callBackend('createGasto', {
+      idProyecto: taskFlowState.idProyecto || '',
+      idHito: taskFlowState.idHito || '',
+      idTarea: idTarActual,
+      idEntidadVinculada: idTarActual,
+      tipoEntidad: 'Tarea',
+      clasificacionOrigen: 'Proyecto',
+      concepto: desc,
+      modalidad: 'Real / Ejecutado',
+      montoOriginal: monto,
+      monedaOriginal: mon,
+      montoMonedaBase: mPen,
+      tipoCambio: tcGasto,
+      categoriaGasto: cat,
+      descripcionGasto: desc,
+      fechaGasto: fProg,
+      metodoPago: 'Transferencia Bancaria',
+      estadoPago: 'Pagado'
+    }, function (res) {
+      if (btnGuardar) {
+        btnGuardar.disabled = false;
+        btnGuardar.innerHTML = '<span>Guardar Gasto</span>';
+      }
+      if (res && res.success && res.idGasto) {
+        nuevoGasto.ID_Gasto = res.idGasto;
+        nuevoGasto.ID_Transaccion = res.idGasto;
+        nuevoGasto._isOptimistic = false;
+        var idxVin = taskFlowState.gastosVinculados.indexOf(tempIdGasto);
+        if (idxVin !== -1) taskFlowState.gastosVinculados[idxVin] = res.idGasto;
+        renderGastosAsociadosTaskFlow();
+        if (typeof renderTableroFinanciero === 'function') renderTableroFinanciero();
+        if (typeof actualizarMetricasDashboard === 'function') actualizarMetricasDashboard();
+      } else {
+        revertirGastoAtomico(res ? res.message : 'Respuesta de servidor no exitosa');
+      }
+    }, function (err) {
+      console.error('[Error de red al crear gasto atómico]:', err);
+      revertirGastoAtomico(err);
+    });
+  }
+
+  function vincularGastoExistenteTaskFlow(idGasto) {
+    if (!idGasto) return;
+    if (!taskFlowState.idTarea) {
+      taskFlowState.idTarea = 'TAR-DRAFT-' + Date.now();
+      var idInp = document.getElementById('task-flow-id');
+      if (idInp) idInp.value = taskFlowState.idTarea;
+    }
+    var idTarActual = taskFlowState.idTarea;
+
+    var g = (state.gastos || []).find(function (x) { return String(x.ID_Gasto || '').trim() === String(idGasto).trim(); });
+    if (!g) return;
+
+    // Snapshot para rollback defensivo
+    var prevIdTarea = g.ID_Tarea;
+    var prevIdProyecto = g.ID_Proyecto;
+    var prevIdHito = g.ID_Hito;
+
+    g.ID_Tarea = idTarActual;
+    if (taskFlowState.idProyecto) g.ID_Proyecto = taskFlowState.idProyecto;
+    if (taskFlowState.idHito) g.ID_Hito = taskFlowState.idHito;
+
+    if (!taskFlowState.gastosVinculados) taskFlowState.gastosVinculados = [];
+    if (taskFlowState.gastosVinculados.indexOf(idGasto) === -1) {
+      taskFlowState.gastosVinculados.push(idGasto);
+    }
+
+    // Recalcular monto total en state.tareas y refrescar DOM inmediatamente
+    function recalcularMontosVinculados() {
+      var totalRestanteTar = (state.gastos || []).reduce(function (acc, x) {
+        if (String(x.ID_Tarea || '').trim() === String(idTarActual).trim() ||
+            (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.indexOf(x.ID_Gasto) !== -1)) {
+          return acc + (parseFloat(x.Monto_PEN || x.Monto_Original) || 0);
+        }
+        return acc;
+      }, 0);
+      var tObj = (state.tareas || []).find(function (t) {
+        return String(t.ID_Tarea || '').trim() === String(idTarActual).trim();
+      });
+      if (tObj) {
+        tObj.Monto_Gasto_Asociado = totalRestanteTar;
+        tObj.Costo_Real_Imputado = totalRestanteTar;
+      }
+      if (typeof aplicarFiltrosCruzados === 'function') {
+        aplicarFiltrosCruzados();
+      }
+      renderGastosAsociadosTaskFlow();
+      var sInp = document.getElementById('task-flow-gasto-search-input');
+      renderGastosDisponiblesTaskFlow(sInp ? sInp.value : '');
+    }
+
+    recalcularMontosVinculados();
+
+    if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('success', 'Gasto vinculado', g.Descripcion_Gasto || idGasto);
+    }
+
+    function revertirVinculacion() {
+      g.ID_Tarea = prevIdTarea;
+      g.ID_Proyecto = prevIdProyecto;
+      g.ID_Hito = prevIdHito;
+      var idxVin = taskFlowState.gastosVinculados.indexOf(idGasto);
+      if (idxVin !== -1) {
+        taskFlowState.gastosVinculados.splice(idxVin, 1);
+      }
+      recalcularMontosVinculados();
+      if (typeof notificarUsuario === 'function') {
+        notificarUsuario('No se pudo vincular el gasto en el servidor. Se revirtió la vinculación.', 'error');
+      } else if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error de Vinculación',
+          text: 'No se pudo actualizar el gasto en el servidor. Se revirtió el cambio.',
+          toast: true,
+          position: 'top-end',
+          timer: 3500,
+          showConfirmButton: false
+        });
+      }
+    }
+
+    callBackend('updateGasto', {
+      idGasto: idGasto,
+      idTarea: idTarActual,
+      idProyecto: taskFlowState.idProyecto || '',
+      idHito: taskFlowState.idHito || ''
+    }, function (res) {
+      if (!res || !res.success) {
+        revertirVinculacion();
+      }
+    }, function (err) {
+      console.error('[Error de red al vincular gasto existente]:', err);
+      revertirVinculacion();
+    });
+  }
+
+  function confirmarAccionGastoTaskFlow(idGasto) {
+    if (!idGasto) return;
+    var g = (state.gastos || []).find(function (x) { return String(x.ID_Gasto || '').trim() === String(idGasto).trim(); });
+    var desc = g ? (g.Descripcion_Gasto || g.Descripcion || g.Concepto || 'Gasto vinculado') : idGasto;
+    var mon = g ? (g.Moneda_Original || 'PEN') : 'PEN';
+    var mOrig = g ? (parseFloat(g.Monto_Original) || parseFloat(g.Monto_PEN) || 0) : 0;
+    var mPen = g ? (parseFloat(g.Monto_PEN) || mOrig) : 0;
+    var sim = (mon === 'USD') ? '$' : (mon === 'EUR' ? '€' : 'S/');
+    var montoTxt = 'S/ ' + mPen.toFixed(2) + ((mon !== 'PEN') ? (' (' + sim + ' ' + mOrig.toFixed(2) + ' ' + mon + ')') : '');
+
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: 'Gestión de Gasto Vinculado',
+        html:
+          '<div class="text-left text-xs space-y-2.5 text-slate-600 dark:text-slate-300">' +
+          '  <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">' +
+          '    <div class="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider mb-0.5">' + idGasto + '</div>' +
+          '    <div class="font-semibold text-slate-800 dark:text-slate-100 text-sm">' + escapeHtmlAttr(desc) + '</div>' +
+          '    <div class="font-mono font-bold text-emerald-700 dark:text-emerald-400 mt-1">' + montoTxt + '</div>' +
+          '  </div>' +
+          '  <p class="text-slate-500 dark:text-slate-400 leading-relaxed">' +
+          '    ¿Qué acción deseas realizar con este egreso?' +
+          '  </p>' +
+          '  <ul class="text-[11px] space-y-1.5 text-slate-500 dark:text-slate-400 list-disc list-inside">' +
+          '    <li><b class="text-indigo-600 dark:text-indigo-400">Solo Desvincular:</b> Remueve el gasto de esta tarea pero <u>se conserva</u> en Finanzas como gasto corriente.</li>' +
+          '    <li><b class="text-rose-600 dark:text-rose-400">Eliminar Definitivamente:</b> Borra <u>físicamente</u> la fila en BBDD_Gastos de forma permanente.</li>' +
+          '  </ul>' +
+          '</div>',
+        icon: 'question',
+        showCancelButton: true,
+        showDenyButton: true,
+        confirmButtonText: 'Solo Desvincular',
+        denyButtonText: 'Eliminar Definitivamente',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#4f46e5',
+        denyButtonColor: '#e11d48',
+        cancelButtonColor: '#64748b',
+        reverseButtons: false,
+        focusCancel: true
+      }).then(function (result) {
+        if (result.isConfirmed) {
+          ejecutarDesvinculacionGastoTaskFlow(idGasto);
+        } else if (result.isDenied) {
+          ejecutarEliminacionGastoTaskFlow(idGasto);
+        }
+      });
+    } else {
+      if (confirm('¿Deseas desvincular este gasto de la tarea? (Aceptar = Desvincular, Cancelar = Mantener)')) {
+        ejecutarDesvinculacionGastoTaskFlow(idGasto);
+      }
+    }
+  }
+
+  function ejecutarDesvinculacionGastoTaskFlow(idGasto) {
+    if (!idGasto) return;
+    var g = (state.gastos || []).find(function (x) { return String(x.ID_Gasto || '').trim() === String(idGasto).trim(); });
+    if (g) {
+      g.ID_Tarea = '';
+      g.idTarea = '';
+      g.ID_Origen_Vinculado = 'NINGUNO';
+      g.idOrigenVinculado = 'NINGUNO';
+      g.Tipo_Origen = 'LIBRE_CORRIENTE';
+      g.tipoOrigen = 'LIBRE_CORRIENTE';
+      g.ID_Entidad_Vinculada = 'NINGUNO';
+      g.idEntidadVinculada = 'NINGUNO';
+      g.Tipo_Entidad = 'Gasto Libre';
+      g.tipoEntidad = 'Gasto Libre';
+      g.ID_Proyecto = 'PERSONAL';
+      g.idProyecto = 'PERSONAL';
+      g.ID_Hito = '';
+      g.idHito = '';
+      g.Tipo_Gasto = 'Gasto Libre';
+      g.tipoGasto = 'Gasto Libre';
+      g.Clasificacion_Origen = 'LIBRE_CORRIENTE';
+      g.clasificacionOrigen = 'LIBRE_CORRIENTE';
+    }
+    if (taskFlowState.gastosVinculados) {
+      taskFlowState.gastosVinculados = taskFlowState.gastosVinculados.filter(function (x) { return x !== idGasto; });
+    }
+
+    // Recalcular monto total en state.tareas y refrescar DOM inmediatamente
+    var idTarActual = String(taskFlowState.idTarea || '').trim();
+    var totalRestanteTar = (state.gastos || []).reduce(function (acc, x) {
+      if (String(x.ID_Tarea || '').trim() === String(idTarActual).trim() ||
+          (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.indexOf(x.ID_Gasto) !== -1)) {
+        return acc + (parseFloat(x.Monto_PEN || x.Monto_Original) || 0);
+      }
+      return acc;
+    }, 0);
+    var tObj = (state.tareas || []).find(function (t) {
+      return String(t.ID_Tarea || '').trim() === idTarActual;
+    });
+    if (tObj) {
+      tObj.Monto_Gasto_Asociado = totalRestanteTar;
+      tObj.Costo_Real_Imputado = totalRestanteTar;
+    }
+    if (typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+
+    renderGastosAsociadosTaskFlow();
+    var sInp = document.getElementById('task-flow-gasto-search-input');
+    if (typeof renderGastosDisponiblesTaskFlow === 'function') {
+      renderGastosDisponiblesTaskFlow(sInp ? sInp.value : '');
+    }
+
+    if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('info', 'Gasto Desvinculado', 'El gasto ' + idGasto + ' permanece activo en Finanzas como gasto libre.');
+    }
+
+    callBackend('desvincularGasto', { idGasto: idGasto }, function () {
+      if (typeof renderTableroFinanciero === 'function') renderTableroFinanciero();
+      if (state.proyectoDetalleActivo && typeof renderCascadaHitos === 'function') {
+        renderCascadaHitos(String(state.proyectoDetalleActivo.ID_Proyecto || '').trim());
+      }
+    }, null, { silent: true });
+  }
+
+  function ejecutarEliminacionGastoTaskFlow(idGasto) {
+    if (!idGasto) return;
+    if (state.gastos && Array.isArray(state.gastos)) {
+      state.gastos = state.gastos.filter(function (x) { return String(x.ID_Gasto || '').trim() !== String(idGasto).trim(); });
+    }
+    if (taskFlowState.gastosVinculados) {
+      taskFlowState.gastosVinculados = taskFlowState.gastosVinculados.filter(function (x) { return x !== idGasto; });
+    }
+
+    // Limpiar inputs a vacío
+    var inpMonto = document.getElementById('task-flow-gasto-monto');
+    var inpDesc = document.getElementById('task-flow-gasto-desc');
+    if (inpMonto) inpMonto.value = '';
+    if (inpDesc) inpDesc.value = '';
+    actualizarEquivalenciaGastoTaskFlow();
+
+    // Recalcular monto total en state.tareas y refrescar DOM inmediatamente
+    var idTarActual = String(taskFlowState.idTarea || '').trim();
+    var totalRestanteTar = (state.gastos || []).reduce(function (acc, x) {
+      if (String(x.ID_Tarea || '').trim() === String(idTarActual).trim() ||
+          (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.indexOf(x.ID_Gasto) !== -1)) {
+        return acc + (parseFloat(x.Monto_PEN || x.Monto_Original) || 0);
+      }
+      return acc;
+    }, 0);
+    var tObj = (state.tareas || []).find(function (t) {
+      return String(t.ID_Tarea || '').trim() === idTarActual;
+    });
+    if (tObj) {
+      tObj.Monto_Gasto_Asociado = totalRestanteTar;
+      tObj.Costo_Real_Imputado = totalRestanteTar;
+    }
+    if (typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+
+    renderGastosAsociadosTaskFlow();
+    var sInp = document.getElementById('task-flow-gasto-search-input');
+    if (typeof renderGastosDisponiblesTaskFlow === 'function') {
+      renderGastosDisponiblesTaskFlow(sInp ? sInp.value : '');
+    }
+
+    if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('success', 'Gasto Eliminado', 'Gasto ' + idGasto + ' eliminado de forma definitiva.');
+    }
+
+    // Solo despachar deleteGasto a backend si tiene ID GAS-XXX real
+    if (idGasto.indexOf('GAS-TMP-') === -1 && idGasto.indexOf('GAS-ATM-') === -1) {
+      callBackend('deleteGasto', { idGasto: idGasto }, function (res) {
+        if (typeof renderTableroFinanciero === 'function') renderTableroFinanciero();
+        if (typeof renderKPIsPortafolio === 'function') renderKPIsPortafolio();
+        if (state.proyectoDetalleActivo) {
+          if (typeof renderCascadaHitos === 'function') {
+            renderCascadaHitos(String(state.proyectoDetalleActivo.ID_Proyecto || '').trim());
+          }
+          if (typeof actualizarBentoKPIsProyecto === 'function') {
+            actualizarBentoKPIsProyecto(state.proyectoDetalleActivo);
+          }
+        }
+      }, function (err) {
+        if (typeof mostrarToastOperativo === 'function') {
+          mostrarToastOperativo('error', 'Error al Eliminar', (err && err.message) || 'No se pudo eliminar el gasto.');
+        }
+      });
+    }
+  }
+
+  /**
+   * Elimina o descarta el gasto desde el modal de TareaFlow.
+   * Si es un borrador (inputs con monto/descripción no guardados o ID no persistido), limpia los inputs a vacío.
+   * Si ya tiene ID GAS-XXX (egreso persistido en Sheets), despacha callBackend('deleteGasto') y limpia state.gastos.
+   */
+  function eliminarGastoModalTaskFlow(idGasto) {
+    var inpMonto = document.getElementById('task-flow-gasto-monto');
+    var inpDesc = document.getElementById('task-flow-gasto-desc');
+
+    var idTarget = idGasto;
+    if (!idTarget) {
+      if (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.length > 0) {
+        idTarget = taskFlowState.gastosVinculados[taskFlowState.gastosVinculados.length - 1];
+      } else {
+        var idTarActual = String(taskFlowState.idTarea || '').trim();
+        var gVin = (state.gastos || []).find(function (g) {
+          return idTarActual && String(g.ID_Tarea || '').trim() === idTarActual;
+        });
+        if (gVin) idTarget = gVin.ID_Gasto;
+      }
+    }
+
+    var esGastoPersistido = idTarget && /^GAS-[A-Za-z0-9_]+$/.test(idTarget) &&
+      idTarget.indexOf('GAS-TMP-') === -1 && idTarget.indexOf('GAS-ATM-') === -1;
+
+    if (esGastoPersistido) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: '¿Eliminar gasto definitivamente?',
+          text: 'Se eliminará el egreso ' + idTarget + ' de Finanzas (Sheets) y se desvinculará de la tarea.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#e11d48',
+          cancelButtonColor: '#64748b',
+          confirmButtonText: 'Sí, eliminar',
+          cancelButtonText: 'Cancelar'
+        }).then(function (result) {
+          if (result.isConfirmed) {
+            ejecutarEliminacionGastoTaskFlow(idTarget);
+          }
+        });
+      } else {
+        ejecutarEliminacionGastoTaskFlow(idTarget);
+      }
+    } else {
+      // Es un BORRADOR: limpia los inputs a vacío
+      if (inpMonto) inpMonto.value = '';
+      if (inpDesc) inpDesc.value = '';
+      actualizarEquivalenciaGastoTaskFlow();
+
+      if (idTarget) {
+        if (taskFlowState.gastosVinculados) {
+          taskFlowState.gastosVinculados = taskFlowState.gastosVinculados.filter(function (x) { return x !== idTarget; });
+        }
+        if (state.gastos) {
+          state.gastos = state.gastos.filter(function (x) { return x.ID_Gasto !== idTarget; });
+        }
+      }
+
+      var idTarActual = String(taskFlowState.idTarea || '').trim();
+      var totalRestanteTar = (state.gastos || []).reduce(function (acc, x) {
+        if (String(x.ID_Tarea || '').trim() === String(idTarActual).trim() ||
+            (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.indexOf(x.ID_Gasto) !== -1)) {
+          return acc + (parseFloat(x.Monto_PEN || x.Monto_Original) || 0);
+        }
+        return acc;
+      }, 0);
+      var tObj = (state.tareas || []).find(function (t) {
+        return String(t.ID_Tarea || '').trim() === idTarActual;
+      });
+      if (tObj) {
+        tObj.Monto_Gasto_Asociado = totalRestanteTar;
+        tObj.Costo_Real_Imputado = totalRestanteTar;
+      }
+      if (typeof aplicarFiltrosCruzados === 'function') aplicarFiltrosCruzados();
+
+      renderGastosAsociadosTaskFlow();
+
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('info', 'Borrador Descartado', 'Los campos de gasto se han limpiado.');
+      }
+    }
+  }
+
+  function desvincularGastoTaskFlow(idGasto) {
+    confirmarAccionGastoTaskFlow(idGasto);
+  }
+
+  /**
+   * Conmuta la visibilidad de la fila de edición rápida in-place de un gasto en tarea
+   */
+  function toggleEdicionRapidaGastoTaskFlow(idGasto) {
+    var editRow = document.getElementById('task-flow-gasto-edit-' + idGasto);
+    if (!editRow) return;
+    editRow.classList.toggle('hidden');
+    if (!editRow.classList.contains('hidden')) {
+      var inp = document.getElementById('task-edit-monto-' + idGasto);
+      if (inp) {
+        inp.focus();
+        inp.select();
+      }
+    }
+  }
+
+  /**
+   * Guarda de forma atómica la micro-edición in-place del egreso vinculado a tarea
+   */
+  function guardarEdicionRapidaGastoTaskFlow(idGasto) {
+    if (!idGasto) return;
+    var inpDesc = document.getElementById('task-edit-desc-' + idGasto);
+    var inpMonto = document.getElementById('task-edit-monto-' + idGasto);
+    var nuevoDesc = inpDesc ? inpDesc.value.trim() : '';
+    var nuevoMonto = parseFloat(inpMonto ? inpMonto.value : 0) || 0;
+
+    if (nuevoMonto <= 0) {
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('warning', 'Monto Requerido', 'Ingresa un monto válido mayor a 0.');
+      }
+      return;
+    }
+
+    var g = (state.gastos || []).find(function (item) { return String(item.ID_Gasto || '').trim() === String(idGasto).trim(); });
+    if (!g) return;
+
+    var mon = g.Moneda_Original || 'PEN';
+    var tc = parseFloat(g.Tipo_Cambio) || 1.0;
+    var mPen = (mon === 'PEN') ? nuevoMonto : (nuevoMonto * tc);
+
+    g.Descripcion_Gasto = nuevoDesc || g.Descripcion_Gasto;
+    g.Descripcion = nuevoDesc || g.Descripcion;
+    g.Concepto = nuevoDesc || g.Concepto;
+    g.concepto = nuevoDesc || g.concepto;
+    g.Monto_Original = nuevoMonto;
+    g.montoOriginal = nuevoMonto;
+    g.Monto_PEN = mPen;
+    g.montoPEN = mPen;
+    g.Monto_Moneda_Base = mPen;
+
+    var idTarActual = String(taskFlowState.idTarea || '').trim();
+    var totalRestanteTar = (state.gastos || []).reduce(function (acc, x) {
+      if (String(x.ID_Tarea || '').trim() === String(idTarActual).trim() ||
+          (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.indexOf(x.ID_Gasto) !== -1)) {
+        return acc + (parseFloat(x.Monto_PEN || x.Monto_Original) || 0);
+      }
+      return acc;
+    }, 0);
+    var tObj = (state.tareas || []).find(function (t) {
+      return String(t.ID_Tarea || '').trim() === idTarActual;
+    });
+    if (tObj) {
+      tObj.Monto_Gasto_Asociado = totalRestanteTar;
+      tObj.Costo_Real_Imputado = totalRestanteTar;
+    }
+    if (typeof aplicarFiltrosCruzados === 'function') {
+      aplicarFiltrosCruzados();
+    }
+
+    renderGastosAsociadosTaskFlow();
+
+    if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('success', 'Gasto Actualizado', 'Egreso ' + idGasto + ' actualizado a ' + mon + ' ' + nuevoMonto.toFixed(2));
+    }
+
+    // Persistir en backend
+    if (idGasto.indexOf('GAS-TMP-') === -1 && idGasto.indexOf('GAS-ATM-') === -1) {
+      callBackend('updateGasto', {
+        idGasto: idGasto,
+        montoOriginal: nuevoMonto,
+        concepto: nuevoDesc,
+        descripcionGasto: nuevoDesc,
+        monedaOriginal: mon,
+        tipoCambio: tc
+      }, function () {
+        if (typeof renderTableroFinanciero === 'function') renderTableroFinanciero();
+      }, null, { silent: true });
+    }
+  }
+
+  function renderGastosAsociadosTaskFlow() {
+    var box = document.getElementById('task-flow-gastos-asociados-box');
+    var list = document.getElementById('task-flow-gastos-asociados-list');
+    var totalBadge = document.getElementById('task-flow-gastos-total-badge');
+    var chipLabel = document.getElementById('task-flow-chip-gasto-label');
+    var chip = document.getElementById('task-flow-chip-gasto');
+
+    var idTarActual = String(taskFlowState.idTarea || '').trim();
+    var vinculados = (state.gastos || []).filter(function (g) {
+      var matchId = idTarActual && String(g.ID_Tarea || '').trim() === idTarActual;
+      var matchArr = (taskFlowState.gastosVinculados || []).indexOf(g.ID_Gasto) !== -1;
+      return matchId || matchArr;
+    });
+
+    if (vinculados.length === 0) {
+      if (box) box.classList.add('hidden');
+      if (list) list.innerHTML = '';
+      if (chipLabel) chipLabel.textContent = '+ Gasto Asociado';
+      if (chip) {
+        chip.className = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/60 transition shadow-2xs cursor-pointer';
+      }
+      return;
+    }
+
+    if (box) box.classList.remove('hidden');
+    if (chip) {
+      chip.className = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/60 transition shadow-2xs cursor-pointer';
+    }
+
+    var totalPen = 0;
+    var fnEscape = window.escapeHtmlAttr || function (s) { return String(s || '').replace(/"/g, '&quot;'); };
+
+    if (list) {
+      list.innerHTML = vinculados.map(function (g) {
+        var mon = g.Moneda_Original || 'PEN';
+        var sim = (mon === 'USD') ? '$' : (mon === 'EUR' ? '€' : 'S/');
+        var mOrig = parseFloat(g.Monto_Original) || parseFloat(g.Monto_PEN) || 0;
+        var mPen = parseFloat(g.Monto_PEN || (mOrig * (g.Tipo_Cambio || 1)) || 0);
+        totalPen += mPen;
+
+        var equivTxt = (mon !== 'PEN') ? (' <span class="text-[9.5px] text-slate-400 font-normal">(' + sim + ' ' + mOrig.toFixed(2) + ' ' + mon + ')</span>') : '';
+        var descG = (g.Descripcion_Gasto || g.Descripcion || 'Gasto');
+        var idG = g.ID_Gasto || '';
+
+        return '<div id="task-flow-gasto-item-' + idG + '" class="p-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-100 dark:border-emerald-900/60 shadow-2xs space-y-1.5">' +
+          '<div class="flex items-center justify-between gap-2">' +
+            '<div class="flex items-center gap-1.5 truncate flex-1 min-w-0">' +
+              '<span class="font-mono text-[9px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded">' + idG + '</span>' +
+              '<span class="text-slate-700 dark:text-slate-300 truncate" title="' + fnEscape(descG) + '">' + descG + '</span>' +
+            '</div>' +
+            '<div class="flex items-center gap-1.5 shrink-0">' +
+              '<span class="font-mono text-emerald-700 dark:text-emerald-400 font-bold">S/ ' + mPen.toFixed(2) + equivTxt + '</span>' +
+              '<button type="button" onclick="toggleEdicionRapidaGastoTaskFlow(\'' + idG + '\')" class="text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 text-xs px-1.5 py-0.5 rounded hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition active:scale-95" title="Editar monto o concepto de forma rápida"><svg class="portal-icon-sm w-3.5 h-3.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>' +
+              '<button type="button" onclick="confirmarAccionGastoTaskFlow(\'' + idG + '\')" class="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 text-xs px-1.5 py-0.5 rounded font-bold hover:bg-rose-50 dark:hover:bg-rose-950/40 transition" title="Opciones: Desvincular o Eliminar este gasto">✕</button>' +
+            '</div>' +
+          '</div>' +
+          '<div id="task-flow-gasto-edit-' + idG + '" class="hidden pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center gap-1.5">' +
+            '<input type="text" id="task-edit-desc-' + idG + '" value="' + fnEscape(descG) + '" class="flex-1 text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="Concepto o descripción">' +
+            '<input type="number" step="0.01" min="0" id="task-edit-monto-' + idG + '" value="' + mOrig.toFixed(2) + '" class="w-20 font-mono text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-right focus:outline-none focus:ring-1 focus:ring-emerald-500" placeholder="0.00">' +
+            '<button type="button" onclick="guardarEdicionRapidaGastoTaskFlow(\'' + idG + '\')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg shadow-2xs transition active:scale-95" title="Guardar cambios"><svg class="portal-icon-sm w-3.5 h-3.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>' +
+            '<button type="button" onclick="toggleEdicionRapidaGastoTaskFlow(\'' + idG + '\')" class="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-lg transition active:scale-95" title="Cancelar">✕</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    if (totalBadge) totalBadge.textContent = 'Total: S/ ' + totalPen.toFixed(2);
+    if (chipLabel) {
+      chipLabel.innerHTML = '<span class="font-mono tabular-nums">S/ ' + totalPen.toFixed(2) + '</span>' + (vinculados.length > 1 ? ' (' + vinculados.length + ')' : '');
+    }
+  }
+
+  /**
+   * Controlador interactivo para el selector segmentado de moneda en Tarea de Proyecto.
+   * Conmuta entre PEN, USD y EUR actualizando estilos, prefijo monetario y tipo de cambio.
+   *
+   * @param {string} moneda - 'PEN', 'USD' o 'EUR'
+   */
+  function seleccionarMonedaTaskFlow(moneda) {
+    var mon = String(moneda || 'PEN').toUpperCase();
+    if (['PEN', 'USD', 'EUR'].indexOf(mon) === -1) mon = 'PEN';
+    var inpMon = document.getElementById('task-flow-gasto-moneda');
+    if (inpMon) inpMon.value = mon;
+
+    var btnPen = document.getElementById('task-btn-moneda-pen');
+    var btnUsd = document.getElementById('task-btn-moneda-usd');
+    var btnEur = document.getElementById('task-btn-moneda-eur');
+
+    var clsActive = 'flex-1 py-1 rounded-lg text-xs font-bold transition shadow-xs bg-emerald-600 text-white flex items-center justify-center gap-1 active:scale-95';
+    var clsInactive = 'flex-1 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition flex items-center justify-center gap-1 active:scale-95';
+
+    if (btnPen) btnPen.className = (mon === 'PEN') ? clsActive : clsInactive;
+    if (btnUsd) btnUsd.className = (mon === 'USD') ? clsActive : clsInactive;
+    if (btnEur) btnEur.className = (mon === 'EUR') ? clsActive : clsInactive;
+
+    var simEl = document.getElementById('task-flow-gasto-simbolo');
+    if (simEl) {
+      simEl.textContent = (mon === 'USD') ? '$' : (mon === 'EUR' ? '€' : 'S/');
+    }
+
+    actualizarEquivalenciaGastoTaskFlow();
+  }
+
+  /**
+   * Calcula y proyecta en tiempo real la equivalencia en PEN del gasto ingresado en moneda extranjera.
+   */
+  function actualizarEquivalenciaGastoTaskFlow() {
+    var inpMonto = document.getElementById('task-flow-gasto-monto');
+    var monto = inpMonto ? parseFloat(inpMonto.value) || 0 : 0;
+    var inpMon = document.getElementById('task-flow-gasto-moneda');
+    var mon = inpMon ? inpMon.value : 'PEN';
+
+    var eqBox = document.getElementById('task-flow-gasto-equiv-box');
+    var eqLbl = document.getElementById('task-flow-gasto-equiv-lbl');
+    var tcBadge = document.getElementById('task-flow-gasto-tc-badge');
+
+    if (monto > 0 && mon !== 'PEN') {
+      var tcUsd = (state.tipoCambioOficial && state.tipoCambioOficial.usd) || 3.75;
+      var tcEur = (state.tipoCambioOficial && state.tipoCambioOficial.eur) || 4.12;
+      var tc = (mon === 'USD') ? tcUsd : tcEur;
+      var mPen = monto * tc;
+
+      if (eqBox && eqLbl) {
+        eqLbl.textContent = '≈ S/ ' + mPen.toFixed(2);
+        eqBox.classList.remove('hidden');
+      }
+      if (tcBadge) {
+        tcBadge.textContent = 'TC: ' + tc.toFixed(2);
+        tcBadge.classList.remove('hidden');
+      }
+    } else {
+      if (eqBox) eqBox.classList.add('hidden');
+      if (tcBadge) tcBadge.classList.add('hidden');
+    }
+  }
+
+  function toggleLugarSectionTaskFlow(event) {
+    if (event) event.stopPropagation();
+    var sec = document.getElementById('task-flow-lugar-section');
+    if (!sec) return;
+    var isHidden = sec.classList.contains('hidden');
+    if (isHidden) {
+      sec.classList.remove('hidden');
+      var inp = document.getElementById('task-flow-lugar-input');
+      if (inp) setTimeout(function () { inp.focus(); }, 50);
+    } else {
+      sec.classList.add('hidden');
+    }
+  }
+
+  function abrirBuscadorMapsDesdeTaskFlow() {
+    var inp = document.getElementById('task-flow-lugar-input');
+    var query = inp ? inp.value.trim() : '';
+    window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query), '_blank');
+  }
+
+  // ----------------------------------------------------------------------------
+  // GESTIÓN DE NOTAS VINCULADAS EN TAREA FLOW (VINCULACIÓN INVERSA)
+  // ----------------------------------------------------------------------------
+
+  function toggleNotasSectionTaskFlow(event) {
+    if (event) event.stopPropagation();
+    var sec = document.getElementById('task-flow-notas-section');
+    if (!sec) return;
+    var isHidden = sec.classList.contains('hidden');
+    if (isHidden) {
+      sec.classList.remove('hidden');
+      renderNotasVinculadasTaskFlow();
+      filtrarNotasParaVincularTaskFlow('');
+      var sInp = document.getElementById('task-flow-notas-search-input');
+      if (sInp) {
+        sInp.value = '';
+        setTimeout(function () { sInp.focus(); }, 50);
+      }
+    } else {
+      sec.classList.add('hidden');
+    }
+  }
+
+  function renderNotasVinculadasTaskFlow() {
+    var idTarea = String((taskFlowState && taskFlowState.idTarea) || '').trim();
+    var chipLabel = document.getElementById('task-flow-chip-notas-label');
+    var chip = document.getElementById('task-flow-chip-notas');
+    var listEl = document.getElementById('task-flow-notas-vinculadas-list');
+    var notas = (idTarea && typeof obtenerNotasVinculadasAEntidad === 'function')
+      ? obtenerNotasVinculadasAEntidad(idTarea, 'TAREA')
+      : [];
+
+    if (chipLabel) {
+      chipLabel.textContent = notas.length > 0 ? (notas.length + ' ' + (notas.length === 1 ? 'Nota' : 'Notas')) : '+ Notas';
+    }
+    if (chip) {
+      if (notas.length > 0) {
+        chip.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-purple-300 border border-purple-500/60 transition shadow-2xs cursor-pointer';
+      } else {
+        chip.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60 hover:border-purple-500/60 transition shadow-2xs cursor-pointer';
+      }
+    }
+
+    if (!listEl) return;
+    if (notas.length === 0) {
+      listEl.innerHTML = '<div class="py-2 text-center text-slate-500 italic text-xs">Sin notas vinculadas a esta tarea</div>';
+      return;
+    }
+
+    listEl.innerHTML = notas.map(function (n) {
+      var idN = n.ID_Nota || n.idNota || '';
+      var tit = n.Titulo || n.titulo || 'Nota sin título';
+      var tipo = (typeof clasificarTipoNota === 'function') ? clasificarTipoNota(n) : 'NOTA';
+      var cfg = (typeof CONFIG_TIPO_NOTA !== 'undefined' && CONFIG_TIPO_NOTA[tipo]) ? CONFIG_TIPO_NOTA[tipo] : null;
+      var iconSvg = cfg ? cfg.svg : '<svg class="portal-icon-sm shrink-0 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/></svg>';
+
+      return '<div class="flex items-center justify-between gap-2 p-1.5 rounded-xl bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200/60 dark:border-purple-800/60 text-xs transition group">' +
+        '<div class="flex items-center gap-2 overflow-hidden flex-1 cursor-pointer min-w-0" onclick="if(typeof window.abrirModalEditarNotaConDatos===\'function\'){ window.abrirModalEditarNotaConDatos(\'' + idN + '\'); }else if(typeof window.abrirModalEditarNota===\'function\'){ window.abrirModalEditarNota(\'' + idN + '\'); }">' +
+          iconSvg +
+          '<div class="truncate font-semibold text-slate-800 dark:text-slate-100">' + escapeHtml(tit) + '</div>' +
+          '<span class="font-mono text-[10px] text-slate-400 shrink-0">' + idN + '</span>' +
+        '</div>' +
+        '<button type="button" onclick="event.stopPropagation(); desvincularNotaDeTareaFlow(\'' + idN + '\')" class="p-1 text-slate-400 hover:text-rose-500 transition rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer" title="Desvincular nota de esta tarea">' +
+          '<svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>' +
+        '</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  function filtrarNotasParaVincularTaskFlow(q) {
+    var listEl = document.getElementById('task-flow-notas-disponibles-list');
+    if (!listEl) return;
+    var idTarea = String((taskFlowState && taskFlowState.idTarea) || '').trim();
+    var query = String(q || '').trim().toLowerCase();
+    var todas = (state && Array.isArray(state.notas)) ? state.notas : [];
+
+    var vinculadasActuales = (idTarea && typeof obtenerNotasVinculadasAEntidad === 'function')
+      ? obtenerNotasVinculadasAEntidad(idTarea, 'TAREA')
+      : [];
+    var setVinc = new Set(vinculadasActuales.map(function (n) { return String(n.ID_Nota || n.idNota || '').toUpperCase(); }));
+
+    var disponibles = todas.filter(function (n) {
+      if (!n) return false;
+      var idN = String(n.ID_Nota || n.idNota || '').trim().toUpperCase();
+      if (setVinc.has(idN)) return false;
+      if (!query) return true;
+      var tit = String(n.Titulo || n.titulo || '').toLowerCase();
+      var con = String(n.Contenido || n.contenido || '').toLowerCase();
+      var tags = String(n.Etiquetas || n.tags || '').toLowerCase();
+      return idN.toLowerCase().includes(query) || tit.includes(query) || con.includes(query) || tags.includes(query);
+    });
+
+    if (disponibles.length === 0) {
+      listEl.innerHTML = '<div class="py-2 text-center text-slate-400 italic text-xs">' +
+        (query ? 'No se encontraron notas con "' + escapeHtml(query) + '"' : 'No hay notas disponibles para vincular') +
+      '</div>';
+      return;
+    }
+
+    listEl.innerHTML = disponibles.slice(0, 8).map(function (n) {
+      var idN = n.ID_Nota || n.idNota || '';
+      var tit = n.Titulo || n.titulo || 'Nota sin título';
+      var tipo = (typeof clasificarTipoNota === 'function') ? clasificarTipoNota(n) : 'NOTA';
+      var cfg = (typeof CONFIG_TIPO_NOTA !== 'undefined' && CONFIG_TIPO_NOTA[tipo]) ? CONFIG_TIPO_NOTA[tipo] : null;
+      var iconSvg = cfg ? cfg.svg : '<svg class="portal-icon-sm shrink-0 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>';
+
+      return '<div class="flex items-center justify-between gap-2 p-1.5 rounded-xl hover:bg-purple-50/80 dark:hover:bg-purple-950/40 border border-slate-200/60 dark:border-slate-800 text-xs transition group">' +
+        '<div class="flex items-center gap-1.5 overflow-hidden flex-1 min-w-0">' +
+          iconSvg +
+          '<span class="truncate font-medium text-slate-700 dark:text-slate-200 group-hover:text-purple-700 dark:group-hover:text-purple-300">' + escapeHtml(tit) + '</span>' +
+          '<span class="font-mono text-[10px] text-slate-400 shrink-0">(' + idN + ')</span>' +
+        '</div>' +
+        '<button type="button" onclick="event.stopPropagation(); event.preventDefault(); vincularNotaATareaFlow(\'' + idN + '\')" ' +
+          'class="px-2 py-0.5 rounded-lg text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/60 active:scale-95 transition shrink-0 cursor-pointer">' +
+          '+ Vincular' +
+        '</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  var _vincularNotaTareaEnProgreso = false;
+  function vincularNotaATareaFlow(idNota) {
+    if (_vincularNotaTareaEnProgreso) return;
+    var idTarea = String((taskFlowState && taskFlowState.idTarea) || '').trim();
+    if (!idTarea || idTarea.startsWith('TEMP-TAR-') || idTarea.startsWith('TAR-DRAFT-')) {
+      if (typeof mostrarToastOperativo === 'function') mostrarToastOperativo('warning', 'Guarda la tarea primero antes de vincular notas.');
+      else alert('Por favor guarda la tarea primero antes de asociar notas.');
+      return;
+    }
+    var nomTarea = (document.getElementById('task-flow-titulo') && document.getElementById('task-flow-titulo').value) || idTarea;
+    if (typeof window.vincularNotaAEntidad === 'function') {
+      _vincularNotaTareaEnProgreso = true;
+      window.vincularNotaAEntidad(idNota, { tipo: 'TAREA', codigo: idTarea, titulo: nomTarea }, function (res) {
+        _vincularNotaTareaEnProgreso = false;
+        if (res && res.success) {
+          renderNotasVinculadasTaskFlow();
+          filtrarNotasParaVincularTaskFlow('');
+          var bNotasModal = document.getElementById('task-flow-badge-notas');
+          if (bNotasModal && typeof generarBadgeNotasVinculadas === 'function') {
+            bNotasModal.innerHTML = generarBadgeNotasVinculadas(idTarea, 'TAREA');
+          }
+          var slotKanban = document.querySelector('.kanban-badge-notas-slot[data-id-tarea="' + idTarea + '"]');
+          if (slotKanban && typeof generarBadgeNotasVinculadas === 'function') {
+            slotKanban.innerHTML = generarBadgeNotasVinculadas(idTarea, 'TAREA');
+          }
+          if (typeof renderKanbanColumns === 'function' && state && Array.isArray(state.tareas)) {
+            renderKanbanColumns(state.tareas);
+          }
+          if (typeof window.aplicarFiltrosCruzados === 'function') {
+            window.aplicarFiltrosCruzados();
+          }
+        }
+      });
+    }
+  }
+
+  function desvincularNotaDeTareaFlow(idNota) {
+    var idTarea = String((taskFlowState && taskFlowState.idTarea) || '').trim();
+    if (!idTarea) return;
+    if (typeof window.desvincularNotaDeEntidad === 'function') {
+      window.desvincularNotaDeEntidad(idNota, idTarea, function (res) {
+        if (res && res.success) {
+          renderNotasVinculadasTaskFlow();
+          filtrarNotasParaVincularTaskFlow('');
+          var bNotasModal = document.getElementById('task-flow-badge-notas');
+          if (bNotasModal && typeof generarBadgeNotasVinculadas === 'function') {
+            bNotasModal.innerHTML = generarBadgeNotasVinculadas(idTarea, 'TAREA');
+          }
+          var slotKanban = document.querySelector('.kanban-badge-notas-slot[data-id-tarea="' + idTarea + '"]');
+          if (slotKanban && typeof generarBadgeNotasVinculadas === 'function') {
+            slotKanban.innerHTML = generarBadgeNotasVinculadas(idTarea, 'TAREA');
+          }
+          if (typeof renderKanbanColumns === 'function' && state && Array.isArray(state.tareas)) {
+            renderKanbanColumns(state.tareas);
+          }
+          if (typeof window.aplicarFiltrosCruzados === 'function') {
+            window.aplicarFiltrosCruzados();
+          }
+        }
+      });
+    }
+  }
+
+  // ----------------------------------------------------------------------------
+  // PROCEDIMIENTO / PASOS SECUENCIALES (MOTOR PROCEDURAL CON CANDADO ESTRICTO)
+  // ----------------------------------------------------------------------------
+
+  function cargarPasosTaskFlow(idTarea) {
+    if (typeof renderListaPasosProceduralesModal === 'function') {
+      renderListaPasosProceduralesModal(idTarea, 'TAREA');
+    }
+  }
+
+  function renderPasosTemporalesTaskFlow() {
+    var idTarget = taskFlowState.idTarea || document.getElementById('task-flow-id')?.value || 'TEMP-CREAR-TAR';
+    if (typeof renderListaPasosProceduralesModal === 'function') {
+      renderListaPasosProceduralesModal(idTarget, 'TAREA');
+    }
+  }
+
+  function agregarSubtareaProceduralTaskFlow() {
+    var inp = document.getElementById('task-flow-nuevo-paso-input');
+    var txt = inp ? inp.value.trim() : '';
+    if (!txt) {
+      if (inp) inp.focus();
+      return;
+    }
+
+    if (!taskFlowState.idTarea) {
+      taskFlowState.idTarea = 'TEMP-TAR-' + Date.now();
+      var idInp = document.getElementById('task-flow-id');
+      if (idInp) idInp.value = taskFlowState.idTarea;
+    }
+
+    if (typeof agregarSubtareaProceduralDesdeModal === 'function') {
+      agregarSubtareaProceduralDesdeModal('TAREA');
+    }
+
+    if (inp) {
+      inp.value = '';
+      inp.focus();
+    }
+  }
+
+  // ----------------------------------------------------------------------------
+  // ABRIR Y CERRAR MODAL FLOW DE TAREA
+  // ----------------------------------------------------------------------------
+
+  function abrirModalCrearTareaFlow(idProyecto, idHito, estadoInicial) {
+    taskFlowState.modo = 'CREAR';
+    taskFlowState.idTarea = '';
+    taskFlowState.pasosTemporales = [];
+    window._pasosEliminadosPendientes = [];
+    window._reordenSubtareasPendiente = null;
+
+    // Resolver proyecto de contexto
+    var pDef = idProyecto || state.selectedProjectId || (state.proyectoDetalleActivo ? state.proyectoDetalleActivo.ID_Proyecto : '');
+    taskFlowState.idProyecto = pDef ? String(pDef).trim().toUpperCase() : '';
+
+    // Resolver hito de contexto
+    taskFlowState.idHito = idHito ? String(idHito).trim().toUpperCase() : '';
+    if (taskFlowState.idHito && !taskFlowState.idProyecto) {
+      var hito = (state.hitos || []).find(function (h) {
+        return String(h.ID_Hito || '').trim().toUpperCase() === taskFlowState.idHito;
+      });
+      if (hito && hito.ID_Proyecto) taskFlowState.idProyecto = hito.ID_Proyecto;
+    }
+
+    taskFlowState.idDependencia = '';
+    taskFlowState.estado = estadoInicial || '02_Por_Hacer';
+    taskFlowState.prioridad = '02_P2_Media';
+    taskFlowState.energia = 'Media_Operativa';
+    taskFlowState.horasEstimadas = 1.0;
+    taskFlowState.horasReales = 0.0;
+    taskFlowState.lugarEjecucion = '';
+
+    var hoy = new Date();
+    var mesStr = String(hoy.getMonth() + 1).padStart(2, '0');
+    var diaStr = String(hoy.getDate()).padStart(2, '0');
+    taskFlowState.fechaProgramada = hoy.getFullYear() + '-' + mesStr + '-' + diaStr;
+    taskFlowState.horaProgramada = '09:00';
+
+    // Configurar DOM
+    var idBadge = document.getElementById('task-flow-badge-id');
+    if (idBadge) {
+      idBadge.textContent = 'NUEVA TAREA';
+      idBadge.title = 'Tarea nueva (código autogenerado al guardar)';
+    }
+
+    taskFlowState.idTarea = 'TEMP-TAR-' + Date.now();
+    taskFlowState.gastosVinculados = [];
+
+    var idInput = document.getElementById('task-flow-id');
+    if (idInput) idInput.value = taskFlowState.idTarea;
+
+    var btnArchivar = document.getElementById('task-flow-btn-archivar');
+    if (btnArchivar) btnArchivar.classList.add('hidden');
+    var btnEliminar = document.getElementById('task-flow-btn-eliminar');
+    if (btnEliminar) btnEliminar.classList.add('hidden');
+
+    var btnSubmit = document.getElementById('task-flow-btn-submit');
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = '<span>Guardar Tarea</span>';
+    }
+
+    var inpTitulo = document.getElementById('task-flow-titulo');
+    if (inpTitulo) inpTitulo.value = '';
+
+    var txtNotas = document.getElementById('task-flow-notas');
+    if (txtNotas) txtNotas.value = '';
+
+    var inpLugar = document.getElementById('task-flow-lugar-input');
+    if (inpLugar) inpLugar.value = '';
+    var secLugar = document.getElementById('task-flow-lugar-section');
+    if (secLugar) secLugar.classList.add('hidden');
+
+    var secGasto = document.getElementById('task-flow-gasto-section');
+    if (secGasto) secGasto.classList.add('hidden');
+    var inpGastoMonto = document.getElementById('task-flow-gasto-monto');
+    if (inpGastoMonto) inpGastoMonto.value = '';
+    var inpGastoDesc = document.getElementById('task-flow-gasto-desc');
+    if (inpGastoDesc) inpGastoDesc.value = '';
+
+    var secNotas = document.getElementById('task-flow-notas-section');
+    if (secNotas) secNotas.classList.add('hidden');
+    renderNotasVinculadasTaskFlow();
+
+    cambiarTabGastoTaskFlow('NUEVO');
+    renderGastosAsociadosTaskFlow();
+
+    // Inicializar moneda interactiva por defecto según el proyecto activo o PEN
+    var proyActual = (state.proyectos || []).find(function (p) {
+      return String(p.ID_Proyecto || '').trim().toUpperCase() === String(taskFlowState.idProyecto || '').trim().toUpperCase();
+    });
+    var monDef = (proyActual && proyActual.Moneda_Base) ? proyActual.Moneda_Base : 'PEN';
+    seleccionarMonedaTaskFlow(monDef);
+
+    actualizarPildorasJerarquiaTaskFlow();
+    seleccionarEstadoTaskFlow(taskFlowState.estado);
+    fijarPrioridadTaskFlow(taskFlowState.prioridad);
+    seleccionarDepTaskFlow('', '');
+    actualizarBentoHorasTaskFlow();
+
+    // Actualizar chip fecha/hora
+    var partes = taskFlowState.fechaProgramada.split('-');
+    var mesesCortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    var chipLbl = document.getElementById('task-flow-chip-datetime-label');
+    if (chipLbl) {
+      chipLbl.textContent = partes[2] + ' ' + (mesesCortos[parseInt(partes[1], 10) - 1] || '') + ' • 09:00 (1.0h)';
+    }
+
+    var bNotasModal = document.getElementById('task-flow-badge-notas');
+    if (bNotasModal) bNotasModal.innerHTML = '';
+
+    cargarPasosTaskFlow(taskFlowState.idTarea);
+    cerrarTodosDropdownsTaskFlow();
+    cerrarDatePickerTaskFlow();
+    cerrarDepPickerTaskFlow();
+
+    openModal('modal-tarea-flow');
+    setTimeout(function () {
+      if (inpTitulo) inpTitulo.focus();
+    }, 100);
+  }
+
+  function abrirModalEditarTareaFlow(idTarea) {
+    var t = (state.tareas || []).find(function (x) {
+      return String(x.ID_Tarea || '').trim() === String(idTarea || '').trim();
+    });
+    if (!t) return;
+
+    taskFlowState.modo = 'EDITAR';
+    window._pasosEliminadosPendientes = [];
+    window._reordenSubtareasPendiente = null;
+    taskFlowState.idTarea = t.ID_Tarea;
+
+    // Resolución canónica WBS: Tarea -> Paquete (state.hitos) -> Proyecto (state.proyectos)
+    var idHitoKey = String(t.ID_Hito || t.idHito || '').trim();
+    var hitoObj = (state.hitos || []).find(function (h) {
+      var hId = String(h.ID_Hito || h.ID_Elemento_WBS || '').trim().toUpperCase();
+      return hId === idHitoKey.toUpperCase();
+    });
+
+    var idProyKey = '';
+    if (hitoObj && hitoObj.ID_Proyecto) {
+      idProyKey = String(hitoObj.ID_Proyecto).trim().toUpperCase();
+    } else if (t.ID_Proyecto || t.idProyecto) {
+      idProyKey = String(t.ID_Proyecto || t.idProyecto).trim().toUpperCase();
+    }
+
+    taskFlowState.idHito = idHitoKey;
+    taskFlowState.idProyecto = idProyKey;
+    taskFlowState.idDependencia = t.ID_Dependencia ? String(t.ID_Dependencia).trim() : '';
+    taskFlowState.estado = t.Estado_Tarea || '02_Por_Hacer';
+    taskFlowState.prioridad = t.Prioridad_Eisenhower || '02_P2_Media';
+    taskFlowState.energia = t.Nivel_Energia_Requerido || 'Media_Operativa';
+    taskFlowState.horasEstimadas = parseFloat(t.Horas_Estimadas) || 1.0;
+    taskFlowState.horasReales = parseFloat(t.Horas_Reales) || 0.0;
+    taskFlowState.notas = t.Notas_Impedimentos || '';
+    taskFlowState.lugarEjecucion = t.Lugar_Ejecucion || '';
+
+    // Detección de fecha y hora
+    var fProgStr = t.Fecha_Programada ? String(t.Fecha_Programada).trim() : '';
+    var horaDetectada = '';
+    if (t.Hora_Inicio) {
+      var hL = formatHoraLimpia(t.Hora_Inicio);
+      if (hL !== '--:--') horaDetectada = hL;
+    }
+    if (!horaDetectada && (fProgStr.includes(' ') || fProgStr.includes('T'))) {
+      var partesHora = fProgStr.split(/[\sT]+/)[1];
+      if (partesHora) {
+        var hL2 = formatHoraLimpia(partesHora);
+        if (hL2 !== '--:--') horaDetectada = hL2;
+      }
+    }
+    taskFlowState.fechaProgramada = fProgStr ? fProgStr.split(/[\sT]+/)[0] : '';
+    taskFlowState.horaProgramada = horaDetectada || '09:00';
+
+    // Configurar DOM
+    var idBadge = document.getElementById('task-flow-badge-id');
+    if (idBadge) {
+      idBadge.textContent = String(t.ID_Tarea || '').trim();
+      idBadge.title = 'Código de tarea: ' + String(t.ID_Tarea || '').trim();
+    }
+
+    var bNotasModal = document.getElementById('task-flow-badge-notas');
+    if (bNotasModal) {
+      bNotasModal.innerHTML = (typeof generarBadgeNotasVinculadas === 'function')
+        ? generarBadgeNotasVinculadas(t.ID_Tarea, 'TAREA')
+        : '';
+    }
+
+    var idInput = document.getElementById('task-flow-id');
+    if (idInput) idInput.value = t.ID_Tarea;
+
+    var btnArchivar = document.getElementById('task-flow-btn-archivar');
+    if (btnArchivar) btnArchivar.classList.remove('hidden');
+    var btnEliminar = document.getElementById('task-flow-btn-eliminar');
+    if (btnEliminar) btnEliminar.classList.remove('hidden');
+
+    var btnSubmit = document.getElementById('task-flow-btn-submit');
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = '<span>Guardar Cambios</span>';
+    }
+
+    var inpTitulo = document.getElementById('task-flow-titulo');
+    if (inpTitulo) inpTitulo.value = t.Nombre_Tarea_Actividad || '';
+
+    var txtNotas = document.getElementById('task-flow-notas');
+    if (txtNotas) txtNotas.value = t.Notas_Impedimentos || '';
+
+    var inpLugar = document.getElementById('task-flow-lugar-input');
+    if (inpLugar) inpLugar.value = taskFlowState.lugarEjecucion;
+    var secLugar = document.getElementById('task-flow-lugar-section');
+    if (secLugar) {
+      if (taskFlowState.lugarEjecucion) secLugar.classList.remove('hidden');
+      else secLugar.classList.add('hidden');
+    }
+
+    var secGasto = document.getElementById('task-flow-gasto-section');
+    if (secGasto) secGasto.classList.add('hidden');
+    var inpGastoMonto = document.getElementById('task-flow-gasto-monto');
+    if (inpGastoMonto) inpGastoMonto.value = '';
+    var inpGastoDesc = document.getElementById('task-flow-gasto-desc');
+    if (inpGastoDesc) inpGastoDesc.value = '';
+
+    var secNotas = document.getElementById('task-flow-notas-section');
+    if (secNotas) secNotas.classList.add('hidden');
+    renderNotasVinculadasTaskFlow();
+
+    taskFlowState.gastosVinculados = [];
+    cambiarTabGastoTaskFlow('NUEVO');
+    renderGastosAsociadosTaskFlow();
+
+    actualizarPildorasJerarquiaTaskFlow();
+    seleccionarEstadoTaskFlow(taskFlowState.estado);
+    fijarPrioridadTaskFlow(taskFlowState.prioridad);
+    actualizarBentoHorasTaskFlow();
+
+    // Predecesora
+    var nomDep = '';
+    if (taskFlowState.idDependencia) {
+      var depT = (state.tareas || []).find(function (x) {
+        return String(x.ID_Tarea || '').trim() === taskFlowState.idDependencia;
+      });
+      if (depT) nomDep = depT.Nombre_Tarea_Actividad || '';
+    }
+    seleccionarDepTaskFlow(taskFlowState.idDependencia, nomDep);
+
+    // Chip fecha/hora
+    var chipLbl = document.getElementById('task-flow-chip-datetime-label');
+    if (chipLbl) {
+      if (taskFlowState.fechaProgramada) {
+        var partes = taskFlowState.fechaProgramada.split('-');
+        var mesesCortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        chipLbl.textContent = partes[2] + ' ' + (mesesCortos[parseInt(partes[1], 10) - 1] || '') + ' • ' + taskFlowState.horaProgramada + ' (' + taskFlowState.horasEstimadas + 'h)';
+      } else {
+        chipLbl.textContent = 'Fecha y Hora';
+      }
+    }
+
+    cargarPasosTaskFlow(t.ID_Tarea);
+    cerrarTodosDropdownsTaskFlow();
+    cerrarDatePickerTaskFlow();
+    cerrarDepPickerTaskFlow();
+
+    openModal('modal-tarea-flow');
+  }
+
+  function cerrarModalTareaFlow() {
+    cerrarTodosDropdownsTaskFlow();
+    cerrarDatePickerTaskFlow();
+    cerrarDepPickerTaskFlow();
+    var secNotas = document.getElementById('task-flow-notas-section');
+    if (secNotas) secNotas.classList.add('hidden');
+    closeModal('modal-tarea-flow');
+  }
+
+  // ----------------------------------------------------------------------------
+  // GUARDAR Y ARCHIVAR TAREA FLOW
+  // ----------------------------------------------------------------------------
+
+  function guardarTareaFlow() {
+    var inpTitulo = document.getElementById('task-flow-titulo');
+    var titulo = inpTitulo ? inpTitulo.value.trim() : '';
+
+    if (!titulo) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Título requerido',
+        text: 'Por favor ingresa un nombre o descripción para la tarea de proyecto.',
+        confirmButtonColor: '#4f46e5'
+      });
+      if (inpTitulo) inpTitulo.focus();
+      return;
+    }
+
+    if (!taskFlowState.idProyecto) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Proyecto requerido',
+        text: 'Toda tarea debe pertenecer a un proyecto. Por favor selecciona el proyecto en la cabecera.',
+        confirmButtonColor: '#4f46e5'
+      });
+      return;
+    }
+
+    // Poka-Yoke Estricto DoD: Bloqueo si la tarea se intenta guardar como Completado con subtareas pendientes
+    var estadoSeleccionado = taskFlowState.estado || '02_Por_Hacer';
+    if (estadoSeleccionado === '04_Completado' || String(estadoSeleccionado).indexOf('Completado') !== -1) {
+      var pasosTemp = Array.isArray(taskFlowState.pasosTemporales) ? taskFlowState.pasosTemporales : [];
+      var idTarActual = String(taskFlowState.idTarea || '').trim().toUpperCase();
+      var pasosGuardados = (idTarActual && Array.isArray(state.subtareas)) ? state.subtareas.filter(function (s) {
+        var idP = String(s.ID_Padre_Vinculado || s.ID_Padre || s.idPadre || '').trim().toUpperCase();
+        return idP === idTarActual;
+      }) : [];
+      var totalPasos = pasosTemp.length + pasosGuardados.length;
+      var pasosIncompletos = 0;
+      pasosTemp.forEach(function (p) { if (!p.Completada && !p.completado) pasosIncompletos++; });
+      pasosGuardados.forEach(function (s) {
+        if (!s.Completado && !s.completado && String(s.Completado).toLowerCase() !== 'true' && String(s.Completado) !== '1') pasosIncompletos++;
+      });
+      if (totalPasos > 0 && pasosIncompletos > 0) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'warning',
+            title: 'DoD Incompleto (Poka-Yoke)',
+            html: '<div class="text-xs text-slate-600 dark:text-slate-300 space-y-2 text-left">' +
+              '<p>Esta tarea tiene <b>' + pasosIncompletos + ' de ' + totalPasos + '</b> subtareas o pasos pendientes en su checklist.</p>' +
+              '<p class="text-indigo-600 dark:text-indigo-400 font-semibold">Por gobernanza PMO, debes verificar el 100% de los pasos antes de marcarla como completada.</p>' +
+              '</div>',
+            confirmButtonColor: '#4f46e5'
+          });
+        }
+        return;
+      }
+    }
+
+    var txtNotas = document.getElementById('task-flow-notas');
+    var notas = txtNotas ? txtNotas.value.trim() : '';
+
+    var inpLugar = document.getElementById('task-flow-lugar-input');
+    var lugar = inpLugar ? inpLugar.value.trim() : '';
+
+    var btnSubmit = document.getElementById('task-flow-btn-submit');
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = '<span>Guardando...</span>';
+    }
+
+    var inpMonto = document.getElementById('task-flow-gasto-monto');
+    var montoGasto = inpMonto ? parseFloat(inpMonto.value) || 0 : 0;
+    var selMoneda = document.getElementById('task-flow-gasto-moneda');
+    var monedaGasto = selMoneda ? selMoneda.value : 'PEN';
+    var selCatGasto = document.getElementById('task-flow-gasto-categoria');
+    var catGasto = selCatGasto ? selCatGasto.value : 'Servicios_Contratados';
+    var inpDescGasto = document.getElementById('task-flow-gasto-desc');
+    var descGasto = inpDescGasto ? inpDescGasto.value.trim() : '';
+
+    if (taskFlowState.modo === 'CREAR') {
+      var tempId = taskFlowState.idTarea || ('TEMP-TAR-' + Date.now());
+      var fProg = taskFlowState.fechaProgramada || new Date().toISOString().split('T')[0];
+      var hProg = taskFlowState.horaProgramada || '09:00';
+
+      // Calcular gastos confirmados vinculados (NO se auto-crean gastos de inputs no guardados)
+      var totalGastoConfirmado = (state.gastos || []).reduce(function (acc, x) {
+        if (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.indexOf(x.ID_Gasto) !== -1) {
+          return acc + (parseFloat(x.Monto_PEN || x.Monto_Original) || 0);
+        }
+        return acc;
+      }, 0);
+
+      var nuevaTareaLocal = {
+        ID_Tarea: tempId,
+        Nombre_Tarea_Actividad: titulo,
+        ID_Proyecto: taskFlowState.idProyecto,
+        ID_Hito: taskFlowState.idHito || '',
+        ID_Dependencia: taskFlowState.idDependencia || '',
+        Estado_Tarea: taskFlowState.estado || '02_Por_Hacer',
+        Prioridad_Eisenhower: taskFlowState.prioridad || '02_P2_Media',
+        Nivel_Energia_Requerido: taskFlowState.energia || 'Medio',
+        Lugar_Ejecucion: lugar,
+        Recursos_Requeridos: '',
+        Fecha_Programada: fProg + (hProg ? (' ' + hProg) : ''),
+        Hora_Inicio: hProg,
+        Horas_Estimadas: parseFloat(taskFlowState.horasEstimadas) || 1.0,
+        Horas_Reales: 0.0,
+        Monto_Gasto_Asociado: totalGastoConfirmado,
+        Costo_Real_Imputado: totalGastoConfirmado,
+        Responsable_Ejecutor: 'Christopher',
+        Notas_Impedimentos: notas,
+        _isOptimistic: true
+      };
+
+      if (!state.tareas) state.tareas = [];
+      state.tareas.unshift(nuevaTareaLocal);
+
+      // Si se agregaron pasos temporales en el mismo flujo
+      var pasosTemp = Array.isArray(taskFlowState.pasosTemporales) ? taskFlowState.pasosTemporales : [];
+      if (pasosTemp.length > 0) {
+        if (!state.subtareas) state.subtareas = [];
+        pasosTemp.forEach(function (p, idx) {
+          state.subtareas.push({
+            ID_Subtarea: 'TEMP-STEP-' + tempId + '-' + (idx + 1),
+            idSubtarea: 'TEMP-STEP-' + tempId + '-' + (idx + 1),
+            ID_Padre_Vinculado: tempId,
+            idPadreVinculado: tempId,
+            ID_Padre: tempId,
+            idPadre: tempId,
+            Tipo_Padre: 'TAREA',
+            tipoPadre: 'TAREA',
+            Numero_Paso: idx + 1,
+            numeroPaso: idx + 1,
+            Orden_Ejecucion: idx + 1,
+            Descripcion_Paso: (p.Titulo_Subtarea || p.Descripcion_Paso || p.titulo || '').trim(),
+            descripcionPaso: (p.Titulo_Subtarea || p.Descripcion_Paso || p.titulo || '').trim(),
+            Completado: !!p.Completada,
+            completado: !!p.Completada,
+            Estado: p.Completada ? '02_Completada' : '01_Pendiente'
+          });
+        });
+      }
+
+      // 1. CERRAR MODAL AL INSTANTE (0ms)
+      cerrarModalTareaFlow();
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = '<span>Guardar Tarea</span>';
+      }
+
+      // 2. ACTUALIZACIÓN REACTIVA AL INSTANTE (60 FPS)
+      if (typeof recalcularAvanceCascada === 'function') {
+        recalcularAvanceCascada(tempId, taskFlowState.idHito, taskFlowState.idProyecto);
+      }
+      if (typeof renderSidebarProyectos === 'function') renderSidebarProyectos();
+      if (typeof aplicarFiltrosCruzados === 'function') aplicarFiltrosCruzados();
+
+      if (state.proyectoDetalleActivo) {
+        var idProyActivo = String(state.proyectoDetalleActivo.ID_Proyecto || '').trim();
+        if (typeof renderCascadaHitos === 'function') renderCascadaHitos(idProyActivo);
+        if (typeof actualizarBentoKPIsProyecto === 'function') {
+          actualizarBentoKPIsProyecto(state.proyectoDetalleActivo);
+        }
+      }
+      if (typeof actualizarMetricasDashboard === 'function') actualizarMetricasDashboard();
+      if (typeof renderTableroFinanciero === 'function' && totalGastoConfirmado > 0) renderTableroFinanciero();
+
+      // 3. TOAST ESQUINERO OPERATIVO (Discreto, no invasivo)
+      if (typeof notificarCreacion === 'function') {
+        notificarCreacion('Tarea', titulo, 'f');
+      } else if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('success', 'Tarea creada correctamente', titulo);
+      }
+
+      // 4. PERSISTENCIA SILENCIOSA EN SEGUNDO PLANO
+      var payloadCreate = {
+        nombreTareaActividad: titulo,
+        idProyecto: taskFlowState.idProyecto,
+        idHito: taskFlowState.idHito,
+        idDependencia: taskFlowState.idDependencia,
+        estadoTarea: taskFlowState.estado,
+        prioridad: taskFlowState.prioridad,
+        nivelEnergiaRequerido: taskFlowState.energia,
+        lugarEjecucion: lugar,
+        recursosRequeridos: '',
+        fechaProgramada: taskFlowState.fechaProgramada,
+        horaProgramada: taskFlowState.horaProgramada,
+        horaInicio: taskFlowState.horaProgramada || '09:00',
+        horasEstimadas: taskFlowState.horasEstimadas,
+        horasReales: 0.0,
+        responsableEjecutor: 'Christopher',
+        notasImpedimentos: notas,
+        montoGastoAsociado: totalGastoConfirmado,
+        costoRealImputado: totalGastoConfirmado
+      };
+
+      var draftIdBuscado = taskFlowState.idTareaEdicion;
+      var linkedGastosIds = (taskFlowState.gastosVinculados || []).slice();
+
+      callBackend('createTarea', payloadCreate, function (res) {
+        if (res && res.success) {
+          var realTarea = res.data || {};
+          var realId = realTarea.ID_Tarea || res.idTarea;
+          if (realId) {
+            nuevaTareaLocal.ID_Tarea = realId;
+            nuevaTareaLocal._isOptimistic = false;
+            if (realTarea.ID_Proyecto) nuevaTareaLocal.ID_Proyecto = realTarea.ID_Proyecto;
+            if (realTarea.ID_Hito) nuevaTareaLocal.ID_Hito = realTarea.ID_Hito;
+
+            if (typeof notificarEntidadCreadaDesdeIdea === 'function') {
+              notificarEntidadCreadaDesdeIdea('TAREA', realId);
+            }
+
+            // Reconciliar subtareas
+            (state.subtareas || []).forEach(function (s) {
+              if (s.ID_Padre_Vinculado === tempId || s.ID_Padre === tempId) {
+                s.ID_Padre_Vinculado = realId;
+                s.idPadreVinculado = realId;
+                s.ID_Padre = realId;
+                s.idPadre = realId;
+              }
+            });
+
+            // Reconciliar cualquier gasto vinculado atómicamente antes o durante la tarea
+            var idsParaReconciliar = [];
+            if (draftIdBuscado && draftIdBuscado !== realId) idsParaReconciliar.push(draftIdBuscado);
+            if (tempId && tempId !== realId) idsParaReconciliar.push(tempId);
+
+            (state.gastos || []).forEach(function (g) {
+              if (idsParaReconciliar.indexOf(g.ID_Tarea) !== -1 || linkedGastosIds.indexOf(g.ID_Gasto) !== -1) {
+                var idGastoActual = g.ID_Gasto;
+                g.ID_Tarea = realId;
+                if (nuevaTareaLocal.ID_Proyecto) g.ID_Proyecto = nuevaTareaLocal.ID_Proyecto;
+                if (nuevaTareaLocal.ID_Hito) g.ID_Hito = nuevaTareaLocal.ID_Hito;
+                if (idGastoActual && idGastoActual.indexOf('GAS-TMP-') === -1) {
+                  callBackend('updateGasto', {
+                    idGasto: idGastoActual,
+                    idTarea: realId,
+                    idProyecto: nuevaTareaLocal.ID_Proyecto || '',
+                    idHito: nuevaTareaLocal.ID_Hito || ''
+                  }, null, null, { silent: true });
+                }
+              }
+            });
+
+            // Si hubo pasos creados en memoria para esta tarea, persistir silenciosamente
+            var pasosParaCrear = (state.subtareas || []).filter(function (s) {
+              var sPad = s.ID_Padre_Vinculado || s.idPadreVinculado || s.ID_Padre || s.idPadre;
+              return sPad === realId && (String(s.ID_Subtarea || '').startsWith('SUB-TMP-') || String(s.ID_Subtarea || '').startsWith('TEMP-'));
+            });
+            if (pasosParaCrear.length > 0) {
+              pasosParaCrear.forEach(function (p, idx) {
+                var txtPaso = (p.Descripcion_Paso || p.Titulo_Subtarea || p.Titulo || '').trim();
+                callBackend('createSubtarea', {
+                  idPadre: realId,
+                  idPadreVinculado: realId,
+                  tipoPadre: 'TAREA',
+                  descripcionPaso: txtPaso,
+                  titulo: txtPaso,
+                  numeroPaso: p.Numero_Paso || (idx + 1),
+                  orden: p.Numero_Paso || (idx + 1),
+                  completada: !!p.Completado
+                }, function (resPaso) {
+                  if (resPaso && resPaso.data) {
+                    Object.assign(p, resPaso.data);
+                  }
+                }, null, { silent: true });
+              });
+            }
+          }
+        } else {
+          // Rollback
+          state.tareas = (state.tareas || []).filter(function (t) { return t.ID_Tarea !== tempId; });
+          state.subtareas = (state.subtareas || []).filter(function (s) {
+            var sPad = s.ID_Padre_Vinculado || s.idPadreVinculado || s.ID_Padre || s.idPadre;
+            return sPad !== tempId;
+          });
+          if (typeof aplicarFiltrosCruzados === 'function') aplicarFiltrosCruzados();
+          if (state.proyectoDetalleActivo && typeof renderCascadaHitos === 'function') {
+            renderCascadaHitos(String(state.proyectoDetalleActivo.ID_Proyecto || '').trim());
+          }
+          if (typeof mostrarToastOperativo === 'function') {
+            mostrarToastOperativo('error', 'Error al Guardar Tarea', (res && res.error) || 'No se pudo sincronizar.');
+          }
+        }
+      }, function (err) {
+        // Rollback
+        state.tareas = (state.tareas || []).filter(function (t) { return t.ID_Tarea !== tempId; });
+        state.subtareas = (state.subtareas || []).filter(function (s) {
+          var sPad = s.ID_Padre_Vinculado || s.idPadreVinculado || s.ID_Padre || s.idPadre;
+          return sPad !== tempId;
+        });
+        if (typeof aplicarFiltrosCruzados === 'function') aplicarFiltrosCruzados();
+        if (state.proyectoDetalleActivo && typeof renderCascadaHitos === 'function') {
+          renderCascadaHitos(String(state.proyectoDetalleActivo.ID_Proyecto || '').trim());
+        }
+        if (typeof mostrarToastOperativo === 'function') {
+          mostrarToastOperativo('error', 'Error de Red', (err && err.message) || 'Error de conexión.');
+        }
+      }, { silent: true });
+
+    } else {
+      // MODO EDITAR: ACTUALIZACIÓN INSTANTÁNEA OPTIMISTA
+      var idTarea = taskFlowState.idTarea;
+      var tarLocal = (state.tareas || []).find(function (t) {
+        return String(t.ID_Tarea || '').trim() === String(idTarea).trim();
+      });
+
+      var backupTar = tarLocal ? Object.assign({}, tarLocal) : null;
+
+      // Calcular gastos confirmados vinculados (NO se auto-crean gastos de inputs no guardados)
+      var totalGastoConfirmado = (state.gastos || []).reduce(function (acc, x) {
+        if (String(x.ID_Tarea || '').trim() === String(idTarea).trim() ||
+            (taskFlowState.gastosVinculados && taskFlowState.gastosVinculados.indexOf(x.ID_Gasto) !== -1)) {
+          return acc + (parseFloat(x.Monto_PEN || x.Monto_Original) || 0);
+        }
+        return acc;
+      }, 0);
+
+      if (tarLocal) {
+        tarLocal.Nombre_Tarea_Actividad = titulo;
+        tarLocal.ID_Proyecto = taskFlowState.idProyecto;
+        tarLocal.ID_Hito = taskFlowState.idHito;
+        tarLocal.ID_Dependencia = taskFlowState.idDependencia;
+        tarLocal.Estado_Tarea = taskFlowState.estado;
+        tarLocal.Prioridad_Eisenhower = taskFlowState.prioridad;
+        tarLocal.Nivel_Energia_Requerido = taskFlowState.energia;
+        tarLocal.Fecha_Programada = taskFlowState.fechaProgramada + (taskFlowState.horaProgramada ? (' ' + taskFlowState.horaProgramada) : '');
+        tarLocal.Hora_Inicio = taskFlowState.horaProgramada;
+        tarLocal.Horas_Estimadas = taskFlowState.horasEstimadas;
+        tarLocal.Horas_Reales = taskFlowState.horasReales;
+        tarLocal.Monto_Gasto_Asociado = totalGastoConfirmado;
+        tarLocal.Costo_Real_Imputado = totalGastoConfirmado;
+        tarLocal.Notas_Impedimentos = notas;
+        tarLocal.Lugar_Ejecucion = lugar;
+      }
+
+      // 1. CERRAR MODAL INMEDIATAMENTE
+      cerrarModalTareaFlow();
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = '<span>Guardar Tarea</span>';
+      }
+
+      // 2. ACTUALIZACIÓN REACTIVA AL INSTANTE (60 FPS)
+      if (typeof recalcularAvanceCascada === 'function') {
+        recalcularAvanceCascada(idTarea, taskFlowState.idHito, taskFlowState.idProyecto);
+      }
+      if (typeof renderSidebarProyectos === 'function') renderSidebarProyectos();
+      if (typeof aplicarFiltrosCruzados === 'function') aplicarFiltrosCruzados();
+      if (state.proyectoDetalleActivo) {
+        var idProyAct = String(state.proyectoDetalleActivo.ID_Proyecto || '').trim();
+        if (typeof renderCascadaHitos === 'function') renderCascadaHitos(idProyAct);
+        if (typeof actualizarBentoKPIsProyecto === 'function') {
+          actualizarBentoKPIsProyecto(state.proyectoDetalleActivo);
+        }
+      }
+      if (typeof renderTableroFinanciero === 'function' && totalGastoConfirmado > 0) renderTableroFinanciero();
+
+      // 3. TOAST ESQUINERO OPERATIVO
+      if (typeof notificarModificacion === 'function') {
+        notificarModificacion('Tarea', titulo, 'f');
+      } else if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('info', 'Tarea actualizada correctamente', titulo);
+      }
+
+      // 4. PERSISTENCIA SILENCIOSA EN SEGUNDO PLANO
+      var payloadUpdate = {
+        idTarea: idTarea,
+        ID_Tarea: idTarea,
+        horaProgramada: taskFlowState.horaProgramada,
+        horaInicio: taskFlowState.horaProgramada,
+        datos: {
+          Nombre_Tarea_Actividad: titulo,
+          ID_Proyecto: taskFlowState.idProyecto,
+          ID_Hito: taskFlowState.idHito,
+          ID_Dependencia: taskFlowState.idDependencia,
+          Estado_Tarea: taskFlowState.estado,
+          Prioridad_Eisenhower: taskFlowState.prioridad,
+          Nivel_Energia_Requerido: taskFlowState.energia,
+          Fecha_Programada: taskFlowState.fechaProgramada,
+          horaProgramada: taskFlowState.horaProgramada,
+          horaInicio: taskFlowState.horaProgramada,
+          Horas_Estimadas: taskFlowState.horasEstimadas,
+          Horas_Reales: taskFlowState.horasReales,
+          Monto_Gasto_Asociado: totalGastoConfirmado,
+          Costo_Real_Imputado: totalGastoConfirmado,
+          Notas_Impedimentos: notas,
+          Lugar_Ejecucion: lugar
+        },
+        nombreTareaActividad: titulo,
+        idProyecto: taskFlowState.idProyecto,
+        idHito: taskFlowState.idHito,
+        idDependencia: taskFlowState.idDependencia,
+        prioridad: taskFlowState.prioridad,
+        nivelEnergiaRequerido: taskFlowState.energia,
+        fechaProgramada: taskFlowState.fechaProgramada,
+        horasEstimadas: taskFlowState.horasEstimadas,
+        horasReales: taskFlowState.horasReales,
+        montoGastoAsociado: totalGastoConfirmado,
+        costoRealImputado: totalGastoConfirmado,
+        notasImpedimentos: notas,
+        lugarEjecucion: lugar
+      };
+
+      callBackend('updateTarea', payloadUpdate, function (res) {
+        if (!res || !res.success) {
+          if (tarLocal && backupTar) Object.assign(tarLocal, backupTar);
+          if (typeof aplicarFiltrosCruzados === 'function') aplicarFiltrosCruzados();
+          if (typeof mostrarToastOperativo === 'function') {
+            mostrarToastOperativo('error', 'Error al Actualizar', (res && res.error) || 'No se guardaron los cambios.');
+          }
+        }
+      }, function (err) {
+        if (tarLocal && backupTar) Object.assign(tarLocal, backupTar);
+        if (typeof aplicarFiltrosCruzados === 'function') aplicarFiltrosCruzados();
+        if (typeof mostrarToastOperativo === 'function') {
+          mostrarToastOperativo('error', 'Error de Red', (err && err.message) || 'Error de conexión.');
+        }
+      }, { silent: true });
+
+      // Persistir subtareas creadas en memoria durante la edición
+      var pasosNuevosEdit = (state.subtareas || []).filter(function (s) {
+        var sPad = s.ID_Padre_Vinculado || s.idPadreVinculado || s.ID_Padre || s.idPadre;
+        return sPad === idTarea && (String(s.ID_Subtarea || '').startsWith('SUB-TMP-') || String(s.ID_Subtarea || '').startsWith('TEMP-'));
+      });
+      if (pasosNuevosEdit.length > 0) {
+        pasosNuevosEdit.forEach(function (p, idx) {
+          var txtPaso = (p.Descripcion_Paso || p.Titulo_Subtarea || p.Titulo || '').trim();
+          callBackend('createSubtarea', {
+            idPadre: idTarea,
+            idPadreVinculado: idTarea,
+            tipoPadre: 'TAREA',
+            descripcionPaso: txtPaso,
+            titulo: txtPaso,
+            numeroPaso: p.Numero_Paso || (idx + 1),
+            orden: p.Numero_Paso || (idx + 1),
+            completada: !!p.Completado
+          }, function (resPaso) {
+            if (resPaso && resPaso.data) {
+              Object.assign(p, resPaso.data);
+            }
+          }, null, { silent: true });
+        });
+      }
+
+      // Persistir subtareas eliminadas durante el modal
+      if (Array.isArray(window._pasosEliminadosPendientes) && window._pasosEliminadosPendientes.length > 0) {
+        window._pasosEliminadosPendientes.forEach(function (delId) {
+          callBackend('deleteSubtarea', { idSubtarea: delId }, null, null, { silent: true });
+        });
+        window._pasosEliminadosPendientes = [];
+      }
+
+      // Persistir reorden de subtareas si se modificó durante el modal
+      if (window._reordenSubtareasPendiente) {
+        var idPadreReord = window._reordenSubtareasPendiente;
+        var pReord = (typeof obtenerSubtareasPadre === 'function') ? obtenerSubtareasPadre(idPadreReord) : [];
+        var ordenIds = pReord.map(function (p) { return p.ID_Subtarea; }).filter(function (id) {
+          return id && !String(id).startsWith('SUB-TMP-') && !String(id).startsWith('TEMP-');
+        });
+        if (ordenIds.length > 0) {
+          callBackend('reordenarsubtareas', {
+            idPadre: idPadreReord,
+            idPadreVinculado: idPadreReord,
+            ordenIds: ordenIds
+          }, null, null, { silent: true });
+        }
+        window._reordenSubtareasPendiente = null;
+      }
+    }
+  }
+
+  function confirmarArchivarTareaTaskFlow() {
+    if (!taskFlowState.idTarea) return;
+    var idTar = taskFlowState.idTarea;
+    cerrarModalTareaFlow();
+    if (typeof confirmarArchivarTarea === 'function') {
+      confirmarArchivarTarea(idTar);
+    }
+  }
+
+  // ----------------------------------------------------------------------------
+  // ENRUTAMIENTO DE COMPATIBILIDAD (LEGACY ROUTING)
+  // ----------------------------------------------------------------------------
+
+  function abrirModalCrearTareaKanban(estadoInicial) {
+    var hitoPreseleccionado = '';
+    var elHito = document.getElementById('filter-hito-tarea');
+    if (elHito && elHito.value) {
+      hitoPreseleccionado = elHito.value;
+    }
+    abrirModalCrearTareaFlow(state.selectedProjectId || '', hitoPreseleccionado, estadoInicial);
+  }
+
+  function abrirModalCrearTareaConHito(idHito) {
+    var hitoObj = (state.hitos || []).find(function (h) {
+      return String(h.ID_Hito || '').trim().toUpperCase() === String(idHito || '').trim().toUpperCase();
+    });
+    var proyId = hitoObj ? hitoObj.ID_Proyecto : (state.proyectoDetalleActivo ? state.proyectoDetalleActivo.ID_Proyecto : '');
+    abrirModalCrearTareaFlow(proyId, idHito, '02_Por_Hacer');
+  }
+
+  function abrirModalCrearTarea(proyectoDef, hitoDef, estadoDef) {
+    abrirModalCrearTareaFlow(proyectoDef, hitoDef, estadoDef);
+  }
+
+  function abrirModalDetalleTarea(idTarea) {
+    abrirModalEditarTareaFlow(idTarea);
+  }
+
+  function abrirBuscadorMaps() {
+    abrirBuscadorMapsDesdeTaskFlow();
+  }
+
+  // Exposición global para interoperabilidad total
+  window.toggleSelectorProyectoTaskFlow = toggleSelectorProyectoTaskFlow;
+  window.seleccionarProyectoTaskFlow = seleccionarProyectoTaskFlow;
+  window.toggleSelectorHitoTaskFlow = toggleSelectorHitoTaskFlow;
+  window.seleccionarHitoTaskFlow = seleccionarHitoTaskFlow;
+  window.toggleSelectorEstadoTaskFlow = toggleSelectorEstadoTaskFlow;
+  window.seleccionarEstadoTaskFlow = seleccionarEstadoTaskFlow;
+  window.togglePrioridadTaskFlow = togglePrioridadTaskFlow;
+  window.fijarPrioridadTaskFlow = fijarPrioridadTaskFlow;
+  window.toggleEnergiaTaskFlow = toggleEnergiaTaskFlow;
+  window.toggleMavTaskFlow = toggleMavTaskFlow;
+  window.abrirDatePickerTaskFlow = abrirDatePickerTaskFlow;
+  window.cerrarDatePickerTaskFlow = cerrarDatePickerTaskFlow;
+  window.navegarMesDatePickerTask = navegarMesDatePickerTask;
+  window.irAHoyDatePickerTask = irAHoyDatePickerTask;
+  window.seleccionarDiaTaskPicker = seleccionarDiaTaskPicker;
+  window.actualizarHoraTaskPicker = actualizarHoraTaskPicker;
+  window.fijarHorasEstimadasTask = fijarHorasEstimadasTask;
+  window.ajustarHorasEstimadasTask = ajustarHorasEstimadasTask;
+  window.actualizarHorasManualTaskPicker = actualizarHorasManualTaskPicker;
+  window.limpiarDatePickerTaskFlow = limpiarDatePickerTaskFlow;
+  window.aplicarDatePickerTaskFlow = aplicarDatePickerTaskFlow;
+  window.abrirDepPickerTaskFlow = abrirDepPickerTaskFlow;
+  window.cerrarDepPickerTaskFlow = cerrarDepPickerTaskFlow;
+  window.filtrarListaPredecesorasTaskFlow = filtrarListaPredecesorasTaskFlow;
+  window.seleccionarDepTaskFlow = seleccionarDepTaskFlow;
+  window.toggleGastoSectionTaskFlow = toggleGastoSectionTaskFlow;
+  window.seleccionarMonedaTaskFlow = seleccionarMonedaTaskFlow;
+  window.actualizarEquivalenciaGastoTaskFlow = actualizarEquivalenciaGastoTaskFlow;
+  window.toggleLugarSectionTaskFlow = toggleLugarSectionTaskFlow;
+  window.abrirBuscadorMapsDesdeTaskFlow = abrirBuscadorMapsDesdeTaskFlow;
+  window.agregarSubtareaProceduralTaskFlow = agregarSubtareaProceduralTaskFlow;
+  window.cargarPasosTaskFlow = cargarPasosTaskFlow;
+  window.guardarTareaFlow = guardarTareaFlow;
+  window.confirmarArchivarTareaTaskFlow = confirmarArchivarTareaTaskFlow;
+  window.abrirModalCrearTareaFlow = abrirModalCrearTareaFlow;
+  window.abrirModalEditarTareaFlow = abrirModalEditarTareaFlow;
+  window.cerrarModalTareaFlow = cerrarModalTareaFlow;
+  window.abrirModalCrearTarea = abrirModalCrearTarea;
+  window.abrirModalCrearTareaKanban = abrirModalCrearTareaKanban;
+  window.abrirModalCrearTareaConHito = abrirModalCrearTareaConHito;
+  window.abrirModalDetalleTarea = abrirModalDetalleTarea;
+  window.abrirBuscadorMaps = abrirBuscadorMaps;
+  window.recalcularAvanceCascada = recalcularAvanceCascada;
+  window.calcularAvanceTarea = calcularAvanceTarea;
+  window.calcularAvanceHito = calcularAvanceHito;
+  window.calcularAvanceProyectoCascada = calcularAvanceProyectoCascada;
+  if (typeof calcularAvancesProyecto === 'function') {
+    window.calcularAvancesProyecto = calcularAvancesProyecto;
+  }
+  window.ordenarHitosCronologicamente = ordenarHitosCronologicamente;
+  window.obtenerPesosEfectivosHitos = obtenerPesosEfectivosHitos;
+  window.actualizarSelectorHitosKanban = actualizarSelectorHitosKanban;
+  window.cambiarTabGastoTaskFlow = cambiarTabGastoTaskFlow;
+  window.filtrarGastosParaVincularTaskFlow = filtrarGastosParaVincularTaskFlow;
+  window.renderGastosDisponiblesTaskFlow = renderGastosDisponiblesTaskFlow;
+  window.guardarGastoAtomicoTaskFlow = guardarGastoAtomicoTaskFlow;
+  window.vincularGastoExistenteTaskFlow = vincularGastoExistenteTaskFlow;
+  window.desvincularGastoTaskFlow = desvincularGastoTaskFlow;
+  window.confirmarAccionGastoTaskFlow = confirmarAccionGastoTaskFlow;
+  window.renderGastosAsociadosTaskFlow = renderGastosAsociadosTaskFlow;
+  window.toggleEdicionRapidaGastoTaskFlow = toggleEdicionRapidaGastoTaskFlow;
+  window.guardarEdicionRapidaGastoTaskFlow = guardarEdicionRapidaGastoTaskFlow;
+  window.eliminarGastoModalTaskFlow = eliminarGastoModalTaskFlow;
+  window.eliminarGastoTaskFlow = eliminarGastoModalTaskFlow;
+  window.guardarTareaDesdeModalFlow = guardarTareaFlow;
+  window.toggleNotasSectionTaskFlow = toggleNotasSectionTaskFlow;
+  window.renderNotasVinculadasTaskFlow = renderNotasVinculadasTaskFlow;
+  window.filtrarNotasParaVincularTaskFlow = filtrarNotasParaVincularTaskFlow;
+  window.vincularNotaATareaFlow = vincularNotaATareaFlow;
+  window.desvincularNotaDeTareaFlow = desvincularNotaDeTareaFlow;
+  // Métodos de eliminación y control de modales centralizados en JS_ModalesYAtajos
+
+  /**
+   * 6.6.1. Abrir Modal de Gastos (Blindado)
+   */
+</script>

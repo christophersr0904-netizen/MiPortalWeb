@@ -1,0 +1,794 @@
+<!-- ===================================================================== -->
+<!-- 2.1. VISTA TABLERO KANBAN                                              -->
+<!-- ===================================================================== -->
+<div id="vista-kanban-wrapper" class="flex-1 flex h-full w-full overflow-y-auto md:overflow-hidden">
+  <aside id="sidebar-portafolio"
+    class="sidebar-expanded hidden md:flex flex-col bg-slate-900 text-white border-r border-slate-800 shrink-0 h-full z-40 transition-all duration-300">
+    <!-- Cabecera del Sidebar -->
+    <div class="p-3 border-b border-slate-800 bg-slate-950/70 shrink-0">
+      <div class="flex items-center justify-between gap-2 sidebar-header-row">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="hide-on-collapse flex items-center justify-center shrink-0" title="Portafolio de Proyectos">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+          </span>
+          <div class="hide-on-collapse flex items-center gap-2 min-w-0">
+            <h1 class="text-xs font-black tracking-wider uppercase text-slate-100 truncate">Proyectos</h1>
+            <span id="badge-total-proyectos-sidebar"
+              class="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0 transition-all"
+              title="Total proyectos activos filtrados">0</span>
+          </div>
+        </div>
+        <!-- Botón de Contraer / Expandir en la cabecera (siempre accesible) -->
+        <button type="button" id="btn-toggle-sidebar-header" onclick="toggleSidebarCollapse()"
+          title="Contraer / Expandir panel"
+          class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0 flex items-center justify-center">
+          <svg id="icon-toggle-header" class="portal-icon-sm transition-transform duration-200" fill="none"
+            stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Barra de Búsqueda / Filtro Rápido en Tiempo Real -->
+      <div class="hide-on-collapse mt-2.5 relative">
+        <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-slate-400 text-xs">
+          <svg class="portal-icon-sm" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </span>
+        <input type="text" id="sidebar-search-proyectos" oninput="filtrarProyectosSidebarEnVivo(this.value)"
+          placeholder="Buscar por nombre o PRO-..."
+          class="w-full bg-slate-900/90 text-slate-100 placeholder-slate-400 text-xs rounded-lg border border-slate-700/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 pl-8 pr-7 py-1.5 transition outline-none" />
+        <button type="button" id="btn-clear-search-sidebar" onclick="limpiarBusquedaSidebar()"
+          class="hidden absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-200 active:scale-95 transition-transform duration-150 text-xs font-bold"
+          title="Limpiar búsqueda">✕</button>
+      </div>
+
+      <!-- Filtros rápidos por Cartera / Tipo de Iniciativa -->
+      <div class="hide-on-collapse flex items-center gap-1 flex-wrap mt-2 pt-2 border-t border-slate-800/60">
+        <button type="button" data-tipo="" onclick="filtrarPorPildoraTipo('')"
+          class="pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-600 text-white transition">Todos</button>
+        <button type="button" data-tipo="Personal" onclick="filtrarPorPildoraTipo('Personal')"
+          class="pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-400 hover:text-white transition">Personal</button>
+        <button type="button" data-tipo="Profesional" onclick="filtrarPorPildoraTipo('Profesional')"
+          class="pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-400 hover:text-white transition">Profesional</button>
+        <button type="button" data-tipo="Inversiones" onclick="filtrarPorPildoraTipo('Inversiones')"
+          class="pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-400 hover:text-white transition">Inversiones</button>
+        <button type="button" data-tipo="Social" onclick="filtrarPorPildoraTipo('Social')"
+          class="pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-400 hover:text-white transition">Social</button>
+      </div>
+    </div>
+
+    <!-- Listado Scrollable de Proyectos -->
+    <div id="lista-proyectos-sidebar" class="flex-1 overflow-y-auto p-2.5 space-y-2 kanban-col-body"></div>
+
+    <!-- Pie del Sidebar con Botón Nuevo Proyecto -->
+    <div class="p-2.5 border-t border-slate-800 bg-slate-950/80 shrink-0">
+      <!-- Botón directo "Nuevo Proyecto" destacado -->
+      <button type="button" onclick="abrirWizardProyecto()" title="Crear nuevo proyecto"
+        class="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white text-xs font-bold shadow-md shadow-indigo-900/30 flex items-center justify-center gap-2 transition duration-150 border border-indigo-400/30">
+        <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-indigo-200 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+        <span class="hide-on-collapse whitespace-nowrap tracking-wide font-semibold">Nuevo Proyecto</span>
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- ÁREA CENTRAL DEL TABLERO KANBAN -->
+  <main
+    class="flex-1 flex flex-col h-full overflow-y-auto md:overflow-hidden bg-slate-100 dark:bg-slate-950 transition-colors duration-200">
+    <header
+      class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2 shrink-0 flex flex-col gap-2 shadow-2xs transition-colors duration-200 overflow-visible relative">
+      <!-- FILA 1: IDENTIDAD, CONTEXTO Y RESUMEN FINANCIERO -->
+      <div class="flex items-center gap-3 min-h-[36px] overflow-visible relative w-full">
+        <!-- Extremo Izquierdo: Identidad y Segmentación de Contexto Ancladas -->
+        <div class="flex items-center gap-3 shrink-0">
+          <h2
+            class="font-bold text-slate-800 dark:text-slate-100 text-sm md:text-base flex items-center gap-2 shrink-0">
+            <span>Tablero Kanban</span>
+          </h2>
+
+          <!-- Segmentación rápida con icono y contador (Anclada a la izquierda sin desplazamientos) -->
+          <div
+            class="hidden sm:inline-flex p-0.5 bg-slate-100 dark:bg-slate-950/70 rounded-lg border border-slate-200 dark:border-slate-800 shadow-2xs shrink-0">
+            <button type="button" id="btn-context-todos" onclick="setKanbanContextFilter('TODOS')"
+              class="px-2.5 py-1 rounded-md text-xs font-bold transition-all duration-200 flex items-center gap-1.5 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-slate-700"
+              title="Ver todas las tareas de proyectos y actividades personales">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+              <span>Todo</span>
+              <span id="badge-context-todos"
+                class="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-extrabold border border-indigo-200 dark:border-indigo-800/60">0</span>
+            </button>
+            <button type="button" id="btn-context-proyectos" onclick="setKanbanContextFilter('PROYECTOS')"
+              class="px-2.5 py-1 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 border border-transparent"
+              title="Ver únicamente tareas asociadas a proyectos">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+              <span>Proyectos</span>
+              <span id="badge-context-proyectos"
+                class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400 font-extrabold border border-transparent">0</span>
+            </button>
+            <button type="button" id="btn-context-personal" onclick="setKanbanContextFilter('PERSONAL')"
+              class="px-2.5 py-1 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 border border-transparent"
+              title="Ver únicamente compromisos y actividades personales">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Personal</span>
+              <span id="badge-context-personal"
+                class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400 font-extrabold border border-transparent">0</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Centro Contenido: Chip/Badge del Proyecto Seleccionado y Metadatos -->
+        <div id="label-proyecto-activo-container" class="flex items-center gap-2 min-w-0 max-w-[260px] transition-all duration-300 ease-out">
+          <span id="label-proyecto-activo"
+            class="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700 truncate max-w-[260px] inline-flex items-center gap-1.5 transition-all duration-200"
+            title="Vista Global de todas las tareas">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+            <span class="truncate">Vista Global</span>
+          </span>
+
+          <!-- Metadatos Compactos del Proyecto Activo (Solo cuando hay proyecto seleccionado) -->
+          <div id="kanban-proy-meta-bar" class="hidden items-center gap-1.5 shrink-0 text-xs transition-opacity duration-200">
+            <!-- Health Badge Dinámico con Tooltip -->
+            <div id="kanban-proy-health-badge"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border cursor-help shadow-2xs bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800"
+              title="Salud operativa del cronograma">
+              <span id="kanban-proy-health-icon" class="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block"></span>
+              <span id="kanban-proy-health-label">Saludable</span>
+            </div>
+
+            <!-- Semáforo Financiero Dual: Badge CPI Dinámico -->
+            <div id="kanban-proy-cpi-badge"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border cursor-help shadow-2xs font-mono tabular-nums bg-slate-50 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+              title="Cost Performance Index: Calculando...">
+              <span class="text-[10px] text-slate-400 font-sans font-semibold">CPI</span>
+              <span id="kanban-proy-cpi-val">1.00</span>
+            </div>
+
+            <!-- Botón Rápido Check-in de Gobernanza -->
+            <button type="button" id="btn-quick-checkin" onclick="ejecutarCheckinDesdeKanban()"
+              class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold shadow-2xs transition items-center gap-1"
+              title="Registrar revisión y check-in de control ahora">
+              <span>✓ Check-in</span>
+            </button>
+
+            <!-- Botón Acceso Rápido Vista 360 -->
+            <button type="button" onclick="abrirDetalle360(state.selectedProjectId)"
+              class="px-2 py-0.5 rounded-full bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold shadow-2xs transition inline-flex items-center gap-1"
+              title="Abrir Vista Detallada 360° de este proyecto">
+              <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+              <span>Vista 360°</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Extremo Derecho: Filtros de tiempo + Gasto Global (Anclado con ml-auto para cero saltos) -->
+        <div class="ml-auto flex items-center gap-2 shrink-0">
+          <!-- Cápsula Compacta Filtro Temporal con Micro-Popover Flotante Glassmorphism -->
+          <div class="relative group/timefilter shrink-0 kanban-hover-popover-container" id="container-time-filter">
+            <!-- Botón Cápsula que muestra el filtro temporal activo -->
+            <button type="button" id="btn-time-capsule" onclick="toggleTimeFilterDropdown(event)"
+              class="btn-portal-secondary inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold cursor-pointer select-none"
+              title="Filtro de horizonte temporal (Pasa el cursor o presiona para cambiar)">
+              <span id="label-time-active-icon" class="text-xs select-none flex items-center justify-center">
+                <svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                  <path d="M8 2v4" />
+                  <path d="M16 2v4" />
+                  <rect width="18" height="18" x="3" y="4" rx="2" />
+                  <path d="M3 10h18" />
+                </svg>
+              </span>
+              <span id="label-time-active-text" class="text-xs font-semibold">Todo</span>
+              <svg class="portal-icon-sm text-slate-400 group-hover/timefilter:rotate-180 transition-transform duration-200"
+                fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+
+            <!-- Micro-Popover Flotante Glassmorphism (Hover en Desktop & Tap en Móvil) -->
+            <div id="popover-time-filter"
+              class="kanban-hover-popover invisible opacity-0 group-hover/timefilter:visible group-hover/timefilter:opacity-100 transition-all duration-200 absolute right-0 top-full mt-1.5 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/60 rounded-xl shadow-2xl p-1.5 min-w-[160px] space-y-0.5 pointer-events-none group-hover/timefilter:pointer-events-auto before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2">
+              <button type="button" id="btn-time-todo" onclick="setKanbanTimeFilter('TODO')"
+                class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer">
+                <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Todo</span></span>
+                <span id="check-time-todo" class="text-indigo-600 dark:text-indigo-400 font-bold text-xs">✓</span>
+              </button>
+              <button type="button" id="btn-time-hoy" onclick="setKanbanTimeFilter('HOY')"
+                class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+                <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Hoy</span></span>
+                <span id="check-time-hoy" class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs">✓</span>
+              </button>
+              <button type="button" id="btn-time-semana" onclick="setKanbanTimeFilter('SEMANA')"
+                class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+                <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg><span>Semana</span></span>
+                <span id="check-time-semana"
+                  class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs">✓</span>
+              </button>
+              <button type="button" id="btn-time-mes" onclick="setKanbanTimeFilter('MES')"
+                class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer">
+                <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-purple-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M17 14h-6"/><path d="M13 18H7"/><path d="M7 14h.01"/><path d="M17 18h.01"/></svg><span>Mes</span></span>
+                <span id="check-time-mes" class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs">✓</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Gasto Contextual (Global si no hay proyecto, o del proyecto si está filtrado) -->
+          <div
+            class="hidden md:flex items-center text-xs bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-medium shrink-0">
+            <span class="text-slate-500 dark:text-slate-400 text-xs flex items-center">
+              <span id="lbl-gasto-contextual-titulo">Gasto Global:</span>
+              <b id="lbl-gasto-contextual" class="text-slate-900 dark:text-slate-100 font-bold font-mono ml-1">PEN
+                0.00</b>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILA 2: BARRA DE FILTROS INTERACTIVA, COMPACTA Y BASADA EN ICONOS (Máximo 1 fila fija) -->
+      <div
+        class="portal-surface p-2.5 my-2 flex items-center gap-2 text-xs overflow-visible relative min-h-[34px]">
+        <!-- Buscador Rápido -->
+        <div class="relative min-w-[150px] max-w-[180px] shrink-0">
+          <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-slate-400 text-xs">
+            <svg class="portal-icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </span>
+          <input type="text" id="filter-buscar-tarea" oninput="aplicarFiltrosCruzados()" placeholder="Buscar tarea..."
+            title="Buscar por título, código o responsable de tarea"
+            class="w-full bg-slate-100/75 dark:bg-slate-900/30 text-slate-700 dark:text-slate-200 placeholder-slate-400 text-xs rounded-xl border border-slate-200/80 dark:border-slate-800/60 focus:border-indigo-500/70 focus:ring-1 focus:ring-indigo-500/50 pl-8 pr-6 py-1 outline-none transition duration-150 hover:bg-slate-200/50 dark:hover:bg-slate-800/60" />
+          <button type="button" id="btn-clear-task-search" onclick="limpiarBusquedaTareas()"
+            class="hidden absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 active:scale-95 transition-transform duration-150 text-xs font-bold"
+            title="Limpiar búsqueda">✕</button>
+        </div>
+
+        <!-- Botón Agrupado de Filtros Móvil (< md) -->
+        <button type="button" id="btn-filtros-kanban-movil" onclick="abrirModalFiltrosKanbanMovil()"
+          class="flex md:hidden items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80 transition cursor-pointer shrink-0">
+          <svg class="portal-icon-sm text-indigo-500 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+          <span>Filtros</span>
+          <span id="badge-count-filtros-movil" class="hidden text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-indigo-600 text-white leading-none">0</span>
+        </button>
+
+        <!-- Botón de Ordenamiento Kanban -->
+        <div class="hidden md:block relative group/sort-kanban shrink-0 kanban-hover-popover-container" id="container-sort-kanban">
+          <button type="button" id="btn-sort-kanban" onclick="toggleFilterPopover(event, 'popover-sort-kanban')"
+            class="filter-ghost-btn h-8 px-2 rounded-xl flex items-center justify-center transition-all cursor-pointer select-none text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 bg-transparent border border-transparent"
+            title="Opciones de Ordenamiento">
+            <span id="label-sort-kanban-icon" class="flex items-center justify-center">
+              <svg class="portal-icon-sm shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+            </span>
+          </button>
+          <!-- Popover de Ordenamiento -->
+          <div id="popover-sort-kanban"
+            class="kanban-hover-popover invisible opacity-0 group-hover/sort-kanban:visible group-hover/sort-kanban:opacity-100 transition-all duration-200 absolute top-full left-0 mt-1.5 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/60 rounded-xl shadow-2xl p-1.5 flex items-center gap-1 w-max pointer-events-none group-hover/sort-kanban:pointer-events-auto before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2">
+            <button type="button" onclick="setSortModeKanban('PRIORITY')" class="btn-sort-kanban-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 ring-1 ring-indigo-500" data-val="PRIORITY" title="Por Prioridad">
+              <svg class="portal-icon-sm shrink-0 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+            </button>
+            <button type="button" onclick="setSortModeKanban('DATE')" class="btn-sort-kanban-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" data-val="DATE" title="Por Vencimiento / Fecha">
+              <svg class="portal-icon-sm shrink-0 text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/></svg>
+            </button>
+            <button type="button" onclick="setSortModeKanban('ENERGY')" class="btn-sort-kanban-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" data-val="ENERGY" title="Por Energía">
+              <svg class="portal-icon-sm shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </button>
+            <button type="button" onclick="setSortModeKanban('HOURS')" class="btn-sort-kanban-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" data-val="HOURS" title="Por Horas Estimadas">
+              <svg class="portal-icon-sm shrink-0 text-teal-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </button>
+            <button type="button" onclick="setSortModeKanban('ALPHA')" class="btn-sort-kanban-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" data-val="ALPHA" title="Alfabético A-Z">
+              <svg class="portal-icon-sm shrink-0 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M20 8h-5"/><path d="M15 10V6.5a2.5 2.5 0 0 1 5 0V10"/><path d="M15 14h5l-5 6h5"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 1. Filtro por Hito del Proyecto Activo (Cápsula + Micro-Popover Glassmorphism) -->
+        <!-- Deshabilitado por defecto si no hay proyecto activo seleccionado -->
+        <div class="hidden md:block relative shrink-0 kanban-hover-popover-container" id="container-filter-hito">
+          <input type="hidden" id="filter-hito-tarea" value="" />
+          <button type="button" id="btn-hito-capsule" onclick="toggleFilterPopover(event, 'popover-filter-hito')"
+            disabled
+            class="filter-ghost-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400 select-none max-w-[200px] opacity-40 cursor-not-allowed pointer-events-none transition-all duration-200"
+            title="Filtrar por hito (Requiere seleccionar un proyecto)">
+            <span id="label-hito-active-icon" class="text-xs select-none flex items-center justify-center">
+              <svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                <line x1="4" x2="4" y1="22" y2="15" />
+              </svg>
+            </span>
+            <span id="label-hito-active-text" class="text-xs truncate">Hitos (Selecciona Proyecto)</span>
+            <svg
+              class="portal-icon-sm text-slate-400 group-hover/filter-hito:rotate-180 transition-transform duration-200 shrink-0"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <!-- Micro-Popover Flotante con puente continuo mt-1.5 y z-50 -->
+          <div id="popover-filter-hito"
+            class="kanban-hover-popover invisible opacity-0 group-hover/filter-hito:visible group-hover/filter-hito:opacity-100 transition-all duration-200 absolute top-full left-0 mt-1.5 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/60 rounded-xl shadow-2xl p-1.5 min-w-[160px] w-56 max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 pointer-events-none group-hover/filter-hito:pointer-events-auto before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2">
+            <div id="lista-opciones-hitos-popover" class="space-y-0.5">
+              <button type="button" onclick="setKanbanHitoFilter('')"
+                class="btn-opt-hito w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                data-val="" data-hito-id="">
+                <span class="flex items-center gap-1.5 select-none truncate"><span>Todos los Hitos</span></span>
+                <span
+                  class="text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0 check-hito-indicator hidden">✓</span>
+              </button>
+              <div class="px-2.5 py-2 text-[11px] text-slate-400 dark:text-slate-500 italic select-none"
+                id="msg-hitos-popover-info">
+                Selecciona un proyecto para ver sus hitos
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Filtro de Prioridad (Cápsula + Micro-Popover Glassmorphism) -->
+        <div class="hidden md:block relative group/filter-prio shrink-0 kanban-hover-popover-container" id="container-filter-prio">
+          <input type="hidden" id="filter-prioridad-tarea" value="" />
+          <button type="button" id="btn-prio-capsule" onclick="toggleFilterPopover(event, 'popover-filter-prio')"
+            class="filter-ghost-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 bg-transparent border border-transparent transition-all duration-150 cursor-pointer shrink-0 select-none"
+            title="Filtrar por Prioridad Eisenhower (Pasa el cursor o presiona para cambiar)">
+            <span id="label-prio-active-icon" class="text-xs select-none flex items-center justify-center">
+              <svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" />
+              </svg>
+            </span>
+            <span id="label-prio-active-text" class="text-xs">Prioridad</span>
+            <svg
+              class="portal-icon-sm text-slate-400 group-hover/filter-prio:rotate-180 transition-transform duration-200 shrink-0"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <!-- Micro-Popover Flotante z-50 -->
+          <div id="popover-filter-prio"
+            class="kanban-hover-popover invisible opacity-0 group-hover/filter-prio:visible group-hover/filter-prio:opacity-100 transition-all duration-200 absolute top-full left-0 mt-1.5 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/60 rounded-xl shadow-2xl p-1.5 min-w-[160px] space-y-0.5 pointer-events-none group-hover/filter-prio:pointer-events-auto before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2">
+            <button type="button" onclick="setKanbanPrioridadFilter('')" id="opt-prio-all"
+              class="btn-opt-prio w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer"
+              data-val="">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Todas</span></span>
+              <span class="text-indigo-600 dark:text-indigo-400 font-bold text-xs check-prio-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanPrioridadFilter('01_P1_Alta')" id="opt-prio-p1"
+              class="btn-opt-prio w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="01_P1_Alta">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-rose-500 fill-rose-500/20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg><span>P1 - Alta</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-prio-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanPrioridadFilter('02_P2_Media')" id="opt-prio-p2"
+              class="btn-opt-prio w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="02_P2_Media">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-amber-500 fill-amber-500/20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg><span>P2 - Media</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-prio-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanPrioridadFilter('03_P3_Baja')" id="opt-prio-p3"
+              class="btn-opt-prio w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="03_P3_Baja">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-emerald-500 fill-emerald-500/20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg><span>P3 - Baja</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-prio-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanPrioridadFilter('04_P4')" id="opt-prio-p4"
+              class="btn-opt-prio w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="04_P4">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-slate-400 fill-slate-400/20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/></svg><span>P4 - Descarte</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-prio-indicator">✓</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Filtro de Tipo de Trabajo / Nivel de Energía (Cápsula + Micro-Popover Glassmorphism) -->
+        <div class="hidden md:block relative group/filter-energia shrink-0 kanban-hover-popover-container"
+          id="container-filter-energia">
+          <input type="hidden" id="filter-energia-tarea" value="" />
+          <button type="button" id="btn-energia-capsule" onclick="toggleFilterPopover(event, 'popover-filter-energia')"
+            class="filter-ghost-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 bg-transparent border border-transparent transition-all duration-150 cursor-pointer shrink-0 select-none"
+            title="Filtrar por Tipo de Trabajo (DeepWork, Operativa, Automática)">
+            <span id="label-energia-active-icon" class="text-xs select-none flex items-center justify-center">
+              <svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 14.14 14.14"/></svg>
+            </span>
+            <span id="label-energia-active-text" class="text-xs">Tipo</span>
+            <svg
+              class="portal-icon-sm text-slate-400 group-hover/filter-energia:rotate-180 transition-transform duration-200 shrink-0"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <!-- Micro-Popover Flotante z-50 -->
+          <div id="popover-filter-energia"
+            class="kanban-hover-popover invisible opacity-0 group-hover/filter-energia:visible group-hover/filter-energia:opacity-100 transition-all duration-200 absolute top-full left-0 mt-1.5 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/60 rounded-xl shadow-2xl p-1.5 min-w-[160px] space-y-0.5 pointer-events-none group-hover/filter-energia:pointer-events-auto before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2">
+            <button type="button" onclick="setKanbanEnergiaFilter('')" id="opt-energia-all"
+              class="btn-opt-energia w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer"
+              data-val="">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 14.14 14.14"/></svg><span>Todos los Tipos</span></span>
+              <span class="text-indigo-600 dark:text-indigo-400 font-bold text-xs check-energia-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanEnergiaFilter('Alta_DeepWork')" id="opt-energia-alta"
+              class="btn-opt-energia w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="Alta_DeepWork">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-purple-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M12 18v4"/><path d="M12 5V2"/></svg><span>DeepWork</span></span>
+              <span
+                class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-energia-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanEnergiaFilter('Media_Operativa')" id="opt-energia-media"
+              class="btn-opt-energia w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="Media_Operativa">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-blue-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg><span>Operativa</span></span>
+              <span
+                class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-energia-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanEnergiaFilter('Baja_Automatica')" id="opt-energia-baja"
+              class="btn-opt-energia w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="Baja_Automatica">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg><span>Automática</span></span>
+              <span
+                class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-energia-indicator">✓</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4. Filtro de Plazo / Vencimiento (Cápsula + Micro-Popover Glassmorphism) -->
+        <div class="hidden md:block relative group/filter-plazo shrink-0 kanban-hover-popover-container" id="container-filter-plazo">
+          <input type="hidden" id="filter-plazo-tarea" value="" />
+          <button type="button" id="btn-plazo-capsule" onclick="toggleFilterPopover(event, 'popover-filter-plazo')"
+            class="filter-ghost-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 bg-transparent border border-transparent transition-all duration-150 cursor-pointer shrink-0 select-none"
+            title="Filtrar por Vencimiento o Plazo (Pasa el cursor o presiona para cambiar)">
+            <span id="label-plazo-active-icon" class="text-xs select-none flex items-center justify-center">
+              <svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/></svg>
+            </span>
+            <span id="label-plazo-active-text" class="text-xs">Vencimiento</span>
+            <svg
+              class="portal-icon-sm text-slate-400 group-hover/filter-plazo:rotate-180 transition-transform duration-200 shrink-0"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <!-- Micro-Popover Flotante z-50 -->
+          <div id="popover-filter-plazo"
+            class="kanban-hover-popover invisible opacity-0 group-hover/filter-plazo:visible group-hover/filter-plazo:opacity-100 transition-all duration-200 absolute top-full left-0 mt-1.5 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/60 rounded-xl shadow-2xl p-1.5 min-w-[160px] space-y-0.5 pointer-events-none group-hover/filter-plazo:pointer-events-auto before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2">
+            <button type="button" onclick="setKanbanPlazoFilter('')" id="opt-plazo-all"
+              class="btn-opt-plazo w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer"
+              data-val="">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/></svg><span>Todos</span></span>
+              <span class="text-indigo-600 dark:text-indigo-400 font-bold text-xs check-plazo-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanPlazoFilter('vencidas')" id="opt-plazo-vencidas"
+              class="btn-opt-plazo w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="vencidas">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Vencidas</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-plazo-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanPlazoFilter('hoy')" id="opt-plazo-hoy"
+              class="btn-opt-plazo w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="hoy">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Vencen Hoy</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-plazo-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanPlazoFilter('7dias')" id="opt-plazo-semana"
+              class="btn-opt-plazo w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="7dias">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg><span>Esta Semana</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-plazo-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanPlazoFilter('sin_fecha')" id="opt-plazo-sinfecha"
+              class="btn-opt-plazo w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="sin_fecha">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="m3 3 18 18"/></svg><span>Sin Fecha</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-plazo-indicator">✓</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5. Filtro de Dependencias / Bloqueos (Cápsula + Micro-Popover Glassmorphism) -->
+        <div class="hidden md:block relative group/filter-dep shrink-0 kanban-hover-popover-container" id="container-filter-dep">
+          <input type="hidden" id="filter-dependencia-tarea" value="" />
+          <button type="button" id="btn-dep-capsule" onclick="toggleFilterPopover(event, 'popover-filter-dep')"
+            class="filter-ghost-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 bg-transparent border border-transparent transition-all duration-150 cursor-pointer shrink-0 select-none"
+            title="Filtrar por Dependencias y Bloqueos (Pasa el cursor o presiona para cambiar)">
+            <span id="label-dep-active-icon" class="text-xs select-none flex items-center justify-center">
+              <svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+                <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+                <line x1="8" x2="16" y1="12" y2="12" />
+              </svg>
+            </span>
+            <span id="label-dep-active-text" class="text-xs">Bloqueos</span>
+            <svg
+              class="portal-icon-sm text-slate-400 group-hover/filter-dep:rotate-180 transition-transform duration-200 shrink-0"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <!-- Micro-Popover Flotante z-50 -->
+          <div id="popover-filter-dep"
+            class="kanban-hover-popover invisible opacity-0 group-hover/filter-dep:visible group-hover/filter-dep:opacity-100 transition-all duration-200 absolute top-full left-0 mt-1.5 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/60 rounded-xl shadow-2xl p-1.5 min-w-[160px] space-y-0.5 pointer-events-none group-hover/filter-dep:pointer-events-auto before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2">
+            <button type="button" onclick="setKanbanDependenciaFilter('')" id="opt-dep-all"
+              class="btn-opt-dep w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 cursor-pointer"
+              data-val="">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" x2="16" y1="12" y2="12"/></svg><span>Todos</span></span>
+              <span class="text-indigo-600 dark:text-indigo-400 font-bold text-xs check-dep-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanDependenciaFilter('con_dep')" id="opt-dep-condep"
+              class="btn-opt-dep w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="con_dep">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-rose-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.8 17 5 19 5a1 1 0 0 1 1 1z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>Bloqueadas</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-dep-indicator">✓</span>
+            </button>
+            <button type="button" onclick="setKanbanDependenciaFilter('sin_dep')" id="opt-dep-sindep"
+              class="btn-opt-dep w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              data-val="sin_dep">
+              <span class="flex items-center gap-1.5 select-none"><svg class="portal-icon-sm shrink-0 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span>Sin Bloqueo</span></span>
+              <span class="hidden text-indigo-600 dark:text-indigo-400 font-bold text-xs check-dep-indicator">✓</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Indicador Reactivo de Filtro Activo y Botón Limpiar Filtros -->
+        <div class="ml-auto shrink-0 flex items-center gap-2">
+          <span id="badge-filtro-activo-resumen"
+            class="hidden bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-semibold px-2.5 py-1 rounded-xl text-xs items-center gap-1.5 shadow-2xs whitespace-nowrap">
+            <svg class="portal-icon-sm shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Filtro activo: 0 de 0 tareas</span>
+          </span>
+
+          <button type="button" id="btn-limpiar-filtros-kanban"
+            onclick="(window.limpiarFiltrosVistaActiva || window.limpiarFiltrosKanban)()"
+            class="hidden filter-ghost-btn text-xs font-bold items-center gap-1.5 px-2.5 py-1 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition-all duration-150 shrink-0 cursor-pointer"
+            title="Restablecer filtros de tareas Kanban">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            <span>Limpiar Filtros</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="flex-1 min-h-0 overflow-y-auto md:overflow-x-auto p-3 sm:p-4 md:p-6 bg-slate-100/70 dark:bg-slate-950 pb-24 md:pb-6">
+      <!-- Selector de Pestañas Táctil Móvil (< md) para Columnas Kanban -->
+      <div id="kanban-mobile-tabs" class="flex md:hidden items-center gap-1.5 p-1 mb-3 bg-slate-200/80 dark:bg-slate-900/90 rounded-2xl border border-slate-300/60 dark:border-slate-800/80 shrink-0 overflow-x-auto no-scrollbar">
+        <button type="button" onclick="seleccionarColumnaKanbanMovil('01_Backlog')" id="tab-col-01_Backlog"
+          class="kanban-tab-btn flex-1 min-w-[85px] py-1.5 px-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center gap-1 transition-all cursor-pointer">
+          <span>Backlog</span>
+          <span id="badge-tab-01_Backlog" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-300 dark:bg-slate-800 font-bold">0</span>
+        </button>
+        <button type="button" onclick="seleccionarColumnaKanbanMovil('02_Por_Hacer')" id="tab-col-02_Por_Hacer"
+          class="kanban-tab-btn flex-1 min-w-[85px] py-1.5 px-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-xs flex items-center justify-center gap-1 transition-all cursor-pointer">
+          <span>Por Hacer</span>
+          <span id="badge-tab-02_Por_Hacer" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-900/60 font-bold">0</span>
+        </button>
+        <button type="button" onclick="seleccionarColumnaKanbanMovil('03_En_Proceso')" id="tab-col-03_En_Proceso"
+          class="kanban-tab-btn flex-1 min-w-[85px] py-1.5 px-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center gap-1 transition-all cursor-pointer">
+          <span>En Proceso</span>
+          <span id="badge-tab-03_En_Proceso" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-300 dark:bg-slate-800 font-bold">0</span>
+        </button>
+        <button type="button" onclick="seleccionarColumnaKanbanMovil('04_Completado')" id="tab-col-04_Completado"
+          class="kanban-tab-btn flex-1 min-w-[85px] py-1.5 px-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center gap-1 transition-all cursor-pointer">
+          <span>Completado</span>
+          <span id="badge-tab-04_Completado" class="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-300 dark:bg-slate-800 font-bold">0</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 min-w-0 md:min-w-[950px] h-full min-h-0">
+        <!-- Columna 1: Backlog -->
+        <div
+          class="kanban-col-container bg-slate-100/70 dark:bg-slate-900 rounded-2xl p-3 border border-slate-200/80 dark:border-slate-800 flex flex-col h-full min-h-0 overflow-hidden transition-all duration-150 shadow-2xs"
+          data-state="01_Backlog">
+          <!-- Cabecera Backlog -->
+          <div class="mb-3 space-y-2.5 shrink-0">
+            <div class="flex justify-between items-center px-1">
+              <div class="flex items-center gap-2">
+                <span
+                  class="w-6 h-6 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center text-xs shadow-2xs font-semibold">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-slate-700 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+                </span>
+                <span
+                  class="text-xs font-bold uppercase text-slate-700 dark:text-slate-200 tracking-wider">Backlog</span>
+              </div>
+              <span id="count-01_Backlog"
+                class="text-xs px-2.5 py-0.5 bg-slate-200 dark:bg-slate-800 rounded-full font-bold text-slate-700 dark:text-slate-300 border border-slate-300/70 dark:border-slate-700">0</span>
+            </div>
+            <button type="button" data-aos="fade-down" onclick="abrirModalCrearTareaKanban('01_Backlog')"
+              class="w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200 shadow-2xs group shrink-0">
+              <span class="text-sm font-bold transition-transform group-hover:scale-110 text-slate-500">+</span>
+              <span>Añadir Tarea</span>
+            </button>
+          </div>
+          <div id="col-backlog" class="kanban-col-body flex-1 min-h-0 overflow-y-auto pr-1 space-y-2.5 pb-24 md:pb-2"></div>
+        </div>
+
+        <!-- Columna 2: Por Hacer -->
+        <div
+          class="kanban-col-container kanban-col-mobile-active bg-slate-100/70 dark:bg-slate-900 rounded-2xl p-3 border border-slate-200/80 dark:border-slate-800 flex flex-col h-full min-h-0 overflow-hidden transition-all duration-150 shadow-2xs"
+          data-state="02_Por_Hacer">
+          <!-- Cabecera Por Hacer -->
+          <div class="mb-3 space-y-2.5 shrink-0">
+            <div class="flex justify-between items-center px-1">
+              <div class="flex items-center gap-2">
+                <span
+                  class="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs shadow-2xs font-semibold">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-blue-700 dark:text-blue-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
+                </span>
+                <span class="text-xs font-bold uppercase text-blue-700 dark:text-blue-400 tracking-wider">Por
+                  Hacer</span>
+              </div>
+              <span id="count-02_Por_Hacer"
+                class="text-xs px-2.5 py-0.5 bg-blue-100 dark:bg-blue-950/60 rounded-full font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/60">0</span>
+            </div>
+            <button type="button" data-aos="fade-down" onclick="abrirModalCrearTareaKanban('02_Por_Hacer')"
+              class="w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-400 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-blue-700 dark:hover:text-blue-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200 shadow-2xs group shrink-0">
+              <span class="text-sm font-bold transition-transform group-hover:scale-110 text-blue-500">+</span>
+              <span>Añadir Tarea</span>
+            </button>
+          </div>
+          <div id="col-por-hacer" class="kanban-col-body flex-1 min-h-0 overflow-y-auto pr-1 space-y-2.5 pb-24 md:pb-2">
+          </div>
+        </div>
+
+        <!-- Columna 3: En Proceso -->
+        <div
+          class="kanban-col-container bg-slate-100/70 dark:bg-slate-900 rounded-2xl p-3 border border-slate-200/80 dark:border-slate-800 flex flex-col h-full min-h-0 overflow-hidden transition-all duration-150 shadow-2xs"
+          data-state="03_En_Proceso">
+          <!-- Cabecera En Proceso -->
+          <div class="mb-3 space-y-2.5 shrink-0">
+            <div class="flex justify-between items-center px-1">
+              <div class="flex items-center gap-2">
+                <span
+                  class="relative w-6 h-6 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center text-xs shadow-2xs font-semibold">
+                  <span
+                    class="animate-ping absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 opacity-75"></span>
+                  <span class="relative flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  </span>
+                </span>
+                <span class="text-xs font-bold uppercase text-amber-700 dark:text-amber-400 tracking-wider">En
+                  Proceso</span>
+              </div>
+              <span id="count-03_En_Proceso"
+                class="text-xs px-2.5 py-0.5 bg-amber-100 dark:bg-amber-950/60 rounded-full font-bold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60">0</span>
+            </div>
+            <button type="button" data-aos="fade-down" onclick="abrirModalCrearTareaKanban('03_En_Proceso')"
+              class="w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-amber-400 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200 shadow-2xs group shrink-0">
+              <span class="text-sm font-bold transition-transform group-hover:scale-110 text-amber-500">+</span>
+              <span>Añadir Tarea</span>
+            </button>
+          </div>
+          <div id="col-en-proceso" class="kanban-col-body flex-1 min-h-0 overflow-y-auto pr-1 space-y-2.5 pb-24 md:pb-2">
+          </div>
+        </div>
+
+        <!-- Columna 4: Completado -->
+        <div
+          class="kanban-col-container bg-slate-100/70 dark:bg-slate-900 rounded-2xl p-3 border border-slate-200/80 dark:border-slate-800 flex flex-col h-full min-h-0 overflow-hidden transition-all duration-150 shadow-2xs"
+          data-state="04_Completado">
+          <!-- Cabecera Completado -->
+          <div class="mb-3 space-y-2.5 shrink-0">
+            <div class="flex justify-between items-center px-1">
+              <div class="flex items-center gap-2">
+                <span
+                  class="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center text-xs shadow-2xs font-semibold">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                </span>
+                <span
+                  class="text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">Completado</span>
+              </div>
+              <span id="count-04_Completado"
+                class="text-xs px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 rounded-full font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60">0</span>
+            </div>
+            <button type="button" data-aos="fade-down" onclick="abrirModalCrearTareaKanban('04_Completado')"
+              class="w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-400 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200 shadow-2xs group shrink-0">
+              <span class="text-sm font-bold transition-transform group-hover:scale-110 text-emerald-500">+</span>
+              <span>Añadir Tarea</span>
+            </button>
+          </div>
+          <div id="col-completado" class="kanban-col-body flex-1 min-h-0 overflow-y-auto pr-1 space-y-2.5 pb-24 md:pb-2">
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal Bottom Sheet de Filtros Agrupados Móvil (< md) -->
+  <div id="modal-filtros-kanban-movil" class="fixed inset-0 z-[10000] hidden items-end justify-center bg-slate-950/70 backdrop-blur-sm transition-opacity duration-200">
+    <div class="w-full bg-white dark:bg-slate-900 rounded-t-3xl border-t border-slate-200 dark:border-slate-800 p-5 max-h-[85vh] overflow-y-auto space-y-4 shadow-2xl animate-in slide-in-from-bottom duration-300 pb-safe">
+      <!-- Handle bar táctil -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto -mt-1 mb-2"></div>
+      
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+        <div class="flex items-center gap-2">
+          <svg class="portal-icon text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+          <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Filtros de Tareas</h3>
+        </div>
+        <button type="button" onclick="cerrarModalFiltrosKanbanMovil()" class="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <svg class="portal-icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Filtro Prioridad -->
+      <div>
+        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Prioridad</label>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <button type="button" onclick="setKanbanPrioridadFilter(''); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-prio px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Todas</span>
+          </button>
+          <button type="button" onclick="setKanbanPrioridadFilter('01_P1_Alta'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-prio px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="01_P1_Alta">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span><span>P1 - Alta</span>
+          </button>
+          <button type="button" onclick="setKanbanPrioridadFilter('02_P2_Media'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-prio px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="02_P2_Media">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span><span>P2 - Media</span>
+          </button>
+          <button type="button" onclick="setKanbanPrioridadFilter('03_P3_Baja'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-prio px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="03_P3_Baja">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>P3 - Baja</span>
+          </button>
+          <button type="button" onclick="setKanbanPrioridadFilter('04_P4'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-prio px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition col-span-2 flex items-center gap-2" data-val="04_P4">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>P4 - Descarte</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filtro Tipo de Trabajo -->
+      <div>
+        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Tipo de Trabajo</label>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <button type="button" onclick="setKanbanEnergiaFilter(''); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-energia px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Todos</span>
+          </button>
+          <button type="button" onclick="setKanbanEnergiaFilter('Alta_DeepWork'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-energia px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="Alta_DeepWork">
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span><span>DeepWork</span>
+          </button>
+          <button type="button" onclick="setKanbanEnergiaFilter('Media_Operativa'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-energia px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="Media_Operativa">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span><span>Operativa</span>
+          </button>
+          <button type="button" onclick="setKanbanEnergiaFilter('Baja_Automatica'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-energia px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="Baja_Automatica">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Automática</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filtro Vencimiento -->
+      <div>
+        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Vencimiento</label>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <button type="button" onclick="setKanbanPlazoFilter(''); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-plazo px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Todos</span>
+          </button>
+          <button type="button" onclick="setKanbanPlazoFilter('vencidas'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-plazo px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="vencidas">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span><span>Vencidas</span>
+          </button>
+          <button type="button" onclick="setKanbanPlazoFilter('hoy'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-plazo px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="hoy">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span><span>Vencen Hoy</span>
+          </button>
+          <button type="button" onclick="setKanbanPlazoFilter('7dias'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-plazo px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition flex items-center gap-2" data-val="7dias">
+            <span class="w-2 h-2 rounded-full bg-indigo-500"></span><span>Esta Semana</span>
+          </button>
+          <button type="button" onclick="setKanbanPlazoFilter('sin_fecha'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-plazo px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-left transition col-span-2 flex items-center gap-2" data-val="sin_fecha">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Sin Fecha</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filtro Bloqueos -->
+      <div>
+        <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Bloqueos</label>
+        <div class="grid grid-cols-3 gap-2 text-xs">
+          <button type="button" onclick="setKanbanDependenciaFilter(''); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-dep px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-center transition" data-val="">Todos</button>
+          <button type="button" onclick="setKanbanDependenciaFilter('con_dep'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-dep px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-center transition" data-val="con_dep">Bloqueadas</button>
+          <button type="button" onclick="setKanbanDependenciaFilter('sin_dep'); actualizarPillsFiltrosMovil();" class="pill-filtro-movil-dep px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-center transition" data-val="sin_dep">Sin Bloqueo</button>
+        </div>
+      </div>
+
+      <!-- Botones de Acción -->
+      <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-3">
+        <button type="button" onclick="(window.limpiarFiltrosVistaActiva || window.limpiarFiltrosKanban)(); actualizarPillsFiltrosMovil();" class="w-1/2 py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          Limpiar Todo
+        </button>
+        <button type="button" onclick="cerrarModalFiltrosKanbanMovil()" class="w-1/2 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition shadow-md">
+          Ver Tareas
+        </button>
+      </div>
+    </div>
+  </div>
+</div> <!-- FIN VISTA KANBAN -->

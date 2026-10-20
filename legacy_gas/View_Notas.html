@@ -1,0 +1,623 @@
+<!--
+ * ============================================================================
+ * ARCHIVO: View_Notas.html
+ * SISTEMA: PMO Personal Modular & Gestión Integral de Vida
+ * ROL: Pestaña Principal de Notas Inteligentes (Google Keep + OneNote)
+ * ============================================================================
+-->
+<div id="vista-notas-wrapper"
+  class="hidden flex flex-col w-full h-full flex-1 min-h-0 bg-slate-50/70 dark:bg-slate-950/70 relative select-none">
+
+  <!-- ===================================================================== -->
+  <!-- ===================================================================== -->
+  <!-- 1. BARRA SUPERIOR DE HERRAMIENTAS Y FILTROS EN DOS NIVELES           -->
+  <!-- ===================================================================== -->
+  
+  <!-- NIVEL SUPERIOR: Identidad, Filtro Maestro Segmentado y Acciones Principales -->
+  <div
+    class="shrink-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs z-10">
+
+    <!-- Lado Izquierdo: Título y Estadísticas Rápidas -->
+    <div class="flex items-center gap-3 shrink-0">
+      <div
+        class="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-amber-400 to-orange-500 flex items-center justify-center font-bold text-white shadow-md shadow-amber-500/20 ring-1 ring-white/20 shrink-0">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-bold text-slate-800 dark:text-slate-100 leading-none">Notas Inteligentes</h2>
+          <span id="badge-total-notas"
+            class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300/60">0 notas</span>
+        </div>
+        <p class="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5">Captura rápida, checklists, Google Drive y vínculos @</p>
+      </div>
+    </div>
+
+    <!-- Indicador de Arquitectura Unificada: Nota Híbrida Modular -->
+    <div class="hidden md:flex items-center justify-center">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold text-slate-600 dark:text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+        <span>Notas Híbridas Modulares</span>
+      </div>
+    </div>
+
+    <!-- Lado Derecho: Conmutador de Vistas y Botón '+ Nueva Nota' -->
+    <div class="flex items-center gap-2 shrink-0 justify-end">
+      <!-- Conmutador de Vista: Mosaico Masonry vs Lista Compacta -->
+      <div class="flex items-center p-0.5 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/70">
+        <button type="button" id="btn-vista-notas-masonry" onclick="setModoVistaNotas('masonry')"
+          class="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 shadow-2xs transition cursor-pointer"
+          title="Vista Mosaico Dinámico (Masonry Grid)">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v6a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 18a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+          </svg>
+        </button>
+        <button type="button" id="btn-vista-notas-lista" onclick="setModoVistaNotas('list')"
+          class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
+          title="Vista Lista Compacta">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Botón Crear Nota Modal 360° -->
+      <button type="button" id="btn-nueva-nota-principal" onclick="abrirModalNuevaNota()"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-600 active:scale-95 text-white transition shadow-sm shadow-amber-500/20 cursor-pointer"
+        title="Crear nota detallada con modal 360°">
+        <span>＋</span>
+        <span class="hidden sm:inline">Nueva Nota</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- NIVEL SECUNDARIO: Búsqueda Rápida y Filtros de Refinamiento -->
+  <div
+    class="shrink-0 bg-slate-50/90 dark:bg-slate-900/60 backdrop-blur-xs border-b border-slate-200/70 dark:border-slate-800/70 px-4 sm:px-6 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2.5 z-10">
+
+    <!-- Buscador en tiempo real -->
+    <div class="relative w-full md:max-w-md">
+      <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" fill="none"
+        stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input type="text" id="input-busqueda-notas" oninput="filtrarNotasEnTiempoReal()"
+        placeholder="Buscar notas, checklists, etiquetas o @..."
+        class="w-full pl-9 pr-7 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-hidden shadow-2xs" />
+      <button type="button" id="btn-limpiar-busqueda-notas" onclick="limpiarBusquedaNotas()"
+        class="hidden absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs cursor-pointer">
+        ✕
+      </button>
+    </div>
+
+    <!-- Refinamiento: Subfiltros Rápidos, Tags, Color y Limpieza -->
+    <div class="flex flex-wrap items-center gap-1.5 justify-start md:justify-end">
+      <!-- Subfiltros Tipo Cápsula (Checklist promovido a tab maestro) -->
+      <div class="inline-flex items-center gap-1 p-0.5 bg-slate-200/50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/70 text-xs">
+        <button type="button" id="chip-nota-fijadas" onclick="setFiltroRapidoNotas('FIJADAS')"
+          class="chip-filtro-nota px-2 py-1 rounded-lg font-semibold text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1">
+          <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>
+          <span>Fijadas</span>
+        </button>
+        <button type="button" id="chip-nota-adjuntos" onclick="setFiltroRapidoNotas('ADJUNTOS')"
+          class="chip-filtro-nota px-2 py-1 rounded-lg font-semibold text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1">
+          <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          <span>Adjuntos</span>
+        </button>
+        <button type="button" id="chip-nota-vinculadas" onclick="setFiltroRapidoNotas('VINCULADAS')"
+          class="chip-filtro-nota px-2 py-1 rounded-lg font-semibold text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1">
+          <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span>Vínculos</span>
+        </button>
+      </div>
+
+      <!-- Selector de Filtro de Etiquetas Dinámico -->
+      <div class="relative inline-block" id="dropdown-filtro-etiquetas-notas-wrap">
+        <button type="button" id="btn-filtro-etiquetas-notas" onclick="toggleDropdownEtiquetasNotas(event)"
+          class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 bg-white/70 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 transition shadow-2xs flex items-center gap-1.5 cursor-pointer"
+          title="Filtrar por etiqueta">
+          <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>
+          <span id="label-filtro-etiqueta-activa" class="hidden sm:inline">Tags</span>
+          <span id="badge-filtro-etiqueta-activa" class="hidden px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-white"></span>
+          <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+
+        <!-- Dropdown flotante de etiquetas con buscador/creador -->
+        <div id="dropdown-etiquetas-notas-menu"
+          class="hidden absolute right-0 mt-1 w-64 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div class="text-[10px] font-bold text-slate-400 dark:text-slate-400 px-2 py-1 uppercase tracking-wider flex items-center justify-between">
+            <span>Filtrar por Tags (Multi-Tag)</span>
+            <button type="button" onclick="limpiarTagsNotasFiltro()" class="text-amber-500 hover:underline text-[9px] font-bold normal-case cursor-pointer">Limpiar todas</button>
+          </div>
+          <div class="px-1 py-1">
+            <input type="text" id="input-buscar-crear-filtro-tag"
+              placeholder="Buscar o crear etiqueta..."
+              oninput="filtrarEtiquetasEnDropdown(event)"
+              onkeydown="handleCrearTagDesdeDropdown(event)"
+              class="w-full text-xs px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 outline-hidden focus:ring-1 focus:ring-amber-500" />
+          </div>
+          <div id="lista-etiquetas-filtro-dropdown" class="space-y-0.5 mt-1 max-h-56 overflow-y-auto custom-scrollbar">
+            <!-- Render dinámico de tags con checkboxes para selección múltiple -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Selector de Filtro de Color Sutil (Paleta) -->
+      <div class="relative inline-block" id="dropdown-filtro-color-notas-wrap">
+        <button type="button" id="btn-filtro-color-notas" onclick="toggleDropdownColorNotas(event)"
+          class="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 bg-white/70 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 transition shadow-2xs cursor-pointer"
+          title="Filtrar por color / tono">
+          <span class="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-400 inline-block"></span>
+        </button>
+
+        <!-- Dropdown flotante de colores: 16 tonos Tailwind canónicos -->
+        <div id="dropdown-color-notas-menu"
+          class="hidden absolute right-0 mt-1 w-56 max-h-80 overflow-y-auto custom-scrollbar bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+          <div class="text-[10px] font-bold text-slate-400 dark:text-slate-400 px-2 py-1 uppercase tracking-wider">Filtrar por Tono (16 Tonos)</div>
+          <button type="button" onclick="setFiltroColorNotas('')"
+            class="w-full text-left px-2 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-700 dark:text-slate-200 cursor-pointer">
+            <span class="w-3 h-3 rounded-full border border-slate-400 bg-white shadow-2xs"></span> Todos los tonos
+          </button>
+          <div class="my-1 border-t border-slate-100 dark:border-slate-700"></div>
+          <button type="button" onclick="setFiltroColorNotas('slate')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center gap-2 text-slate-700 dark:text-slate-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-slate-600 shadow-2xs"></span> Slate / Pizarra
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('red')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-red-50 dark:hover:bg-red-950/40 flex items-center gap-2 text-red-700 dark:text-red-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-red-500 shadow-2xs"></span> Red / Rojo
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('orange')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-orange-50 dark:hover:bg-orange-950/40 flex items-center gap-2 text-orange-700 dark:text-orange-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-orange-500 shadow-2xs"></span> Orange / Naranja
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('amber')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-amber-50 dark:hover:bg-amber-950/40 flex items-center gap-2 text-amber-700 dark:text-amber-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-amber-500 shadow-2xs"></span> Amber / Ámbar
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('yellow')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-yellow-50 dark:hover:bg-yellow-950/40 flex items-center gap-2 text-yellow-700 dark:text-yellow-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-yellow-400 shadow-2xs"></span> Yellow / Amarillo
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('lime')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-lime-50 dark:hover:bg-lime-950/40 flex items-center gap-2 text-lime-700 dark:text-lime-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-lime-500 shadow-2xs"></span> Lime / Lima
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('green')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-green-50 dark:hover:bg-green-950/40 flex items-center gap-2 text-green-700 dark:text-green-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-green-500 shadow-2xs"></span> Green / Verde
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('emerald')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-emerald-50 dark:hover:bg-emerald-950/50 flex items-center gap-2 text-emerald-700 dark:text-emerald-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-2xs"></span> Emerald / Esmeralda
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('teal')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-teal-50 dark:hover:bg-teal-950/40 flex items-center gap-2 text-teal-700 dark:text-teal-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-teal-500 shadow-2xs"></span> Teal / Turquesa
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('cyan')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-cyan-50 dark:hover:bg-cyan-950/40 flex items-center gap-2 text-cyan-700 dark:text-cyan-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-cyan-400 shadow-2xs"></span> Cyan / Cian
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('sky')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/50 flex items-center gap-2 text-sky-700 dark:text-sky-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-sky-500 shadow-2xs"></span> Sky / Cielo
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('blue')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center gap-2 text-blue-700 dark:text-blue-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-blue-500 shadow-2xs"></span> Blue / Azul
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('indigo')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-indigo-50 dark:hover:bg-indigo-950/50 flex items-center gap-2 text-indigo-700 dark:text-indigo-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-indigo-500 shadow-2xs"></span> Indigo / Índigo
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('violet')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-purple-50 dark:hover:bg-purple-950/50 flex items-center gap-2 text-purple-700 dark:text-purple-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-purple-500 shadow-2xs"></span> Violet / Violeta
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('purple')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-purple-50 dark:hover:bg-purple-950/50 flex items-center gap-2 text-purple-700 dark:text-purple-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-purple-600 shadow-2xs"></span> Purple / Púrpura
+          </button>
+          <button type="button" onclick="setFiltroColorNotas('rose')"
+            class="w-full text-left px-2 py-1 rounded-lg text-xs font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/50 flex items-center gap-2 text-rose-700 dark:text-rose-300 cursor-pointer">
+            <span class="w-3 h-3 rounded-full bg-rose-500 shadow-2xs"></span> Rose / Rosa
+          </button>
+        </div>
+      </div>
+
+      <!-- Botón Limpiar Filtros de Notas (Dinámico con ✕) -->
+      <button type="button" id="btn-limpiar-filtros-notas" onclick="(window.limpiarFiltrosVistaActiva || window.limpiarFiltrosNotas)()"
+        class="hidden px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/60 transition shadow-2xs items-center gap-1 active:scale-95 cursor-pointer"
+        title="Restablecer todos los filtros de notas a su estado neutro">
+        <span class="font-bold">✕</span>
+        <span class="hidden sm:inline">Limpiar</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Barra Reactiva de Etiquetas y Filtros Activos (Chips con ✕) -->
+  <div id="barra-etiquetas-activas-notas"
+    class="hidden shrink-0 bg-amber-50/70 dark:bg-amber-950/40 border-b border-amber-200/80 dark:border-amber-900/50 px-4 sm:px-6 py-1.5 flex-wrap items-center justify-between gap-2 z-10 animate-in fade-in duration-150">
+    <div class="flex flex-wrap items-center gap-1.5">
+      <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300 mr-1 flex items-center gap-1.5">
+        <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>
+        <span>Tags activos:</span>
+      </span>
+      <div id="lista-chips-etiquetas-activas-notas" class="flex flex-wrap items-center gap-1.5"></div>
+      <button type="button" onclick="limpiarTagsNotasFiltro()"
+        class="text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 hover:underline ml-1">
+        Limpiar tags
+      </button>
+    </div>
+    <button type="button" onclick="(window.limpiarFiltrosVistaActiva || window.limpiarFiltrosNotas)()"
+      class="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-300 flex items-center gap-1 px-2 py-0.5 rounded-lg hover:bg-rose-100/60 dark:hover:bg-rose-950/50 transition cursor-pointer">
+      <span>✕</span>
+      <span>Limpiar todos los filtros</span>
+    </button>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 2. CONTENEDOR EXPANDIBLE DE CREACIÓN RÁPIDA (GOOGLE KEEP STYLE)      -->
+  <!-- ===================================================================== -->
+  <div class="shrink-0 w-full max-w-2xl mx-auto px-4 pt-4 pb-2 z-10">
+    <div id="quick-note-box"
+      class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm transition-all duration-300 relative overflow-hidden group">
+
+      <!-- ESTADO COLAPSADO (Trigger inicial) -->
+      <div id="quick-note-collapsed" onclick="expandirQuickNoteCreator()"
+        class="p-3.5 flex items-center justify-between gap-3 cursor-text">
+        <div class="flex items-center gap-2.5 text-slate-400 dark:text-slate-400 text-xs font-medium flex-1">
+          <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+          <span>Tomar una nota rápida, lista de verificación o escribe @...</span>
+        </div>
+        <div class="flex items-center gap-1 shrink-0 text-slate-400">
+          <button type="button" onclick="event.stopPropagation(); expandirQuickNoteCreator('checklist');"
+            class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition"
+            title="Nueva lista de verificación">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+          </button>
+          <button type="button" onclick="event.stopPropagation(); triggerFileInputQuickNote();"
+            class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition"
+            title="Adjuntar imagen o archivo">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ESTADO EXPANDIDO (Formulario activo estilo Keep) -->
+      <div id="quick-note-expanded" class="hidden flex-col p-4 space-y-3">
+        <!-- Fila de Título y Botón Pin -->
+        <div class="flex items-center justify-between gap-2">
+          <input type="text" id="quick-note-title" placeholder="Título de la nota..."
+            class="w-full text-sm font-bold text-slate-800 dark:text-slate-100 placeholder-slate-400 bg-transparent border-none outline-hidden focus:ring-0 p-0" />
+          
+          <button type="button" id="quick-note-pin-btn" onclick="toggleQuickNotePin()"
+            class="p-1.5 rounded-xl text-slate-400 hover:text-amber-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition active:scale-90"
+            title="Fijar nota en la parte superior">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="17" x2="12" y2="22"/>
+              <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Selector de Modo: Texto / Checklist / WishList -->
+        <div class="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2 text-xs">
+          <button type="button" id="quick-mode-text-btn" onclick="setQuickNoteTipo('texto')"
+            class="px-2.5 py-1 rounded-lg font-bold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 transition inline-flex items-center gap-1.5">
+            <svg class="portal-icon-sm shrink-0 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+            <span>Nota</span>
+          </button>
+          <button type="button" id="quick-mode-check-btn" onclick="setQuickNoteTipo('checklist')"
+            class="px-2.5 py-1 rounded-lg font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition inline-flex items-center gap-1.5">
+            <svg class="portal-icon-sm shrink-0 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+            <span>Checklist</span>
+          </button>
+          <button type="button" id="quick-mode-wishlist-btn" onclick="setQuickNoteTipo('wishlist')"
+            class="px-2.5 py-1 rounded-lg font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition inline-flex items-center gap-1.5">
+            <svg class="portal-icon-sm shrink-0 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+            <span>WishList</span>
+          </button>
+        </div>
+
+        <!-- Campos Específicos para WishList en Quick Creator -->
+        <div id="quick-note-wishlist-fields" class="hidden flex-col space-y-2 p-2.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-xs">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label class="block text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider mb-1">Costo Estimado</label>
+              <div class="flex items-center gap-1">
+                <select id="quick-wishlist-moneda" class="text-xs font-bold rounded-lg bg-white dark:bg-slate-800 border border-amber-300/80 dark:border-amber-700/80 px-2 py-1 text-slate-800 dark:text-slate-100 outline-hidden">
+                  <option value="PEN">S/</option>
+                  <option value="USD">$</option>
+                </select>
+                <input type="number" id="quick-wishlist-costo" step="0.01" min="0" placeholder="0.00"
+                  class="w-full text-xs font-mono font-bold rounded-lg bg-white dark:bg-slate-800 border border-amber-300/80 dark:border-amber-700/80 px-2.5 py-1 text-slate-800 dark:text-slate-100 outline-hidden" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider mb-1">Nivel de Deseo</label>
+              <select id="quick-wishlist-nivel" class="w-full text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-amber-300/80 dark:border-amber-700/80 px-2 py-1 text-slate-800 dark:text-slate-100 outline-hidden">
+                <option value="Alta">Alta Prioridad</option>
+                <option value="Media" selected>Media</option>
+                <option value="Baja">Baja / Capricho</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider mb-1">Enlace de Referencia</label>
+              <input type="url" id="quick-wishlist-enlace" placeholder="https://..."
+                class="w-full text-xs rounded-lg bg-white dark:bg-slate-800 border border-amber-300/80 dark:border-amber-700/80 px-2.5 py-1 text-slate-800 dark:text-slate-100 outline-hidden" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Área de Texto Libre -->
+        <div id="quick-note-text-container">
+          <textarea id="quick-note-content" rows="3"
+            placeholder="Escribe tus notas, reflexiones o detalles... Escribe @ para vincular con Proyectos, Tareas o Finanzas..."
+            class="w-full text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 bg-transparent border-none outline-hidden focus:ring-0 p-0 resize-none custom-scrollbar leading-relaxed"></textarea>
+        </div>
+
+        <!-- Área de Checklist Dinámica -->
+        <div id="quick-note-checklist-container" class="hidden flex-col space-y-2">
+          <div id="quick-note-checklist-list" class="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+            <!-- Items de checklist dinámicos se insertan aquí -->
+          </div>
+          
+          <div class="flex items-center gap-2 pt-1">
+            <span class="text-slate-400 text-xs">＋</span>
+            <input type="text" id="quick-note-new-item-input"
+              placeholder="Elemento de lista... (Presiona Enter para agregar)"
+              onkeydown="handleQuickNoteChecklistKeydown(event)"
+              class="w-full text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 bg-transparent border-none outline-hidden focus:ring-0 p-0" />
+            <button type="button" onclick="agregarItemQuickChecklist()"
+              class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+              Agregar
+            </button>
+          </div>
+        </div>
+
+        <!-- Vínculos de Entidades Adjuntadas (@) -->
+        <div id="quick-note-links-container" class="hidden flex-wrap items-center gap-1.5 pt-1">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Vínculos:</span>
+          <div id="quick-note-links-chips" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <!-- Adjuntos Subidos (Imágenes o Documentos) -->
+        <div id="quick-note-attachments-container" class="hidden flex-wrap items-center gap-2 pt-1">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">Adjuntos:</span>
+          <div id="quick-note-attachments-list" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Fila de Etiquetas Rápidas (Chips interactivos + input + popover + catálogo sugerido) -->
+        <div id="quick-note-tags-container" class="relative pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1">
+              <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>
+              <span>Tags:</span>
+            </span>
+            <div id="quick-note-tags-list" class="flex flex-wrap items-center gap-1.5"></div>
+            <div class="relative inline-block flex-1 min-w-[140px]">
+              <input type="text" id="quick-note-new-tag-input"
+                placeholder="+ Añadir etiqueta (Enter)..."
+                onkeydown="handleQuickNoteTagKeydown(event)"
+                onfocus="mostrarSugerenciasEtiquetasQuick(event)"
+                oninput="mostrarSugerenciasEtiquetasQuick(event)"
+                class="w-full text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 bg-transparent border-none outline-hidden focus:ring-0 p-1" />
+              <div id="quick-note-tags-autocomplete"
+                class="hidden absolute left-0 bottom-full mb-1 w-60 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-1.5 z-50 max-h-44 overflow-y-auto custom-scrollbar"></div>
+            </div>
+          </div>
+          <!-- Catálogo sugerido rápido (Chips globales disponibles para 1-clic) -->
+          <div id="quick-note-catalogo-wrap" class="hidden flex-wrap items-center gap-1 pt-1 border-t border-slate-100 dark:border-slate-800/60">
+            <span class="text-[10px] text-slate-400 mr-1">Disponibles:</span>
+            <div id="quick-note-catalogo-chips" class="flex flex-wrap gap-1"></div>
+          </div>
+        </div>
+
+        <!-- Barra Inferior de Acciones y Paleta de Colores Unificada -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+          <!-- Paleta de Colores Flotante Compacta (Trigger + Popover) -->
+          <div class="relative inline-block" id="quick-note-color-picker-wrap">
+            <button type="button" id="quick-note-btn-palette" onclick="toggleQuickNoteColorPicker(event)"
+              class="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition shadow-2xs flex items-center gap-1.5 text-slate-600 dark:text-slate-300"
+              title="Seleccionar tono / color de nota">
+              <span class="w-4 h-4 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-400 inline-block shadow-2xs"></span>
+              <span id="quick-note-color-label" class="text-[11px] font-semibold hidden sm:inline">Color</span>
+              <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+
+            <!-- Popover flotante de colores -->
+            <div id="quick-note-color-picker-popover"
+              class="hidden absolute left-0 bottom-full mb-2 w-48 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div class="text-[10px] font-bold text-slate-400 dark:text-slate-400 px-2 py-1 uppercase tracking-wider">Tono de Nota</div>
+              <div class="grid grid-cols-4 gap-1.5 p-1">
+                <button type="button" onclick="setQuickNoteColor('default')" class="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Predeterminado">
+                  <span class="w-5 h-5 rounded-full border border-slate-300 bg-white"></span>
+                  <span class="text-[9px] text-slate-500">Def</span>
+                </button>
+                <button type="button" onclick="setQuickNoteColor('emerald')" class="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition" title="Esmeralda">
+                  <span class="w-5 h-5 rounded-full bg-emerald-500"></span>
+                  <span class="text-[9px] text-emerald-600">Verde</span>
+                </button>
+                <button type="button" onclick="setQuickNoteColor('indigo')" class="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition" title="Índigo">
+                  <span class="w-5 h-5 rounded-full bg-indigo-500"></span>
+                  <span class="text-[9px] text-indigo-600">Índigo</span>
+                </button>
+                <button type="button" onclick="setQuickNoteColor('amber')" class="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/40 transition" title="Ámbar">
+                  <span class="w-5 h-5 rounded-full bg-amber-500"></span>
+                  <span class="text-[9px] text-amber-600">Ámbar</span>
+                </button>
+                <button type="button" onclick="setQuickNoteColor('rose')" class="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition" title="Rosa">
+                  <span class="w-5 h-5 rounded-full bg-rose-500"></span>
+                  <span class="text-[9px] text-rose-600">Rosa</span>
+                </button>
+                <button type="button" onclick="setQuickNoteColor('sky')" class="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-sky-50 dark:hover:bg-sky-950/40 transition" title="Cielo">
+                  <span class="w-5 h-5 rounded-full bg-sky-500"></span>
+                  <span class="text-[9px] text-sky-600">Cielo</span>
+                </button>
+                <button type="button" onclick="setQuickNoteColor('violet')" class="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40 transition" title="Violeta">
+                  <span class="w-5 h-5 rounded-full bg-purple-500"></span>
+                  <span class="text-[9px] text-purple-600">Violeta</span>
+                </button>
+                <button type="button" onclick="setQuickNoteColor('slate')" class="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition" title="Gris">
+                  <span class="w-5 h-5 rounded-full bg-slate-500"></span>
+                  <span class="text-[9px] text-slate-500">Gris</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Botones de Acción Secundaria (Adjuntar, Vincular) -->
+          <div class="flex items-center gap-2">
+            <!-- Botón Vincular Entidad (@) -->
+            <button type="button" onclick="abrirModalVincularEntidadNota('quick')"
+              class="px-2.5 py-1 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-1 transition"
+              title="Vincular con Proyecto, Tarea, Actividad o Transacción">
+              <span class="text-indigo-500 font-bold">@</span>
+              <span class="hidden sm:inline">Vincular</span>
+            </button>
+
+            <!-- Botón Adjuntar Archivo a Drive -->
+            <button type="button" onclick="triggerFileInputQuickNote()"
+              class="px-2.5 py-1 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-1 transition"
+              title="Adjuntar Imagen o PDF (Google Drive)">
+              <svg class="portal-icon-sm w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              <span class="hidden sm:inline">Adjuntar</span>
+            </button>
+            <input type="file" id="input-file-quick-note" class="hidden" accept="image/*,application/pdf"
+              onchange="handleQuickNoteFileSelect(event)" />
+
+            <!-- Botón Cerrar -->
+            <button type="button" onclick="cerrarQuickNoteCreator()"
+              class="px-3 py-1 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+              Cerrar
+            </button>
+
+            <!-- Botón Guardar -->
+            <button type="button" onclick="guardarQuickNota()"
+              class="px-4 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-sm hover:shadow-md transition-all active:scale-95">
+              Guardar
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 3. ÁREA DE CONTENIDO PRINCIPAL: NOTAS FIJADAS Y OTRAS NOTAS          -->
+  <!-- ===================================================================== -->
+  <div id="contenedor-scroll-notas" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-6 pt-4 pb-32 space-y-6">
+
+    <!-- SECCIÓN: NOTAS FIJADAS (Se muestra solo si hay notas con Es_Fijada = true) -->
+    <div id="seccion-notas-fijadas" class="hidden space-y-3">
+      <div class="flex items-center gap-2 px-1">
+        <span class="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-400 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-amber-500 transform rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+          </svg>
+          Fijadas
+        </span>
+        <span id="badge-count-fijadas"
+          class="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">0</span>
+      </div>
+
+      <!-- Contenedor Rejilla Masonry de Notas Fijadas -->
+      <div id="grid-notas-fijadas" class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
+        <!-- Render dinámico de tarjetas fijadas -->
+      </div>
+    </div>
+
+    <!-- SECCIÓN: OTRAS NOTAS -->
+    <div id="seccion-notas-otras" class="space-y-3">
+      <div id="header-notas-otras" class="hidden items-center gap-2 px-1">
+        <span class="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-400">
+          Otras Notas
+        </span>
+        <span id="badge-count-otras"
+          class="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300">0</span>
+      </div>
+
+      <!-- Contenedor Rejilla Masonry de Otras Notas -->
+      <div id="grid-notas-otras" class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
+        <!-- Render dinámico de tarjetas normales -->
+      </div>
+    </div>
+
+    <!-- SECCIÓN COLAPSABLE: WISHLIST CONSEGUIDOS / ARCHIVADOS -->
+    <div id="wrapper-conseguidos-wishlist" class="hidden space-y-3 pt-3 border-t border-slate-200/80 dark:border-slate-800/80">
+      <button type="button" onclick="toggleSeccionConseguidosWishlist()"
+        class="flex items-center justify-between w-full py-2 px-3 rounded-xl bg-slate-100/60 dark:bg-slate-900/60 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition border border-slate-200/60 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 active:scale-[0.99] cursor-pointer">
+        <div class="flex items-center gap-2">
+          <span class="w-5 h-5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[11px] font-black">✓</span>
+          <span>Deseos Conseguidos / Archivados</span>
+          <span id="badge-count-conseguidos-wishlist"
+            class="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">0</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-slate-400">
+          <span class="text-[11px] font-normal hidden sm:inline" id="label-toggle-conseguidos-wishlist">Mostrar</span>
+          <svg id="chevron-conseguidos-wishlist" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+          </svg>
+        </div>
+      </button>
+
+      <!-- Contenedor Rejilla de Deseos Conseguidos -->
+      <div id="grid-conseguidos-wishlist" class="hidden columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4 pt-1">
+        <!-- Render dinámico de tarjetas de deseos conseguidos -->
+      </div>
+    </div>
+
+    <!-- ESTADO VACÍO (EMPTY STATE SAAS / FRAMER MINIMALISTA) -->
+    <div id="notas-empty-state" class="hidden flex flex-col items-center justify-center py-20 text-center px-4 animate-in fade-in zoom-in-95 duration-200">
+      <div class="w-14 h-14 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-400 dark:text-slate-500 flex items-center justify-center mb-3 shadow-2xs">
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"
+            d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        </svg>
+      </div>
+      <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Tu espacio de notas está vacío</h3>
+      <p class="text-xs text-slate-400 dark:text-slate-400 max-w-md mt-1 font-normal">
+        Captura ideas rápidas, listas de tareas y archivos vinculados a tus proyectos.
+      </p>
+      <button type="button" onclick="focusCrearPrimeraNota()"
+        class="mt-3.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer">
+        <span>＋</span>
+        <span>Crear primera nota</span>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 4. MENÚ FLOTANTE DE AUTOCOMPLETADO DE MENCIONES (@)                    -->
+  <!-- ===================================================================== -->
+  <div id="dropdown-menciones-flotante"
+    class="hidden fixed bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-72 max-h-60 overflow-y-auto custom-scrollbar p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+    <div class="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700/60 mb-1">
+      Vincular Entidad al Escribir @
+    </div>
+    <div id="dropdown-menciones-items" class="space-y-0.5">
+      <!-- Items predictivos de Proyectos, Tareas, etc. -->
+    </div>
+  </div>
+
+</div>

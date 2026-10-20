@@ -1,0 +1,1736 @@
+<script>
+/**
+ * ============================================================================
+ * ARCHIVO: JS_Ideas.html
+ * SISTEMA: PMO Personal Modular & Life Operating System
+ * ROL: Controlador Frontend de Ideas Rápidas, Captura Multimodal y Triaje
+ * ESTÁNDAR: Cobalt Aerodynamic A.2.2 • SYSTEM_RULES.md • Cero Emojis
+ * ============================================================================
+ */
+
+(function () {
+  'use strict';
+
+  // 1. ESTADO REACTIVO DEL MÓDULO IDEAS
+  var ideasState = {
+    ideas: [],
+    ideaActiva: null,
+    filtroEstado: 'inbox', // 'inbox' | 'incubacion' | 'procesadas'
+    busqueda: '',
+    tagsCaptura: [],
+    grabacion: {
+      activo: false,
+      mediaRecorder: null,
+      chunks: [],
+      stream: null,
+      timerInterval: null,
+      segundos: 0
+    }
+  };
+  window.ideasState = ideasState;
+
+  // ----------------------------------------------------------------------------
+  // CLIENTE RPC ASÍNCRONO DEL MÓDULO IDEAS (CON PROMESAS NATIVAS)
+  // ----------------------------------------------------------------------------
+  function ejecutarAccionBackend(action, payload) {
+    return new Promise(function (resolve, reject) {
+      if (typeof window.callBackend === 'function') {
+        window.callBackend(action, payload, function (res) {
+          resolve(res);
+        }, function (err) {
+          reject(err);
+        });
+      } else if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function (rawRes) {
+            var res = rawRes;
+            if (typeof rawRes === 'string') {
+              try { res = JSON.parse(rawRes); } catch (e) { }
+            }
+            resolve(res);
+          })
+          .withFailureHandler(function (err) {
+            reject(err);
+          })
+          .apiRouter(action, payload);
+      } else {
+        reject(new Error('Entorno Apps Script no disponible'));
+      }
+    });
+  }
+  window.ejecutarAccionBackend = ejecutarAccionBackend;
+
+  // ----------------------------------------------------------------------------
+  // 2. SINCRONIZACIÓN Y CICLO DE VIDA
+  // ----------------------------------------------------------------------------
+
+  function sincronizarIdeasDesdeState() {
+    if (window.state && Array.isArray(window.state.ideas)) {
+      ideasState.ideas = window.state.ideas;
+    }
+    actualizarContadorWidgetIdeas();
+    renderListaDrawerIdeas();
+  }
+  window.sincronizarIdeasDesdeState = sincronizarIdeasDesdeState;
+
+  function actualizarContadorWidgetIdeas() {
+    var activas = (ideasState.ideas || []).filter(function (i) {
+      var est = String(i.Estado || i.estado || '').trim();
+      return est === 'Borrador / Inbox' || est === 'En Incubación / Algún día';
+    });
+
+    var badgeBubble = document.getElementById('badge-contador-ideas-activas');
+    if (badgeBubble) {
+      badgeBubble.textContent = activas.length;
+    }
+
+    var badgeTotal = document.getElementById('drawer-ideas-total-badge');
+    if (badgeTotal) {
+      badgeTotal.textContent = activas.length;
+    }
+
+    // Actualizar contadores de las pestañas del drawer
+    var countInbox = 0;
+    var countIncub = 0;
+    var countProc = 0;
+
+    (ideasState.ideas || []).forEach(function (i) {
+      var est = String(i.Estado || i.estado || '').trim();
+      if (est === 'Borrador / Inbox') countInbox++;
+      else if (est === 'En Incubación / Algún día') countIncub++;
+      else if (est === 'Procesada' || est === 'Archivada') countProc++;
+    });
+
+    var cInb = document.getElementById('count-tab-ideas-inbox');
+    if (cInb) cInb.textContent = countInbox;
+    var cInc = document.getElementById('count-tab-ideas-incubacion');
+    if (cInc) cInc.textContent = countIncub;
+    var cPrc = document.getElementById('count-tab-ideas-procesadas');
+    if (cPrc) cPrc.textContent = countProc;
+  }
+  window.actualizarContadorWidgetIdeas = actualizarContadorWidgetIdeas;
+
+  // ----------------------------------------------------------------------------
+  // GESTIÓN DE CUERPO ÚNICO Y HASHTAGS (SINGLE BODY CANVAS)
+  // ----------------------------------------------------------------------------
+
+  function extraerHashtagsDeTexto(texto) {
+    if (!texto) return [];
+    var matches = String(texto).match(/(^|\s)(#[a-zA-Z0-9_\-]+)/g);
+    if (!matches) return [];
+    var tags = [];
+    matches.forEach(function (m) {
+      var tag = m.trim();
+      if (tag && tags.indexOf(tag) === -1) {
+        tags.push(tag);
+      }
+    });
+    return tags;
+  }
+  window.extraerHashtagsDeTexto = extraerHashtagsDeTexto;
+
+  function desglosarCuerpoUnicoIdea(textoCompleto) {
+    var str = String(textoCompleto || '').trim();
+    if (!str) {
+      return {
+        enunciado: '',
+        detalle: '',
+        cuerpoCompleto: '',
+        tags: []
+      };
+    }
+
+    var tags = extraerHashtagsDeTexto(str);
+
+    // Separar primera línea u oración para el enunciado visible de las tarjetas
+    var lineas = str.split(/\r?\n/);
+    var primeraLinea = (lineas[0] || '').trim();
+    var resto = lineas.slice(1).join('\n').trim();
+
+    // Si es una sola línea extensa sin saltos, extraer primera oración como enunciado
+    if (!resto && primeraLinea.length > 120) {
+      var puntoIdx = primeraLinea.indexOf('.');
+      if (puntoIdx > 20 && puntoIdx < 120) {
+        resto = primeraLinea.substring(puntoIdx + 1).trim();
+        primeraLinea = primeraLinea.substring(0, puntoIdx + 1).trim();
+      }
+    }
+
+    return {
+      enunciado: primeraLinea || str,
+      detalle: resto,
+      cuerpoCompleto: str,
+      tags: tags
+    };
+  }
+  window.desglosarCuerpoUnicoIdea = desglosarCuerpoUnicoIdea;
+
+  function reconstruirCuerpoUnicoIdea(enunciado, detalle) {
+    var enun = String(enunciado || '').trim();
+    var det = String(detalle || '').trim();
+    if (!det) return enun;
+    if (!enun) return det;
+    if (det === enun || det.startsWith(enun)) return det;
+    return enun + '\n\n' + det;
+  }
+  window.reconstruirCuerpoUnicoIdea = reconstruirCuerpoUnicoIdea;
+
+  function actualizarResaltadoHashtags(texto) {
+    // Compatibilidad defensiva sin capas superpuestas
+    return;
+  }
+  window.actualizarResaltadoHashtags = actualizarResaltadoHashtags;
+
+  // ----------------------------------------------------------------------------
+  // 3. POPOVER DE MICRO-CAPTURA RÁPIDA
+  // ----------------------------------------------------------------------------
+
+  // ----------------------------------------------------------------------------
+  // 3. POPOVER DE MICRO-CAPTURA RÁPIDA (COLLISION DETECTION & EDGE BOUNDS)
+  // ----------------------------------------------------------------------------
+
+  // Payload temporal para adjuntos seleccionados antes de guardar voluntariamente
+  window._adjuntoTemporalIdea = null;
+  window._grabandoAudio = false;
+
+  function posicionarPopoverCapturaRapida() {
+    var pop = document.getElementById('popover-captura-rapida-idea');
+    var botonPlus = document.getElementById('btn-widget-ideas-add') || document.getElementById('widget-ideas-pill');
+    if (!pop || !botonPlus) return;
+
+    var rect = botonPlus.getBoundingClientRect();
+    var popoverWidth = 340;
+    if (window.innerWidth < 380) {
+      popoverWidth = window.innerWidth - 32;
+    }
+
+    let left = rect.left;
+    // Si el popover desborda por la derecha:
+    if (left + popoverWidth > window.innerWidth - 16) {
+      left = window.innerWidth - popoverWidth - 16;
+    }
+    if (left < 16) left = 16;
+
+    // Si desborda por abajo, invertir hacia arriba:
+    let top = rect.bottom + 8;
+    if (top + 280 > window.innerHeight - 16) {
+      top = rect.top - 288;
+    }
+    if (top < 16) top = 16;
+
+    pop.style.position = 'fixed';
+    pop.style.zIndex = '9999';
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+  }
+  window.posicionarPopoverCapturaRapida = posicionarPopoverCapturaRapida;
+
+  function togglePopoverCapturaRapida(forzar) {
+    var pop = document.getElementById('popover-captura-rapida-idea');
+    if (!pop) return;
+
+    var mostrar = forzar !== undefined ? !!forzar : pop.classList.contains('hidden');
+    if (mostrar) {
+      pop.classList.remove('hidden');
+      pop.classList.add('flex');
+      posicionarPopoverCapturaRapida();
+      actualizarResaltadoHashtags('');
+      renderBadgeAdjuntoTemporalPopover();
+
+      var inp = document.getElementById('input-captura-rapida-enunciado');
+      if (inp) {
+        inp.value = '';
+        setTimeout(function () {
+          posicionarPopoverCapturaRapida();
+          inp.focus();
+          inp.onkeydown = function (ev) {
+            if ((ev.ctrlKey && ev.key === 'Enter') || (ev.key === 'Enter' && !ev.shiftKey)) {
+              ev.preventDefault();
+              guardarCapturaRapidaIdea();
+            }
+          };
+        }, 100);
+      }
+
+      window.addEventListener('resize', posicionarPopoverCapturaRapida);
+    } else {
+      pop.classList.add('hidden');
+      pop.classList.remove('flex');
+      actualizarResaltadoHashtags('');
+      window.removeEventListener('resize', posicionarPopoverCapturaRapida);
+
+      var bannerMic = document.getElementById('banner-guia-permisos-mic');
+      if (bannerMic) bannerMic.classList.add('hidden');
+      if (window._grabandoAudio || ideasState.grabacion.activo) {
+        cancelarGrabacionAudio();
+      }
+    }
+  }
+  window.togglePopoverCapturaRapida = togglePopoverCapturaRapida;
+
+  function expandirCapturaAEditorAmplio() {
+    var inp = document.getElementById('input-captura-rapida-enunciado');
+    var texto = inp ? String(inp.value || '').trim() : '';
+
+    var desglosado = desglosarCuerpoUnicoIdea(texto);
+    var adj = window._adjuntoTemporalIdea;
+    togglePopoverCapturaRapida(false);
+
+    var ideaNueva = {
+      ID_Idea: 'NUEVA',
+      Enunciado_Idea: desglosado.enunciado,
+      Detalle_Contexto: desglosado.detalle,
+      Tipo_Captura: adj ? (adj.isAudio ? 'Audio' : (adj.isImage ? 'Foto' : 'Archivo')) : 'Texto',
+      URL_Adjunto_Drive: (adj && adj.base64) ? adj.base64 : '',
+      Transcripcion_Texto: '',
+      Clarificacion_IA: '',
+      Estado: 'Borrador / Inbox'
+    };
+    poblarModalDetalleIdea(ideaNueva);
+    abrirModalDetalleIdeaAnimado();
+  }
+  window.expandirCapturaAEditorAmplio = expandirCapturaAEditorAmplio;
+
+  // ----------------------------------------------------------------------------
+  // GESTIÓN DE ADJUNTOS MULTIFORMATO EN CAPTURA RÁPIDA (FOTOS, AUDIOS, ARCHIVOS)
+  // ----------------------------------------------------------------------------
+
+  function dispararCapturaArchivoIdea() {
+    var input = document.getElementById('input-archivo-idea') || document.getElementById('input-archivo-foto-oculto');
+    if (input) input.click();
+  }
+  window.dispararCapturaArchivoIdea = dispararCapturaArchivoIdea;
+  window.dispararCapturaFoto = dispararCapturaArchivoIdea; // Retrocompatibilidad
+
+  function procesarArchivoIdeaSeleccionado(event) {
+    var files = event.target.files;
+    if (!files || files.length === 0) return;
+    var file = files[0];
+
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var base64Data = e.target.result;
+      var mime = file.type || 'application/octet-stream';
+      var isImg = mime.startsWith('image/');
+      var isAud = mime.startsWith('audio/');
+
+      window._adjuntoTemporalIdea = {
+        base64: base64Data,
+        mimeType: mime,
+        name: file.name || ('Adjunto_' + Date.now()),
+        size: file.size || 0,
+        isImage: isImg,
+        isAudio: isAud
+      };
+
+      renderBadgeAdjuntoTemporalPopover();
+      posicionarPopoverCapturaRapida();
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  }
+  window.procesarArchivoIdeaSeleccionado = procesarArchivoIdeaSeleccionado;
+  window.procesarFotoSeleccionada = procesarArchivoIdeaSeleccionado; // Retrocompatibilidad
+
+  function renderBadgeAdjuntoTemporalPopover() {
+    var badge = document.getElementById('badge-adjunto-temporal-popover');
+    if (!badge) return;
+
+    if (!window._adjuntoTemporalIdea) {
+      badge.classList.add('hidden');
+      badge.classList.remove('flex');
+      return;
+    }
+
+    var adj = window._adjuntoTemporalIdea;
+    var lblNom = document.getElementById('badge-adjunto-nombre');
+    var lblTam = document.getElementById('badge-adjunto-tamano');
+    var iconCont = document.getElementById('badge-adjunto-preview-icon');
+
+    if (lblNom) lblNom.textContent = adj.name;
+    if (lblTam) {
+      var kb = Math.round(adj.size / 1024);
+      lblTam.textContent = kb > 1024 ? (kb / 1024).toFixed(1) + ' MB' : (kb + ' KB');
+    }
+
+    if (iconCont) {
+      if (adj.isImage && adj.base64) {
+        iconCont.innerHTML = '<img src="' + adj.base64 + '" class="w-5 h-5 rounded object-cover border border-white/20"/>';
+      } else if (adj.isAudio) {
+        iconCont.innerHTML = '<svg class="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>';
+      } else {
+        iconCont.innerHTML = '<svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>';
+      }
+    }
+
+    badge.classList.remove('hidden');
+    badge.classList.add('flex');
+  }
+
+  function quitarAdjuntoTemporalIdea(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    window._adjuntoTemporalIdea = null;
+    renderBadgeAdjuntoTemporalPopover();
+    posicionarPopoverCapturaRapida();
+  }
+  window.quitarAdjuntoTemporalIdea = quitarAdjuntoTemporalIdea;
+
+  // ----------------------------------------------------------------------------
+  // 4. CAPTURA DE AUDIO Y MICRÓFONO EN CAPTURA RÁPIDA (CON RETROALIMENTACIÓN)
+  // ----------------------------------------------------------------------------
+
+  async function alternarGrabacionAudioRapida(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (window._grabandoAudio || ideasState.grabacion.activo) {
+      detenerGrabacionAudio();
+    } else {
+      await iniciarGrabacionAudio();
+    }
+  }
+  window.alternarGrabacionAudioRapida = alternarGrabacionAudioRapida;
+  window.toggleGrabacionAudioRapida = alternarGrabacionAudioRapida;
+
+  async function iniciarGrabacionAudio() {
+    var bannerGuia = document.getElementById('banner-guia-permisos-mic');
+    if (bannerGuia) bannerGuia.classList.add('hidden');
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      if (bannerGuia) {
+        bannerGuia.classList.remove('hidden');
+      } else if (typeof mostrarToast === 'function') {
+        mostrarToast('Tu navegador no permite acceso al micrófono en este marco', 'warning');
+      }
+      return;
+    }
+
+    try {
+      var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      ideasState.grabacion.stream = stream;
+      ideasState.grabacion.chunks = [];
+      ideasState.grabacion.segundos = 0;
+      window._grabandoAudio = true;
+      ideasState.grabacion.activo = true;
+
+      var mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
+                 (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/ogg');
+      var recorder = new MediaRecorder(stream, { mimeType: mime });
+
+      recorder.ondataavailable = function (e) {
+        if (e.data && e.data.size > 0) {
+          ideasState.grabacion.chunks.push(e.data);
+        }
+      };
+
+      recorder.start(250);
+      ideasState.grabacion.mediaRecorder = recorder;
+
+      // Feedback visual instantáneo: color rojo parpadeante con contador
+      var btnRec = document.getElementById('btn-quick-audio-record');
+      var lblRec = document.getElementById('label-quick-audio');
+      if (btnRec) {
+        btnRec.classList.add('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse');
+        btnRec.classList.remove('bg-white/5', 'text-slate-300');
+      }
+      if (lblRec) lblRec.textContent = '00:00';
+
+      var banner = document.getElementById('banner-grabacion-activa');
+      if (banner) {
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+      }
+
+      var timerEl = document.getElementById('timer-grabacion-audio');
+      if (ideasState.grabacion.timerInterval) clearInterval(ideasState.grabacion.timerInterval);
+      ideasState.grabacion.timerInterval = setInterval(function () {
+        ideasState.grabacion.segundos++;
+        var m = String(Math.floor(ideasState.grabacion.segundos / 60)).padStart(2, '0');
+        var s = String(ideasState.grabacion.segundos % 60).padStart(2, '0');
+        var timeStr = m + ':' + s;
+        if (lblRec) lblRec.textContent = timeStr;
+        if (timerEl) timerEl.textContent = timeStr;
+      }, 1000);
+
+      posicionarPopoverCapturaRapida();
+    } catch (err) {
+      console.warn('[iniciarGrabacionAudio Permiso Denegado/Bloqueado]:', err);
+      window._grabandoAudio = false;
+      ideasState.grabacion.activo = false;
+      if (bannerGuia) {
+        bannerGuia.classList.remove('hidden');
+      } else if (typeof mostrarToast === 'function') {
+        mostrarToast('Micrófono bloqueado: habilítalo desde el icono 🔒 en la URL', 'warning');
+      }
+    }
+  }
+  window.iniciarGrabacionAudio = iniciarGrabacionAudio;
+
+  function detenerGrabacionAudio() {
+    if (!ideasState.grabacion.activo || !ideasState.grabacion.mediaRecorder) {
+      cancelarGrabacionAudio();
+      return;
+    }
+
+    if (ideasState.grabacion.timerInterval) {
+      clearInterval(ideasState.grabacion.timerInterval);
+    }
+
+    var duracionSeg = ideasState.grabacion.segundos;
+    var mime = ideasState.grabacion.mediaRecorder.mimeType || 'audio/webm';
+
+    ideasState.grabacion.mediaRecorder.onstop = function () {
+      var blob = new Blob(ideasState.grabacion.chunks, { type: mime });
+      if (ideasState.grabacion.stream) {
+        ideasState.grabacion.stream.getTracks().forEach(function (t) { t.stop(); });
+      }
+      window._grabandoAudio = false;
+      ideasState.grabacion.activo = false;
+
+      // Convertir Blob a Base64 para guardarlo en _adjuntoTemporalIdea
+      var reader = new FileReader();
+      reader.onloadend = function () {
+        var base64Data = reader.result;
+        var horaActual = new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+        var m = String(Math.floor(duracionSeg / 60)).padStart(2, '0');
+        var s = String(duracionSeg % 60).padStart(2, '0');
+
+        window._adjuntoTemporalIdea = {
+          base64: base64Data,
+          mimeType: mime,
+          name: 'Voz (' + m + ':' + s + ' - ' + horaActual + ').webm',
+          size: blob.size,
+          isAudio: true,
+          isImage: false
+        };
+
+        renderBadgeAdjuntoTemporalPopover();
+        posicionarPopoverCapturaRapida();
+      };
+      reader.readAsDataURL(blob);
+    };
+
+    // Restaurar UI del botón de micro
+    var btnRec = document.getElementById('btn-quick-audio-record');
+    var lblRec = document.getElementById('label-quick-audio');
+    if (btnRec) {
+      btnRec.classList.remove('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse');
+      btnRec.classList.add('bg-white/5', 'text-slate-300');
+    }
+    if (lblRec) lblRec.textContent = 'Voz';
+
+    var banner = document.getElementById('banner-grabacion-activa');
+    if (banner) banner.classList.add('hidden');
+
+    try {
+      ideasState.grabacion.mediaRecorder.stop();
+    } catch (eStop) { }
+  }
+  window.detenerGrabacionAudio = detenerGrabacionAudio;
+
+  function cancelarGrabacionAudio() {
+    if (ideasState.grabacion.timerInterval) {
+      clearInterval(ideasState.grabacion.timerInterval);
+    }
+    if (ideasState.grabacion.mediaRecorder && ideasState.grabacion.mediaRecorder.state !== 'inactive') {
+      try { ideasState.grabacion.mediaRecorder.stop(); } catch (e) { }
+    }
+    if (ideasState.grabacion.stream) {
+      ideasState.grabacion.stream.getTracks().forEach(function (t) { t.stop(); });
+    }
+    window._grabandoAudio = false;
+    ideasState.grabacion.activo = false;
+    ideasState.grabacion.chunks = [];
+
+    var banner = document.getElementById('banner-grabacion-activa');
+    if (banner) banner.classList.add('hidden');
+    var btnRec = document.getElementById('btn-quick-audio-record');
+    if (btnRec) {
+      btnRec.classList.remove('bg-rose-600', 'text-white', 'border-rose-400', 'animate-pulse');
+      btnRec.classList.add('bg-white/5', 'text-slate-300');
+    }
+    var lblRec = document.getElementById('label-quick-audio');
+    if (lblRec) lblRec.textContent = 'Voz';
+  }
+  window.cancelarGrabacionAudio = cancelarGrabacionAudio;
+
+  // ----------------------------------------------------------------------------
+  // 5. GUARDADO INTELIGENTE DE CAPTURA RÁPIDA (TEXTO, MULTIMODAL Y HASHTAGS)
+  // ----------------------------------------------------------------------------
+
+  async function guardarCapturaRapidaIdea() {
+    // Si estaba grabando audio, detenerlo primero
+    if (window._grabandoAudio && ideasState.grabacion.mediaRecorder && ideasState.grabacion.mediaRecorder.state !== 'inactive') {
+      detenerGrabacionAudio();
+    }
+
+    var inp = document.getElementById('input-captura-rapida-enunciado');
+    var rawTexto = inp ? String(inp.value || '').trim() : '';
+    var tieneAdjunto = !!window._adjuntoTemporalIdea;
+
+    // Validación defensiva
+    if (!rawTexto && !tieneAdjunto) {
+      if (inp) {
+        inp.classList.add('animate-shake-input', 'border-rose-500/80');
+        setTimeout(function () {
+          inp.classList.remove('animate-shake-input', 'border-rose-500/80');
+        }, 500);
+        inp.focus();
+      }
+      return;
+    }
+
+    // Título por defecto orgánico si solo adjuntó contenido
+    if (!rawTexto && tieneAdjunto) {
+      var adj = window._adjuntoTemporalIdea;
+      if (adj.isAudio) {
+        rawTexto = 'Nota de Voz (' + new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) + ')';
+      } else if (adj.isImage) {
+        rawTexto = 'Captura Visual (' + new Date().toLocaleDateString('es-PE') + ')';
+      } else {
+        rawTexto = adj.name || 'Archivo Adjunto';
+      }
+    }
+
+    // Desglose del cuerpo único fluido
+    var desglosado = desglosarCuerpoUnicoIdea(rawTexto);
+    var enunciadoFinal = desglosado.enunciado;
+    var detalleFinal = desglosado.detalle;
+
+    var btnSubmit = document.getElementById('btn-quick-idea-submit');
+    var lblSubmit = document.getElementById('label-quick-submit');
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.classList.add('opacity-70');
+      if (lblSubmit) lblSubmit.textContent = tieneAdjunto ? 'Subiendo adjunto...' : 'Guardando...';
+    }
+
+    try {
+      var urlAdjunto = '';
+      var tipoCaptura = 'Texto';
+
+      if (tieneAdjunto) {
+        var adjPayload = window._adjuntoTemporalIdea;
+        tipoCaptura = adjPayload.isAudio ? 'Audio' : (adjPayload.isImage ? 'Foto' : 'Archivo');
+
+        var resAdj = await ejecutarAccionBackend('guardaradjuntoidea', {
+          idIdea: 'TEMP',
+          base64Data: adjPayload.base64,
+          mimeType: adjPayload.mimeType,
+          fileName: adjPayload.name
+        });
+
+        if (resAdj && resAdj.success) {
+          urlAdjunto = resAdj.url || resAdj.viewUrl || '';
+        } else {
+          throw new Error((resAdj && resAdj.error) || 'Fallo al almacenar adjunto en Drive');
+        }
+      }
+
+      // Respuesta optimista inmediata para UX a 60 FPS
+      var idTemp = 'IDE-' + Date.now();
+      var ideaOptimista = {
+        ID_Idea: idTemp,
+        id: idTemp,
+        Enunciado_Idea: enunciadoFinal,
+        enunciado: enunciadoFinal,
+        Detalle_Contexto: detalleFinal,
+        detalle: detalleFinal,
+        Tipo_Captura: tipoCaptura,
+        tipoCaptura: tipoCaptura,
+        URL_Adjunto_Drive: urlAdjunto,
+        urlAdjunto: urlAdjunto,
+        Transcripcion_Texto: '',
+        Clarificacion_IA: '',
+        Estado: 'Borrador / Inbox',
+        estado: 'Borrador / Inbox',
+        Fecha_Captura: new Date().toISOString()
+      };
+
+      if (!window.state.ideas) window.state.ideas = [];
+      window.state.ideas.unshift(ideaOptimista);
+      sincronizarIdeasDesdeState();
+
+      // Limpiar adjunto y cerrar popover
+      window._adjuntoTemporalIdea = null;
+      renderBadgeAdjuntoTemporalPopover();
+      togglePopoverCapturaRapida(false);
+
+      if (typeof mostrarToast === 'function') {
+        mostrarToast('Idea capturada en Inbox', 'success');
+      }
+
+      var resIdea = await ejecutarAccionBackend('crearidea', {
+        enunciado: enunciadoFinal,
+        detalle: detalleFinal,
+        tipoCaptura: tipoCaptura,
+        urlAdjunto: urlAdjunto,
+        estado: 'Borrador / Inbox'
+      });
+
+      if (resIdea && resIdea.success && resIdea.idea) {
+        var idx = (window.state.ideas || []).findIndex(function (i) { return (i.ID_Idea || i.id) === idTemp; });
+        if (idx !== -1) {
+          window.state.ideas[idx] = resIdea.idea;
+        }
+        sincronizarIdeasDesdeState();
+      }
+    } catch (err) {
+      console.error('[guardarCapturaRapidaIdea Error]:', err);
+      if (typeof mostrarToast === 'function') {
+        mostrarToast('Error al persistir: ' + (err.message || err), 'error');
+      }
+    } finally {
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.classList.remove('opacity-70');
+        if (lblSubmit) lblSubmit.textContent = 'Guardar';
+      }
+    }
+  }
+  window.guardarCapturaRapidaIdea = guardarCapturaRapidaIdea;
+  window.guardarCapturaRapidaTexto = guardarCapturaRapidaIdea; // Alias de retrocompatibilidad
+
+  // ----------------------------------------------------------------------------
+  // 6. VENTANA FLOTANTE ESTILO CANVAS / PIP (ARRASTRABLE Y REDIMENSIONABLE)
+  // ----------------------------------------------------------------------------
+
+  function toggleVentanaFlotanteIdeas() {
+    var win = document.getElementById('ventana-flotante-ideas');
+    if (!win) return;
+
+    var estaOculta = win.classList.contains('hidden');
+    if (estaOculta) {
+      abrirVentanaFlotanteIdeas();
+    } else {
+      cerrarVentanaFlotanteIdeas();
+    }
+  }
+  window.toggleVentanaFlotanteIdeas = toggleVentanaFlotanteIdeas;
+  window.toggleDrawerIdeas = toggleVentanaFlotanteIdeas; // Retrocompatibilidad
+
+  function abrirVentanaFlotanteIdeas() {
+    togglePopoverCapturaRapida(false);
+    var win = document.getElementById('ventana-flotante-ideas');
+    if (win) {
+      win.classList.remove('hidden');
+      win.classList.remove('is-minimized');
+      renderListaDrawerIdeas();
+      inicializarDraggableVentanaIdeas();
+    }
+  }
+  window.abrirVentanaFlotanteIdeas = abrirVentanaFlotanteIdeas;
+  window.abrirDrawerIdeas = abrirVentanaFlotanteIdeas; // Retrocompatibilidad
+
+  function cerrarVentanaFlotanteIdeas() {
+    var win = document.getElementById('ventana-flotante-ideas');
+    if (win) {
+      win.classList.add('hidden');
+    }
+  }
+  window.cerrarVentanaFlotanteIdeas = cerrarVentanaFlotanteIdeas;
+  window.cerrarDrawerIdeas = cerrarVentanaFlotanteIdeas; // Retrocompatibilidad
+
+  function toggleMinimizarVentanaIdeas() {
+    var win = document.getElementById('ventana-flotante-ideas');
+    if (!win) return;
+    win.classList.toggle('is-minimized');
+  }
+  window.toggleMinimizarVentanaIdeas = toggleMinimizarVentanaIdeas;
+
+  function toggleMaximizarVentanaIdeas() {
+    var win = document.getElementById('ventana-flotante-ideas');
+    if (!win) return;
+    win.classList.remove('is-minimized');
+    win.classList.toggle('is-maximized');
+  }
+  window.toggleMaximizarVentanaIdeas = toggleMaximizarVentanaIdeas;
+
+  function inicializarDraggableVentanaIdeas() {
+    var win = document.getElementById('ventana-flotante-ideas');
+    var header = document.getElementById('ideas-floating-drag-header');
+    if (!win || !header || header._hasDragInitialized) return;
+    header._hasDragInitialized = true;
+
+    var isDragging = false;
+    var startX, startY, initLeft, initTop;
+
+    header.addEventListener('pointerdown', function (e) {
+      if (win.classList.contains('is-maximized')) return;
+      if (e.target.closest('button')) return; // No arrastrar si se hizo clic en controles
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      var rect = win.getBoundingClientRect();
+      initLeft = rect.left;
+      initTop = rect.top;
+
+      // Anclar explícitamente left y top, desanclar right y bottom
+      win.style.left = initLeft + 'px';
+      win.style.top = initTop + 'px';
+      win.style.right = 'auto';
+      win.style.bottom = 'auto';
+
+      header.setPointerCapture(e.pointerId);
+      win.classList.add('opacity-95');
+      e.preventDefault();
+    });
+
+    header.addEventListener('pointermove', function (e) {
+      if (!isDragging) return;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+
+      var newX = Math.max(8, Math.min(window.innerWidth - win.offsetWidth - 8, initLeft + dx));
+      var newY = Math.max(8, Math.min(window.innerHeight - 50, initTop + dy));
+
+      win.style.left = newX + 'px';
+      win.style.top = newY + 'px';
+      e.preventDefault();
+    });
+
+    header.addEventListener('pointerup', function (e) {
+      if (!isDragging) return;
+      isDragging = false;
+      header.releasePointerCapture(e.pointerId);
+      win.classList.remove('opacity-95');
+      e.preventDefault();
+    });
+  }
+
+  function cambiarFiltroEstadoIdeas(filtro) {
+    ideasState.filtroEstado = filtro;
+    var tabs = ['inbox', 'incubacion', 'procesadas'];
+    tabs.forEach(function (t) {
+      var btn = document.getElementById('tab-ideas-' + t);
+      if (!btn) return;
+      if (t === filtro) {
+        btn.className = 'flex-1 text-center py-1 rounded-lg text-xs font-bold bg-indigo-600/30 text-indigo-200 border border-indigo-500/30 transition cursor-pointer';
+      } else {
+        btn.className = 'flex-1 text-center py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition cursor-pointer border border-transparent';
+      }
+    });
+    renderListaDrawerIdeas();
+  }
+  window.cambiarFiltroEstadoIdeas = cambiarFiltroEstadoIdeas;
+
+  function filtrarIdeasDrawer() {
+    var inp = document.getElementById('input-busqueda-ideas-drawer');
+    ideasState.busqueda = (inp ? inp.value : '').toLowerCase().trim();
+    renderListaDrawerIdeas();
+  }
+  window.filtrarIdeasDrawer = filtrarIdeasDrawer;
+
+  function renderListaDrawerIdeas() {
+    var cont = document.getElementById('contenedor-lista-ideas-drawer');
+    if (!cont) return;
+
+    var filtro = ideasState.filtroEstado || 'inbox';
+    var q = ideasState.busqueda || '';
+
+    var items = (ideasState.ideas || []).filter(function (i) {
+      var est = String(i.Estado || i.estado || '').trim();
+      var coincideEstado = false;
+      if (filtro === 'inbox') coincideEstado = (est === 'Borrador / Inbox');
+      else if (filtro === 'incubacion') coincideEstado = (est === 'En Incubación / Algún día');
+      else if (filtro === 'procesadas') coincideEstado = (est === 'Procesada' || est === 'Archivada');
+
+      if (!coincideEstado) return false;
+
+      if (!q) return true;
+      var enun = String(i.Enunciado_Idea || i.enunciado || '').toLowerCase();
+      var det = String(i.Detalle_Contexto || i.detalle || '').toLowerCase();
+      var tra = String(i.Transcripcion_Texto || i.transcripcion || '').toLowerCase();
+      return enun.includes(q) || det.includes(q) || tra.includes(q);
+    });
+
+    if (items.length === 0) {
+      cont.innerHTML = '<div class="py-16 text-center text-slate-500 text-xs flex flex-col items-center gap-3">' +
+        '<div class="w-12 h-12 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center justify-center text-slate-600">' +
+        '  <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">' +
+        '    <path stroke-linecap="round" stroke-linejoin="round" d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5m-6 4h6m-5 4h4"/>' +
+        '  </svg>' +
+        '</div>' +
+        '<span class="font-medium text-slate-400">No hay ideas en esta sección</span>' +
+        '</div>';
+      return;
+    }
+
+    var html = '';
+    items.forEach(function (idea) {
+      var id = idea.ID_Idea || idea.id || '';
+      var enun = idea.Enunciado_Idea || idea.enunciado || 'Idea sin título';
+      var det = idea.Detalle_Contexto || idea.detalle || '';
+      var tipo = idea.Tipo_Captura || idea.tipoCaptura || 'Texto';
+      var est = idea.Estado || idea.estado || 'Borrador / Inbox';
+      var tieneAudio = tipo === 'Audio' || (idea.URL_Adjunto_Drive && (idea.URL_Adjunto_Drive.includes('webm') || idea.URL_Adjunto_Drive.includes('mp4')));
+      var tieneFoto = tipo === 'Foto' || (idea.URL_Adjunto_Drive && (idea.URL_Adjunto_Drive.includes('jpg') || idea.URL_Adjunto_Drive.includes('png') || idea.URL_Adjunto_Drive.includes('webp')));
+      var tieneTrans = !!(idea.Transcripcion_Texto || idea.transcripcion);
+      var tieneClarif = !!(idea.Clarificacion_IA || idea.clarificacion);
+      var fecha = idea.Fecha_Captura ? new Date(idea.Fecha_Captura).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) : '';
+
+      var iconSvg = '<svg class="portal-icon-sm text-indigo-300 w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>';
+      if (tieneAudio) {
+        iconSvg = '<svg class="portal-icon-sm text-violet-400 w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>';
+      } else if (tieneFoto) {
+        iconSvg = '<svg class="portal-icon-sm text-emerald-400 w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>';
+      }
+
+      html += '<div onclick="abrirModalDetalleIdea(\'' + id + '\')" class="p-3.5 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-indigo-500/30 hover:translate-x-1 transition-all duration-150 cursor-pointer flex flex-col gap-2.5 group shadow-xs">';
+      
+      // Fila 1: ID, Tipo y Fecha
+      html += '<div class="flex items-center justify-between gap-2">';
+      html += '  <div class="flex items-center gap-2">';
+      html += '    <span class="w-7 h-7 rounded-xl bg-white/5 flex items-center justify-center shrink-0 border border-white/5 group-hover:scale-105 transition-transform">' + iconSvg + '</span>';
+      html += '    <span class="font-mono text-[10px] font-bold text-slate-400 tracking-wider">' + id + '</span>';
+      html += '  </div>';
+      html += '  <div class="flex items-center gap-2">';
+      html += '    <span class="font-mono text-[10px] text-slate-500">' + fecha + '</span>';
+      html += '  </div>';
+      html += '</div>';
+
+      // Título visible: primera línea u oración del lienzo continuo
+      var primeraLinea = String(enun).split(/\r?\n/)[0].trim() || 'Idea sin título';
+
+      // Extracción automática de #tags sobre el cuerpo total de la idea
+      var textoTotal = (enun || '') + ' ' + (det || '');
+      var tagsIdea = (typeof extraerHashtagsDeTexto === 'function') ? extraerHashtagsDeTexto(textoTotal) : [];
+
+      // Fila 2: Enunciado (primera línea)
+      html += '<p class="text-xs font-bold text-slate-200 line-clamp-2 leading-relaxed group-hover:text-indigo-200 transition-colors">' + escapeHtml(primeraLinea) + '</p>';
+
+      // Fila 2.1: Chips visuales de #tags compactos
+      if (tagsIdea.length > 0) {
+        html += '<div class="flex items-center gap-1.5 flex-wrap">';
+        tagsIdea.forEach(function (tag) {
+          html += '<span class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium">' + escapeHtml(tag) + '</span>';
+        });
+        html += '</div>';
+      }
+
+      // Si es audio: mini barra de progreso decorativa
+      if (tieneAudio) {
+        html += '<div class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-black/30 border border-white/5 text-[11px] text-violet-300">';
+        html += '  <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+        html += '  <div class="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">';
+        html += '    <div class="w-2/3 h-full bg-violet-400 rounded-full"></div>';
+        html += '  </div>';
+        html += '  <span class="font-mono text-[9px] text-slate-400">Audio</span>';
+        html += '</div>';
+      }
+
+      // Si es foto: thumbnail sutil
+      if (tieneFoto && idea.URL_Adjunto_Drive) {
+        html += '<div class="flex items-center gap-2 text-[10px] text-emerald-400">';
+        html += '  <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>';
+        html += '  <span>Foto adjunta</span>';
+        html += '</div>';
+      }
+
+      // Fila 3: Píldoras de Transcripción / IA / Destino
+      html += '<div class="flex items-center gap-1.5 flex-wrap pt-0.5">';
+      if (tieneTrans) {
+        html += '<span class="text-[9.5px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">Transcrito</span>';
+      }
+      if (tieneClarif) {
+        html += '<span class="text-[9.5px] font-bold px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 flex items-center gap-1"><svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg> Clarificado</span>';
+      }
+      if (idea.Entidad_Convertida) {
+        html += '<span class="text-[9.5px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">→ ' + escapeHtml(idea.Entidad_Convertida) + ' (' + escapeHtml(idea.ID_Entidad_Destino || '') + ')</span>';
+      }
+      html += '</div>';
+
+      html += '</div>';
+    });
+
+    cont.innerHTML = html;
+  }
+  window.renderListaDrawerIdeas = renderListaDrawerIdeas;
+
+  // ----------------------------------------------------------------------------
+  // 7. MODAL DETALLE DE LA IDEA (ZEN TIER 2 ANIMADO)
+  // ----------------------------------------------------------------------------
+
+  function abrirModalDetalleIdeaAnimado() {
+    var modal = document.getElementById('modal-detalle-idea');
+    var card = document.getElementById('modal-detalle-idea-card');
+    if (!modal || !card) return;
+
+    modal.classList.remove('hidden');
+    setTimeout(function () {
+      card.classList.remove('scale-95', 'opacity-0');
+      card.classList.add('scale-100', 'opacity-100');
+    }, 10);
+  }
+
+  function cerrarModalDetalleIdea() {
+    var modal = document.getElementById('modal-detalle-idea');
+    var card = document.getElementById('modal-detalle-idea-card');
+    if (modal && card) {
+      card.classList.remove('scale-100', 'opacity-100');
+      card.classList.add('scale-95', 'opacity-0');
+      setTimeout(function () {
+        modal.classList.add('hidden');
+        ideasState.ideaActiva = null;
+      }, 200);
+    }
+  }
+  window.cerrarModalDetalleIdea = cerrarModalDetalleIdea;
+
+  function abrirModalDetalleIdeaNueva() {
+    cerrarDrawerIdeas();
+    var ideaNueva = {
+      ID_Idea: 'NUEVA',
+      Enunciado_Idea: '',
+      Detalle_Contexto: '',
+      Tipo_Captura: 'Texto',
+      URL_Adjunto_Drive: '',
+      Transcripcion_Texto: '',
+      Clarificacion_IA: '',
+      Estado: 'Borrador / Inbox'
+    };
+    poblarModalDetalleIdea(ideaNueva);
+    abrirModalDetalleIdeaAnimado();
+  }
+  window.abrirModalDetalleIdeaNueva = abrirModalDetalleIdeaNueva;
+
+  function abrirModalDetalleIdea(idIdea) {
+    cerrarDrawerIdeas();
+    var idea = (ideasState.ideas || []).find(function (i) {
+      return String(i.ID_Idea || i.id || '').trim() === String(idIdea).trim();
+    });
+    if (!idea) {
+      if (typeof mostrarToast === 'function') mostrarToast('Idea no encontrada', 'error');
+      return;
+    }
+    ideasState.ideaActiva = idea;
+    poblarModalDetalleIdea(idea);
+    abrirModalDetalleIdeaAnimado();
+  }
+  window.abrirModalDetalleIdea = abrirModalDetalleIdea;
+
+  function poblarModalDetalleIdea(idea) {
+    var idInput = document.getElementById('modal-idea-id');
+    if (idInput) idInput.value = idea.ID_Idea || idea.id || '';
+
+    var badgeId = document.getElementById('modal-idea-id-badge');
+    if (badgeId) badgeId.textContent = idea.ID_Idea || 'NUEVA IDEA';
+
+    var badgeEstadoLabel = document.getElementById('modal-idea-estado-label');
+    if (badgeEstadoLabel) badgeEstadoLabel.textContent = idea.Estado || 'Borrador / Inbox';
+
+    var badgeTipoLabel = document.getElementById('modal-idea-tipo-label');
+    if (badgeTipoLabel) badgeTipoLabel.textContent = idea.Tipo_Captura || 'Texto';
+
+    // Reconstrucción y poblamiento del Lienzo Único Continuo (Single Body Canvas)
+    var textoContinuo = reconstruirCuerpoUnicoIdea(idea.Enunciado_Idea || idea.enunciado || '', idea.Detalle_Contexto || idea.detalle || '');
+
+    var inpCuerpo = document.getElementById('modal-idea-cuerpo');
+    if (inpCuerpo) {
+      inpCuerpo.value = textoContinuo;
+      setTimeout(function () {
+        inpCuerpo.style.height = 'auto';
+        inpCuerpo.style.height = Math.max(160, inpCuerpo.scrollHeight) + 'px';
+      }, 50);
+    }
+
+    // Sincronización transparente de retrocompatibilidad
+    var inpEnun = document.getElementById('modal-idea-enunciado');
+    if (inpEnun) inpEnun.value = idea.Enunciado_Idea || idea.enunciado || '';
+    var txtDet = document.getElementById('modal-idea-detalle');
+    if (txtDet) txtDet.value = idea.Detalle_Contexto || idea.detalle || '';
+    var aliasDet = document.getElementById('detalle-idea-contexto');
+    if (aliasDet) aliasDet.value = idea.Detalle_Contexto || idea.detalle || '';
+
+    var txtTrans = document.getElementById('modal-idea-transcripcion');
+    if (txtTrans) txtTrans.value = idea.Transcripcion_Texto || idea.transcripcion || '';
+
+    // Integración compacta y minimalista de evidencia multimedia (Sin filas toscas)
+    var audCont = document.getElementById('modal-idea-audio-container');
+    var audPlayer = document.getElementById('modal-idea-audio-player');
+    var fotCont = document.getElementById('modal-idea-foto-container');
+    var fotImg = document.getElementById('modal-idea-foto-img');
+    var chipDoc = document.getElementById('modal-idea-archivo-chip');
+    var chipNom = document.getElementById('modal-idea-archivo-nombre');
+    var linkAdj = document.getElementById('modal-idea-adjunto-enlace');
+
+    // Ocultar todos por defecto para no reservar espacio en blanco
+    if (audCont) { audCont.classList.add('hidden'); audCont.classList.remove('flex'); }
+    if (fotCont) { fotCont.classList.add('hidden'); fotCont.classList.remove('flex'); }
+    if (chipDoc) { chipDoc.classList.add('hidden'); chipDoc.classList.remove('flex'); }
+
+    var urlAdj = idea.URL_Adjunto_Drive || idea.urlAdjunto || '';
+    var tipo = String(idea.Tipo_Captura || idea.tipoCaptura || '').toLowerCase();
+
+    if (urlAdj) {
+      if (linkAdj) linkAdj.href = urlAdj;
+
+      var esAud = tipo === 'audio' || urlAdj.includes('.webm') || urlAdj.includes('.mp4') || urlAdj.includes('.ogg') || urlAdj.includes('.wav') || urlAdj.includes('audio');
+      var esImg = tipo === 'foto' || tipo === 'imagen' || urlAdj.includes('.jpg') || urlAdj.includes('.jpeg') || urlAdj.includes('.png') || urlAdj.includes('.webp') || urlAdj.includes('image');
+
+      if (esAud) {
+        if (audCont) {
+          audCont.classList.remove('hidden');
+          audCont.classList.add('flex');
+        }
+        if (audPlayer) {
+          audPlayer.src = urlAdj;
+        }
+      } else if (esImg) {
+        if (fotCont) {
+          fotCont.classList.remove('hidden');
+          fotCont.classList.add('flex');
+        }
+        if (fotImg) {
+          fotImg.src = urlAdj;
+        }
+      } else {
+        if (chipDoc) {
+          chipDoc.classList.remove('hidden');
+          chipDoc.classList.add('flex');
+        }
+        if (chipNom) {
+          var cleanName = 'Archivo Adjunto';
+          try {
+            var urlParts = urlAdj.split('/');
+            cleanName = urlParts[urlParts.length - 1] || 'Archivo Adjunto';
+          } catch (e) { }
+          chipNom.textContent = cleanName;
+        }
+      }
+    }
+
+    // Resetear campo de consulta de IA
+    var pregInp = document.getElementById('input-pregunta-ia-idea') || document.getElementById('modal-idea-pregunta-usuario');
+    if (pregInp) pregInp.value = '';
+
+    // Clarificación IA
+    renderBentoClarificacionIA(idea.Clarificacion_IA || idea.clarificacion);
+  }
+
+  function abrirZoomFotoIdea() {
+    var fotImg = document.getElementById('modal-idea-foto-img');
+    var lightbox = document.getElementById('modal-idea-lightbox');
+    var lightboxImg = document.getElementById('modal-idea-lightbox-img');
+    if (!fotImg || !fotImg.src) return;
+
+    if (lightbox && lightboxImg) {
+      lightboxImg.src = fotImg.src;
+      lightbox.classList.remove('hidden');
+    } else {
+      window.open(fotImg.src, '_blank');
+    }
+  }
+  window.abrirZoomFotoIdea = abrirZoomFotoIdea;
+
+  function renderBentoClarificacionIA(clarif) {
+    var cont = document.getElementById('modal-idea-clarificacion-resultado');
+    if (!cont) return;
+
+    if (!clarif) {
+      cont.innerHTML = '<div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-400 text-center text-xs">' +
+        'Aún no has clarificado esta idea. Puedes formular una duda libre o solicitar un análisis de viabilidad, costos y riesgos.' +
+        '</div>';
+      return;
+    }
+
+    var data = (typeof clarif === 'string') ? null : clarif;
+    if (typeof clarif === 'string') {
+      try { data = JSON.parse(clarif); } catch (e) { data = null; }
+    }
+
+    if (!data) {
+      cont.innerHTML = '<div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 text-xs leading-relaxed whitespace-pre-wrap">' +
+        escapeHtml(String(clarif)) +
+        '</div>';
+      return;
+    }
+
+    var viab = data.evaluacionViabilidad || {};
+    var fricClase = viab.nivelFriccion === 'ALTO' ? 'text-rose-400 bg-rose-950/60 border-rose-800/60' :
+                    (viab.nivelFriccion === 'MEDIO' ? 'text-amber-400 bg-amber-950/60 border-amber-800/60' : 'text-emerald-400 bg-emerald-950/60 border-emerald-800/60');
+
+    var html = '<div class="space-y-3">';
+    
+    // 1. Desglose Esencial
+    html += '<div class="p-3 rounded-xl bg-slate-900/80 border border-indigo-900/40">';
+    html += '  <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Desglose Esencial</div>';
+    html += '  <p class="text-xs text-slate-200 leading-relaxed">' + escapeHtml(data.desgloseEsencial || '') + '</p>';
+    html += '</div>';
+
+    // 2. Bento Grid: Viabilidad + Vía Sugerida
+    html += '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">';
+    
+    // Viabilidad
+    html += '<div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between gap-2">';
+    html += '  <div>';
+    html += '    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Viabilidad & Fricción</div>';
+    html += '    <div class="flex items-center gap-2 mb-1.5">';
+    html += '      <span class="text-xs font-bold text-slate-100">' + (viab.esRealista ? '[Viable]' : '[Calibrar]') + '</span>';
+    html += '      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + fricClase + '">Fricción ' + escapeHtml(viab.nivelFriccion || 'MEDIA') + '</span>';
+    html += '    </div>';
+    html += '    <p class="text-[11px] text-slate-400 leading-tight"><strong class="text-slate-300">Costos Ocultos:</strong> ' + escapeHtml(viab.costosOcultos || 'No identificados') + '</p>';
+    html += '  </div>';
+    html += '  <div class="font-mono text-[10px] text-indigo-400">Tiempo estimado: ' + escapeHtml(viab.tiempoEstimado || 'Variable') + '</div>';
+    html += '</div>';
+
+    // Vía Sugerida
+    html += '<div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between gap-2">';
+    html += '  <div>';
+    html += '    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Ruta Sugerida</div>';
+    html += '    <div class="text-sm font-black text-indigo-300 mb-1">' + escapeHtml(data.entidadSugerida || 'TAREA') + '</div>';
+    html += '    <p class="text-[11px] text-slate-400 leading-tight">' + escapeHtml(data.justificacionEntidad || '') + '</p>';
+    html += '  </div>';
+    html += '</div>';
+
+    html += '</div>';
+
+    // 3. Respuesta a la Duda Libre (si existe)
+    if (data.respuestaDudaUsuario) {
+      html += '<div class="p-3 rounded-xl bg-violet-950/30 border border-violet-800/40">';
+      html += '  <div class="text-[10px] font-bold text-violet-300 uppercase tracking-wider mb-1">Respuesta a tu Consulta</div>';
+      html += '  <p class="text-xs text-slate-200 leading-relaxed">' + escapeHtml(data.respuestaDudaUsuario) + '</p>';
+      html += '</div>';
+    }
+
+    // 4. Primeros Pasos
+    if (Array.isArray(data.primerosPasosAccionables) && data.primerosPasosAccionables.length > 0) {
+      html += '<div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">';
+      html += '  <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Primeros Pasos para Desbloquear</div>';
+      html += '  <ul class="space-y-1 text-xs text-slate-300">';
+      data.primerosPasosAccionables.forEach(function (paso, pIdx) {
+        html += '    <li class="flex items-start gap-1.5"><span class="font-mono text-indigo-400">' + (pIdx + 1) + '.</span> <span>' + escapeHtml(paso) + '</span></li>';
+      });
+      html += '  </ul>';
+      html += '</div>';
+    }
+
+    html += '</div>';
+    cont.innerHTML = html;
+  }
+
+  function guardarCambiosModalIdea() {
+    var idInput = document.getElementById('modal-idea-id');
+    var id = idInput ? idInput.value : '';
+
+    var cuerpoInp = document.getElementById('modal-idea-cuerpo');
+    var textoCompleto = cuerpoInp ? cuerpoInp.value.trim() : '';
+
+    // Fallback defensivo si modal-idea-cuerpo no estuviera presente
+    if (!textoCompleto) {
+      var enunFallbackInp = document.getElementById('modal-idea-enunciado');
+      var detFallbackInp = document.getElementById('modal-idea-detalle') || document.getElementById('detalle-idea-contexto');
+      var enunFallback = enunFallbackInp ? enunFallbackInp.value.trim() : '';
+      var detFallback = detFallbackInp ? detFallbackInp.value.trim() : '';
+      textoCompleto = reconstruirCuerpoUnicoIdea(enunFallback, detFallback);
+    }
+
+    if (!textoCompleto) {
+      if (typeof mostrarToast === 'function') mostrarToast('Escribe el contenido de la idea antes de guardar', 'warning');
+      if (cuerpoInp) cuerpoInp.focus();
+      return;
+    }
+
+    // Desglose del cuerpo único fluido: primera línea para Enunciado (Col B), resto para Detalle (Col C)
+    var desglosado = desglosarCuerpoUnicoIdea(textoCompleto);
+    var enun = desglosado.enunciado;
+    var det = desglosado.detalle;
+
+    // Sincronizar inputs ocultos
+    var inpEnun = document.getElementById('modal-idea-enunciado');
+    if (inpEnun) inpEnun.value = enun;
+    var inpDet = document.getElementById('modal-idea-detalle');
+    if (inpDet) inpDet.value = det;
+    var aliasDet = document.getElementById('detalle-idea-contexto');
+    if (aliasDet) aliasDet.value = det;
+
+    var traInp = document.getElementById('modal-idea-transcripcion');
+    var tra = traInp ? traInp.value : '';
+
+    if (!id || id === 'NUEVA') {
+      ejecutarAccionBackend('crearidea', {
+        enunciado: enun,
+        detalle: det,
+        transcripcion: tra,
+        tipoCaptura: 'Texto'
+      }).then(function (res) {
+        if (res && res.success && res.idea) {
+          if (!window.state.ideas) window.state.ideas = [];
+          window.state.ideas.unshift(res.idea);
+          sincronizarIdeasDesdeState();
+          cerrarModalDetalleIdea();
+          if (typeof mostrarToast === 'function') mostrarToast('Idea guardada con éxito', 'success');
+        }
+      });
+      return;
+    }
+
+    ejecutarAccionBackend('actualizaridea', {
+      idIdea: id,
+      enunciado: enun,
+      detalle: det,
+      transcripcion: tra
+    }).then(function (res) {
+      if (res && res.success) {
+        var idx = (window.state.ideas || []).findIndex(function (i) { return (i.ID_Idea || i.id) === id; });
+        if (idx !== -1) {
+          window.state.ideas[idx].Enunciado_Idea = enun;
+          window.state.ideas[idx].Detalle_Contexto = det;
+          window.state.ideas[idx].Transcripcion_Texto = tra;
+        }
+        sincronizarIdeasDesdeState();
+        cerrarModalDetalleIdea();
+        if (typeof mostrarToast === 'function') mostrarToast('Cambios guardados', 'success');
+      }
+    });
+  }
+  window.guardarCambiosModalIdea = guardarCambiosModalIdea;
+
+  function moverIdeaIncubacionModal() {
+    var id = document.getElementById('modal-idea-id').value;
+    if (!id || id === 'NUEVA') return;
+
+    ejecutarAccionBackend('moverideaincubacion', { idIdea: id })
+      .then(function (res) {
+        if (res && res.success) {
+          var idx = (window.state.ideas || []).findIndex(function (i) { return (i.ID_Idea || i.id) === id; });
+          if (idx !== -1) window.state.ideas[idx].Estado = 'En Incubación / Algún día';
+          sincronizarIdeasDesdeState();
+          cerrarModalDetalleIdea();
+          if (typeof mostrarToast === 'function') mostrarToast('Idea movida a Incubación', 'info');
+        }
+      });
+  }
+  window.moverIdeaIncubacionModal = moverIdeaIncubacionModal;
+
+  function eliminarIdeaModal() {
+    var id = document.getElementById('modal-idea-id').value;
+    if (!id || id === 'NUEVA') {
+      cerrarModalDetalleIdea();
+      return;
+    }
+
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        title: '¿Eliminar esta idea?',
+        text: 'La captura se eliminará de forma irreversible de BBDD_Ideas.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#e11d48',
+        background: '#0D1526',
+        color: '#F8FAFC'
+      }).then(function (result) {
+        if (result.isConfirmed) {
+          ejecutarAccionBackend('eliminaridea', { idIdea: id })
+            .then(function (res) {
+              if (res && res.success) {
+                window.state.ideas = (window.state.ideas || []).filter(function (i) { return (i.ID_Idea || i.id) !== id; });
+                sincronizarIdeasDesdeState();
+                cerrarModalDetalleIdea();
+                if (typeof mostrarToast === 'function') mostrarToast('Idea eliminada', 'success');
+              }
+            });
+        }
+      });
+    } else {
+      if (confirm('¿Eliminar idea?')) {
+        ejecutarAccionBackend('eliminaridea', { idIdea: id }).then(function () {
+          window.state.ideas = (window.state.ideas || []).filter(function (i) { return (i.ID_Idea || i.id) !== id; });
+          sincronizarIdeasDesdeState();
+          cerrarModalDetalleIdea();
+        });
+      }
+    }
+  }
+  window.eliminarIdeaModal = eliminarIdeaModal;
+
+  function transcribirAudioModalIdea() {
+    var id = document.getElementById('modal-idea-id').value;
+    var btn = document.getElementById('btn-transcribir-audio');
+    var lbl = document.getElementById('label-transcribir-audio');
+    var icon = document.getElementById('icon-transcribir-audio');
+
+    var idea = ideasState.ideaActiva || {};
+    var urlAdj = idea.URL_Adjunto_Drive || idea.urlAdjunto || '';
+    var tipo = String(idea.Tipo_Captura || idea.tipoCaptura || '').toLowerCase();
+
+    var esAud = tipo === 'audio' || urlAdj.includes('.webm') || urlAdj.includes('.mp4') || urlAdj.includes('.ogg') || urlAdj.includes('.wav') || urlAdj.includes('audio');
+    var esImg = tipo === 'foto' || tipo === 'imagen' || urlAdj.includes('.jpg') || urlAdj.includes('.jpeg') || urlAdj.includes('.png') || urlAdj.includes('.webp') || urlAdj.includes('image');
+
+    // Validación 1: Si no tiene archivo o es solo documento plano / texto
+    if (!urlAdj || (!esAud && !esImg)) {
+      if (typeof mostrarToast === 'function') {
+        mostrarToast('Esta idea no contiene audio para transcribir', 'warning');
+      }
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (lbl) lbl.textContent = esImg ? 'Extrayendo texto de imagen...' : 'Transcribiendo con IA...';
+    if (icon) icon.classList.add('animate-spin');
+
+    ejecutarAccionBackend('transcribiraudioidea', {
+      idIdea: id,
+      urlAdjunto: urlAdj
+    })
+    .then(function (res) {
+      if (res && res.success && res.transcripcion) {
+        var txtTrans = document.getElementById('modal-idea-transcripcion');
+        if (txtTrans) txtTrans.value = res.transcripcion;
+        if (ideasState.ideaActiva) {
+          ideasState.ideaActiva.Transcripcion_Texto = res.transcripcion;
+          ideasState.ideaActiva.transcripcion = res.transcripcion;
+        }
+        var idx = (window.state.ideas || []).findIndex(function (i) { return (i.ID_Idea || i.id) === id; });
+        if (idx !== -1) {
+          window.state.ideas[idx].Transcripcion_Texto = res.transcripcion;
+          window.state.ideas[idx].transcripcion = res.transcripcion;
+        }
+        if (typeof mostrarToast === 'function') {
+          mostrarToast(esImg ? 'Texto de imagen extraído con IA' : 'Audio transcripto con éxito', 'success');
+        }
+      } else {
+        throw new Error((res && res.error) || 'Fallo en transcripción');
+      }
+    })
+    .catch(function (err) {
+      console.error('[transcribirAudioModalIdea Error]:', err);
+      if (typeof mostrarToast === 'function') {
+        mostrarToast('Error de transcripción: ' + err.message, 'error');
+      }
+    })
+    .finally(function () {
+      if (btn) btn.disabled = false;
+      if (lbl) lbl.textContent = 'Transcribir a Texto';
+      if (icon) icon.classList.remove('animate-spin');
+    });
+  }
+  window.transcribirAudioModalIdea = transcribirAudioModalIdea;
+
+  async function clarificarConIAModalIdea() {
+    var idInput = document.getElementById('modal-idea-id');
+    var id = idInput ? idInput.value : '';
+
+    var cuerpoInp = document.getElementById('modal-idea-cuerpo');
+    var textoCompleto = cuerpoInp ? cuerpoInp.value.trim() : '';
+    if (!textoCompleto) {
+      var enunFallbackInp = document.getElementById('modal-idea-enunciado');
+      var detFallbackInp = document.getElementById('detalle-idea-contexto') || document.getElementById('modal-idea-detalle');
+      var enunFallback = enunFallbackInp ? enunFallbackInp.value.trim() : '';
+      var detFallback = detFallbackInp ? detFallbackInp.value.trim() : '';
+      textoCompleto = reconstruirCuerpoUnicoIdea(enunFallback, detFallback);
+    }
+
+    var desglosado = desglosarCuerpoUnicoIdea(textoCompleto);
+    var enun = desglosado.enunciado;
+    var det = desglosado.detalle;
+
+    var traInp = document.getElementById('modal-idea-transcripcion');
+    var tra = traInp ? traInp.value.trim() : '';
+
+    var pregInp = document.getElementById('input-pregunta-ia-idea') || document.getElementById('modal-idea-pregunta-usuario');
+    var preg = pregInp ? pregInp.value.trim() : '';
+
+    var btn = document.getElementById('btn-clarificar-idea-ia') || document.getElementById('btn-clarificar-ia');
+    var lbl = document.getElementById('label-clarificar-ia');
+    var icon = document.getElementById('icon-clarificar-ia');
+
+    if (!enun.trim()) {
+      if (typeof mostrarToast === 'function') mostrarToast('Ingresa al menos una idea para clarificar', 'warning');
+      if (cuerpoInp) cuerpoInp.focus();
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    if (lbl) lbl.textContent = 'Consultando a Gemini...';
+    if (icon) icon.classList.add('animate-spin');
+
+    try {
+      var res = await ejecutarAccionBackend('clarificarideaia', {
+        idIdea: id,
+        enunciado: enun,
+        detalle: det,
+        transcripcion: tra,
+        preguntaUsuario: preg
+      });
+
+      if (res && res.success && res.data) {
+        renderBentoClarificacionIA(res.data);
+        if (ideasState.ideaActiva) {
+          ideasState.ideaActiva.Clarificacion_IA = res.data;
+          ideasState.ideaActiva.clarificacion = res.data;
+        }
+        var idx = (window.state.ideas || []).findIndex(function (i) { return (i.ID_Idea || i.id) === id; });
+        if (idx !== -1) {
+          window.state.ideas[idx].Clarificacion_IA = res.data;
+          window.state.ideas[idx].clarificacion = res.data;
+        }
+        if (typeof mostrarToast === 'function') mostrarToast('Idea clarificada con Gemini', 'success');
+      } else {
+        throw new Error((res && res.error) || 'Fallo en clarificación');
+      }
+    } catch (err) {
+      console.error('[clarificarConIAModalIdea Error]:', err);
+      if (typeof mostrarToast === 'function') mostrarToast('Error al clarificar: ' + (err.message || err), 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+      if (lbl) lbl.textContent = 'Clarificar con IA';
+      if (icon) icon.classList.remove('animate-spin');
+    }
+  }
+  window.clarificarConIAModalIdea = clarificarConIAModalIdea;
+
+  // ----------------------------------------------------------------------------
+  // 8. TRIAJE Y CONVERSIÓN A ENTIDADES VIVAS
+  // ----------------------------------------------------------------------------
+
+  function prepararContextoIdeaParaEntidad() {
+    var idInput = document.getElementById('modal-idea-id');
+    var id = idInput ? idInput.value : '';
+
+    var cuerpoInp = document.getElementById('modal-idea-cuerpo');
+    var textoCompleto = cuerpoInp ? cuerpoInp.value.trim() : '';
+    if (!textoCompleto) {
+      var enunFallbackInp = document.getElementById('modal-idea-enunciado');
+      var detFallbackInp = document.getElementById('modal-idea-detalle') || document.getElementById('detalle-idea-contexto');
+      var enunFallback = enunFallbackInp ? enunFallbackInp.value.trim() : '';
+      var detFallback = detFallbackInp ? detFallbackInp.value.trim() : '';
+      textoCompleto = reconstruirCuerpoUnicoIdea(enunFallback, detFallback);
+    }
+
+    var desglosado = desglosarCuerpoUnicoIdea(textoCompleto);
+    var enun = desglosado.enunciado;
+    var det = desglosado.detalle;
+
+    var traInp = document.getElementById('modal-idea-transcripcion');
+    var tra = traInp ? traInp.value : '';
+
+    window._ideaEnConversionId = id;
+
+    var notasCompuestas = det;
+    if (tra) {
+      notasCompuestas += (notasCompuestas ? '\n\n' : '') + '--- Transcripción de Audio ---\n' + tra;
+    }
+    if (ideasState.ideaActiva && ideasState.ideaActiva.Clarificacion_IA) {
+      var cData = ideasState.ideaActiva.Clarificacion_IA;
+      if (typeof cData === 'object') {
+        notasCompuestas += (notasCompuestas ? '\n\n' : '') + '--- Clarificación IA ---\n' +
+          '• Desglose: ' + (cData.desgloseEsencial || '') + '\n' +
+          '• Vía Sugerida: ' + (cData.entidadSugerida || '') + ' (' + (cData.justificacionEntidad || '') + ')';
+      }
+    }
+
+    return {
+      id: id,
+      enunciado: enun,
+      notas: notasCompuestas
+    };
+  }
+
+  function convertirIdeaATarea() {
+    var ctx = prepararContextoIdeaParaEntidad();
+    cerrarModalDetalleIdea();
+
+    if (typeof abrirModalCrearTareaFlow === 'function') {
+      abrirModalCrearTareaFlow('', '', '02_Por_Hacer');
+      var tit = document.getElementById('task-flow-titulo');
+      if (tit) tit.value = ctx.enunciado;
+      var nts = document.getElementById('task-flow-notas');
+      if (nts) {
+        nts.value = ctx.notas;
+        var secNotas = document.getElementById('task-flow-notas-section');
+        if (secNotas) secNotas.classList.remove('hidden');
+      }
+    } else {
+      if (typeof mostrarToast === 'function') mostrarToast('Modal de Tareas no disponible', 'warning');
+    }
+  }
+  window.convertirIdeaATarea = convertirIdeaATarea;
+
+  function convertirIdeaAProyecto() {
+    var ctx = prepararContextoIdeaParaEntidad();
+    cerrarModalDetalleIdea();
+
+    if (typeof abrirWizardProyecto === 'function') {
+      abrirWizardProyecto();
+      var nom = document.getElementById('wiz-nombreProyecto');
+      if (nom) nom.value = ctx.enunciado;
+      var desc = document.getElementById('wiz-descripcion');
+      if (desc) desc.value = ctx.notas;
+    } else {
+      if (typeof mostrarToast === 'function') mostrarToast('Wizard de Proyectos no disponible', 'warning');
+    }
+  }
+  window.convertirIdeaAProyecto = convertirIdeaAProyecto;
+
+  function convertirIdeaAHabito() {
+    var ctx = prepararContextoIdeaParaEntidad();
+    cerrarModalDetalleIdea();
+
+    if (typeof abrirModalCrearActividadPersonalPorCategoria === 'function') {
+      abrirModalCrearActividadPersonalPorCategoria('SALUD_DEPORTE');
+      var tit = document.getElementById('act-flow-titulo');
+      if (tit) tit.value = ctx.enunciado;
+      var nts = document.getElementById('act-flow-notas');
+      if (nts) {
+        nts.value = ctx.notas;
+        var secNotas = document.getElementById('act-flow-notas-section');
+        if (secNotas) secNotas.classList.remove('hidden');
+      }
+    } else {
+      if (typeof mostrarToast === 'function') mostrarToast('Modal de Hábitos no disponible', 'warning');
+    }
+  }
+  window.convertirIdeaAHabito = convertirIdeaAHabito;
+
+  function convertirIdeaANota() {
+    var ctx = prepararContextoIdeaParaEntidad();
+    cerrarModalDetalleIdea();
+
+    if (typeof abrirModalNuevaNota === 'function') {
+      abrirModalNuevaNota();
+      var tit = document.getElementById('modal-nota-titulo');
+      if (tit) tit.value = ctx.enunciado;
+      var con = document.getElementById('modal-nota-contenido');
+      if (con) con.value = ctx.notas;
+    } else {
+      if (typeof mostrarToast === 'function') mostrarToast('Modal de Notas no disponible', 'warning');
+    }
+  }
+  window.convertirIdeaANota = convertirIdeaANota;
+
+  /**
+   * Hook global reactivo invocado al guardar exitosamente una entidad destino.
+   * Si existía una idea en proceso de conversión, la marca como 'Procesada' atómicamente.
+   */
+  function notificarEntidadCreadaDesdeIdea(entidad, idDestino) {
+    var idIdea = window._ideaEnConversionId;
+    if (!idIdea || idIdea === 'TEMP' || idIdea === 'NUEVA') return;
+
+    window._ideaEnConversionId = null;
+
+    ejecutarAccionBackend('marcarideaprocesada', {
+      idIdea: idIdea,
+      entidad: entidad,
+      idDestino: idDestino
+    })
+    .then(function (res) {
+      if (res && res.success) {
+        var idx = (window.state.ideas || []).findIndex(function (i) { return (i.ID_Idea || i.id) === idIdea; });
+        if (idx !== -1) {
+          window.state.ideas[idx].Estado = 'Procesada';
+          window.state.ideas[idx].Entidad_Convertida = entidad;
+          window.state.ideas[idx].ID_Entidad_Destino = idDestino;
+          window.state.ideas[idx].Fecha_Procesada = new Date().toISOString();
+        }
+        sincronizarIdeasDesdeState();
+        if (typeof mostrarToast === 'function') {
+          mostrarToast('Idea procesada y convertida a ' + entidad, 'success');
+        }
+      }
+    })
+    .catch(function (err) {
+      console.warn('[notificarEntidadCreadaDesdeIdea Error]:', err);
+    });
+  }
+  window.notificarEntidadCreadaDesdeIdea = notificarEntidadCreadaDesdeIdea;
+
+  // ----------------------------------------------------------------------------
+  // 9. DRAG & DROP DESACOPLADO PARA LA MICRO-CÁPSULA EN DESKTOP
+  // ----------------------------------------------------------------------------
+
+  function inicializarDraggableBurbujaIdeas() {
+    var bubbleCont = document.getElementById('widget-ideas-bubble-container');
+    var dragHandle = document.getElementById('widget-ideas-drag-handle') || document.getElementById('handle-widget-ideas-drag');
+    if (!bubbleCont) return;
+
+    // Restaurar posición persistida en localStorage si existe
+    try {
+      var savedPos = localStorage.getItem('pmo_widget_ideas_pos');
+      if (savedPos && window.innerWidth >= 768) {
+        var pos = JSON.parse(savedPos);
+        bubbleCont.style.left = pos.left + 'px';
+        bubbleCont.style.top = pos.top + 'px';
+        bubbleCont.style.right = 'auto';
+        bubbleCont.style.bottom = 'auto';
+      }
+    } catch (ePos) { }
+
+    if (!dragHandle || dragHandle._hasPillDragInit) return;
+    dragHandle._hasPillDragInit = true;
+
+    var isDragging = false;
+    var startX, startY, initX, initY;
+
+    dragHandle.addEventListener('pointerdown', function (e) {
+      if (window.innerWidth < 768) return; // Solo draggable en desktop
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      var rect = bubbleCont.getBoundingClientRect();
+      initX = rect.left;
+      initY = rect.top;
+      dragHandle.setPointerCapture(e.pointerId);
+      bubbleCont.classList.add('opacity-90', 'scale-105');
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    dragHandle.addEventListener('pointermove', function (e) {
+      if (!isDragging) return;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+
+      var newX = Math.max(10, Math.min(window.innerWidth - 180, initX + dx));
+      var newY = Math.max(10, Math.min(window.innerHeight - 60, initY + dy));
+      bubbleCont.style.left = newX + 'px';
+      bubbleCont.style.top = newY + 'px';
+      bubbleCont.style.right = 'auto';
+      bubbleCont.style.bottom = 'auto';
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    dragHandle.addEventListener('pointerup', function (e) {
+      if (!isDragging) return;
+      isDragging = false;
+      try {
+        dragHandle.releasePointerCapture(e.pointerId);
+      } catch (eRel) { }
+      bubbleCont.classList.remove('opacity-90', 'scale-105');
+
+      try {
+        var rect = bubbleCont.getBoundingClientRect();
+        localStorage.setItem('pmo_widget_ideas_pos', JSON.stringify({ left: rect.left, top: rect.top }));
+      } catch (eSave) { }
+
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  }
+
+  // Helper de escape HTML
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // Inicialización en DOMContentLoaded
+  document.addEventListener('DOMContentLoaded', function () {
+    inicializarDraggableBurbujaIdeas();
+    sincronizarIdeasDesdeState();
+  });
+
+})();
+</script>

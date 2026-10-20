@@ -1,0 +1,926 @@
+  <div id="modal-editar-proyecto"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-editar-proyecto-card" class="portal-surface elevation-3 w-full max-w-4xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+
+      <!-- Drag handle móvil -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <!-- Header del Modal -->
+      <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-xs">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-indigo-600/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 flex items-center justify-center shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-black text-slate-800 dark:text-slate-100 text-sm md:text-base">Editar Proyecto</h3>
+            <span id="modal-edit-proy-badge-notas" class="text-[11px] text-slate-500 dark:text-slate-400">Ajusta parámetros estratégicos, ciclo de vida y criterios de gobernanza</span>
+          </div>
+        </div>
+        <button type="button" onclick="closeModal('modal-editar-proyecto')"
+          class="btn-portal-icon" title="Cerrar">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Formulario Bento Grid en 3 Cuadrantes -->
+      <form id="form-editar-proyecto" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar text-xs">
+        <input type="hidden" id="edit-idProyecto">
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+          
+          <!-- CUADRANTE 1: IDENTIDAD & CICLO DE VIDA (col-span-12 md:col-span-4) -->
+          <div class="md:col-span-4 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 space-y-3">
+            <div class="flex items-center gap-1.5 pb-2 border-b border-slate-200/60 dark:border-slate-800/60">
+              <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+              <h4 class="font-extrabold text-[11px] uppercase tracking-wider text-slate-700 dark:text-slate-300">1. Identidad & Ciclo</h4>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nombre del Proyecto</label>
+              <input type="text" id="edit-nombreProyecto" required class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Estado del Proyecto</label>
+              <select id="edit-estadoProyecto" class="w-full border dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800">
+                <option value="01_Backlog">01_Backlog</option>
+                <option value="02_Planificado">02_Planificado</option>
+                <option value="03_En_Ejecucion">03_En_Ejecucion</option>
+                <option value="04_En_Pausa">04_En_Pausa</option>
+                <option value="06_Cerrado">06_Cerrado</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Arquetipo de Ciclo</label>
+              <select id="edit-arquetipoProyecto" class="w-full border dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800">
+                <option value="1_Infraestructura">1. Infraestructura / Producto Físico</option>
+                <option value="2_Venture">2. Venture / Startup / Negocio</option>
+                <option value="3_Activo">3. Activo Financiero / Inversión</option>
+                <option value="4_Carrera">4. Carrera / Habilidad / Certificación</option>
+                <option value="5_Evento">5. Evento / Campaña / Temporal</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Magnitud / Complejidad</label>
+              <select id="edit-magnitudComplejidad" class="w-full border dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800">
+                <option value="LIGHT">LIGHT (1 Fase canónica • WBS ágil)</option>
+                <option value="MEDIUM">MEDIUM (3 Fases • EVM estándar)</option>
+                <option value="HEAVY">HEAVY (4 Fases • Control exhaustivo)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Cadencia de Control</label>
+              <select id="edit-frecuenciaControl" class="w-full border dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800">
+                <option value="Diario">Diario</option>
+                <option value="Semanal">Semanal (Check-in PMO)</option>
+                <option value="Quincenal">Quincenal</option>
+                <option value="Mensual">Mensual</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- CUADRANTE 2: CRONOGRAMA & FINANZAS (col-span-12 md:col-span-4) -->
+          <div class="md:col-span-4 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 space-y-3">
+            <div class="flex items-center gap-1.5 pb-2 border-b border-slate-200/60 dark:border-slate-800/60">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <h4 class="font-extrabold text-[11px] uppercase tracking-wider text-slate-700 dark:text-slate-300">2. Cronograma & Finanzas</h4>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Inicio Plan</label>
+                <input type="date" id="edit-fechaInicioPlan" class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 text-xs">
+              </div>
+              <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Fin Plan</label>
+                <input type="date" id="edit-fechaFinPlan" class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 text-xs">
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Presupuesto Tope (BAC)</label>
+              <div class="relative">
+                <span class="absolute left-2.5 top-2 font-mono font-bold text-slate-400">S/</span>
+                <input type="number" step="0.01" id="edit-presupuestoTope" class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 pl-8 font-mono text-slate-900 dark:text-slate-100 font-bold">
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Carpeta Google Drive</label>
+              <input type="url" id="edit-urlDrive" class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 text-indigo-600 dark:text-indigo-400" placeholder="https://drive.google.com/...">
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                <span>Salud EVM (Tiempo Real)</span>
+                <span class="text-[9.5px] text-slate-400 font-normal">Calculada automáticamente</span>
+              </label>
+              <div id="edit-healthStatus-badge" class="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 flex items-center gap-2 cursor-help" title="Calculada automáticamente según SPI, CPI y cronograma">
+                <span id="edit-healthStatus-icon" class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                <span id="edit-healthStatus-text" class="font-bold text-slate-700 dark:text-slate-200">Saludable</span>
+                <span id="edit-healthStatus-motivo" class="text-[10px] text-slate-500 ml-auto truncate max-w-[130px]">SPI >= 0.95</span>
+              </div>
+              <input type="hidden" id="edit-healthStatus" value="Saludable">
+            </div>
+          </div>
+
+          <!-- CUADRANTE 3: ALINEACIÓN ESTRATÉGICA & DOD (col-span-12 md:col-span-4) -->
+          <div class="md:col-span-4 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 space-y-3">
+            <div class="flex items-center gap-1.5 pb-2 border-b border-slate-200/60 dark:border-slate-800/60">
+              <span class="w-2 h-2 rounded-full bg-violet-500"></span>
+              <h4 class="font-extrabold text-[11px] uppercase tracking-wider text-slate-700 dark:text-slate-300">3. Estrategia & Calidad</h4>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">North Star OKR</label>
+              <input type="text" id="edit-northStarOKR" class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2" placeholder="Objetivo estratégico cuantificable...">
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Criterios de Aceptación (DoD)</label>
+              <textarea id="edit-criteriosDoD" rows="4" class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2" placeholder="Condiciones estrictas para considerar el proyecto finalizado con éxito..."></textarea>
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-violet-50/60 dark:bg-violet-950/40 border border-violet-100 dark:border-violet-900/40 text-[10.5px] text-violet-800 dark:text-violet-300 leading-relaxed">
+              <b>Gobernanza WBS:</b> Los cambios en arquetipo o magnitud recalibran las fases activas y las tolerancias EVM.
+            </div>
+          </div>
+
+        </div>
+
+        </div>
+        <!-- Footer Acciones -->
+        <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between gap-2.5">
+          <button type="button" id="btn-eliminar-proyecto-modal" onclick="confirmarEliminarProyectoDesdeModal()"
+            class="px-3 py-2 rounded-xl text-xs font-semibold text-rose-500 hover:text-rose-600 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 active:scale-95 transition-all duration-200 flex items-center gap-1.5"
+            title="Eliminar este proyecto y todas sus dependencias permanentemente">
+            <svg class="portal-icon-sm text-rose-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>
+            </svg>
+            <span>Eliminar Proyecto</span>
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="closeModal('modal-editar-proyecto')"
+              class="btn-portal-secondary">
+              Cancelar
+            </button>
+            <button type="submit" id="btn-submit-edit-proy"
+              class="btn-portal-primary shadow-xs">
+              Guardar Cambios
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL DUAL DE ENTREGABLES: PAQUETE DE TRABAJO (WP) & HITO (HIT)       -->
+  <!-- ===================================================================== -->
+  <div id="modal-hito"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-hito-card" class="portal-surface elevation-3 w-full max-w-xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative animate-in slide-in-from-bottom duration-200">
+
+      <!-- Drag handle móvil -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <!-- Cabecera -->
+      <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-xs">
+        <div class="flex items-center gap-2">
+          <div id="entregable-icon-container" class="w-7 h-7 rounded-lg bg-indigo-600/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 flex items-center justify-center shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <h3 id="titulo-modal-entregable" class="font-bold text-slate-800 dark:text-slate-100 text-sm">Nuevo Entregable WBS</h3>
+        </div>
+        <button type="button" onclick="closeModal('modal-hito')"
+          class="btn-portal-icon" title="Cerrar">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+
+      <form id="form-create-hito" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
+        <input type="hidden" id="hito-idProyecto">
+        <input type="hidden" id="hito-tipoElementoWbs" value="PAQUETE_TRABAJO">
+        <input type="hidden" id="hito-duracion" value="0">
+
+        <!-- SELECTOR DUAL PILL: [ 📦 Paquete de Trabajo (WP) | 🏁 Hito de Control (Milestone) ] -->
+        <div class="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/80 gap-1">
+          <button type="button" id="tab-entregable-wp" onclick="seleccionarTipoEntregable('WP')"
+            class="py-1.5 px-3 rounded-lg text-xs font-bold transition-all shadow-xs bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-center gap-1.5">
+            <span>📦 Paquete de Trabajo (WP)</span>
+          </button>
+          <button type="button" id="tab-entregable-hit" onclick="seleccionarTipoEntregable('HIT')"
+            class="py-1.5 px-3 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-all flex items-center justify-center gap-1.5">
+            <span>🏁 Hito de Control (Milestone)</span>
+          </button>
+        </div>
+
+        <div>
+          <label id="lbl-nombre-entregable" class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nombre del Paquete de Trabajo</label>
+          <input type="text" id="hito-nombre" required placeholder="Ej. Arquitectura Backend & Base de Datos"
+            class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 outline-none focus:ring-1 focus:ring-indigo-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Fase Asociada</label>
+            <input type="text" id="hito-faseAsociada" list="lista-fases-proyecto" placeholder="Ej. Fase 1: Entregables Principales"
+              class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 text-xs">
+            <datalist id="lista-fases-proyecto"></datalist>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Peso Ponderado (0.0 a 1.0)</label>
+            <input type="number" step="0.05" id="hito-peso" value="0.20" class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 font-mono">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label id="lbl-fecha-entregable" class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Fecha Límite Plan</label>
+            <input type="date" id="hito-fechaLimite" required class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2">
+          </div>
+          <div id="contenedor-presupuesto-entregable">
+            <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Presupuesto Planificado ($PV)</label>
+            <div class="relative">
+              <span class="absolute left-2.5 top-2 font-mono font-bold text-slate-400">S/</span>
+              <input type="number" step="0.01" id="hito-presupuesto" value="0.00" class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2 pl-8 font-mono">
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Criterio de Aceptación (DoD)</label>
+          <textarea id="hito-criterioDod" rows="2" class="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg p-2" placeholder="Condición verificable para marcar este entregable como Completado..."></textarea>
+        </div>
+
+        <!-- Banner informativo dinámico -->
+        <div id="banner-regla-entregable" class="p-2.5 rounded-xl border border-sky-200/80 dark:border-sky-800/80 bg-sky-50/60 dark:bg-sky-950/40 text-[11px] text-sky-800 dark:text-sky-300 flex items-center justify-between">
+          <span class="flex items-center gap-1.5 font-medium">
+            <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            <span id="texto-regla-entregable">Paquete de Trabajo: admite vinculación de tareas y costos reales.</span>
+          </span>
+          <span id="badge-costo-entregable" class="font-mono font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">PV Flexible</span>
+        </div>
+
+        </div>
+        <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-end gap-2.5">
+          <button type="button" onclick="closeModal('modal-hito')" class="btn-portal-secondary">Cancelar</button>
+          <button type="submit" id="btn-submit-hito" class="btn-portal-primary">Guardar Entregable</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL: CREACIÓN DE PROYECTO & GENERACIÓN WBS CON IA (UNIFICADO)       -->
+  <!-- ===================================================================== -->
+  <div id="modal-proyecto-wizard"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-proyecto-wizard-card"
+      class="portal-surface elevation-3 w-full max-w-4xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+
+      <!-- Drag handle móvil -->
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+      <!-- CABECERA PRINCIPAL (STICKY) CON BOTÓN ÚNICO DE IA -->
+      <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-xs gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
+            <svg class="portal-icon text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-black text-slate-800 dark:text-slate-100 text-sm md:text-base">Nuevo Proyecto & Estructura WBS</h3>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80">Asistido por IA</span>
+            </div>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">Define los datos clave o genera la estructura completa (Hitos, Tareas y Gastos) con Gemini</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <!-- BOTÓN ÚNICO Y PROMINENTE DE GENERACIÓN CON IA (CON TOOLTIP ELEGANTE) -->
+          <div class="relative group">
+            <button type="button" id="btn-ia-generar-propuesta" onclick="ejecutarGeneracionPropuestaIA()"
+              class="btn-portal-primary flex items-center gap-2 shrink-0">
+              <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+              <span>Generar Estructura con IA</span>
+            </button>
+            <!-- Micro-tooltip elegante flotante al pasar el cursor -->
+            <div class="absolute right-0 top-full mt-2 hidden group-hover:block z-50 pointer-events-none w-72">
+              <div class="bg-slate-900/95 dark:bg-slate-800 text-slate-100 text-[11px] p-2.5 rounded-xl shadow-2xl border border-slate-700/80 backdrop-blur leading-relaxed">
+                <strong class="text-indigo-300">Asistente Inteligente:</strong> Estructura automáticamente hitos progresivos, tareas tácticas y presupuesto estimado a partir de los datos ingresados en el formulario.
+              </div>
+            </div>
+          </div>
+          <button type="button" onclick="closeModal('modal-proyecto-wizard')"
+            class="btn-portal-icon" title="Cerrar">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- NAVEGACIÓN POR PESTAÑAS (STICKY FLOWBITE / TAILWIND) -->
+      <div class="sticky top-[68px] z-20 px-6 py-2 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 shrink-0 overflow-x-auto text-xs font-bold custom-scrollbar">
+        <button type="button" id="tab-btn-wiz-datos" onclick="cambiarTabWizProyecto('datos')"
+          class="px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 bg-indigo-600 text-white shadow-sm font-bold shrink-0">
+          <span>1. Datos Generales</span>
+        </button>
+        <button type="button" id="tab-btn-wiz-hitos" onclick="cambiarTabWizProyecto('hitos')"
+          class="px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent font-bold shrink-0">
+          <span>2. Hitos</span>
+          <span id="badge-wiz-hitos-count" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">0</span>
+        </button>
+        <button type="button" id="tab-btn-wiz-tareas" onclick="cambiarTabWizProyecto('tareas')"
+          class="px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent font-bold shrink-0">
+          <span>3. Tareas</span>
+          <span id="badge-wiz-tareas-count" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">0</span>
+        </button>
+        <button type="button" id="tab-btn-wiz-gastos" onclick="cambiarTabWizProyecto('gastos')"
+          class="px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent font-bold shrink-0">
+          <span>4. Gastos</span>
+          <span id="badge-wiz-gastos-count" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">0</span>
+        </button>
+      </div>
+
+      <!-- CUERPO PRINCIPAL CON SCROLL INDEPENDIENTE (max-h-[70vh]) -->
+      <form id="form-wizard-proyecto" class="flex-1 overflow-y-auto max-h-[70vh] p-4 md:p-6 custom-scrollbar bg-slate-50/50 dark:bg-slate-950/40 space-y-4 text-xs" onsubmit="event.preventDefault(); guardarProyectoDesdeWizard();">
+        
+        <!-- PESTAÑA 1: DATOS GENERALES Y GOBERNANZA -->
+        <div id="wiz-panel-datos" class="space-y-4">
+          <!-- BANNER GUÍA DE CREACIÓN Y ESTRUCTURACIÓN -->
+          <div class="p-3.5 bg-gradient-to-r from-slate-100 via-indigo-50/40 to-slate-100/80 dark:from-slate-800/80 dark:via-indigo-950/20 dark:to-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl flex items-center gap-3 shadow-2xs">
+            <svg class="portal-icon text-indigo-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            <div class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300 flex-1">
+              <span class="font-bold text-slate-800 dark:text-slate-100">Creación Asistida:</span>
+              Ingresa el <strong class="text-indigo-600 dark:text-indigo-400 font-semibold">Nombre</strong> y un resumen en <strong class="text-indigo-600 dark:text-indigo-400 font-semibold">Descripción / Alcance</strong>. Haz clic arriba en <strong class="text-indigo-600 dark:text-indigo-400 font-semibold">"Generar Estructura con IA"</strong> para desglosar hitos, tareas y presupuesto adaptados a tu sector.
+            </div>
+          </div>
+
+          <!-- BANNER DE CLASIFICACIÓN ADAPTATIVA IA (SUGERENCIAS Y JUSTIFICACIÓN) -->
+          <div id="wiz-ia-clasificacion-banner" class="hidden p-3.5 bg-gradient-to-r from-indigo-50 via-purple-50 to-indigo-50 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-slate-900 border border-indigo-200 dark:border-indigo-800/80 rounded-2xl shadow-xs space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="font-extrabold text-xs text-indigo-900 dark:text-indigo-200">Clasificación Adaptativa IA:</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="wiz-badge-arquetipo-sugerido" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 dark:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700">1_Infraestructura</span>
+                <span id="wiz-badge-magnitud-sugerida" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 dark:bg-purple-900/80 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700">Medium</span>
+              </div>
+            </div>
+            <p id="wiz-texto-justificacion-clasificacion" class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300 italic">
+              Clasificación adaptativa determinada según el alcance y especificaciones del proyecto.
+            </p>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-4">
+            <!-- NOMBRE DEL PROYECTO -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <svg class="portal-icon-sm text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><circle cx="7" cy="7" r=".5" fill="currentColor"/></svg>
+                  <span>Nombre del Proyecto</span>
+                  <span class="text-rose-500 font-bold">*</span>
+                </label>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/60">
+                  Requerido
+                </span>
+              </div>
+              <input type="text" id="wiz-nombreProyecto" name="nombreProyecto" required placeholder="Ej: Construcción de segundo piso / Lanzamiento de Tienda Online / Minuta de compra de terreno"
+                class="w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 font-bold outline-none text-slate-800 dark:text-slate-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+            </div>
+
+            <!-- DESCRIPCIÓN / ALCANCE / PROBLEMA -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <svg class="portal-icon-sm text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+                  <span>Descripción / Alcance / Problema a Resolver</span>
+                  <span class="text-rose-500 font-bold">*</span>
+                </label>
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60">
+                  Recomendado
+                </span>
+              </div>
+              
+              <!-- Micro-guía de contexto ideal -->
+              <div class="mb-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                <div class="flex items-start gap-1.5">
+                  <span class="text-indigo-600 dark:text-indigo-400 font-bold">1.</span>
+                  <div><strong class="text-slate-800 dark:text-slate-100">Resultado:</strong> Entregable final tangible, obra, producto o servicio concluido.</div>
+                </div>
+                <div class="flex items-start gap-1.5">
+                  <span class="text-amber-600 dark:text-amber-400 font-bold">2.</span>
+                  <div><strong class="text-slate-800 dark:text-slate-100">Restricciones:</strong> Plazos límite, presupuesto disponible o trámites externos.</div>
+                </div>
+                <div class="flex items-start gap-1.5">
+                  <span class="text-emerald-600 dark:text-emerald-400 font-bold">3.</span>
+                  <div><strong class="text-slate-800 dark:text-slate-100">Enfoque:</strong> Ejecución propia, con contratistas o colaborativa.</div>
+                </div>
+              </div>
+
+              <textarea id="wiz-descripcion" name="descripcion" rows="3" placeholder="Describe el objetivo, entregables esperados, contexto operativo y condiciones clave (ej. construir ampliación de primer piso con acabados / implementar tienda online / trámites notariales de compra de terreno / procedimiento médico y recuperación)..."
+                class="w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs"></textarea>
+            </div>
+
+            <!-- =================================================================== -->
+            <!-- CONTEXTO OPERATIVO DE EJECUCIÓN (UNIVERSAL Y MULTI-INDUSTRIA)       -->
+            <!-- =================================================================== -->
+            <div class="p-4 bg-gradient-to-br from-slate-50 via-indigo-50/20 to-slate-50 dark:from-slate-900/90 dark:via-indigo-950/20 dark:to-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3.5">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                    <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  </span>
+                  <div>
+                    <h5 class="font-extrabold text-slate-800 dark:text-slate-100 text-xs">Contexto Operativo de Ejecución <span class="text-indigo-600 dark:text-indigo-400 font-semibold">(Alta Precisión)</span></h5>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400">Parámetros clave para generar hitos realistas y tareas accionables adaptadas a tu sector</p>
+                  </div>
+                </div>
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Personalizado</span>
+              </div>
+
+              <!-- Fila 1: Estado de Partida & Modalidad del Ejecutor -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <!-- Estado de Partida -->
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <label class="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1.5">
+                      <svg class="portal-icon-sm text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                      <span>1. Estado Actual de Partida</span>
+                    </label>
+                  </div>
+                  <input type="hidden" id="wiz-estadoPartida" name="estadoPartida" value="Cero Absoluto (Greenfield)">
+                  <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+                    <button type="button" onclick="seleccionarEstadoPartidaWiz('Cero Absoluto (Greenfield)')" data-wiz-estado="Cero Absoluto (Greenfield)"
+                      class="wiz-btn-estado p-2 rounded-xl border border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold text-left transition flex items-center gap-2 active:scale-98 shadow-xs ring-1 ring-indigo-500/30">
+                      <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                      <span class="truncate">Cero Absoluto</span>
+                    </button>
+                    <button type="button" onclick="seleccionarEstadoPartidaWiz('Base / Prototipo Existente')" data-wiz-estado="Base / Prototipo Existente"
+                      class="wiz-btn-estado p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                      <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                      <span class="truncate">Base Existente</span>
+                    </button>
+                    <button type="button" onclick="seleccionarEstadoPartidaWiz('Migración / Refactorización')" data-wiz-estado="Migración / Refactorización"
+                      class="wiz-btn-estado p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                      <span class="w-2 h-2 rounded-full bg-sky-500 shrink-0"></span>
+                      <span class="truncate">Migración / Refactor</span>
+                    </button>
+                    <button type="button" onclick="seleccionarEstadoPartidaWiz('Escalado / Lanzamiento')" data-wiz-estado="Escalado / Lanzamiento"
+                      class="wiz-btn-estado p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                      <span class="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span>
+                      <span class="truncate">Escalado / Salida</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Modalidad o Rol del Ejecutor (Agnóstico / Universal) -->
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <label class="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1.5">
+                      <span>2. Modalidad o Rol del Ejecutor</span>
+                    </label>
+                  </div>
+                  <input type="hidden" id="wiz-perfilEjecutor" name="perfilEjecutor" value="Ejecutor Directo">
+                  <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+                    <button type="button" onclick="seleccionarPerfilEjecutorWiz('Ejecutor Directo')" data-wiz-perfil="Ejecutor Directo"
+                      class="wiz-btn-perfil p-2 rounded-xl border border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold text-left transition flex items-center gap-1.5 active:scale-98 shadow-xs ring-1 ring-indigo-500/30">
+                      <span class="truncate">Ejecutor Directo</span>
+                    </button>
+                    <button type="button" onclick="seleccionarPerfilEjecutorWiz('Con Contratistas')" data-wiz-perfil="Con Contratistas"
+                      class="wiz-btn-perfil p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-1.5 active:scale-98">
+                      <span class="truncate">Con Contratistas</span>
+                    </button>
+                    <button type="button" onclick="seleccionarPerfilEjecutorWiz('Equipo Colaborativo')" data-wiz-perfil="Equipo Colaborativo"
+                      class="wiz-btn-perfil p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-1.5 active:scale-98">
+                      <span class="truncate">Equipo / Socios</span>
+                    </button>
+                    <button type="button" onclick="seleccionarPerfilEjecutorWiz('Consultor / Asesor')" data-wiz-perfil="Consultor / Asesor"
+                      class="wiz-btn-perfil p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-1.5 active:scale-98">
+                      <span class="truncate">Consultor / Asesor</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fila 2: Recursos, Proveedores o Materiales Previstos con Chips de Sugerencia Rápida -->
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <label class="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1.5">
+                    <span>3. Recursos, Proveedores o Materiales Clave</span>
+                  </label>
+                  <span class="text-[10px] text-slate-400">Opcional • Clic en un chip para autocompletar</span>
+                </div>
+                <input type="text" id="wiz-stackTecnologico" name="stackTecnologico" placeholder="Ej. Maestro de obra y ferretería / Notaría y tasador / React y Supabase / Clínica y cirujano / Ninguno (sugerir con IA)..."
+                  class="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-2xs font-sans">
+                <!-- Chips dinámicos de sugerencias según el tipo de iniciativa -->
+                <div id="wiz-stack-presets" class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <!-- Inyectados dinámicamente según tipoIniciativa -->
+                </div>
+              </div>
+
+              <!-- Fila 3: Restricciones Críticas & Dependencias -->
+              <div>
+                <label class="block font-semibold text-slate-700 dark:text-slate-300 text-[11px] mb-1 flex items-center gap-1.5">
+                  <span>4. Restricciones Críticas, Trámites o Dependencias</span>
+                </label>
+                <input type="text" id="wiz-restricciones" name="restricciones" placeholder="Ej: Licencia municipal demora 20 días / Presupuesto tope estricto / Espera de resultados de laboratorio / Proveedor con lead time de 2 semanas..."
+                  class="w-full border dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-2xs">
+              </div>
+            </div>
+
+            <!-- METODOLOGÍA SUGERIDA (PÍLDORAS INTERACTIVAS CON INFERENCIA NEUTRA) -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <span>Metodología / Enfoque de Ejecución</span>
+                </label>
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  Inferencia Automática
+                </span>
+              </div>
+              <input type="hidden" id="wiz-metodologiaSugerida" name="metodologiaSugerida" value="">
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                <button type="button" onclick="seleccionarOpcionWiz('metodologiaSugerida', '')" data-wiz-metodologia=""
+                  class="wiz-btn-metodologia px-3 py-1.5 rounded-xl border border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold transition flex items-center gap-1.5 active:scale-98 shadow-xs ring-1 ring-indigo-500/30">
+                  <span>Automático</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('metodologiaSugerida', 'Scrum / Ágil')" data-wiz-metodologia="Scrum / Ágil"
+                  class="wiz-btn-metodologia px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-1.5 active:scale-98">
+                  <span>Scrum / Ágil</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('metodologiaSugerida', 'Cascada / Tradicional')" data-wiz-metodologia="Cascada / Tradicional"
+                  class="wiz-btn-metodologia px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-1.5 active:scale-98">
+                  <span>Faseado / Cascada</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('metodologiaSugerida', 'Iterativo / Kanban')" data-wiz-metodologia="Iterativo / Kanban"
+                  class="wiz-btn-metodologia px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-1.5 active:scale-98">
+                  <span>Iterativo / Kanban</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- TIPO DE INICIATIVA (GRID INTERACTIVO CON ICONOS) -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <span>Tipo de Iniciativa</span>
+                  <span class="text-rose-500 font-bold">*</span>
+                </label>
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/60">
+                  Requerido
+                </span>
+              </div>
+              <input type="hidden" id="wiz-tipoIniciativa" name="tipoIniciativa" value="Hogar / Construcción">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <button type="button" onclick="seleccionarOpcionWiz('tipoIniciativa', 'Hogar / Construcción')" data-wiz-tipo="Hogar / Construcción"
+                  class="wiz-btn-tipo p-2.5 rounded-xl border border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold text-left transition flex items-center gap-2 active:scale-98">
+                  <span class="truncate">Hogar / Construcción</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('tipoIniciativa', 'Negocio')" data-wiz-tipo="Negocio"
+                  class="wiz-btn-tipo p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                  <span class="truncate">Negocio / Comercio</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('tipoIniciativa', 'Salud / Bienestar')" data-wiz-tipo="Salud / Bienestar"
+                  class="wiz-btn-tipo p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                  <span class="truncate">Salud / Bienestar</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('tipoIniciativa', 'Inversiones')" data-wiz-tipo="Inversiones"
+                  class="wiz-btn-tipo p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                  <span class="truncate">Inversiones / Finanzas</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('tipoIniciativa', 'Desarrollo Web')" data-wiz-tipo="Desarrollo Web"
+                  class="wiz-btn-tipo p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                  <span class="truncate">Desarrollo / Software</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('tipoIniciativa', 'Profesional')" data-wiz-tipo="Profesional"
+                  class="wiz-btn-tipo p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                  <span class="truncate">Profesional / Servicios</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('tipoIniciativa', 'Marketing')" data-wiz-tipo="Marketing"
+                  class="wiz-btn-tipo p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                  <span class="truncate">Marketing / Ventas</span>
+                </button>
+                <button type="button" onclick="seleccionarOpcionWiz('tipoIniciativa', 'Infraestructura')" data-wiz-tipo="Infraestructura"
+                  class="wiz-btn-tipo p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-left transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center gap-2 active:scale-98">
+                  <span class="truncate">Infraestructura / Operaciones</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- MAGNITUD DE COMPLEJIDAD (CANÓNICO WBS v4.1) -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5" for="wiz-magnitudComplejidad">
+                  <svg class="portal-icon-sm text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                  <span>Magnitud de Complejidad</span>
+                </label>
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60">
+                  WBS v4.1
+                </span>
+              </div>
+              <select id="wiz-magnitudComplejidad" name="magnitudComplejidad" onchange="seleccionarMagnitudComplejidadWiz(this.value)"
+                class="w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 font-bold outline-none text-slate-800 dark:text-slate-100 focus:border-indigo-500 text-xs">
+                <option value="Light">Light (Corta duración / Ultra ligero / Sin sobrecarga)</option>
+                <option value="Medium" selected>Medium (Estándar / Mediana envergadura / 30-90 días)</option>
+                <option value="Heavy">Heavy (Largo plazo / Alta criticidad / Contratistas / &gt;90 días)</option>
+              </select>
+              <input type="hidden" id="wiz-categoriaTShirt" name="categoriaTShirt" value="M-Medium">
+            </div>
+
+            <!-- ARQUETIPO DE PROYECTO (CANÓNICO WBS v4.1) -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5" for="wiz-arquetipoProyecto">
+                  <svg class="portal-icon-sm text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+                  <span>Arquetipo de Proyecto (Clasificación Adaptativa)</span>
+                </label>
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60">
+                  Feature Flags
+                </span>
+              </div>
+              <select id="wiz-arquetipoProyecto" name="arquetipoProyecto" onchange="seleccionarArquetipoProyectoWiz(this.value)"
+                class="w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 font-bold outline-none text-slate-800 dark:text-slate-100 focus:border-indigo-500 text-xs">
+                <option value="1_Infraestructura" selected>1_Infraestructura (Construcción, Obras civiles, Hardware, Despliegue Físico)</option>
+                <option value="2_Venture">2_Venture (Desarrollo de Software, Startups, Productos Digitales, SaaS)</option>
+                <option value="3_Activo">3_Activo (Inversiones Financieras, Bienes Raíces, Adquisición de Activos/Inmuebles)</option>
+                <option value="4_Carrera">4_Carrera (Certificaciones, Maestrías, Idiomas, Formación Académica)</option>
+                <option value="5_Evento">5_Evento (Conferencias, Congresos, Bodas, Ceremonias, Cronograma T-Minus)</option>
+              </select>
+              <input type="hidden" id="wiz-criterioDominante" name="criterioDominante" value="1_Infraestructura">
+            </div>
+
+            <!-- MONEDA BASE Y PRESUPUESTO ESTIMADO (BOTONES COMPACTOS + INPUT SIN SPINNERS) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <span>Moneda Base</span>
+                  </label>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    Moneda
+                  </span>
+                </div>
+                <input type="hidden" id="wiz-monedaBase" name="monedaBase" value="PEN">
+                <div class="grid grid-cols-3 gap-1.5 text-xs">
+                  <button type="button" onclick="seleccionarOpcionWiz('monedaBase', 'PEN')" data-wiz-moneda="PEN"
+                    class="wiz-btn-moneda py-2 px-2 rounded-xl border border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold transition flex items-center justify-center gap-1 active:scale-98">
+                    <span>PEN (S/)</span>
+                  </button>
+                  <button type="button" onclick="seleccionarOpcionWiz('monedaBase', 'USD')" data-wiz-moneda="USD"
+                    class="wiz-btn-moneda py-2 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center justify-center gap-1 active:scale-98">
+                    <span>USD ($)</span>
+                  </button>
+                  <button type="button" onclick="seleccionarOpcionWiz('monedaBase', 'EUR')" data-wiz-moneda="EUR"
+                    class="wiz-btn-moneda py-2 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition hover:border-slate-300 dark:hover:border-slate-600 flex items-center justify-center gap-1 active:scale-98">
+                    <span>EUR (€)</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <span>Presupuesto Estimado</span>
+                  </label>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    Cálculo Automático
+                  </span>
+                </div>
+                <div class="relative">
+                  <span id="wiz-presupuesto-moneda-tag" class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">S/.</span>
+                  <input type="number" step="0.01" id="wiz-presupuestoTope" name="presupuestoTope" placeholder="Cálculo automático si se deja en blanco"
+                    class="no-spinner w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl py-2 pl-9 pr-3 font-mono text-slate-800 dark:text-slate-100 font-bold text-xs outline-none focus:border-indigo-500">
+                </div>
+              </div>
+            </div>
+
+            <!-- FECHAS PLANIFICADAS -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <span>Fecha Inicio Plan</span>
+                  </label>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    Fecha Plan
+                  </span>
+                </div>
+                <input type="date" id="wiz-fechaInicioPlan" name="fechaInicioPlan" class="w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 font-medium text-xs">
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <span>Fecha Fin Estimada</span>
+                  </label>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    Cálculo Flexible
+                  </span>
+                </div>
+                <input type="date" id="wiz-fechaFinPlan" name="fechaFinPlan" placeholder="Calculada por esfuerzo" class="w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 font-medium text-xs">
+              </div>
+            </div>
+          </div>
+
+          <!-- Gobernanza & Metas -->
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-3.5">
+            <h4 class="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+              <span>Gobernanza & Criterios de Aceptación</span>
+            </h4>
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <span>North Star OKR (Objetivo Estratégico)</span>
+              </label>
+              <input type="text" id="wiz-northStarOKR" name="northStarOKR" placeholder="Lograr la implementación exitosa en tiempo y forma..."
+                class="w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 text-slate-800 dark:text-slate-100">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <span>Entregable Tangible / Objeto Final</span>
+              </label>
+              <input type="text" id="wiz-entregableTangible" name="entregableTangible" placeholder="Documento, obra física o producto funcional verificable..."
+                class="w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 text-slate-800 dark:text-slate-100">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <span>Criterios de Aceptación (Definition of Done - DoD)</span>
+              </label>
+              <textarea id="wiz-criteriosDoD" name="criteriosDoD" rows="2" placeholder="1. Pruebas superadas. 2. Repositorio en Drive. 3. Balance financiero cuadrado."
+                class="w-full border dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 text-slate-800 dark:text-slate-100"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- PESTAÑA 2: HITOS -->
+        <div id="wiz-panel-hitos" class="space-y-4 hidden">
+          <div class="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Ponderación Total:</span>
+              <span id="wiz-sum-pesos-badge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700">0%</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="agregarHitoWiz('PAQUETE_TRABAJO')"
+                class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow transition flex items-center gap-1.5 shrink-0" title="Añadir Paquete de Trabajo (Alcance, Costo y Tareas)">
+                <span>+ Paquete de Trabajo (WP)</span>
+              </button>
+              <button type="button" onclick="agregarHitoWiz('HITO_MARCADOR')"
+                class="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-xs shadow transition flex items-center gap-1.5 shrink-0" title="Añadir Hito Marcador de Control (Duración 0, Costo $0)">
+                <span>🚩 + Hito Marcador (HIT)</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="wiz-lista-hitos-container" class="space-y-3">
+            <!-- Renderizado reactivo de hitos -->
+          </div>
+        </div>
+
+        <!-- PESTAÑA 3: TAREAS -->
+        <div id="wiz-panel-tareas" class="space-y-4 hidden">
+          <div class="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Esfuerzo Total Estimado:</span>
+              <span id="wiz-total-horas-badge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">0 horas</span>
+            </div>
+            <button type="button" onclick="agregarTareaWiz()"
+              class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow transition flex items-center gap-1.5 shrink-0">
+              <span>+ Añadir Tarea</span>
+            </button>
+          </div>
+
+          <div id="wiz-lista-tareas-container" class="space-y-4">
+            <!-- Renderizado reactivo de tareas agrupadas por hito -->
+          </div>
+        </div>
+
+        <!-- PESTAÑA 4: GASTOS PROYECTADOS -->
+        <div id="wiz-panel-gastos" class="space-y-4 hidden">
+          <div class="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 class="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                  <span>Presupuesto y Partidas Estimadas</span>
+                </h4>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Distribución de egresos planificados frente al presupuesto tope</p>
+              </div>
+              <button type="button" onclick="agregarGastoWiz()"
+                class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow transition flex items-center gap-1.5">
+                <span>+ Añadir Gasto</span>
+              </button>
+            </div>
+            
+            <!-- Barra de control presupuestal -->
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs font-semibold">
+                <span id="wiz-lbl-presupuesto-consumo" class="text-slate-600 dark:text-slate-300">Consumo estimado: 0.00</span>
+                <span id="wiz-lbl-presupuesto-pct" class="font-mono text-emerald-600 dark:text-emerald-400">0%</span>
+              </div>
+              <div class="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div id="wiz-bar-presupuesto" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="wiz-lista-gastos-container" class="space-y-2.5">
+            <!-- Renderizado reactivo de gastos -->
+          </div>
+        </div>
+
+      </form>
+
+      <!-- PIE DEL MODAL (ACCIONES ESENCIALES) -->
+      <div class="sticky bottom-0 z-20 px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0 gap-3">
+        <button type="button" onclick="closeModal('modal-proyecto-wizard')"
+          class="btn-portal-secondary">
+          Cancelar
+        </button>
+
+        <button type="button" id="btn-wiz-guardar-todo" onclick="guardarProyectoDesdeWizard()"
+          class="btn-portal-primary flex items-center gap-2">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <span>Guardar Proyecto</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODALES DE ASISTENCIA IA: WBS Y TAREAS ATÓMICAS (GEMINI)              -->
+  <!-- ===================================================================== -->
+  <div id="modal-ia-completar-wbs"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-ia-completar-wbs-card" class="portal-surface elevation-3 w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative animate-in slide-in-from-bottom duration-200">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+      <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-xs">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-black text-slate-800 dark:text-slate-100 text-sm">✨ Asistente IA: Completar Estructura WBS</h3>
+            <p id="analisis-wbs-ia" class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">Sugerencias inteligentes basadas en el arquetipo del proyecto.</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeModal('modal-ia-completar-wbs')" class="btn-portal-icon" title="Cerrar">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-4 overflow-y-auto space-y-3 flex-1 text-xs">
+        <p class="text-xs text-slate-600 dark:text-slate-400">Selecciona los paquetes de trabajo e hitos sugeridos por Gemini que deseas incorporar a la WBS:</p>
+        <div id="contenedor-sugerencias-wbs-ia" class="space-y-2.5">
+          <!-- Renderizado dinámico -->
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2 bg-slate-50/50 dark:bg-slate-800/30 shrink-0">
+        <button type="button" onclick="closeModal('modal-ia-completar-wbs')" class="btn-portal-secondary text-xs">Cancelar</button>
+        <button type="button" onclick="aplicarSugerenciasWbsIA()" class="btn-portal-primary text-xs flex items-center gap-1.5 shadow-2xs">
+          <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          <span>Insertar Entregables en WBS</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-ia-desglose-tareas"
+    class="hidden fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200">
+    <div id="modal-ia-desglose-tareas-card" class="portal-surface elevation-3 w-full max-w-xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative animate-in slide-in-from-bottom duration-200">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+      <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-xs">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+          </div>
+          <div>
+            <h3 class="font-black text-slate-800 dark:text-slate-100 text-sm">✨ Asistente IA: Desglose de Tareas</h3>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">Paquete: <span id="titulo-paquete-ia-desglose" class="font-bold text-slate-800 dark:text-slate-200"></span></p>
+          </div>
+        </div>
+        <button type="button" onclick="closeModal('modal-ia-desglose-tareas')" class="btn-portal-icon" title="Cerrar">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-4 overflow-y-auto space-y-3 flex-1 text-xs">
+        <div id="analisis-tareas-ia" class="p-2.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40 text-indigo-900 dark:text-indigo-300 text-[11px] font-medium leading-relaxed">
+          Tareas orientadas a cumplir los criterios DoD del paquete de trabajo.
+        </div>
+        <div id="contenedor-sugerencias-tareas-ia" class="space-y-2">
+          <!-- Renderizado dinámico -->
+        </div>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2 bg-slate-50/50 dark:bg-slate-800/30 shrink-0">
+        <button type="button" onclick="closeModal('modal-ia-desglose-tareas')" class="btn-portal-secondary text-xs">Cancelar</button>
+        <button type="button" onclick="aplicarSugerenciasTareasIA()" class="btn-portal-primary text-xs flex items-center gap-1.5 shadow-2xs">
+          <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          <span>Insertar Tareas en Paquete</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fin de modal-proyecto-wizard -->

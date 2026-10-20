@@ -1,0 +1,1926 @@
+  <style>
+    /* ===================================================================== */
+    /* DESIGN SYSTEM: ARQUITECTURA MULTITEMA (SLATE METÁLICO & ROSE LUXURY) */
+    /* ===================================================================== */
+    :root,
+    :root[data-theme="slate"] {
+      --bg-canvas: #f8fafc;
+      --bg-surface-1: #ffffff;
+      --bg-surface-2: #f1f5f9;
+      --bg-surface-hover: #e2e8f0;
+      --border-subtle: #e2e8f0;
+      --border-card: #cbd5e1;
+      --border-focus: #4f46e5;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+      --accent-brand: #4f46e5;
+      --accent-brand-hover: #4338ca;
+      --accent-glow: rgba(79, 70, 229, 0.25);
+      --scrollbar-thumb: #cbd5e1;
+      --scrollbar-thumb-hover: #94a3b8;
+      /* Tokens de Elevación y Sombras (Slate Light) */
+      --elevation-1: 0 1px 3px 0 rgba(15, 23, 42, 0.05), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+      --elevation-2: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+      --elevation-3: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
+      --elevation-hover: 0 10px 20px -5px rgba(15, 23, 42, 0.08), 0 6px 8px -4px rgba(15, 23, 42, 0.04);
+    }
+
+    html.dark,
+    html.dark[data-theme="slate"] {
+      --bg-canvas: #020617;
+      --bg-surface-1: #0D1526;
+      --bg-surface-2: #1e293b;
+      --bg-surface-hover: #243247;
+      --border-subtle: rgba(30, 41, 59, 0.45);
+      --border-card: #334155;
+      --border-focus: #38bdf8;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-brand: #38bdf8;
+      --accent-brand-hover: #0284c7;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --scrollbar-thumb: #334155;
+      --scrollbar-thumb-hover: #475569;
+      /* Tokens de Elevación y Sombras (Cobalt Aerodynamic A.2.2) */
+      --elevation-1: 0 10px 25px -5px rgba(2, 6, 23, 0.8), 0 8px 10px -6px rgba(30, 58, 138, 0.18);
+      --elevation-2: 0 14px 28px -4px rgba(2, 6, 23, 0.85), 0 10px 14px -5px rgba(30, 58, 138, 0.25);
+      --elevation-3: 0 25px 50px -12px rgba(2, 6, 23, 0.9), 0 12px 24px -8px rgba(30, 58, 138, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      --elevation-hover: 0 14px 28px -4px rgba(2, 6, 23, 0.85), 0 10px 14px -5px rgba(30, 58, 138, 0.28);
+    }
+
+    /* TEMA B: CHAMPAGNE & DUSTY ROSE LUXURY (ALTO CONTRASTE & GLASSMORPHISM) */
+    :root[data-theme="rose"] {
+      --bg-canvas: #fcf9f7;
+      --bg-surface-1: #ffffff;
+      --bg-surface-2: #fdf5f3;
+      --bg-surface-hover: #f7e8e5;
+      --border-subtle: #ebd7d2;
+      --border-card: #e2c7c1;
+      --border-focus: #b85d6e;
+      --text-primary: #1f1317;
+      --text-secondary: #584147;
+      --text-muted: #8c7278;
+      --accent-brand: #b85d6e;
+      --accent-brand-hover: #9e4657;
+      --accent-champagne: #c99c6b;
+      --accent-glow: rgba(184, 93, 110, 0.22);
+      --scrollbar-thumb: #e2c7c1;
+      --scrollbar-thumb-hover: #cfaca5;
+      /* Tokens de Elevación y Sombras (Rose Light) */
+      --elevation-1: 0 1px 3px 0 rgba(184, 93, 110, 0.06), 0 1px 2px 0 rgba(184, 93, 110, 0.04);
+      --elevation-2: 0 4px 12px -2px rgba(184, 93, 110, 0.1), 0 2px 4px -1px rgba(184, 93, 110, 0.06);
+      --elevation-3: 0 20px 30px -6px rgba(184, 93, 110, 0.16), 0 8px 12px -4px rgba(184, 93, 110, 0.08);
+      --elevation-hover: 0 6px 16px -4px rgba(184, 93, 110, 0.12), 0 4px 8px -2px rgba(184, 93, 110, 0.06);
+    }
+
+    html.dark[data-theme="rose"] {
+      --bg-canvas: #120b10;
+      --bg-surface-1: #1a1017;
+      --bg-surface-2: #241620;
+      --bg-surface-hover: #321c2c;
+      --border-subtle: #3a1f33;
+      --border-card: #4d2642;
+      --border-focus: #f2728f;
+      --text-primary: #fff2f4;
+      --text-secondary: #e6b8c4;
+      --text-muted: #af8190;
+      --accent-brand: #f06a88;
+      --accent-brand-hover: #f887a1;
+      --accent-champagne: #e0b484;
+      --accent-glow: rgba(240, 106, 136, 0.35);
+      --scrollbar-thumb: #451f3b;
+      --scrollbar-thumb-hover: #632a53;
+      /* Tokens de Elevación y Sombras (Rose Dark) */
+      --elevation-1: 0 1px 3px 0 rgba(2, 6, 23, 0.45), inset 0 0 0 1px rgba(240, 106, 136, 0.1);
+      --elevation-2: 0 6px 18px -3px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(240, 106, 136, 0.12);
+      --elevation-3: 0 25px 50px -12px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(240, 106, 136, 0.15);
+      --elevation-hover: 0 12px 24px -6px rgba(0, 0, 0, 0.55), 0 6px 20px -4px rgba(240, 106, 136, 0.22), inset 0 0 0 1px rgba(240, 106, 136, 0.12);
+    }
+
+    /* Reglas de Revestimiento Champagne & Dusty Rose */
+    html[data-theme="rose"] body {
+      background-color: var(--bg-canvas) !important;
+      color: var(--text-primary) !important;
+    }
+
+    html[data-theme="rose"] header {
+      background-color: rgba(255, 255, 255, 0.88) !important;
+      backdrop-filter: blur(20px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+      border-color: #ebd7d2 !important;
+      box-shadow: 0 4px 20px -2px rgba(184, 93, 110, 0.05) !important;
+    }
+
+    html.dark[data-theme="rose"] header {
+      background-color: rgba(26, 16, 23, 0.88) !important;
+      backdrop-filter: blur(20px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+      border-color: #3a1f33 !important;
+      box-shadow: 0 4px 25px -2px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    html[data-theme="rose"] header nav {
+      background-color: rgba(253, 245, 243, 0.85) !important;
+      backdrop-filter: blur(12px) !important;
+      border-color: rgba(235, 215, 210, 0.9) !important;
+    }
+    html.dark[data-theme="rose"] header nav {
+      background-color: rgba(36, 22, 32, 0.85) !important;
+      backdrop-filter: blur(12px) !important;
+      border-color: rgba(77, 38, 66, 0.7) !important;
+    }
+
+    html[data-theme="rose"] .nav-tab-active {
+      color: #8f3244 !important;
+      background-color: #ffffff !important;
+      border-color: #e2c7c1 !important;
+      box-shadow: 0 2px 8px -2px rgba(184, 93, 110, 0.15) !important;
+    }
+
+    html.dark[data-theme="rose"] .nav-tab-active {
+      color: #fddde4 !important;
+      background-color: #2b1825 !important;
+      border-color: #5d284e !important;
+      box-shadow: 0 4px 14px -2px rgba(240, 106, 136, 0.3) !important;
+    }
+
+    html[data-theme="rose"] .nav-tab-active::after {
+      background: linear-gradient(90deg, transparent, #b85d6e, transparent) !important;
+    }
+    html.dark[data-theme="rose"] .nav-tab-active::after {
+      background: linear-gradient(90deg, transparent, #f06a88, transparent) !important;
+      box-shadow: 0 0 10px rgba(240, 106, 136, 0.6) !important;
+    }
+
+    /* Estilos limpios y minimalistas para Tarjetas (Kanban, Hábitos, Portafolio) */
+    .kanban-card,
+    .habit-card,
+    .portfolio-card {
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                  border-color 0.2s ease,
+                  background-color 0.15s ease-out,
+                  opacity 0.2s ease !important;
+      border: 1px solid rgba(226, 232, 240, 0.7) !important;
+      box-shadow: var(--elevation-1) !important;
+    }
+    .kanban-card:hover,
+    .habit-card:hover,
+    .portfolio-card:hover {
+      border-color: rgba(148, 163, 184, 0.5) !important;
+      box-shadow: var(--elevation-hover) !important;
+    }
+    @media (hover: hover) {
+      .kanban-card:not(.card-dragging):not(.dragging):not(.sortable-chosen):hover,
+      .habit-card:not(.card-dragging):not(.dragging):not(.sortable-chosen):hover,
+      .portfolio-card:not(.card-dragging):not(.dragging):not(.sortable-chosen):hover {
+        transform: translateY(-1.5px);
+      }
+    }
+    html.dark .kanban-card,
+    html.dark .habit-card,
+    html.dark .portfolio-card {
+      border: 1px solid rgba(30, 41, 59, 0.7) !important;
+      background-color: #0f172a !important;
+      box-shadow: var(--elevation-1) !important;
+    }
+    html.dark .kanban-card:hover,
+    html.dark .habit-card:hover,
+    html.dark .portfolio-card:hover {
+      border-color: rgba(99, 102, 241, 0.35) !important;
+      box-shadow: var(--elevation-hover) !important;
+    }
+
+    html[data-theme="rose"] .kanban-card,
+    html[data-theme="rose"] .habit-card,
+    html[data-theme="rose"] .portfolio-card {
+      background-color: #ffffff !important;
+      border: 1px solid rgba(235, 215, 210, 0.85) !important;
+      box-shadow: var(--elevation-1) !important;
+    }
+    html[data-theme="rose"] .kanban-card:hover,
+    html[data-theme="rose"] .habit-card:hover,
+    html[data-theme="rose"] .portfolio-card:hover {
+      border-color: rgba(201, 156, 107, 0.7) !important;
+      box-shadow: var(--elevation-hover) !important;
+    }
+    html.dark[data-theme="rose"] .kanban-card,
+    html.dark[data-theme="rose"] .habit-card,
+    html.dark[data-theme="rose"] .portfolio-card {
+      background-color: #1a1017 !important;
+      border: 1px solid rgba(58, 31, 51, 0.85) !important;
+      box-shadow: var(--elevation-1) !important;
+    }
+    html.dark[data-theme="rose"] .kanban-card:hover,
+    html.dark[data-theme="rose"] .habit-card:hover,
+    html.dark[data-theme="rose"] .portfolio-card:hover {
+      border-color: rgba(224, 180, 132, 0.6) !important;
+      box-shadow: var(--elevation-hover) !important;
+    }
+
+    /* Clases Utilitarias de Elevación Semántica */
+    .elevation-1 { box-shadow: var(--elevation-1) !important; }
+    .elevation-2 { box-shadow: var(--elevation-2) !important; }
+    .elevation-3 { box-shadow: var(--elevation-3) !important; }
+    .elevation-hover:hover { box-shadow: var(--elevation-hover) !important; }
+
+    /* ===================================================================== */
+    /* TIPIFICACIÓN NUMÉRICA TABULAR: EVITA SALTOS HORIZONTALES EN MÉTRICAS  */
+    /* ===================================================================== */
+    .tabular-nums,
+    .font-mono,
+    .monto-financiero,
+    .precio,
+    .moneda,
+    .currency,
+    .hora-badge,
+    .tiempo-contador,
+    .duracion,
+    .kpi-valor,
+    .progreso-texto,
+    .metric-value {
+      font-variant-numeric: tabular-nums !important;
+      -webkit-font-feature-settings: "tnum" 1 !important;
+      font-feature-settings: "tnum" 1 !important;
+    }
+
+    html[data-theme="rose"] .kanban-dropzone-active {
+      background-color: rgba(253, 245, 243, 0.6) !important;
+      border: 1.5px dashed #b85d6e !important;
+    }
+    html.dark[data-theme="rose"] .kanban-dropzone-active {
+      background-color: rgba(240, 106, 136, 0.12) !important;
+      border: 1.5px dashed #f06a88 !important;
+    }
+
+    /* Estilos Glassmorphism para Drawer de Archivados y Menú Temas */
+    #drawer-archivados {
+      box-shadow: -10px 0 40px -10px rgba(0, 0, 0, 0.25);
+    }
+    html.dark #drawer-archivados {
+      box-shadow: -10px 0 50px -10px rgba(0, 0, 0, 0.7);
+    }
+    html[data-theme="rose"] #drawer-archivados {
+      background-color: rgba(252, 249, 247, 0.96) !important;
+      border-color: #ebd7d2 !important;
+    }
+    html.dark[data-theme="rose"] #drawer-archivados {
+      background-color: rgba(26, 16, 23, 0.96) !important;
+      border-color: #3a1f33 !important;
+    }
+    .drawer-bento-card {
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .drawer-bento-card:hover {
+      transform: translateY(-1px);
+    }
+
+    /* ===================================================================== */
+    /* DOCK PREMIUM BENTO / GLASSMORPHISM - BARRA SUPERIOR                    */
+    /* ===================================================================== */
+    /* DOCK DERECHO: ACABADO 'CARVED GLASS' DE ALTA GAMA (ESTILO LINEAR / RAYCAST) */
+    /* Recargar, Atajos, Calendar, Archivados, Tema y Notas                  */
+    /* ===================================================================== */
+    .header-dock-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 2.25rem; /* h-9 */
+      border-radius: 0.75rem; /* rounded-xl (12px) */
+      cursor: pointer;
+      user-select: none;
+      backdrop-filter: blur(12px) !important;
+      -webkit-backdrop-filter: blur(12px) !important;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    .header-dock-btn:active {
+      transform: scale(0.96) !important;
+    }
+
+    /* ===================================================================== */
+    /* CÁPSULAS TRANSPARENTES E ICONOS FLOTANTES DEL HEADER (DOCK DERECHO)   */
+    /* ===================================================================== */
+    /* 1. Notas (#btn-nav-notas): Cápsula transparente con borde fino nítido en ámbar */
+    #btn-nav-notas {
+      background: transparent !important;
+      background-color: transparent !important;
+      border: 1px solid rgba(217, 119, 6, 0.8) !important; /* amber-600/80 */
+      color: #f59e0b !important;
+      box-shadow: none !important;
+    }
+    html.dark #btn-nav-notas {
+      color: #fbbf24 !important;
+      border-color: rgba(217, 119, 6, 0.8) !important;
+    }
+    #btn-nav-notas:hover {
+      background: rgba(245, 158, 11, 0.10) !important;
+      background-color: rgba(245, 158, 11, 0.10) !important;
+      border-color: rgba(245, 158, 11, 0.95) !important;
+      color: #d97706 !important;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.20) !important;
+    }
+    html.dark #btn-nav-notas:hover {
+      color: #fef3c7 !important;
+      border-color: rgba(251, 191, 36, 0.95) !important;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.25) !important;
+    }
+
+    /* 2. Calendar (#btn-header-calendar): Cápsula transparente con borde fino en gris/azul metálico */
+    #btn-header-calendar {
+      background: transparent !important;
+      background-color: transparent !important;
+      border: 1px solid rgba(71, 85, 105, 0.8) !important; /* slate-600/80 */
+      color: #64748b !important;
+      box-shadow: none !important;
+    }
+    html.dark #btn-header-calendar {
+      color: #cbd5e1 !important;
+      border-color: rgba(71, 85, 105, 0.8) !important;
+    }
+    #btn-header-calendar:hover {
+      background: rgba(148, 163, 184, 0.10) !important;
+      background-color: rgba(148, 163, 184, 0.10) !important;
+      border-color: rgba(148, 163, 184, 0.70) !important;
+      color: #0f172a !important;
+      box-shadow: 0 0 10px rgba(100, 116, 139, 0.15) !important;
+    }
+    html.dark #btn-header-calendar:hover {
+      color: #ffffff !important;
+      border-color: rgba(203, 213, 225, 0.70) !important;
+      box-shadow: 0 0 12px rgba(148, 163, 184, 0.25) !important;
+    }
+
+    /* 3. Archivados (#btn-header-boveda-archivados / #btn-header-archivados): Cápsula transparente naranja */
+    #btn-header-boveda-archivados,
+    #btn-header-archivados {
+      background: transparent !important;
+      background-color: transparent !important;
+      border: 1px solid rgba(249, 115, 22, 0.8) !important; /* orange-500/80 */
+      color: #ea580c !important;
+      box-shadow: none !important;
+    }
+    html.dark #btn-header-boveda-archivados,
+    html.dark #btn-header-archivados {
+      color: #fb923c !important;
+      border-color: rgba(249, 115, 22, 0.8) !important;
+    }
+    #btn-header-boveda-archivados:hover,
+    #btn-header-archivados:hover {
+      background: rgba(249, 115, 22, 0.10) !important;
+      background-color: rgba(249, 115, 22, 0.10) !important;
+      border-color: rgba(249, 115, 22, 0.95) !important;
+      color: #c2410c !important;
+      box-shadow: 0 0 10px rgba(249, 115, 22, 0.20) !important;
+    }
+    html.dark #btn-header-boveda-archivados:hover,
+    html.dark #btn-header-archivados:hover {
+      color: #ffedd5 !important;
+      border-color: rgba(251, 146, 60, 0.95) !important;
+      box-shadow: 0 0 12px rgba(249, 115, 22, 0.25) !important;
+    }
+
+    /* 4. Iconos Sueltos de Utilidades (Recargar, Atajos, Sol/Tema): Flotantes, limpios, sin marco ni caja en reposo */
+    #btn-refresh-global,
+    #btn-header-refresh,
+    #btn-toggle-shortcuts-modal,
+    #btn-shortcuts-config,
+    #btn-theme-dropdown {
+      background: transparent !important;
+      background-color: transparent !important;
+      border: 1px solid transparent !important;
+      box-shadow: none !important;
+      color: #64748b !important;
+    }
+    html.dark #btn-refresh-global,
+    html.dark #btn-header-refresh,
+    html.dark #btn-toggle-shortcuts-modal,
+    html.dark #btn-shortcuts-config,
+    html.dark #btn-theme-dropdown {
+      color: #94a3b8 !important;
+      background: transparent !important;
+      background-color: transparent !important;
+      border-color: transparent !important;
+      box-shadow: none !important;
+    }
+    #btn-refresh-global:hover,
+    #btn-header-refresh:hover,
+    #btn-toggle-shortcuts-modal:hover,
+    #btn-shortcuts-config:hover,
+    #btn-theme-dropdown:hover {
+      background: rgba(100, 116, 139, 0.15) !important;
+      background-color: rgba(100, 116, 139, 0.15) !important;
+      border-color: transparent !important;
+      color: #0f172a !important;
+      box-shadow: none !important;
+    }
+    html.dark #btn-refresh-global:hover,
+    html.dark #btn-header-refresh:hover,
+    html.dark #btn-toggle-shortcuts-modal:hover,
+    html.dark #btn-shortcuts-config:hover,
+    html.dark #btn-theme-dropdown:hover {
+      background: rgba(148, 163, 184, 0.15) !important;
+      background-color: rgba(148, 163, 184, 0.15) !important;
+      border-color: transparent !important;
+      color: #f8fafc !important;
+      box-shadow: none !important;
+    }
+
+
+    /* Columnas Bento de Hábitos en Rose Theme */
+    html[data-theme="rose"] #vista-habitos-wrapper [data-categoria] {
+      background-color: #fff9fa !important;
+      border-color: #fecdd3 !important;
+    }
+    html[data-theme="rose"] #vista-habitos-wrapper [data-categoria] > div:first-child {
+      background-color: rgba(255, 249, 250, 0.95) !important;
+      border-color: #fecdd3 !important;
+    }
+    html.dark[data-theme="rose"] #vista-habitos-wrapper [data-categoria] {
+      background-color: #1a0f17 !important;
+      border-color: #3d1c31 !important;
+    }
+    html.dark[data-theme="rose"] #vista-habitos-wrapper [data-categoria] > div:first-child {
+      background-color: rgba(26, 15, 23, 0.95) !important;
+      border-color: #3d1c31 !important;
+    }
+
+    /* Bento KPI Cards y Tarjetas de Hábitos en Modo Oscuro */
+    html.dark #vista-habitos-wrapper {
+      background-color: #020617 !important;
+    }
+    html.dark #vista-habitos-wrapper [data-categoria] {
+      background-color: #0b1120 !important;
+      border-color: #1e293b !important;
+    }
+    html.dark #vista-habitos-wrapper [data-categoria] > div:first-child {
+      background-color: rgba(11, 17, 32, 0.95) !important;
+      border-color: #1e293b !important;
+    }
+    html.dark #vista-habitos-wrapper .habit-card {
+      background-color: #0f172a !important;
+      border-color: #1e293b !important;
+    }
+    html.dark #vista-habitos-wrapper [class*="bg-white"] {
+      background-color: #0f172a !important;
+      border-color: #1e293b !important;
+    }
+
+    /* Bento KPI Cards en Rose Theme */
+    html[data-theme="rose"]:not(.dark) #vista-habitos-wrapper .bg-white\/80 {
+      background-color: rgba(255, 255, 255, 0.88) !important;
+      border-color: #fecdd3 !important;
+    }
+    html.dark[data-theme="rose"] #vista-habitos-wrapper {
+      background-color: #140d12 !important;
+    }
+    html.dark[data-theme="rose"] #vista-habitos-wrapper [data-categoria] {
+      background-color: #1a0f17 !important;
+      border-color: #3d1c31 !important;
+    }
+    html.dark[data-theme="rose"] #vista-habitos-wrapper [data-categoria] > div:first-child {
+      background-color: rgba(26, 15, 23, 0.95) !important;
+      border-color: #3d1c31 !important;
+    }
+    html.dark[data-theme="rose"] #vista-habitos-wrapper .habit-card {
+      background-color: #1e121a !important;
+      border-color: #3d1c31 !important;
+    }
+    html.dark[data-theme="rose"] #vista-habitos-wrapper [class*="bg-white"] {
+      background-color: #1e121a !important;
+      border-color: #3d1c31 !important;
+    }
+    html.dark[data-theme="rose"] #vista-habitos-wrapper .dark\:bg-slate-900\/80 {
+      background-color: rgba(30, 18, 26, 0.88) !important;
+      border-color: #4c1d3d !important;
+    }
+
+    /* Píldoras de Filtro de Hábitos en Rose Theme */
+    html[data-theme="rose"] .chip-filtro-habito.bg-indigo-600 {
+      background-color: #e11d48 !important;
+      color: #ffffff !important;
+    }
+    html.dark[data-theme="rose"] .chip-filtro-habito.bg-indigo-600 {
+      background-color: #f43f5e !important;
+      color: #ffffff !important;
+    }
+
+    /* Refinamiento Multitema para Scrollbars */
+    html[data-theme="rose"] .custom-scrollbar::-webkit-scrollbar-thumb,
+    html[data-theme="rose"] .kanban-col-body::-webkit-scrollbar-thumb {
+      background-color: #fecdd3 !important;
+    }
+    html[data-theme="rose"] .custom-scrollbar::-webkit-scrollbar-thumb:hover,
+    html[data-theme="rose"] .kanban-col-body::-webkit-scrollbar-thumb:hover {
+      background-color: #fda4af !important;
+    }
+    html.dark[data-theme="rose"] .custom-scrollbar::-webkit-scrollbar-thumb,
+    html.dark[data-theme="rose"] .kanban-col-body::-webkit-scrollbar-thumb {
+      background-color: #4c1d3d !important;
+    }
+    html.dark[data-theme="rose"] .custom-scrollbar::-webkit-scrollbar-thumb:hover,
+    html.dark[data-theme="rose"] .kanban-col-body::-webkit-scrollbar-thumb:hover {
+      background-color: #702657 !important;
+    }
+
+    /* Vistas envolventes para Tema Rose */
+    html[data-theme="rose"] #vista-habitos-wrapper,
+    html[data-theme="rose"] #vista-kanban-wrapper,
+    html[data-theme="rose"] #vista-portafolio-wrapper,
+    html[data-theme="rose"] #vista-detalle-proyecto-wrapper,
+    html[data-theme="rose"] #vista-financiero-wrapper,
+    html[data-theme="rose"] #vista-notas-wrapper {
+      background-color: var(--bg-canvas) !important;
+    }
+
+    /* Pestañas Financieras y Botones Segmentados en Tema Rose */
+    html[data-theme="rose"] .tab-btn-fin.bg-white {
+      background-color: #ffffff !important;
+      color: #e11d48 !important;
+      border-color: #fda4af !important;
+    }
+    html.dark[data-theme="rose"] .tab-btn-fin.dark\:bg-slate-800 {
+      background-color: #2b1824 !important;
+      color: #fb7185 !important;
+      border-color: #5a2647 !important;
+    }
+
+    /* Superficies Bento y Tarjetas de Métricas en Tema Rose */
+    html[data-theme="rose"] .bg-white.dark\:bg-slate-900,
+    html[data-theme="rose"] [class*="bg-white/80"],
+    html[data-theme="rose"] [class*="bg-slate-50"] {
+      border-color: #fecdd3 !important;
+    }
+    html.dark[data-theme="rose"] .bg-white.dark\:bg-slate-900,
+    html.dark[data-theme="rose"] [class*="dark:bg-slate-900/80"],
+    html.dark[data-theme="rose"] [class*="dark:bg-slate-900"] {
+      background-color: #1e121a !important;
+      border-color: #3d1c31 !important;
+    }
+
+    /* Modales y Drawers en Tema Rose */
+    html[data-theme="rose"] [id$="-card"] {
+      border-color: #fecdd3 !important;
+    }
+    html.dark[data-theme="rose"] [id$="-card"] {
+      background-color: #1e121a !important;
+      border-color: #4c1d3d !important;
+    }
+    html[data-theme="rose"] #drawer-detalle-transaccion,
+    html[data-theme="rose"] #drawer-detalle-tarea,
+    html[data-theme="rose"] #drawer-detalle-actividad {
+      background-color: #faf7f5 !important;
+      border-color: #fecdd3 !important;
+    }
+    html.dark[data-theme="rose"] #drawer-detalle-transaccion,
+    html.dark[data-theme="rose"] #drawer-detalle-tarea,
+    html.dark[data-theme="rose"] #drawer-detalle-actividad {
+      background-color: #1a0f17 !important;
+      border-color: #3d1c31 !important;
+    }
+
+    /* Botones primarios y acentos en Tema Rose */
+    html[data-theme="rose"] .bg-indigo-600 {
+      background-color: #e11d48 !important;
+    }
+    html[data-theme="rose"] .bg-indigo-600:hover {
+      background-color: #be123c !important;
+    }
+    html[data-theme="rose"] .text-indigo-600 {
+      color: #e11d48 !important;
+    }
+    html.dark[data-theme="rose"] .text-indigo-400 {
+      color: #fb7185 !important;
+    }
+    html[data-theme="rose"] .border-indigo-500,
+    html[data-theme="rose"] .border-indigo-600 {
+      border-color: #f43f5e !important;
+    }
+
+    /* Microinteracciones Táctiles 60 FPS */
+    button:not(:disabled) {
+      transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease-out, border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+    }
+
+    .sidebar-expanded {
+      width: 320px;
+    }
+
+    .sidebar-collapsed {
+      width: 72px;
+    }
+
+    .hide-on-collapse {
+      transition: opacity 0.2s ease;
+    }
+
+    .sidebar-collapsed .hide-on-collapse {
+      display: none !important;
+    }
+
+    .sidebar-collapsed .sidebar-header-row {
+      justify-content: center;
+    }
+
+    /* Scrollbar minimalista y fluida para las columnas Kanban */
+    .kanban-col-body::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .kanban-col-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .kanban-col-body::-webkit-scrollbar-thumb {
+      background-color: rgba(148, 163, 184, 0.4);
+      border-radius: 9999px;
+    }
+
+    .kanban-col-body::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(99, 102, 241, 0.6);
+    }
+
+    html.dark .kanban-col-body::-webkit-scrollbar-thumb {
+      background-color: rgba(148, 163, 184, 0.2);
+    }
+
+    html.dark .kanban-col-body::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(99, 102, 241, 0.5);
+    }
+
+    .kanban-dropzone-active {
+      background-color: rgba(238, 242, 255, 0.4) !important;
+      border: 2px dashed #818cf8 !important;
+      border-radius: 1rem !important;
+      transition: all 0.15s ease-in-out;
+    }
+
+    html.dark .kanban-dropzone-active {
+      background-color: rgba(99, 102, 241, 0.12) !important;
+      border: 2px dashed #6366f1 !important;
+    }
+
+    .card-dragging,
+    .dragging,
+    .sortable-chosen {
+      opacity: 0.4 !important;
+      transform: scale(0.95) rotate(1deg) !important;
+      box-shadow: 0 25px 50px -12px rgba(99, 102, 241, 0.25) !important;
+      border-color: #6366f1 !important;
+    }
+    .card-dragging:hover,
+    .dragging:hover,
+    .sortable-chosen:hover {
+      transform: scale(0.95) rotate(1deg) !important;
+    }
+
+    /* Placeholder visual para arrastre */
+    .kanban-drop-placeholder {
+      border: 2px dashed rgba(99, 102, 241, 0.6) !important;
+      background-color: rgba(238, 242, 255, 0.5) !important;
+      border-radius: 0.75rem;
+      min-height: 52px;
+      margin: 6px 0;
+      transition: all 0.15s ease-in-out;
+      pointer-events: none;
+    }
+
+    html.dark .kanban-drop-placeholder {
+      border: 2px dashed rgba(99, 102, 241, 0.5) !important;
+      background-color: rgba(30, 41, 59, 0.5) !important;
+    }
+
+    /* Trazabilidad moderna y equilibrada de dependencias en Kanban (Estilo Asana / ClickUp) */
+    .kanban-card-foco {
+      box-shadow: 0 0 0 1.5px rgba(99, 102, 241, 0.75), 0 6px 16px -2px rgba(99, 102, 241, 0.16) !important;
+      transform: translateY(-1.5px) scale(1.008) !important;
+      z-index: 30 !important;
+      position: relative !important;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    .kanban-card-predecesora {
+      box-shadow: 0 0 0 1.5px rgba(245, 158, 11, 0.75), 0 5px 14px -2px rgba(245, 158, 11, 0.14) !important;
+      background-color: rgba(254, 243, 199, 0.3) !important;
+      z-index: 25 !important;
+      position: relative !important;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    html.dark .kanban-card-predecesora {
+      background-color: rgba(245, 158, 11, 0.1) !important;
+    }
+
+    .kanban-card-sucesora {
+      box-shadow: 0 0 0 1.5px rgba(16, 185, 129, 0.75), 0 5px 14px -2px rgba(16, 185, 129, 0.14) !important;
+      background-color: rgba(209, 250, 229, 0.3) !important;
+      z-index: 25 !important;
+      position: relative !important;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    html.dark .kanban-card-sucesora {
+      background-color: rgba(16, 185, 129, 0.1) !important;
+    }
+
+    /* Prevención absoluta de tarjetas invisibles por AOS en columnas con scroll */
+    .kanban-card[data-aos^="fade"],
+    .kanban-card {
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+
+    .kanban-card.kanban-card-atenuada {
+      opacity: 0.58 !important;
+      filter: saturate(0.85);
+    }
+
+    @keyframes kanbanCardFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fadeIn {
+      animation: kanbanCardFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Scrollbars personalizados suaves para columnas, tableros y modales (Cobalt A.2.2 Zero Jitter) */
+    .custom-scrollbar {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: rgba(148, 163, 184, 0.35);
+      border-radius: 9999px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(99, 102, 241, 0.6);
+    }
+
+    html.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: rgba(148, 163, 184, 0.2);
+    }
+
+    html.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(129, 140, 248, 0.5);
+    }
+
+    /* ===================================================================== */
+    /* SweetAlert2: Visibilidad, Contraste y Modo Oscuro Coherente           */
+    /* ===================================================================== */
+    .swal2-container {
+      z-index: 99999 !important;
+    }
+
+    .swal2-styled {
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+
+    .swal2-actions {
+      gap: 0.75rem !important;
+    }
+
+    .swal2-styled.swal2-confirm {
+      background-color: #4f46e5 !important;
+      color: #ffffff !important;
+      font-weight: 700 !important;
+      font-size: 0.875rem !important;
+      padding: 0.625rem 1.25rem !important;
+      border-radius: 0.75rem !important;
+      box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.3) !important;
+      border: none !important;
+      transition: all 0.15s ease-in-out !important;
+    }
+
+    .swal2-styled.swal2-confirm:hover {
+      background-color: #4338ca !important;
+      color: #ffffff !important;
+    }
+
+    .swal2-styled.swal2-cancel {
+      background-color: #64748b !important;
+      color: #ffffff !important;
+      font-weight: 500 !important;
+      font-size: 0.875rem !important;
+      padding: 0.625rem 1.25rem !important;
+      border-radius: 0.75rem !important;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+      border: none !important;
+      transition: all 0.15s ease-in-out !important;
+    }
+
+    .swal2-styled.swal2-cancel:hover {
+      background-color: #475569 !important;
+      color: #ffffff !important;
+    }
+
+    /* Modales de peligro / confirmación destructiva */
+    .swal2-styled.swal2-confirm.swal2-btn-danger,
+    .swal2-confirm.swal2-btn-danger,
+    .swal2-styled.swal2-confirm[style*="rgb(220, 38, 38)"],
+    .swal2-styled.swal2-confirm[style*="#dc2626"] {
+      background-color: #dc2626 !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 6px -1px rgba(220, 38, 38, 0.3) !important;
+    }
+
+    .swal2-styled.swal2-confirm.swal2-btn-danger:hover,
+    .swal2-confirm.swal2-btn-danger:hover {
+      background-color: #b91c1c !important;
+      color: #ffffff !important;
+    }
+
+    /* Garantía absoluta de legibilidad: texto blanco en cualquier botón de acción SweetAlert2 */
+    .swal2-actions button,
+    .swal2-actions .swal2-styled {
+      color: #ffffff !important;
+    }
+
+    /* SweetAlert2 en Modo Oscuro (Armonía con la paleta Slate-900 / Slate-950) */
+    html.dark .swal2-popup {
+      background-color: #0f172a !important;
+      /* slate-900 */
+      color: #f1f5f9 !important;
+      /* slate-100 */
+      border: 1px solid #1e293b !important;
+      /* slate-800 */
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7) !important;
+    }
+
+    html.dark .swal2-title {
+      color: #f8fafc !important;
+    }
+
+    html.dark .swal2-html-container {
+      color: #cbd5e1 !important;
+      /* slate-300 */
+    }
+
+    html.dark .swal2-input,
+    html.dark .swal2-select,
+    html.dark .swal2-textarea {
+      background-color: #1e293b !important;
+      color: #f1f5f9 !important;
+      border: 1px solid #334155 !important;
+    }
+
+    /* Modales Globales en Modo Oscuro */
+    html.dark [id^="modal-"]>div:not(.modal-backdrop) {
+      background-color: #0f172a !important;
+      color: #f1f5f9 !important;
+      border-color: #1e293b !important;
+    }
+
+    html.dark [id^="modal-"] header,
+    html.dark [id^="modal-"] div.border-b.flex.justify-between.items-center {
+      background-color: #020617 !important;
+      border-color: #1e293b !important;
+    }
+
+    html.dark [id^="modal-"] input:not([type="checkbox"]):not([type="radio"]),
+    html.dark [id^="modal-"] select,
+    html.dark [id^="modal-"] textarea {
+      background-color: #1e293b !important;
+      color: #f1f5f9 !important;
+      border-color: #334155 !important;
+    }
+
+    html.dark [id^="modal-"] label {
+      color: #cbd5e1 !important;
+    }
+
+    /* Estilos para Workflow Procedural / Pasos Secuenciales */
+    .procedural-drawer {
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      margin-top: 0 !important;
+      border-width: 0 !important;
+      pointer-events: none;
+      transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, margin 0.2s ease, padding 0.2s ease;
+    }
+
+    .procedural-drawer.open {
+      max-height: 480px;
+      opacity: 1;
+      margin-top: 0.5rem !important;
+      padding-top: 0.375rem !important;
+      padding-bottom: 0.375rem !important;
+      border-width: 1px !important;
+      pointer-events: auto;
+      overflow-y: auto;
+    }
+
+    .procedural-step-locked {
+      opacity: 0.55;
+      cursor: not-allowed;
+      filter: grayscale(40%);
+    }
+
+
+    /* ===================================================================== */
+    /* ELIMINACIÓN GLOBAL DE SPINNERS / STEPPERS EN INPUTS NUMÉRICOS         */
+    /* Permite tipeo manual fluido sin flechas que obstruyan el contenido    */
+    /* ===================================================================== */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+      -webkit-appearance: none !important;
+      margin: 0 !important;
+    }
+    input[type=number] {
+      -moz-appearance: textfield !important;
+      appearance: textfield !important;
+    }
+    .no-spinner::-webkit-inner-spin-button,
+    .no-spinner::-webkit-outer-spin-button {
+      -webkit-appearance: none !important;
+      margin: 0 !important;
+    }
+    .no-spinner {
+      -moz-appearance: textfield !important;
+      appearance: textfield !important;
+    }
+
+
+    /* ===================================================================== */
+    /* UI/UX FRAMER & SAAS: FLUIDEZ GLOBAL Y MICRO-INTERACCIONES             */
+    /* ===================================================================== */
+
+    /* 1. Transición suave de entrada de vistas (Cero corte seco / 60 FPS) */
+    @keyframes viewFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    #vista-kanban-wrapper:not(.hidden),
+    #vista-habitos-wrapper:not(.hidden),
+    #vista-finanzas-wrapper:not(.hidden),
+    #vista-financiero-wrapper:not(.hidden),
+    #vista-portafolio-wrapper:not(.hidden),
+    #vista-detalle360-wrapper:not(.hidden),
+    #vista-detalle-proyecto-wrapper:not(.hidden),
+    #vista-notas-wrapper:not(.hidden),
+    .view-fade-enter {
+      animation: viewFadeIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      will-change: opacity, transform;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #vista-kanban-wrapper:not(.hidden),
+      #vista-habitos-wrapper:not(.hidden),
+      #vista-finanzas-wrapper:not(.hidden),
+      #vista-financiero-wrapper:not(.hidden),
+      #vista-portafolio-wrapper:not(.hidden),
+      #vista-detalle360-wrapper:not(.hidden),
+      #vista-detalle-proyecto-wrapper:not(.hidden),
+      #vista-notas-wrapper:not(.hidden),
+      .view-fade-enter {
+        animation: none !important;
+        transform: none !important;
+      }
+    }
+
+    /* 2. Barra de Navegación de Pestañas: Indicador activo luminoso Framer */
+    .nav-tab-active {
+      position: relative;
+    }
+    .nav-tab-active::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 20%;
+      right: 20%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #6366f1, transparent);
+      border-radius: 9999px;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    html.dark .nav-tab-active::after {
+      background: linear-gradient(90deg, transparent, #818cf8, transparent);
+      box-shadow: 0 0 8px rgba(129, 140, 248, 0.6);
+    }
+
+    /* 3. Animación orgánica de apertura de Modales (Scale-up suave) */
+    @keyframes modalScaleUp {
+      0% {
+        opacity: 0;
+        transform: scale(0.96) translateY(6px);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+    .modal-animate-enter {
+      animation: modalScaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      will-change: opacity, transform;
+    }
+
+    /* 4. Feedback háptico visual universal en botones activos */
+    button:not(:disabled):active {
+      transform: scale(0.96);
+    }
+
+    /* 6. Hábitos & Vida: Micro-interacciones de Checkmark y Tarjetas Bento */
+    @keyframes habitCheckPulse {
+      0% {
+        transform: scale(0.8);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+      }
+      60% {
+        transform: scale(1.15);
+        box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+      }
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+      }
+    }
+    .habit-pulse-success {
+      animation: habitCheckPulse 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes checkPop {
+      0% {
+        transform: scale(0.85);
+        opacity: 0.8;
+      }
+      50% {
+        transform: scale(1.18);
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    @keyframes flamePop {
+      0% {
+        transform: scale(1) rotate(0deg);
+      }
+      30% {
+        transform: scale(1.25) rotate(-6deg);
+      }
+      60% {
+        transform: scale(1.15) rotate(6deg);
+      }
+      100% {
+        transform: scale(1) rotate(0deg);
+      }
+    }
+
+    .check-pop {
+      animation: checkPop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+      will-change: transform, opacity;
+    }
+
+    .flame-pop {
+      animation: flamePop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+      will-change: transform;
+    }
+
+    /* Regla para checkboxes personalizados e iconos de check al marcarse */
+    input[type="checkbox"]:checked,
+    .habit-card button:has(svg.scale-100),
+    .habit-card [data-checked="true"],
+    .completado .check-icon,
+    :checked + .check-icon,
+    .check-pop-active {
+      animation: checkPop 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .check-pop,
+      .flame-pop,
+      .habit-pulse-success,
+      input[type="checkbox"]:checked,
+      .skeleton-box {
+        animation: none !important;
+      }
+    }
+
+    /* ========================================================================= */
+    /* 6.1. SKELETON LOADERS & ANIMACIÓN SHIMMER (ESTADOS DE CARGA REACTIVOS)   */
+    /* ========================================================================= */
+    @keyframes shimmer {
+      0% {
+        background-position: -200% 0;
+      }
+      100% {
+        background-position: 200% 0;
+      }
+    }
+
+    .skeleton-box {
+      background: linear-gradient(90deg, rgba(226, 232, 240, 0.6) 25%, rgba(241, 245, 249, 0.9) 50%, rgba(226, 232, 240, 0.6) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.6s infinite ease-in-out;
+    }
+
+    html.dark .skeleton-box {
+      background: linear-gradient(90deg, rgba(30, 41, 59, 0.7) 25%, rgba(51, 65, 85, 0.7) 50%, rgba(30, 41, 59, 0.7) 75%);
+      background-size: 200% 100%;
+    }
+
+    /* ========================================================================= */
+    /* 7. RED LÓGICA & TOPOLOGÍA WBS 360° (BENTO & VECTOR CONNECTORS)            */
+    /* ========================================================================= */
+    .wbs-viewport-container {
+      cursor: grab;
+      user-select: none;
+    }
+    .wbs-viewport-container:active {
+      cursor: grabbing;
+    }
+    .wbs-card {
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                  border-color 0.2s ease;
+      will-change: transform;
+    }
+    .wbs-card:hover {
+      transform: translateY(-2.5px) scale(1.012);
+      z-index: 30;
+    }
+    .wbs-connector-path {
+      transition: stroke 0.2s ease, stroke-width 0.2s ease;
+    }
+    .wbs-connector-path:hover {
+      stroke-width: 3px !important;
+    }
+    @keyframes wbsCriticalPulse {
+      0%, 100% {
+        stroke: #f59e0b;
+        filter: drop-shadow(0 0 2px rgba(245, 158, 11, 0.5));
+      }
+      50% {
+        stroke: #d97706;
+        filter: drop-shadow(0 0 6px rgba(217, 119, 6, 0.85));
+      }
+    }
+    .wbs-connector-critical {
+      animation: wbsCriticalPulse 2s infinite ease-in-out;
+    }
+    .wbs-connector-highlighted {
+      stroke-width: 3.5px !important;
+      stroke: #6366f1 !important;
+      filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.85)) !important;
+      z-index: 50;
+    }
+    .wbs-connector-highlighted-critical {
+      stroke-width: 3.5px !important;
+      stroke: #f59e0b !important;
+      filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.95)) !important;
+      z-index: 50;
+    }
+    .wbs-node-dimmed {
+      opacity: 0.22 !important;
+      filter: grayscale(50%) !important;
+      pointer-events: auto;
+      transition: opacity 0.25s ease, filter 0.25s ease !important;
+    }
+    .wbs-node-focused {
+      opacity: 1 !important;
+      filter: none !important;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.65), 0 10px 25px -5px rgba(99, 102, 241, 0.35) !important;
+      transform: translateY(-3px) scale(1.02) !important;
+      z-index: 40 !important;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+    .wbs-destello-highlight {
+      animation: wbsDestello 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+    }
+    @keyframes wbsDestello {
+      0% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.9), 0 0 25px rgba(99, 102, 241, 0.6);
+        transform: scale(1.03);
+      }
+      50% {
+        box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.35), 0 0 35px rgba(99, 102, 241, 0.35);
+        transform: scale(1.015);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+        transform: scale(1);
+      }
+    }
+
+    /* Animaciones para Eliminación Optimista y Barra de Progreso Deshacer (Undo - 4.5s) */
+    #undo-toast-container,
+    #toast-undo-global-container,
+    #toast-undo-habito-container {
+      position: fixed !important;
+      bottom: 20px !important;
+      right: 20px !important;
+      z-index: 99999 !important;
+      pointer-events: auto !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 0.625rem !important;
+      max-width: 24rem !important;
+      width: calc(100% - 2.5rem) !important;
+    }
+
+    .toast-undo-item {
+      display: flex !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      pointer-events: auto !important;
+      animation: toastUndoEntrada 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+    }
+
+    @keyframes toastUndoEntrada {
+      from {
+        opacity: 0 !important;
+        transform: translateY(16px) scale(0.96) !important;
+      }
+      to {
+        opacity: 1 !important;
+        transform: translateY(0) scale(1) !important;
+      }
+    }
+
+    .toast-undo-item.toast-undo-salida {
+      animation: toastUndoSalida 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+    }
+
+    @keyframes toastUndoSalida {
+      from {
+        opacity: 1 !important;
+        transform: translateY(0) scale(1) !important;
+      }
+      to {
+        opacity: 0 !important;
+        transform: translateY(12px) scale(0.96) !important;
+      }
+    }
+
+    @keyframes undoProgressBar {
+      from {
+        width: 100%;
+      }
+      to {
+        width: 0%;
+      }
+    }
+
+    .animate-undo-progress {
+      animation: undoProgressBar 4.5s linear forwards !important;
+    }
+
+    .card-eliminando-optimista {
+      opacity: 0 !important;
+      transform: scale(0.92) translateY(8px) !important;
+      max-height: 0 !important;
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      overflow: hidden !important;
+      pointer-events: none !important;
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+
+    /* Micro-interacciones táctiles y hover para Tarjetas del Módulo Notas */
+    .card-nota {
+      cursor: pointer;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease, border-color 0.18s ease !important;
+    }
+
+    .card-nota:hover {
+      transform: translateY(-2px);
+    }
+
+    .card-nota:active {
+      transform: translateY(0) scale(0.99);
+    }
+
+    /* Blindaje contra colapso de viewport por SweetAlert2 */
+    html.swal2-shown,
+    body.swal2-shown,
+    html.swal2-height-auto,
+    body.swal2-height-auto {
+      height: 100% !important;
+      min-height: 100% !important;
+    }
+
+    /* ===================================================================== */
+    /* SUPERPOSICIÓN LIBRE DE MICRO-POPOVERS KANBAN (OVERFLOW-VISIBLE & Z-50) */
+    /* ===================================================================== */
+    .kanban-hover-popover,
+    #popover-time-filter {
+      z-index: 50 !important;
+      transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                  visibility 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+      transition-delay: 0s, 0s, 0s;
+    }
+
+    /* Retardo de 250ms al cerrar para evitar cierres accidentales al mover el mouse */
+    .kanban-hover-popover-container:not(:hover) .kanban-hover-popover,
+    .group\/timefilter:not(:hover) #popover-time-filter {
+      transition-delay: 0.25s, 0.25s, 0.25s !important;
+    }
+
+    /* Puente invisible continuo entre el botón de filtro y el popover */
+    .kanban-hover-popover::before,
+    #popover-time-filter::before {
+      content: '';
+      position: absolute;
+      top: -8px;
+      left: 0;
+      right: 0;
+      height: 8px;
+      background: transparent;
+      pointer-events: auto;
+    }
+
+    /* Activación hover o programática */
+    .group\/filter-hito:hover .kanban-hover-popover,
+    .group\/filter-prio:hover .kanban-hover-popover,
+    .group\/filter-energia:hover .kanban-hover-popover,
+    .group\/filter-plazo:hover .kanban-hover-popover,
+    .group\/filter-dep:hover .kanban-hover-popover,
+    .group\/timefilter:hover #popover-time-filter,
+    .kanban-hover-popover:hover,
+    #popover-time-filter:hover,
+    .kanban-hover-popover.popover-force-open,
+    .kanban-hover-popover.filter-popover-open,
+    #popover-time-filter.time-popover-open {
+      visibility: visible !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      transform: translateY(0) !important;
+      transition-delay: 0s !important;
+    }
+
+    /* ===================================================================== */
+    /* SISTEMA DE DISEÑO GLOBAL: UTILIDADES DE ICONOGRAFÍA Y BADGES SEMÁNTICOS */
+    /* ===================================================================== */
+    .portal-icon-sm {
+      width: 12px;
+      height: 12px;
+      stroke-width: 1.75;
+      stroke: currentColor;
+      fill: none;
+      flex-shrink: 0;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .portal-icon {
+      width: 16px;
+      height: 16px;
+      stroke-width: 1.75;
+      stroke: currentColor;
+      fill: none;
+      flex-shrink: 0;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .portal-icon-lg {
+      width: 20px;
+      height: 20px;
+      stroke-width: 1.75;
+      stroke: currentColor;
+      fill: none;
+      flex-shrink: 0;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .badge-sem-emerald {
+      color: #10b981;
+      background-color: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .badge-sem-rose {
+      color: #f43f5e;
+      background-color: rgba(244, 63, 94, 0.1);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+    }
+
+    .badge-sem-amber {
+      color: #f59e0b;
+      background-color: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+
+    .badge-sem-indigo {
+      color: #6366f1;
+      background-color: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    .badge-sem-slate {
+      color: #94a3b8;
+      background-color: rgba(148, 163, 184, 0.1);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    html.dark .badge-sem-emerald {
+      color: #34d399;
+      background-color: rgba(16, 185, 129, 0.15);
+      border-color: rgba(52, 211, 153, 0.25);
+    }
+
+    html.dark .badge-sem-rose {
+      color: #fb7185;
+      background-color: rgba(244, 63, 94, 0.15);
+      border-color: rgba(251, 113, 133, 0.25);
+    }
+
+    html.dark .badge-sem-amber {
+      color: #fbbf24;
+      background-color: rgba(245, 158, 11, 0.15);
+      border-color: rgba(251, 191, 36, 0.25);
+    }
+
+    html.dark .badge-sem-indigo {
+      color: #818cf8;
+      background-color: rgba(99, 102, 241, 0.15);
+      border-color: rgba(129, 140, 248, 0.25);
+    }
+
+    html.dark .badge-sem-slate {
+      color: #cbd5e1;
+      background-color: rgba(148, 163, 184, 0.12);
+      border-color: rgba(203, 213, 225, 0.2);
+    }
+
+    /* ===================================================================== */
+    /* SISTEMA DE DISEÑO GLOBAL: BOTONES UNIVERSALES Y SUPERFICIES BASE     */
+    /* ===================================================================== */
+    .btn-portal-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      line-height: 1rem;
+      padding: 0.375rem 0.75rem;
+      border-radius: 0.5rem;
+      background-color: #4f46e5;
+      color: #ffffff;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+
+    .btn-portal-primary:hover {
+      background-color: #4338ca;
+    }
+
+    .btn-portal-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      line-height: 1rem;
+      padding: 0.375rem 0.625rem;
+      border-radius: 0.5rem;
+      background-color: #f1f5f9;
+      color: #334155;
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      transition: all 0.15s ease;
+    }
+
+    .btn-portal-secondary:hover {
+      background-color: #e2e8f0;
+    }
+
+    html.dark .btn-portal-secondary {
+      background-color: rgba(30, 41, 59, 0.8);
+      color: #cbd5e1;
+      border-color: rgba(51, 65, 85, 0.6);
+    }
+
+    html.dark .btn-portal-secondary:hover {
+      background-color: rgba(51, 65, 85, 0.8);
+    }
+
+    .btn-portal-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.375rem;
+      border-radius: 0.5rem;
+      color: #64748b;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+
+    .btn-portal-icon:hover {
+      background-color: #f1f5f9;
+      color: #1e293b;
+    }
+
+    html.dark .btn-portal-icon {
+      color: #94a3b8;
+    }
+
+    html.dark .btn-portal-icon:hover {
+      background-color: #1e293b;
+      color: #f8fafc;
+    }
+
+    .portal-surface {
+      background-color: #ffffff;
+      border-radius: 0.75rem;
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      box-shadow: var(--elevation-1);
+      transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+    }
+
+    html.dark .portal-surface {
+      background-color: #0D1526;
+      border: 1px solid rgba(30, 41, 59, 0.45);
+      box-shadow: 0 10px 25px -5px rgba(2, 6, 23, 0.8), 0 8px 10px -6px rgba(30, 58, 138, 0.18);
+    }
+
+    html.dark .portal-surface:hover,
+    html.dark .portal-surface.hover\:elevation-hover:hover {
+      box-shadow: 0 14px 28px -4px rgba(2, 6, 23, 0.85), 0 10px 14px -5px rgba(30, 58, 138, 0.28);
+    }
+
+    /* CONTROLES DE FILTRO TIPO GHOST (COBALT AERODYNAMIC A.2.2) */
+    .filter-ghost-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.625rem;
+      border-radius: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #64748b;
+      background: transparent;
+      border: 1px solid transparent;
+      transition: all 0.15s ease-out;
+      cursor: pointer;
+    }
+
+    .filter-ghost-btn:hover {
+      color: #0f172a;
+      background: rgba(241, 245, 249, 0.8);
+    }
+
+    .filter-ghost-btn.active,
+    .filter-ghost-btn[data-active="true"] {
+      color: #0284c7;
+      background: rgba(14, 165, 233, 0.08);
+      border-color: rgba(14, 165, 233, 0.2);
+    }
+
+    html.dark .filter-ghost-btn {
+      color: #94a3b8;
+    }
+
+    html.dark .filter-ghost-btn:hover {
+      color: #f8fafc;
+      background: rgba(30, 41, 59, 0.4);
+    }
+
+    html.dark .filter-ghost-btn.active,
+    html.dark .filter-ghost-btn[data-active="true"] {
+      color: #7dd3fc;
+      background: rgba(56, 189, 248, 0.1);
+      border-color: rgba(56, 189, 248, 0.25);
+    }
+
+    .filter-ghost-select {
+      background: transparent;
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      color: #64748b;
+      border-radius: 0.5rem;
+      padding: 0.375rem 0.625rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      outline: none;
+      transition: all 0.15s ease-out;
+    }
+
+    .filter-ghost-select:hover,
+    .filter-ghost-select:focus {
+      color: #0f172a;
+      border-color: #cbd5e1;
+    }
+
+    html.dark .filter-ghost-select {
+      background: rgba(13, 21, 38, 0.6);
+      border: 1px solid rgba(30, 41, 59, 0.45);
+      color: #94a3b8;
+    }
+
+    html.dark .filter-ghost-select:hover,
+    html.dark .filter-ghost-select:focus {
+      color: #7dd3fc;
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
+    /* ===================================================================== */
+    /* ADAPTACIÓN MÓVIL RESPONSIVA: MODALES BOTTOM SHEET Y KANBAN (< 768px)  */
+    /* ESTÁNDAR: COBALT AERODYNAMIC A.2.2                                    */
+    /* ===================================================================== */
+    @media (max-width: 767px) {
+      /* Padding seguro para dispositivos móviles con barra de navegación / iPhone bar */
+      .pb-safe {
+        padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 1.25rem)) !important;
+      }
+
+      /* Contenedores de modales principales anclados abajo como Bottom Sheet */
+      #modal-tarea-flow,
+      #modal-actividad-flow,
+      #modal-editar-nota,
+      #modal-crear-gasto,
+      #modal-editar-gasto,
+      #modal-editar-proyecto,
+      #modal-hito,
+      #modal-proyecto-wizard,
+      #modal-shortcuts {
+        align-items: flex-end !important;
+        padding: 0 !important;
+      }
+
+      #modal-tarea-flow > div,
+      #modal-actividad-flow > div,
+      #modal-editar-nota > div,
+      #modal-crear-gasto > div,
+      #modal-editar-gasto > div,
+      #modal-editar-proyecto > div,
+      #modal-hito > div,
+      #modal-proyecto-wizard > div,
+      #modal-shortcuts > div {
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: 88vh !important;
+        border-radius: 1.5rem 1.5rem 0 0 !important;
+        border-bottom: none !important;
+        margin-bottom: 0 !important;
+        overflow-y: auto !important;
+        animation: slideUpSheet 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+      }
+
+      @keyframes slideUpSheet {
+        from {
+          transform: translateY(100%);
+          opacity: 0.7;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+
+      /* Columnas Kanban en Móvil (< 768px): únicamente la activa al 100% */
+      .kanban-col-container:not(.kanban-col-mobile-active) {
+        display: none !important;
+      }
+
+      .kanban-col-container.kanban-col-mobile-active {
+        display: flex !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 auto !important;
+      }
+
+      /* =================================================================== */
+      /* DIRECTRIZ 3: MICRO-DENSIDAD Y REDUCCIÓN DE RUIDO VISUAL EN TARJETAS */
+      /* =================================================================== */
+      .kanban-card,
+      .habit-card {
+        padding: 0.625rem !important; /* p-2.5 = 10px */
+        gap: 0.375rem !important;
+      }
+
+      /* Título de tarjetas: text-xs font-semibold y máximo 2 líneas */
+      .kanban-card h4,
+      .habit-card h4 {
+        font-size: 0.75rem !important; /* text-xs */
+        font-weight: 600 !important;
+        line-height: 1.25 !important;
+        display: -webkit-box !important;
+        -webkit-box-orient: vertical !important;
+        -webkit-line-clamp: 2 !important;
+        line-clamp: 2 !important;
+        overflow: hidden !important;
+      }
+
+      /* Acento de prioridad sutil en el borde izquierdo (2px) */
+      .kanban-card > div[class*="absolute left-0"],
+      .habit-card > div[class*="absolute left-0"] {
+        width: 2px !important;
+      }
+
+      /* Checkbox táctil en tarjeta de hábitos (mínimo 36px táctil) */
+      .habit-card button[onclick*="toggleCompletarActividadPersonal"] {
+        min-width: 36px !important;
+        min-height: 36px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+
+      /* Formato compacto de racha en hábitos */
+      .habit-card span[title*="Racha activa"] {
+        padding: 0.125rem 0.375rem !important;
+        font-size: 0.65rem !important;
+      }
+
+      /* Ocultar textos secundarios descriptivos extensos en móvil */
+      .kanban-card .procedural-widget-container:empty,
+      .habit-card .procedural-widget-container:empty {
+        display: none !important;
+      }
+
+      /* =================================================================== */
+      /* DIRECTRIZ 4: SCROLL GLOBAL FLUIDO Y ZONA SEGURA TÁCTIL (pb-24)      */
+      /* =================================================================== */
+      #vista-kanban-wrapper,
+      #vista-habitos-wrapper,
+      #vista-portafolio-wrapper,
+      #vista-notas-wrapper,
+      #vista-financiera-wrapper,
+      #vista-detalle-proyecto-wrapper {
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
+
+      .kanban-col-body,
+      #lista-actividades-personales {
+        padding-bottom: 6rem !important; /* pb-24 = 6rem = 96px */
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
+
+      /* Supresión total del botón de notas en header móvil (< 768px) */
+      #btn-nav-notas,
+      #btn-header-notas,
+      #tab-btn-notas,
+      #badge-header-notas {
+        display: none !important;
+      }
+    }
+
+    @media (min-width: 768px) {
+      .kanban-col-container {
+        display: flex !important;
+      }
+    }
+
+    /* ===================================================================== */
+    /* POPOVER GLOBAL DE PREVISUALIZACIÓN DE NOTAS (COBALT A.2.2)            */
+    /* ===================================================================== */
+    #popover-nota-preview {
+      will-change: transform, opacity;
+      pointer-events: none;
+    }
+
+    @media (max-width: 767px) {
+      #popover-nota-preview {
+        display: none !important;
+      }
+    }
+
+    /* ===================================================================== */
+    /* ESTILOS HIGH-END PARA EL MÓDULO IDEAS (GLASSMORPHISM & MICRO-FX)     */
+    /* ===================================================================== */
+    @keyframes ideasShake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-4px); }
+      40%, 80% { transform: translateX(4px); }
+    }
+    .animate-shake-input {
+      animation: ideasShake 0.4s ease-in-out;
+    }
+
+    @keyframes ideasGlowPulse {
+      0%, 100% {
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.25), inset 0 0 10px rgba(168, 85, 247, 0.15);
+      }
+      50% {
+        box-shadow: 0 0 25px rgba(168, 85, 247, 0.45), inset 0 0 15px rgba(236, 72, 153, 0.25);
+      }
+    }
+    .ideas-aurora-glow {
+      animation: ideasGlowPulse 4s infinite ease-in-out;
+    }
+
+    @keyframes ideasWave {
+      0%, 100% { height: 4px; }
+      50% { height: 16px; }
+    }
+    .wave-bar-1 { animation: ideasWave 0.8s infinite ease-in-out; }
+    .wave-bar-2 { animation: ideasWave 0.9s infinite ease-in-out 0.15s; }
+    .wave-bar-3 { animation: ideasWave 0.75s infinite ease-in-out 0.3s; }
+    .wave-bar-4 { animation: ideasWave 1s infinite ease-in-out 0.2s; }
+    .wave-bar-5 { animation: ideasWave 0.85s infinite ease-in-out 0.4s; }
+
+    .ideas-drag-handle {
+      touch-action: none !important;
+      cursor: grab;
+    }
+    .ideas-drag-handle:active {
+      cursor: grabbing;
+    }
+
+    /* ===================================================================== */
+    /* VENTANA FLOTANTE ESTILO CANVAS / PIP (MÓDULO IDEAS HIGH-END)          */
+    /* ===================================================================== */
+    .ideas-floating-window {
+      position: fixed;
+      min-width: 320px;
+      min-height: 380px;
+      max-width: 95vw;
+      max-height: 92vh;
+      resize: both;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 35px -5px rgba(99, 102, 241, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+    }
+    .ideas-floating-window.is-maximized {
+      top: 16px !important;
+      left: 16px !important;
+      right: 16px !important;
+      bottom: 16px !important;
+      width: calc(100vw - 32px) !important;
+      height: calc(100vh - 32px) !important;
+      max-width: none !important;
+      max-height: none !important;
+      resize: none !important;
+      border-radius: 1.25rem !important;
+    }
+    .ideas-floating-window.is-minimized {
+      height: 48px !important;
+      min-height: 48px !important;
+      overflow: hidden !important;
+      resize: none !important;
+    }
+    .ideas-floating-window.is-minimized #ideas-floating-body,
+    .ideas-floating-window.is-minimized #ideas-floating-filterbar {
+      display: none !important;
+    }
+    .ideas-window-drag-header {
+      cursor: move;
+      user-select: none;
+      touch-action: none;
+    }
+    .ideas-resize-handle {
+      position: absolute;
+      right: 2px;
+      bottom: 2px;
+      width: 14px;
+      height: 14px;
+      cursor: nwse-resize;
+      pointer-events: none;
+      opacity: 0.4;
+    }
+
+    /* Estilos de Ideas y Chips */
+    .idea-tag-chip {
+      background-color: rgba(99, 102, 241, 0.1);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+  </style>

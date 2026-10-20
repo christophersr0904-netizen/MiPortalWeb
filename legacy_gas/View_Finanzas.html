@@ -1,0 +1,609 @@
+    <!-- ======================================================= -->
+    <!-- ======================================================= -->
+    <!-- 2.2. VISTA TABLERO FINANCIERO (REINGENIERÍA ESTRUCTURAL) -->
+    <!-- ======================================================= -->
+    <div id="vista-financiero-wrapper"
+      class="hidden flex-1 bg-slate-100 dark:bg-slate-950 flex-col w-full h-full overflow-y-auto transition-colors duration-200">
+
+      <!-- HEADER FINANCIERO -->
+      <header
+        class="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-4 md:px-6 py-3.5 shrink-0 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-0 z-20 transition-colors duration-200">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 text-xl font-bold">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-lg text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 1 1-1v-4"/></svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="font-black text-slate-800 dark:text-slate-100 text-lg tracking-tight">
+                Finanzas & Gobernanza de Liquidez
+              </h2>
+              <span
+                class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                En Tiempo Real
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Coexistencia Real / Proyectado, Cuotas Bancarias, Calendarios Sincronizados y Presupuestos
+            </p>
+          </div>
+        </div>
+
+        <!-- Indicador de Tipo de Cambio (TC) -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" onclick="consultarTipoCambioActual(true)" title="Actualizar tipo de cambio oficial SUNAT / SBS"
+            class="btn-portal-secondary flex items-center gap-1.5 active:scale-95">
+            <span id="icon-refresh-tc" class="transition-transform duration-300 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+            </span>
+            <span class="hidden sm:inline">TC SUNAT:</span>
+            <span id="btn-label-tc" class="font-mono tabular-nums text-amber-600 dark:text-amber-400 font-black">3.750</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- BARRA DE NAVEGACIÓN PRINCIPAL (4 PESTAÑAS ESTRUCTURALES) -->
+      <div class="px-4 md:px-6 pt-3 pb-2 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50">
+        
+        <!-- Tabs Pills -->
+        <div class="flex items-center gap-1.5 bg-slate-200/70 dark:bg-slate-900/90 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 overflow-x-auto">
+          
+          <!-- Pestaña 1: Vista General & KPIs -->
+          <button type="button" id="tab-btn-fin-general" onclick="cambiarTabFinanzas('general')"
+            class="tab-btn-fin px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+            <span>Vista General & KPIs</span>
+          </button>
+
+          <!-- Pestaña 2: Transacciones (Unificadas) -->
+          <button type="button" id="tab-btn-fin-transacciones" onclick="cambiarTabFinanzas('transacciones')"
+            class="tab-btn-fin px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>
+            <span>Transacciones</span>
+            <span id="tab-count-transacciones"
+              class="text-[10px] px-2 py-0.2 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-full font-mono font-bold">0</span>
+          </button>
+
+          <!-- Pestaña 3: Control de Cuotas / Créditos -->
+          <button type="button" id="tab-btn-fin-cuotas" onclick="cambiarTabFinanzas('cuotas')"
+            class="tab-btn-fin px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+            <span>Control de Cuotas / Créditos</span>
+            <span id="tab-count-cuotas"
+              class="text-[10px] px-2 py-0.2 bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 rounded-full font-mono font-bold">0</span>
+          </button>
+
+          <!-- Pestaña 4: Presupuestos -->
+          <button type="button" id="tab-btn-fin-presupuesto" onclick="cambiarTabFinanzas('presupuesto')"
+            class="tab-btn-fin px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+            <span>Presupuestos</span>
+          </button>
+        </div>
+
+        <!-- Selector de Segmento y Periodo Global -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- Barra de Segmentación Maestra: [ Todos | Proyectos | Personal ] -->
+          <div class="inline-flex p-1 bg-slate-200/70 dark:bg-slate-900/90 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 gap-1 text-xs">
+            <button type="button" id="btn-seg-fin-todos" onclick="filtrarSegmentoFinanzas('TODOS')"
+              class="btn-seg-fin px-3 py-1 rounded-xl text-xs font-bold transition-all shadow-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+              <span>Todos</span>
+            </button>
+            <button type="button" id="btn-seg-fin-proyectos" onclick="filtrarSegmentoFinanzas('PROYECTOS')"
+              class="btn-seg-fin px-3 py-1 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+              <span>Proyectos</span>
+            </button>
+            <button type="button" id="btn-seg-fin-personal" onclick="filtrarSegmentoFinanzas('PERSONAL')"
+              class="btn-seg-fin px-3 py-1 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Personal</span>
+            </button>
+          </div>
+
+          <!-- Selector de Periodo Global Unificado -->
+          <div class="relative inline-flex items-center">
+            <span class="absolute left-2.5 pointer-events-none text-slate-400 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M17 14h-6"/><path d="M13 18H7"/><path d="M7 14h.01"/><path d="M17 18h.01"/></svg>
+            </span>
+            <select id="filtro-mes-finanzas" onchange="cambiarFiltroMesFinanzas(this.value)"
+              class="py-1.5 pl-8 pr-3 text-xs bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 shadow-2xs font-semibold cursor-pointer transition">
+              <option value="MES_ACTUAL" selected>Mes Actual</option>
+              <option value="MES_ANTERIOR">Mes Anterior</option>
+              <option value="ULTIMOS_3_MESES">Últimos 3 Meses</option>
+              <option value="ANIO_ACTUAL">Año Actual</option>
+              <option value="TODOS">Todos los Periodos</option>
+            </select>
+          </div>
+
+
+        </div>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- PESTAÑA 1: VISTA GENERAL & KPIS (PANEL DECISIONAL BENTO GRID)     -->
+      <!-- ================================================================= -->
+      <div id="vista-fin-tab-general" class="tab-fin-view p-4 md:p-6 space-y-5">
+        
+        <!-- RESUMEN TOP: SALDO EN MANO HOY VS PROYECCIÓN FIN DE MES -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          
+          <!-- Card 1: Saldo en Mano Real Hoy -->
+          <div class="portal-surface p-4 relative overflow-hidden flex flex-col justify-between">
+            <div class="flex items-center justify-between text-slate-400 dark:text-slate-500 mb-1">
+              <span class="text-[10px] uppercase font-bold tracking-wider">Dinero Real Hoy (En Mano)</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Liquidez Real</span>
+            </div>
+            <div>
+              <div id="kpi-saldo-en-mano" class="text-2xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400 truncate">
+                S/ 0.00
+              </div>
+              <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-mono tabular-nums pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                <span>Ing. Cobrados: <strong id="kpi-sub-ing-real" class="text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">S/ 0.00</strong></span>
+                <span>Gas. Pagados: <strong id="kpi-sub-gas-real" class="text-rose-500 dark:text-rose-400 font-mono tabular-nums">S/ 0.00</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Saldo Proyectado a Fin de Mes -->
+          <div class="portal-surface p-4 relative overflow-hidden flex flex-col justify-between">
+            <div class="flex items-center justify-between text-slate-400 dark:text-slate-500 mb-1">
+              <span class="text-[10px] uppercase font-bold tracking-wider">Saldo Proyectado Fin de Mes</span>
+              <span id="badge-proy-status" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300">Estimado</span>
+            </div>
+            <div>
+              <div id="kpi-saldo-proyectado-fin-mes" class="text-2xl font-black font-mono tabular-nums text-cyan-600 dark:text-cyan-400 truncate">
+                S/ 0.00
+              </div>
+              <div class="text-[10px] text-slate-400 dark:text-slate-500 mt-1 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                Restando compromisos y cuotas pendientes del mes
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Compromisos y Cuotas Pendientes del Mes -->
+          <div class="portal-surface p-4 flex flex-col justify-between">
+            <div class="flex items-center justify-between text-slate-400 dark:text-slate-500 mb-1">
+              <span class="text-[10px] uppercase font-bold tracking-wider">Compromisos por Pagar (Mes)</span>
+              <span id="badge-count-pendientes" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">0 Pendientes</span>
+            </div>
+            <div>
+              <div id="kpi-total-compromisos-pendientes" class="text-2xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400 truncate">
+                S/ 0.00
+              </div>
+              <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-mono tabular-nums pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                <span>Cuotas: <strong id="kpi-sub-cuotas-pend" class="text-violet-600 dark:text-violet-400 font-mono tabular-nums">S/ 0.00</strong></span>
+                <span>Otros Prog.: <strong id="kpi-sub-otros-pend" class="text-slate-700 dark:text-slate-300 font-mono tabular-nums">S/ 0.00</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 4: Posición Bimonetaria y TC -->
+          <div class="portal-surface p-4 flex flex-col justify-between">
+            <div class="flex items-center justify-between text-slate-400 dark:text-slate-500 mb-1">
+              <span class="text-[10px] uppercase font-bold tracking-wider">Posición Bimonetaria</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono">PEN / USD</span>
+            </div>
+            <div>
+              <div class="flex items-baseline justify-between font-mono tabular-nums text-xs">
+                <span class="text-slate-500">PEN:</span>
+                <span id="kpi-fin-bimon-pen" class="font-bold text-slate-800 dark:text-slate-100 text-sm font-mono tabular-nums">S/ 0.00</span>
+              </div>
+              <div class="flex items-baseline justify-between font-mono tabular-nums text-xs mt-0.5">
+                <span class="text-slate-500">USD:</span>
+                <span id="kpi-fin-bimon-usd" class="font-bold text-emerald-600 dark:text-emerald-400 text-sm font-mono tabular-nums">$ 0.00</span>
+              </div>
+              <div class="mt-1 pt-1 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+                <span>TC SUNAT:</span>
+                <span id="kpi-fin-tc-val" class="font-mono tabular-nums font-bold text-slate-700 dark:text-slate-300">3.750</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- BENTO GRID: LOS 5 KPIS DE IMPACTO DECISIONAL -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-black text-slate-800 dark:text-slate-100 text-sm uppercase tracking-wider flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              <span>Indicadores de Salud & Decisión Financiera</span>
+            </h3>
+            <span class="text-xs text-slate-400">Calculado sobre tus ingresos, gastos y cuotas activas</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+            <!-- KPI 1: SEMÁFORO DE LIQUIDEZ -->
+            <div class="portal-surface p-4 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-emerald-500" id="dot-semaforo-liquidez"></span>
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200">1. Semáforo de Liquidez</span>
+                  </div>
+                  <span id="badge-semaforo-liquidez" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Holgado</span>
+                </div>
+                <div class="space-y-1">
+                  <div class="text-[11px] text-slate-500">Liquidez Neta Estimada (Fin de Mes):</div>
+                  <div id="val-semaforo-liquidez" class="text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">S/ 0.00</div>
+                </div>
+                <p id="desc-semaforo-liquidez" class="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                  Tus ingresos cubren con holgura los gastos y cuotas bancarias restantes del mes.
+                </p>
+              </div>
+              <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
+                <div id="bar-semaforo-liquidez" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 80%"></div>
+              </div>
+            </div>
+
+            <!-- KPI 2: ALERTA DE FUGA / GASTOS HORMIGA -->
+            <div class="portal-surface p-4 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-amber-500 flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+                    </span>
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200">2. Alerta Fuga / Gastos Hormiga</span>
+                  </div>
+                  <span id="badge-gastos-hormiga" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Bajo Control</span>
+                </div>
+                <div class="space-y-1">
+                  <div class="text-[11px] text-slate-500">Compras menores no esenciales del mes:</div>
+                  <div id="val-gastos-hormiga" class="text-xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">S/ 0.00</div>
+                </div>
+                <p id="desc-gastos-hormiga" class="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                  Umbral saludable mensual: <span class="font-bold text-slate-700 dark:text-slate-300 font-mono tabular-nums">&le; S/ 300.00</span> (o 10% de ingresos).
+                </p>
+              </div>
+              <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
+                <div id="bar-gastos-hormiga" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 15%"></div>
+              </div>
+            </div>
+
+            <!-- KPI 3: CAPACIDAD DE AHORRO / SUPERÁVIT MENSUAL -->
+            <div class="portal-surface p-4 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-emerald-500 flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                    </span>
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200">3. Capacidad de Ahorro / Superávit</span>
+                  </div>
+                  <span id="badge-capacidad-ahorro" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Superávit</span>
+                </div>
+                <div class="space-y-1">
+                  <div class="text-[11px] text-slate-500">Dinero libre para ahorro / inversión:</div>
+                  <div id="val-capacidad-ahorro" class="text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">S/ 0.00</div>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2 font-mono tabular-nums">
+                  <span>Tasa de Ahorro: <strong id="val-ratio-ahorro-pct" class="text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">0.0%</strong></span>
+                  <span>Meta: &ge; 20%</span>
+                </div>
+              </div>
+              <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
+                <div id="bar-capacidad-ahorro" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- KPI 4: NIVEL DE ENDEUDAMIENTO EN CUOTAS -->
+            <div class="portal-surface p-4 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-violet-500 flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>
+                    </span>
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200">4. Nivel de Endeudamiento en Cuotas</span>
+                  </div>
+                  <span id="badge-endeudamiento-cuotas" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Saludable</span>
+                </div>
+                <div class="space-y-1">
+                  <div class="text-[11px] text-slate-500">% Ingreso Comprometido en Cuotas:</div>
+                  <div id="val-endeudamiento-cuotas" class="text-xl font-black font-mono tabular-nums text-violet-600 dark:text-violet-400">0.0%</div>
+                </div>
+                <div class="flex items-center justify-between text-[10px] text-slate-400 mt-2">
+                  <span>Compromiso: <strong id="val-cuotas-compromiso-sub" class="text-slate-700 dark:text-slate-300 font-mono tabular-nums">S/ 0.00/mes</strong></span>
+                  <span>Límite seguro: &le; 30%</span>
+                </div>
+              </div>
+              <div class="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-3">
+                <div id="bar-endeudamiento-cuotas" class="bg-violet-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- KPI 5: RADAR DE CATEGORÍAS CRÍTICAS -->
+            <div class="portal-surface p-4 md:col-span-2 flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-indigo-500 flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+                    </span>
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200">5. Radar de Categorías Críticas</span>
+                  </div>
+                  <span id="badge-radar-criticas" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Monitoreo</span>
+                </div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+                  Categorías con mayor presión presupuestal o consumo acelerado este periodo:
+                </p>
+                <div id="lista-radar-categorias-criticas" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-xs text-slate-400 italic text-center">
+                    Analizando gastos por categoría...
+                  </div>
+                </div>
+              </div>
+              <div class="pt-2 text-right">
+                <button type="button" onclick="cambiarTabFinanzas('presupuesto')" class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline">
+                  Ver Techos Presupuestales &rarr;
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- PRÓXIMOS VENCIMIENTOS Y CUOTAS (WIDGET ACCIONABLE) -->
+        <div class="portal-surface p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-indigo-500 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </span>
+              <h3 class="font-bold text-xs text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                Próximos Vencimientos y Cuotas (Próximos 15 Días)
+              </h3>
+            </div>
+            <button type="button" onclick="cambiarTabFinanzas('transacciones'); window.filtrarTransaccionesPorEstado && window.filtrarTransaccionesPorEstado('PROGRAMADO');"
+              class="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline">
+              Ver Todas las Programadas &rarr;
+            </button>
+          </div>
+          <div id="lista-proximos-vencimientos-dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="text-xs text-slate-400 italic p-4 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl col-span-full">
+              Sin compromisos pendientes de liquidación en los próximos 15 días
+            </div>
+          </div>
+        </div>
+
+      </div> <!-- FIN PESTAÑA 1 -->
+
+
+      <!-- ================================================================= -->
+      <!-- PESTAÑA 2: TRANSACCIONES (COEXISTENCIA REAL VS PROGRAMADO)         -->
+      <!-- ================================================================= -->
+      <div id="vista-fin-tab-transacciones" class="tab-fin-view hidden p-4 md:p-6 space-y-4">
+        
+        <!-- CABECERA Y FILTROS RÁPIDOS ERGONÓMICOS -->
+        <div class="portal-surface p-4 space-y-3">
+          
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div>
+              <h3 class="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon text-indigo-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v.5"/><path d="M12 6v.5"/></svg>
+                <span>Registro Unificado de Movimientos Financieros</span>
+              </h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400">
+                Movimientos reales ejecutados conviven con compromisos programados. Concilia manualmente con el check.
+              </p>
+            </div>
+            
+            <div class="flex items-center gap-2 flex-wrap">
+              <button type="button" onclick="abrirModalCrearIngreso()"
+                class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition">
+                + Ingreso
+              </button>
+              <button type="button" onclick="abrirModalCrearGasto()"
+                class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition">
+                + Gasto
+              </button>
+            </div>
+          </div>
+
+          <!-- BARRAS DE FILTROS TIPO PÍLDORA -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+            
+            <!-- Filtro 1: Selector Tipo de Movimiento -->
+            <div>
+              <span class="text-[10px] font-bold uppercase text-slate-400 block mb-1">Tipo de Flujo</span>
+              <div class="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl gap-1 text-xs">
+                <button type="button" id="pill-tipo-todos" onclick="filtrarTransaccionesPorTipo('TODOS')" class="pill-trx-tipo px-2.5 py-1 rounded-lg font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs">Todos</button>
+                <button type="button" id="pill-tipo-ingreso" onclick="filtrarTransaccionesPorTipo('INGRESO')" class="pill-trx-tipo px-2.5 py-1 rounded-lg font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 inline-flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                  <span>Ingresos</span>
+                </button>
+                <button type="button" id="pill-tipo-gasto" onclick="filtrarTransaccionesPorTipo('GASTO')" class="pill-trx-tipo px-2.5 py-1 rounded-lg font-medium text-slate-600 dark:text-slate-300 hover:text-rose-600 inline-flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
+                  <span>Gastos</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Filtro 2: Estado (Real/Conciliado vs Programado/Pendiente) -->
+            <div>
+              <span class="text-[10px] font-bold uppercase text-slate-400 block mb-1">Estado de Ejecución</span>
+              <div class="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl gap-1 text-xs">
+                <button type="button" id="pill-estado-todos" onclick="filtrarTransaccionesPorEstado('TODOS')" class="pill-trx-estado px-2.5 py-1 rounded-lg font-bold bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs">Todos</button>
+                <button type="button" id="pill-estado-real" onclick="filtrarTransaccionesPorEstado('REAL')" class="pill-trx-estado px-2.5 py-1 rounded-lg font-medium text-slate-600 dark:text-slate-300 hover:text-emerald-600 inline-flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                  <span>Conciliados</span>
+                </button>
+                <button type="button" id="pill-estado-programado" onclick="filtrarTransaccionesPorEstado('PROGRAMADO')" class="pill-trx-estado px-2.5 py-1 rounded-lg font-medium text-slate-600 dark:text-slate-300 hover:text-amber-600 inline-flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span>Programados</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Búsqueda en Vivo -->
+          <div class="relative pt-1">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+            <input type="text" id="input-busqueda-transacciones" onkeyup="filtrarTransaccionesPorTexto(this.value)"
+              placeholder="Buscar por concepto, banco, entidad, categoría o ID..."
+              class="w-full pl-8 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 dark:text-slate-100">
+            <button type="button" onclick="limpiarBusquedaTransacciones()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600">
+              <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- CONTENEDOR DE TARJETAS TRANSACCIONALES -->
+        <div id="lista-transacciones-unificada" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pb-8">
+          <div class="col-span-full text-center py-16 text-xs text-slate-400 italic">
+            Cargando transacciones...
+          </div>
+        </div>
+
+      </div> <!-- FIN PESTAÑA 2 -->
+
+
+      <!-- ================================================================= -->
+      <!-- PESTAÑA 3: CONTROL DE CUOTAS / CRÉDITOS (ENFOQUE REAL BANCARIO)   -->
+      <!-- ================================================================= -->
+      <div id="vista-fin-tab-cuotas" class="tab-fin-view hidden p-4 md:p-6 space-y-4">
+        
+        <!-- HEADER CONTROL DE CUOTAS -->
+        <div class="portal-surface p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 class="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-violet-500"></span>
+              Gobernanza de Compromisos a Plazos & Deudas Bancarias
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Registrado con la cuota exacta emitida por tu banco. Concilia cuotas individuales y monitorea el avance del capital.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            <button type="button" onclick="ejecutarSaneamientoCuotas()"
+              class="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 active:scale-95 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+              title="Auditar y realinear columnas de cuotas desfasadas en BBDD_Finanzas_Gastos">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              <span>Sanear Cuotas</span>
+            </button>
+            <button type="button" onclick="abrirModalCrearPlanCuotas()"
+              class="px-4 py-2 bg-violet-600 hover:bg-violet-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md shadow-violet-600/20 transition flex items-center gap-1.5">
+              <span>+ Nuevo Plan de Crédito</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- KPIS RÁPIDOS DE CUOTAS -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="portal-surface p-3.5 shadow-2xs">
+            <div class="text-[10px] text-slate-400 uppercase font-bold">Planes de Crédito Activos</div>
+            <div id="kpi-cuotas-activas" class="text-xl font-black font-mono tabular-nums text-violet-600 dark:text-violet-400">0</div>
+          </div>
+          <div class="portal-surface p-3.5 shadow-2xs">
+            <div class="text-[10px] text-slate-400 uppercase font-bold">Compromiso Bancario Mensual</div>
+            <div id="kpi-cuotas-mensual" class="text-xl font-black font-mono tabular-nums text-rose-500 dark:text-rose-400">S/ 0.00</div>
+          </div>
+          <div class="portal-surface p-3.5 shadow-2xs">
+            <div class="text-[10px] text-slate-400 uppercase font-bold">Capital Amortizado Acumulado</div>
+            <div id="kpi-cuotas-amortizado" class="text-xl font-black font-mono tabular-nums text-emerald-600 dark:text-emerald-400">S/ 0.00</div>
+          </div>
+          <div class="portal-surface p-3.5 shadow-2xs">
+            <div class="text-[10px] text-slate-400 uppercase font-bold">Saldo Pendiente Total</div>
+            <div id="kpi-cuotas-deuda" class="text-xl font-black font-mono tabular-nums text-amber-600 dark:text-amber-400">S/ 0.00</div>
+          </div>
+        </div>
+
+        <!-- LISTA DE PLANES DE CRÉDITO Y CUOTAS -->
+        <div id="lista-planes-cuotas" class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-8">
+          <div class="col-span-full text-center py-16 text-xs text-slate-400 italic">
+            Sin planes de cuotas registrados
+          </div>
+        </div>
+
+      </div> <!-- FIN PESTAÑA 3 -->
+
+
+      <!-- ================================================================= -->
+      <!-- PESTAÑA 4: PRESUPUESTOS (TECHOS POR CATEGORÍA & PROYECTOS)        -->
+      <!-- ================================================================= -->
+      <div id="vista-fin-tab-presupuesto" class="tab-fin-view hidden p-4 md:p-6 space-y-5">
+        
+        <!-- HEADER PRESUPUESTOS -->
+        <div class="portal-surface p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 class="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon text-emerald-600 dark:text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              <span>Techos de Gasto Presupuestal por Categoría</span>
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Compara la ejecución real de tus gastos versus el límite mensual fijado para evitar sobrecostos.
+            </p>
+          </div>
+          <button type="button" onclick="abrirModalEditarPresupuestosCategorias()"
+            class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1.5 self-start sm:self-auto">
+            <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>
+            <span>Configurar Techos</span>
+          </button>
+        </div>
+
+        <!-- SECCIÓN 4.1: TECHOS DE GASTO POR CATEGORÍA -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+              Categorías de Vida & Gastos Corrientes
+            </h4>
+            <span class="text-xs text-slate-400" id="label-periodo-presupuesto">Mes Actual</span>
+          </div>
+          <div id="lista-presupuestos-categorias" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            <div class="col-span-full text-center py-12 text-xs text-slate-400 italic">
+              Cargando techos de gasto...
+            </div>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 4.2: PRESUPUESTO POR TIPO DE HÁBITO (INVERSIÓN BIENESTAR & LIFE OS) -->
+        <div class="pt-4 border-t border-slate-200/70 dark:border-slate-800">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+              <h4 class="font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon text-indigo-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                <span>Presupuesto por Tipo de Hábito (Inversión Bienestar)</span>
+              </h4>
+              <p class="text-[11px] text-slate-400">
+                Presupuesto Asignado | Gasto Real Ejecutado | Saldo Restante vinculado a actividades personales (ACT-)
+              </p>
+            </div>
+            <button type="button" onclick="abrirModalEditarPresupuestosHabitos()"
+              class="px-3 py-1 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 active:scale-95">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="1" x2="7" y1="14" y2="14"/><line x1="9" x2="15" y1="8" y2="8"/><line x1="17" x2="23" y1="16" y2="16"/></svg>
+              <span>Techos de Hábitos</span>
+            </button>
+          </div>
+          <div id="lista-presupuestos-habitos" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            <div class="col-span-full text-center py-8 text-xs text-slate-400 italic">
+              Cargando presupuestos de hábitos...
+            </div>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 4.3: MATRIZ DE PRESUPUESTO POR PROYECTO (BURN RATE MATRIX) -->
+        <div class="pt-4 border-t border-slate-200/70 dark:border-slate-800">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="portal-icon text-indigo-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              <span>Control Presupuestario por Proyecto (Burn Rate Matrix)</span>
+            </h4>
+            <span class="text-xs text-slate-400">Presupuesto Tope vs Costo Real Imputado</span>
+          </div>
+          <div id="lista-fin-presupuesto-proyectos" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-8">
+            <div class="col-span-full text-center py-8 text-xs text-slate-400 italic">
+              No hay proyectos registrados
+            </div>
+          </div>
+        </div>
+
+      </div> <!-- FIN PESTAÑA 4 -->
+
+    </div> <!-- FIN VISTA FINANCIERO WRAPPER -->

@@ -1,0 +1,495 @@
+<!-- ===================================================================== -->
+<!-- VISTA: HÁBITOS & VIDA (ESTILO GOOGLE TASKS POR CATEGORÍAS CANÓNICAS)  -->
+<!-- ===================================================================== -->
+<div id="vista-habitos-wrapper"
+  class="hidden flex-1 flex flex-col min-h-0 overflow-hidden p-4 lg:p-6 bg-slate-100 dark:bg-slate-950 transition-colors duration-200">
+
+  <!-- BARRA DE CONTROL SUPERIOR -->
+  <div
+    class="mb-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
+    <div class="flex items-center gap-3">
+      <div
+        class="p-2.5 bg-gradient-to-tr from-emerald-600 via-teal-600 to-cyan-600 text-white rounded-2xl shadow-md shadow-emerald-500/20 ring-1 ring-white/20">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4">
+          </path>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h2 class="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 leading-tight">Hábitos & Vida
+            Modular</h2>
+          <span
+            class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80">SaaS
+            Personal</span>
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400 font-medium">Gestión integral de hábitos, consistencia y
+          desarrollo personal</p>
+      </div>
+    </div>
+
+    <!-- ACCIONES RÁPIDAS SUPERIORES -->
+    <div class="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+      <button type="button" onclick="abrirModalCrearActividadPersonalPorCategoria('SALUD_DEPORTE')"
+        class="btn-portal-primary"
+        title="Registrar nuevo hábito o compromiso personal">
+        <svg class="portal-icon-sm" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+        <span>Nuevo Hábito / Actividad</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- BARRA DE KPIS RELEVANTES DE IMPACTO PERSONAL (BENTO BAR)           -->
+  <!-- ================================================================= -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3.5 shrink-0">
+
+    <!-- BENTO 1: RACHA ACTIVA & CONSISTENCIA (STREAKS) -->
+    <div
+      class="portal-surface p-3.5 flex flex-col justify-between relative overflow-hidden group hover:border-amber-400/50 transition-all">
+      <div class="flex items-center justify-between">
+        <span class="text-[10.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Racha
+          Activa</span>
+        <span
+          class="w-6 h-6 rounded-lg bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center">
+          <svg class="portal-icon text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+        </span>
+      </div>
+      <div class="my-1.5">
+        <span class="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight"
+          id="kpi-mayor-racha">0 días</span>
+      </div>
+      <div class="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 truncate">
+        <span id="kpi-racha-subtexto" class="truncate font-medium">Calculando consistencia...</span>
+      </div>
+    </div>
+
+    <!-- BENTO 2: TASA DE CUMPLIMIENTO DIARIO -->
+    <div
+      class="portal-surface p-3.5 flex flex-col justify-between relative overflow-hidden group hover:border-emerald-400/50 transition-all">
+      <div class="flex items-center justify-between">
+        <span class="text-[10.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Cumplimiento
+          Hoy</span>
+        <span
+          class="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center">
+          <svg class="portal-icon text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        </span>
+      </div>
+      <div class="my-1.5 flex items-baseline justify-between">
+        <span class="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight"
+          id="kpi-habitos-hoy-ratio">0 / 0</span>
+        <span class="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400"
+          id="kpi-habitos-global-cumplimiento">0%</span>
+      </div>
+      <div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+        <div id="kpi-habitos-hoy-bar"
+          class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300"
+          style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- BENTO 3: BALANCE DE PILARES DE VIDA -->
+    <div
+      class="portal-surface p-3.5 flex flex-col justify-between relative overflow-hidden group hover:border-indigo-400/50 transition-all">
+      <div class="flex items-center justify-between">
+        <span class="text-[10.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Balance de
+          Vida</span>
+        <span
+          class="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+          <svg class="portal-icon text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>
+        </span>
+      </div>
+      <div class="my-1.5">
+        <span class="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight"
+          id="kpi-balance-pilares">0 / 6 pilares</span>
+      </div>
+      <div class="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 truncate">
+        <span id="kpi-balance-subtexto" class="truncate font-medium">Equilibrio activo</span>
+      </div>
+    </div>
+
+    <!-- BENTO 4: RADAR DE HÁBITOS & CONTROL PSICOLÓGICO -->
+    <div
+      class="portal-surface p-3.5 flex flex-col justify-between relative overflow-hidden group hover:border-teal-400/50 transition-all">
+      <div class="flex items-center justify-between">
+        <span class="text-[10.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Radar de
+          Control</span>
+        <span
+          class="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center">
+          <svg class="portal-icon text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+      </div>
+      <div class="my-1.5">
+        <span class="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight"
+          id="kpi-radar-habitos">0 en foco</span>
+      </div>
+      <div class="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 truncate">
+        <span id="kpi-radar-subtexto" class="truncate font-medium">100% hábitos constructivos</span>
+      </div>
+    </div>
+
+    <!-- BENTO 5: INVERSIÓN FINANCIERA EN BIENESTAR (DESAGREGADO POR TIPO DE HÁBITO) -->
+    <div onclick="abrirModalDesgloseInversionBienestar()"
+      class="col-span-2 sm:col-span-1 portal-surface p-3.5 flex flex-col justify-between relative overflow-hidden group hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all"
+      title="Clic para ver desglose detallado de inversión por tipo de hábito">
+      <div class="flex items-center justify-between">
+        <span class="text-[10.5px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Inversión
+          Bienestar</span>
+        <div class="flex items-center gap-1.5">
+          <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800/60 px-1.5 py-0.5 rounded-md group-hover:scale-105 transition-all">Desglose</span>
+          <span
+            class="w-6 h-6 rounded-lg bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center">
+            <svg class="portal-icon text-rose-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 1 1-1v-4"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="my-1">
+        <div class="flex items-baseline justify-between">
+          <span class="text-base sm:text-lg font-black text-emerald-700 dark:text-emerald-400 font-mono tracking-tight"
+            id="kpi-gasto-vida">S/ 0.00</span>
+        </div>
+        <!-- Micro-badges de distribución de gasto por dimensión -->
+        <div id="kpi-gasto-vida-microbadges" class="flex items-center gap-1 flex-wrap mt-1">
+          <span class="text-[9.5px] text-slate-400 italic">Calculando...</span>
+        </div>
+      </div>
+      <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 truncate pt-1 border-t border-slate-100 dark:border-slate-800/60">
+        <span id="kpi-habitos-global-horas" class="font-mono">0.0h invertidas</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================================================================= -->
+  <!-- PÍLDORAS BENTO DE FILTRO Y BÚSQUEDA RÁPIDA                        -->
+  <!-- ================================================================= -->
+  <div class="portal-surface p-2.5 my-2 flex items-center justify-between gap-2 shrink-0 flex-wrap">
+    <div
+      class="inline-flex items-center gap-1 text-xs select-none flex-wrap">
+      <button type="button" onclick="filtrarTipoActividadPersonal('TODOS')" id="filtro-habito-TODOS"
+        title="Muestra todas las actividades y hábitos activos"
+        class="chip-filtro-habito btn-portal-primary text-xs shadow-xs active:scale-95">
+        <span class="flex items-center gap-1.5"><svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span>Todos</span></span>
+        <span id="badge-filtro-TODOS" class="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-black">0</span>
+      </button>
+      <button type="button" onclick="filtrarTipoActividadPersonal('HABITUAL')" id="filtro-habito-HABITUAL"
+        title="Filtra los que tienen ciclo diario o semanal continuo"
+        class="chip-filtro-habito btn-portal-secondary text-xs active:scale-95">
+        <span class="flex items-center gap-1.5"><svg class="portal-icon-sm shrink-0 text-indigo-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg><span>Hábitos Recurrentes</span></span>
+        <span id="badge-filtro-HABITUAL"
+          class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-bold">0</span>
+      </button>
+      <button type="button" onclick="filtrarTipoActividadPersonal('UNICO')" id="filtro-habito-UNICO"
+        title="Compromisos con fecha límite única o sin repetición"
+        class="chip-filtro-habito btn-portal-secondary text-xs active:scale-95">
+        <span class="flex items-center gap-1.5"><svg class="portal-icon-sm shrink-0 text-sky-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Metas Puntuales</span></span>
+        <span id="badge-filtro-UNICO"
+          class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-bold">0</span>
+      </button>
+      <button type="button" onclick="filtrarTipoActividadPersonal('RACHA')" id="filtro-habito-RACHA"
+        title="Muestra solo los hábitos que tienen racha mayor a cero"
+        class="chip-filtro-habito btn-portal-secondary text-xs active:scale-95">
+        <span class="flex items-center gap-1.5"><svg class="portal-icon-sm shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><span>Con Racha Activa</span></span>
+        <span id="badge-filtro-RACHA"
+          class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-bold">0</span>
+      </button>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <!-- Botón de Ordenamiento -->
+      <div class="relative group/sort-habitos shrink-0 kanban-hover-popover-container" id="container-sort-habitos">
+        <button type="button" id="btn-sort-habitos" onclick="toggleFilterPopover(event, 'popover-sort-habitos')"
+          class="btn-portal-secondary h-8 px-2 rounded-xl flex items-center justify-center transition-all cursor-pointer select-none"
+          title="Opciones de Ordenamiento">
+          <span id="label-sort-habitos-icon" class="flex items-center justify-center">
+            <svg class="portal-icon-sm shrink-0 text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </span>
+        </button>
+        <!-- Popover de Ordenamiento -->
+        <div id="popover-sort-habitos"
+          class="kanban-hover-popover invisible opacity-0 group-hover/sort-habitos:visible group-hover/sort-habitos:opacity-100 transition-all duration-200 absolute top-full right-0 mt-1.5 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/60 rounded-xl shadow-2xl p-1.5 flex items-center gap-1 w-max pointer-events-none group-hover/sort-habitos:pointer-events-auto before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2">
+          <button type="button" onclick="setSortModeHabitos('TIME')" class="btn-sort-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 ring-1 ring-indigo-500" data-val="TIME" title="Por Hora - Temprano a Tarde">
+            <svg class="portal-icon-sm shrink-0 text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </button>
+          <button type="button" onclick="setSortModeHabitos('STREAK')" class="btn-sort-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" data-val="STREAK" title="Mayor Racha">
+            <svg class="portal-icon-sm shrink-0 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+          </button>
+          <button type="button" onclick="setSortModeHabitos('ALPHA')" class="btn-sort-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" data-val="ALPHA" title="Alfabético A-Z">
+            <svg class="portal-icon-sm shrink-0 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M20 8h-5"/><path d="M15 10V6.5a2.5 2.5 0 0 1 5 0V10"/><path d="M15 14h5l-5 6h5"/></svg>
+          </button>
+          <button type="button" onclick="setSortModeHabitos('PRIORITY')" class="btn-sort-opt h-8 w-8 rounded-lg flex items-center justify-center text-sm transition-all hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" data-val="PRIORITY" title="Prioridad">
+            <svg class="portal-icon-sm shrink-0 text-amber-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="relative">
+        <input type="text" id="filtro-buscar-habito" placeholder="Buscar hábito o tarea..."
+          oninput="filtrarPorTextoHabito(this.value)"
+          class="text-xs bg-slate-100/75 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800/80 rounded-xl pl-8 pr-7 py-1.5 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 shadow-2xs w-48 sm:w-56 transition-all">
+        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+          <svg class="portal-icon-sm text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <button type="button" id="btn-limpiar-busqueda-habito"
+          onclick="(window.limpiarFiltrosVistaActiva || window.limpiarBusquedaHabito)()"
+          class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+          title="Limpiar filtros de hábitos">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TABLERO KANBAN HORIZONTAL DE 6 COLUMNAS CANÓNICAS (HÁBITOS & VIDA) -->
+  <div class="w-full flex-1 overflow-x-auto pb-2 flex gap-5 min-h-0 h-full custom-scrollbar items-stretch">
+
+    <!-- COLUMNA 1: SALUD & DEPORTE -->
+    <div
+      class="w-80 flex-shrink-0 flex flex-col bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 h-full min-h-0 overflow-hidden transition-all duration-150 shadow-xs relative"
+      data-categoria="SALUD_DEPORTE">
+      <!-- Encabezado Sticky: Identidad de Categoría, KPIs y Botón Añadir -->
+      <div
+        class="p-3.5 pb-2.5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xs">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center text-xs shadow-2xs font-semibold"><svg class="w-3.5 h-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+            <h3 class="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-wide">Salud &
+              Deporte</h3>
+          </div>
+          <span
+            class="text-[10px] font-mono font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-900/60"
+            id="badge-count-SALUD_DEPORTE">0/0</span>
+        </div>
+        <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
+          <div id="progreso-bar-SALUD_DEPORTE" class="bg-emerald-500 h-full rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+          <span id="metric-horas-SALUD_DEPORTE">0.0h hoy</span>
+          <span id="metric-pct-SALUD_DEPORTE" class="font-bold text-emerald-600 dark:text-emerald-400">0%</span>
+        </div>
+        <!-- BOTÓN AÑADIR CON ESTILO DASHED TAILWIND (SIEMPRE VISIBLE) -->
+        <button type="button" onclick="abrirModalCrearActividadPersonalPorCategoria('SALUD_DEPORTE')"
+          class="mt-2.5 w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all duration-150 shadow-2xs group">
+          <span class="text-sm font-bold transition-transform group-hover:scale-110 text-emerald-500">+</span>
+          <span>Añadir Hábito / Tarea</span>
+        </button>
+      </div>
+      <!-- CUERPO DE TARJETAS CON SCROLL VERTICAL FLUIDO (PENDIENTES + COMPLETADAS INTEGRADAS) -->
+      <div class="kanban-col-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+        <div id="lista-pendientes-SALUD_DEPORTE" class="space-y-2.5 min-h-[24px]"></div>
+        <div id="wrapper-completadas-SALUD_DEPORTE"
+          class="pt-2 border-t border-slate-200/80 dark:border-slate-800 empty:hidden"></div>
+      </div>
+    </div>
+
+    <!-- COLUMNA 2: DESARROLLO PERSONAL -->
+    <div
+      class="w-80 flex-shrink-0 flex flex-col bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 h-full min-h-0 overflow-hidden transition-all duration-150 shadow-xs relative"
+      data-categoria="DESARROLLO_ESTUDIO">
+      <!-- Encabezado Sticky: Identidad de Categoría, KPIs y Botón Añadir -->
+      <div
+        class="p-3.5 pb-2.5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xs">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-6 h-6 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs shadow-2xs font-semibold"><svg class="w-3.5 h-3.5 shrink-0 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+            <h3 class="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-wide">Desarrollo
+              Personal</h3>
+          </div>
+          <span
+            class="text-[10px] font-mono font-bold text-blue-800 dark:text-blue-300 bg-blue-100 dark:bg-blue-950/60 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-900/60"
+            id="badge-count-DESARROLLO_ESTUDIO">0/0</span>
+        </div>
+        <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
+          <div id="progreso-bar-DESARROLLO_ESTUDIO" class="bg-blue-500 h-full rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+          <span id="metric-horas-DESARROLLO_ESTUDIO">0.0h hoy</span>
+          <span id="metric-pct-DESARROLLO_ESTUDIO" class="font-bold text-blue-600 dark:text-blue-400">0%</span>
+        </div>
+        <!-- BOTÓN AÑADIR CON ESTILO DASHED TAILWIND (SIEMPRE VISIBLE) -->
+        <button type="button" onclick="abrirModalCrearActividadPersonalPorCategoria('DESARROLLO_ESTUDIO')"
+          class="mt-2.5 w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-blue-700 dark:hover:text-blue-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all duration-150 shadow-2xs group">
+          <span class="text-sm font-bold transition-transform group-hover:scale-110 text-blue-500">+</span>
+          <span>Añadir Hábito / Tarea</span>
+        </button>
+      </div>
+      <!-- CUERPO DE TARJETAS CON SCROLL VERTICAL FLUIDO (PENDIENTES + COMPLETADAS INTEGRADAS) -->
+      <div class="kanban-col-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+        <div id="lista-pendientes-DESARROLLO_ESTUDIO" class="space-y-2.5 min-h-[24px]"></div>
+        <div id="wrapper-completadas-DESARROLLO_ESTUDIO"
+          class="pt-2 border-t border-slate-200/80 dark:border-slate-800 empty:hidden"></div>
+      </div>
+    </div>
+
+    <!-- COLUMNA 3: TRABAJO & CARRERA -->
+    <div
+      class="w-80 flex-shrink-0 flex flex-col bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 h-full min-h-0 overflow-hidden transition-all duration-150 shadow-xs relative"
+      data-categoria="LABORAL_HONORARIO">
+      <!-- Encabezado Sticky: Identidad de Categoría, KPIs y Botón Añadir -->
+      <div
+        class="p-3.5 pb-2.5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xs">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-6 h-6 rounded-lg bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 flex items-center justify-center text-xs shadow-2xs font-semibold"><svg class="w-3.5 h-3.5 shrink-0 text-indigo-500 dark:text-indigo-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>
+            <h3 class="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-wide">Trabajo &
+              Carrera</h3>
+          </div>
+          <span
+            class="text-[10px] font-mono font-bold text-violet-800 dark:text-violet-300 bg-violet-100 dark:bg-violet-950/60 px-2 py-0.5 rounded-full border border-violet-200 dark:border-violet-900/60"
+            id="badge-count-LABORAL_HONORARIO">0/0</span>
+        </div>
+        <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
+          <div id="progreso-bar-LABORAL_HONORARIO" class="bg-violet-500 h-full rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+          <span id="metric-horas-LABORAL_HONORARIO">0.0h hoy</span>
+          <span id="metric-pct-LABORAL_HONORARIO" class="font-bold text-violet-600 dark:text-violet-400">0%</span>
+        </div>
+        <!-- BOTÓN AÑADIR CON ESTILO DASHED TAILWIND (SIEMPRE VISIBLE) -->
+        <button type="button" onclick="abrirModalCrearActividadPersonalPorCategoria('LABORAL_HONORARIO')"
+          class="mt-2.5 w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-violet-400 hover:bg-violet-50/50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-violet-700 dark:hover:text-violet-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all duration-150 shadow-2xs group">
+          <span class="text-sm font-bold transition-transform group-hover:scale-110 text-violet-500">+</span>
+          <span>Añadir Hábito / Tarea</span>
+        </button>
+      </div>
+      <!-- CUERPO DE TARJETAS CON SCROLL VERTICAL FLUIDO (PENDIENTES + COMPLETADAS INTEGRADAS) -->
+      <div class="kanban-col-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+        <div id="lista-pendientes-LABORAL_HONORARIO" class="space-y-2.5 min-h-[24px]"></div>
+        <div id="wrapper-completadas-LABORAL_HONORARIO"
+          class="pt-2 border-t border-slate-200/80 dark:border-slate-800 empty:hidden"></div>
+      </div>
+    </div>
+
+    <!-- COLUMNA 4: FINANZAS & ADMIN -->
+    <div
+      class="w-80 flex-shrink-0 flex flex-col bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 h-full min-h-0 overflow-hidden transition-all duration-150 shadow-xs relative"
+      data-categoria="FINANZAS_TRAMITES">
+      <!-- Encabezado Sticky: Identidad de Categoría, KPIs y Botón Añadir -->
+      <div
+        class="p-3.5 pb-2.5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xs">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center text-xs shadow-2xs font-semibold"><svg class="w-3.5 h-3.5 shrink-0 text-amber-500 dark:text-amber-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg></span>
+            <h3 class="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-wide">Finanzas &
+              Admin</h3>
+          </div>
+          <span
+            class="text-[10px] font-mono font-bold text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/60 px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-900/60"
+            id="badge-count-FINANZAS_TRAMITES">0/0</span>
+        </div>
+        <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
+          <div id="progreso-bar-FINANZAS_TRAMITES" class="bg-purple-500 h-full rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+          <span id="metric-horas-FINANZAS_TRAMITES">0.0h hoy</span>
+          <span id="metric-pct-FINANZAS_TRAMITES" class="font-bold text-purple-600 dark:text-purple-400">0%</span>
+        </div>
+        <!-- BOTÓN AÑADIR CON ESTILO DASHED TAILWIND (SIEMPRE VISIBLE) -->
+        <button type="button" onclick="abrirModalCrearActividadPersonalPorCategoria('FINANZAS_TRAMITES')"
+          class="mt-2.5 w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-purple-400 hover:bg-purple-50/50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-purple-700 dark:hover:text-purple-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all duration-150 shadow-2xs group">
+          <span class="text-sm font-bold transition-transform group-hover:scale-110 text-purple-500">+</span>
+          <span>Añadir Hábito / Tarea</span>
+        </button>
+      </div>
+      <!-- CUERPO DE TARJETAS CON SCROLL VERTICAL FLUIDO (PENDIENTES + COMPLETADAS INTEGRADAS) -->
+      <div class="kanban-col-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+        <div id="lista-pendientes-FINANZAS_TRAMITES" class="space-y-2.5 min-h-[24px]"></div>
+        <div id="wrapper-completadas-FINANZAS_TRAMITES"
+          class="pt-2 border-t border-slate-200/80 dark:border-slate-800 empty:hidden"></div>
+      </div>
+    </div>
+
+    <!-- COLUMNA 5: HOGAR & FAMILIA -->
+    <div
+      class="w-80 flex-shrink-0 flex flex-col bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 h-full min-h-0 overflow-hidden transition-all duration-150 shadow-xs relative"
+      data-categoria="SOCIAL_FAMILIA">
+      <!-- Encabezado Sticky: Identidad de Categoría, KPIs y Botón Añadir -->
+      <div
+        class="p-3.5 pb-2.5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xs">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-6 h-6 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center text-xs shadow-2xs font-semibold"><svg class="w-3.5 h-3.5 shrink-0 text-purple-500 dark:text-purple-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+            <h3 class="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-wide">Hogar &
+              Familia</h3>
+          </div>
+          <span
+            class="text-[10px] font-mono font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-900/60"
+            id="badge-count-SOCIAL_FAMILIA">0/0</span>
+        </div>
+        <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
+          <div id="progreso-bar-SOCIAL_FAMILIA" class="bg-amber-500 h-full rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+          <span id="metric-horas-SOCIAL_FAMILIA">0.0h hoy</span>
+          <span id="metric-pct-SOCIAL_FAMILIA" class="font-bold text-amber-600 dark:text-amber-400">0%</span>
+        </div>
+        <!-- BOTÓN AÑADIR CON ESTILO DASHED TAILWIND (SIEMPRE VISIBLE) -->
+        <button type="button" onclick="abrirModalCrearActividadPersonalPorCategoria('SOCIAL_FAMILIA')"
+          class="mt-2.5 w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-amber-400 hover:bg-amber-50/50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-700 dark:hover:text-amber-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all duration-150 shadow-2xs group">
+          <span class="text-sm font-bold transition-transform group-hover:scale-110 text-amber-500">+</span>
+          <span>Añadir Hábito / Tarea</span>
+        </button>
+      </div>
+      <!-- CUERPO DE TARJETAS CON SCROLL VERTICAL FLUIDO (PENDIENTES + COMPLETADAS INTEGRADAS) -->
+      <div class="kanban-col-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+        <div id="lista-pendientes-SOCIAL_FAMILIA" class="space-y-2.5 min-h-[24px]"></div>
+        <div id="wrapper-completadas-SOCIAL_FAMILIA"
+          class="pt-2 border-t border-slate-200/80 dark:border-slate-800 empty:hidden"></div>
+      </div>
+    </div>
+
+    <!-- COLUMNA 6: OCIO & SOCIAL -->
+    <div
+      class="w-80 flex-shrink-0 flex flex-col bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 h-full min-h-0 overflow-hidden transition-all duration-150 shadow-xs relative"
+      data-categoria="PERSONAL_DESCANSO">
+      <!-- Encabezado Sticky: Identidad de Categoría, KPIs y Botón Añadir -->
+      <div
+        class="p-3.5 pb-2.5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 sticky top-0 z-10 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-xs">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-6 h-6 rounded-lg bg-pink-100 dark:bg-pink-950/60 text-pink-700 dark:text-pink-300 flex items-center justify-center text-xs shadow-2xs font-semibold"><svg class="w-3.5 h-3.5 shrink-0 text-teal-500 dark:text-teal-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg></span>
+            <h3 class="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-wide">Ocio & Social
+            </h3>
+          </div>
+          <span
+            class="text-[10px] font-mono font-bold text-pink-800 dark:text-pink-300 bg-pink-100 dark:bg-pink-950/60 px-2 py-0.5 rounded-full border border-pink-200 dark:border-pink-900/60"
+            id="badge-count-PERSONAL_DESCANSO">0/0</span>
+        </div>
+        <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden mb-2">
+          <div id="progreso-bar-PERSONAL_DESCANSO" class="bg-pink-500 h-full rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+          <span id="metric-horas-PERSONAL_DESCANSO">0.0h hoy</span>
+          <span id="metric-pct-PERSONAL_DESCANSO" class="font-bold text-pink-600 dark:text-pink-400">0%</span>
+        </div>
+        <!-- BOTÓN AÑADIR CON ESTILO DASHED TAILWIND (SIEMPRE VISIBLE) -->
+        <button type="button" onclick="abrirModalCrearActividadPersonalPorCategoria('PERSONAL_DESCANSO')"
+          class="mt-2.5 w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-pink-400 hover:bg-pink-50/50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-pink-700 dark:hover:text-pink-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all duration-150 shadow-2xs group">
+          <span class="text-sm font-bold transition-transform group-hover:scale-110 text-pink-500">+</span>
+          <span>Añadir Hábito / Tarea</span>
+        </button>
+      </div>
+      <!-- CUERPO DE TARJETAS CON SCROLL VERTICAL FLUIDO (PENDIENTES + COMPLETADAS INTEGRADAS) -->
+      <div class="kanban-col-body flex-1 min-h-0 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+        <div id="lista-pendientes-PERSONAL_DESCANSO" class="space-y-2.5 min-h-[24px]"></div>
+        <div id="wrapper-completadas-PERSONAL_DESCANSO"
+          class="pt-2 border-t border-slate-200/80 dark:border-slate-800 empty:hidden"></div>
+      </div>
+    </div>
+
+  </div>
+</div>

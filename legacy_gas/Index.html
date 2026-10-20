@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-100 dark:bg-slate-950">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#040711">
+  <title>PMO Personal Modular - Executive Suite</title>
+  <!-- Tailwind CSS (Diseño moderno y limpio) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              750: '#293548',
+              850: '#1e293b'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <script>
+    (function () {
+      try {
+        var flavor = localStorage.getItem('pmo_theme_flavor') || 'slate';
+        document.documentElement.setAttribute('data-theme', flavor);
+
+        var tema = localStorage.getItem('pmo_theme');
+        if (tema === 'dark' || (!tema && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (e) { }
+    })();
+  </script>
+
+  <!-- Flowbite CSS (Componentes modernos para Tailwind) -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.css" rel="stylesheet" />
+
+  <!-- AOS - Animate On Scroll (Para transiciones de aparición sutiles) -->
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+
+  <!-- Vis.js Network: Motor Gráfico de Red Interactivo Open Source (JS + CSS) -->
+  <link rel="stylesheet" href="https://unpkg.com/vis-network/styles/vis-network.min.css" type="text/css" />
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+  <!-- Estilos Custom Segregados -->
+  <?!= include('Styles'); ?>
+</head>
+
+<body
+  class="min-h-screen md:h-full flex flex-col overflow-y-auto md:overflow-hidden font-sans text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-950 antialiased select-none">
+
+
+
+  <!-- ===================================================================== -->
+  <!-- SECCIÓN 1: BARRA SUPERIOR GLOBAL DE NAVEGACIÓN Y ACCIONES             -->
+  <!-- ===================================================================== -->
+  <?!= include('Layout_Header'); ?>
+
+  <!-- ===================================================================== -->
+  <!-- SECCIÓN 2: CONTENEDOR PRINCIPAL DE VISTAS REACTIVAS                   -->
+  <!-- ===================================================================== -->
+  <div class="flex-1 flex overflow-y-auto md:overflow-hidden relative pb-20 md:pb-0">
+    <!-- Vistas del Sistema -->
+    <?!= include('View_Kanban'); ?>
+    <?!= include('View_Finanzas'); ?>
+    <?!= include('View_Portafolio'); ?>
+    <?!= include('View_Habitos'); ?>
+    <?!= include('View_Detalle360'); ?>
+    <?!= include('View_Notas'); ?>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- COMPONENTE: BARRA FIJA INFERIOR MÓVIL (BOTTOM NAVIGATION BAR < 768px)  -->
+  <!-- ===================================================================== -->
+  <nav id="bottom-navigation-bar"
+    class="fixed bottom-0 inset-x-0 z-[9999] md:hidden bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/80 shadow-[0_-8px_25px_rgba(0,0,0,0.35)] px-3 pb-safe pt-1.5 flex items-center justify-around select-none">
+    
+    <!-- Botón 1: Kanban -->
+    <button type="button" id="bottom-nav-kanban" onclick="cambiarVista('kanban')"
+      class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200 transition-colors group cursor-pointer active:scale-95"
+      title="Tablero Kanban">
+      <svg class="portal-icon transition-transform group-hover:scale-110" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M6 5v11" />
+        <path d="M12 5v6" />
+        <path d="M18 5v14" />
+      </svg>
+      <span class="text-[10px] font-semibold mt-1 tracking-tight">Kanban</span>
+    </button>
+
+    <!-- Botón 2: Hábitos -->
+    <button type="button" id="bottom-nav-habitos" onclick="cambiarVista('habitos')"
+      class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200 transition-colors group cursor-pointer active:scale-95"
+      title="Hábitos & Vida">
+      <svg class="portal-icon transition-transform group-hover:scale-110" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+        <polyline points="22 4 12 14.01 9 11.01" />
+      </svg>
+      <span class="text-[10px] font-semibold mt-1 tracking-tight">Hábitos</span>
+    </button>
+
+    <!-- Botón Central (+): Acción Rápida Elevada -->
+    <div class="flex flex-col items-center justify-center -mt-5 px-1 shrink-0">
+      <button type="button" id="bottom-nav-add" onclick="abrirBottomSheetAccionRapida()"
+        class="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white flex items-center justify-center shadow-lg shadow-indigo-600/40 ring-4 ring-slate-900 dark:ring-slate-950 active:scale-90 transition-transform cursor-pointer"
+        title="Crear Nuevo Registro">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+      <span class="text-[9px] font-bold text-indigo-400 dark:text-indigo-300 mt-0.5 tracking-tight">Nuevo</span>
+    </div>
+
+    <!-- Botón 4: Notas -->
+    <button type="button" id="bottom-nav-notas" onclick="cambiarVista('notas')"
+      class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200 transition-colors group cursor-pointer active:scale-95"
+      title="Notas Inteligentes">
+      <svg class="portal-icon transition-transform group-hover:scale-110" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" x2="8" y1="13" y2="13" />
+        <line x1="16" x2="8" y1="17" y2="17" />
+        <line x1="10" x2="8" y1="9" y2="9" />
+      </svg>
+      <span class="text-[10px] font-semibold mt-1 tracking-tight">Notas</span>
+    </button>
+
+    <!-- Botón 5: Más / Proyectos & Finanzas -->
+    <button type="button" id="bottom-nav-mas" onclick="toggleBottomSheetMas()"
+      class="flex flex-col items-center justify-center flex-1 py-1 text-slate-400 hover:text-slate-200 transition-colors group cursor-pointer active:scale-95"
+      title="Más Módulos (Proyectos, Finanzas, Detalle 360)">
+      <svg class="portal-icon transition-transform group-hover:scale-110" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+        <polyline points="2 17 12 22 22 17" />
+        <polyline points="2 12 12 17 22 12" />
+      </svg>
+      <span class="text-[10px] font-semibold mt-1 tracking-tight">Más</span>
+    </button>
+  </nav>
+
+  <!-- ===================================================================== -->
+  <!-- BOTTOM SHEETS MÓVILES (ACCIÓN RÁPIDA & MÁS MÓDULOS)                    -->
+  <!-- ===================================================================== -->
+  <!-- Backdrop Compartido para Bottom Sheets -->
+  <div id="bottom-sheet-backdrop" onclick="cerrarBottomSheetAccionRapida(); cerrarBottomSheetMas();"
+    class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[99990] hidden md:hidden">
+  </div>
+
+  <!-- 1. Bottom Sheet: Acción Rápida (+) -->
+  <div id="bottom-sheet-accion-rapida"
+    class="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 pb-safe shadow-2xl md:hidden hidden flex-col">
+    <!-- Drag Handle -->
+    <div class="w-10 h-1 bg-slate-700/80 rounded-full mx-auto mb-4 shrink-0"></div>
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-4 shrink-0">
+      <div>
+        <h3 class="text-sm font-black text-slate-100 tracking-tight">Acción Rápida</h3>
+        <p class="text-[11px] text-slate-400">Crear un nuevo registro en el sistema</p>
+      </div>
+      <button type="button" onclick="cerrarBottomSheetAccionRapida()"
+        class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer">
+        <svg class="portal-icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- 4 Accesos Rápidos en Grid Bento 2x2 -->
+    <div class="grid grid-cols-2 gap-3 mb-2">
+      <!-- 1. Tarea -->
+      <button type="button" onclick="cerrarBottomSheetAccionRapida(); abrirModalCrearTareaKanban('01_Backlog');"
+        class="portal-surface p-3.5 rounded-2xl flex flex-col items-start gap-2 border border-slate-800/80 hover:border-indigo-500/50 active:scale-95 transition-all text-left cursor-pointer group">
+        <div class="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+          <svg class="portal-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+          </svg>
+        </div>
+        <div>
+          <div class="text-xs font-black text-slate-100">Nueva Tarea</div>
+          <div class="text-[10px] text-slate-400">Al Backlog Kanban</div>
+        </div>
+      </button>
+
+      <!-- 2. Hábito -->
+      <button type="button" onclick="cerrarBottomSheetAccionRapida(); abrirModalCrearActividadFlow();"
+        class="portal-surface p-3.5 rounded-2xl flex flex-col items-start gap-2 border border-slate-800/80 hover:border-emerald-500/50 active:scale-95 transition-all text-left cursor-pointer group">
+        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+          <svg class="portal-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+          </svg>
+        </div>
+        <div>
+          <div class="text-xs font-black text-slate-100">Nuevo Hábito</div>
+          <div class="text-[10px] text-slate-400">Salud & Vida Personal</div>
+        </div>
+      </button>
+
+      <!-- 3. Nota -->
+      <button type="button" onclick="cerrarBottomSheetAccionRapida(); abrirModalCrearNota();"
+        class="portal-surface p-3.5 rounded-2xl flex flex-col items-start gap-2 border border-slate-800/80 hover:border-amber-500/50 active:scale-95 transition-all text-left cursor-pointer group">
+        <div class="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+          <svg class="portal-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M14 2v4a2 2 0 0 0 2 2h4"/>
+          </svg>
+        </div>
+        <div>
+          <div class="text-xs font-black text-slate-100">Nueva Nota</div>
+          <div class="text-[10px] text-slate-400">Checklist & Captura</div>
+        </div>
+      </button>
+
+      <!-- 4. Gasto -->
+      <button type="button" onclick="cerrarBottomSheetAccionRapida(); abrirModalGasto();"
+        class="portal-surface p-3.5 rounded-2xl flex flex-col items-start gap-2 border border-slate-800/80 hover:border-rose-500/50 active:scale-95 transition-all text-left cursor-pointer group">
+        <div class="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 group-hover:bg-rose-500 group-hover:text-white transition-colors">
+          <svg class="portal-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect width="20" height="14" x="2" y="5" rx="2"/>
+            <line x1="2" x2="22" y1="10" y2="10"/>
+          </svg>
+        </div>
+        <div>
+          <div class="text-xs font-black text-slate-100">Nuevo Gasto</div>
+          <div class="text-[10px] text-slate-400">Movimiento Financiero</div>
+        </div>
+      </button>
+    </div>
+  </div>
+
+  <!-- 2. Bottom Sheet: Más Módulos -->
+  <div id="bottom-sheet-mas"
+    class="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 pb-safe shadow-2xl md:hidden hidden flex-col">
+    <!-- Drag Handle -->
+    <div class="w-10 h-1 bg-slate-700/80 rounded-full mx-auto mb-4 shrink-0"></div>
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-4 shrink-0">
+      <div>
+        <h3 class="text-sm font-black text-slate-100 tracking-tight">Más Módulos</h3>
+        <p class="text-[11px] text-slate-400">Gestión estratégica y gobernanza</p>
+      </div>
+      <button type="button" onclick="cerrarBottomSheetMas()"
+        class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer">
+        <svg class="portal-icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="space-y-2 mb-2">
+      <!-- Portafolio de Proyectos -->
+      <button type="button" onclick="cerrarBottomSheetMas(); cambiarVista('portafolio');"
+        class="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition cursor-pointer">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+            <svg class="portal-icon" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 8 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-slate-100">Portafolio de Proyectos</div>
+            <div class="text-[10px] text-slate-400">Iniciativas, carteras e hitos WBS</div>
+          </div>
+        </div>
+        <svg class="portal-icon-sm text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+
+      <!-- Finanzas & Liquidez -->
+      <button type="button" onclick="cerrarBottomSheetMas(); cambiarVista('financiero'); if (typeof window.renderTableroFinanciero === 'function') window.renderTableroFinanciero();"
+        class="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition cursor-pointer">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <svg class="portal-icon" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/>
+              <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 1 1-1v-4"/>
+            </svg>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-slate-100">Flujo de Caja & Finanzas</div>
+            <div class="text-[10px] text-slate-400">Ingresos, egresos, cuotas y liquidez</div>
+          </div>
+        </div>
+        <svg class="portal-icon-sm text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+
+      <!-- Detalle 360° -->
+      <button type="button" onclick="cerrarBottomSheetMas(); cambiarVista('detalle');"
+        class="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition cursor-pointer">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0">
+            <svg class="portal-icon" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="4"/>
+              <line x1="21.17" x2="12" y1="8" y2="8"/>
+              <line x1="3.95" x2="8.54" y1="6.06" y2="14"/>
+              <line x1="10.88" x2="15.46" y1="21.94" y2="14"/>
+            </svg>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-slate-100">Detalle 360° de Proyecto</div>
+            <div class="text-[10px] text-slate-400">Visión profunda, hitos y gobernanza</div>
+          </div>
+        </div>
+        <svg class="portal-icon-sm text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+
+      <!-- Bóveda de Archivados -->
+      <button type="button" onclick="cerrarBottomSheetMas(); abrirDrawerArchivados();"
+        class="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition cursor-pointer">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+            <svg class="portal-icon" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+              <rect width="20" height="5" x="2" y="3" rx="1"/>
+              <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>
+              <path d="M10 12h4"/>
+            </svg>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-slate-100">Bóveda de Archivados</div>
+            <div class="text-[10px] text-slate-400">+10 días finalizados o conciliados</div>
+          </div>
+        </div>
+        <svg class="portal-icon-sm text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- SECCIÓN 3: FORMULARIOS MODALES Y WIZARDS                              -->
+  <!-- ===================================================================== -->
+  <?!= include('Modal_TareaFlow'); ?>
+  <?!= include('Modal_ActividadFlow'); ?>
+  <?!= include('Modal_Finanzas'); ?>
+  <?!= include('Modal_ProyectosYHitos'); ?>
+  <?!= include('Modal_AtajosYPdf'); ?>
+  <?!= include('Modal_Notas'); ?>
+  <?!= include('Modal_DetalleIdea'); ?>
+  <?!= include('Widget_Ideas'); ?>
+
+  <!-- Contenedor Maestro Fijo para Snackbars de Deshacer (Undo 4.5s) y Toasts Globales -->
+  <div id="undo-toast-container"
+    class="fixed bottom-5 right-5 z-[99999] flex flex-col gap-2.5 pointer-events-auto max-w-sm w-full px-4 sm:px-0">
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- SECCIÓN 4: SCRIPTS, LIBRERÍAS Y LÓGICA REACTIVA                      -->
+  <!-- ===================================================================== -->
+  <!-- SweetAlert2 (Para alertas y modales de confirmación elegantes) -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <!-- Chart.js (Para gráficos interactivos conectados a tus datos de Sheets) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Flowbite JS (Funcionalidad de componentes interactivos) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.js"></script>
+
+  <!-- AOS JS (Inicializador de animaciones) -->
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      try {
+        if (typeof AOS !== 'undefined' && AOS.init) {
+          AOS.init({
+            duration: 600,
+            once: true
+          });
+        }
+      } catch (eAos) {
+        console.warn('[AOS init Warning]:', eAos);
+      }
+    });
+  </script>
+
+  <!-- Canvas Confetti (Para celebraciones sutiles de hábitos y rachas) -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <!-- ===================================================================== -->
+  <!-- MÓDULOS SEGREGADOS DE FRONTEND (ORDEN ESTRICTO DE DEPENDENCIAS)       -->
+  <!-- ===================================================================== -->
+  <?!= include('JS_Core'); ?>
+  <?!= include('JS_Subtareas'); ?>
+  <?!= include('JS_Kanban'); ?>
+  <?!= include('JS_Habitos'); ?>
+  <?!= include('JS_Portafolio'); ?>
+  <?!= include('JS_Detalle360'); ?>
+  <?!= include('JS_GrafoRed'); ?>
+  <?!= include('JS_TareaFlow'); ?>
+  <?!= include('JS_Finanzas'); ?>
+  <?!= include('JS_Notas'); ?>
+  <?!= include('JS_Ideas'); ?>
+  <?!= include('JS_ModalesYAtajos'); ?>
+
+  <!-- ===================================================================== -->
+  <!-- POPOVER / PREVIEW FLOTANTE GLOBAL DE NOTAS VINCULADAS (HOVER)         -->
+  <!-- ===================================================================== -->
+  <div id="popover-nota-preview" 
+       class="fixed hidden z-[99999] max-w-xs sm:max-w-sm p-3 rounded-xl bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md border border-slate-700/80 shadow-2xl shadow-black/50 text-slate-200 pointer-events-none transition-opacity duration-150 opacity-0 select-none">
+    <div class="flex items-center justify-between gap-2 pb-1.5 mb-1.5 border-b border-slate-800">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/>
+          <path d="M15 3v6h6"/>
+        </svg>
+        <span id="popover-nota-titulo" class="font-bold text-xs text-slate-100 truncate">Título de la Nota</span>
+      </div>
+      <span id="popover-nota-fecha" class="font-mono text-[10px] text-slate-400 shrink-0">--/--</span>
+    </div>
+    <div id="popover-nota-cuerpo" class="leading-relaxed text-xs text-slate-300 max-h-48 overflow-hidden break-words">
+      Contenido de la nota...
+    </div>
+    <div id="popover-nota-tags" class="flex flex-wrap gap-1 mt-2 pt-1.5 border-t border-slate-800/60 hidden"></div>
+  </div>
+</body>
+
+</html>

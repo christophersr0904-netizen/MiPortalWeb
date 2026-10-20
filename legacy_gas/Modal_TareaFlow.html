@@ -1,0 +1,606 @@
+<!-- ===================================================================== -->
+<!-- MODAL UNIFICADO ELEVADO: TAREA DE PROYECTO (COBALT AERODYNAMIC A.2.2) -->
+<!-- ===================================================================== -->
+<div id="modal-tarea-flow"
+  class="fixed inset-0 z-50 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs hidden flex items-end sm:items-center justify-center p-0 sm:p-4"
+  style="transition: all 0.15s ease-out;">
+  <div id="modal-tarea-flow-card"
+    class="portal-surface elevation-3 w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative"
+    style="transition: all 0.15s ease-out;">
+
+    <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+    <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+    <!-- CAMPOS OCULTOS DE CONTROL Y PUENTES DE RETROCOMPATIBILIDAD -->
+    <input type="hidden" id="task-flow-id">
+    <input type="hidden" id="task-flow-modo" value="CREAR">
+    <input type="hidden" id="task-flow-pry-val">
+    <input type="hidden" id="task-flow-hit-val">
+    <input type="hidden" id="task-flow-dep-val">
+    <input type="hidden" id="task-flow-estado-val" value="02_Por_Hacer">
+    <input type="hidden" id="task-flow-prioridad-val" value="02_P2_Media">
+    <input type="hidden" id="task-flow-energia-val" value="Media_Operativa">
+    <input type="hidden" id="task-flow-fecha-val">
+    <input type="hidden" id="task-flow-hora-val" value="09:00">
+    <input type="hidden" id="task-flow-horas-est-val" value="1.0">
+    <input type="hidden" id="task-flow-horas-rea-val" value="0.0">
+
+    <!-- 1. CABECERA INTEGRADA (ESTRUCTURA, CONTEXTO WBS Y TÍTULO) -->
+    <div class="portal-surface px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 space-y-2.5">
+      <!-- Fila 1: ID en fuente mono, selectores semánticos ghost y botón de cierre -->
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <span id="task-flow-badge-id"
+            class="text-[11px] font-mono tabular-nums font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 border border-slate-700/60 shadow-2xs shrink-0">
+            NUEVA TAREA
+          </span>
+
+          <!-- Selector de Estado (Ghost pill) -->
+          <div class="relative">
+            <button type="button" id="task-flow-estado-btn" onclick="toggleSelectorEstadoTaskFlow(event)"
+              class="filter-ghost-btn inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-full transition shadow-2xs"
+              title="Clic para cambiar estado de la tarea">
+              <span class="icon-slot flex items-center justify-center shrink-0">
+                <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+              </span>
+              <span id="task-flow-estado-label">02 Por Hacer</span>
+              <svg class="portal-icon-sm opacity-60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div id="task-flow-estado-dropdown"
+              class="hidden absolute left-0 top-full mt-1.5 w-44 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-1.5 z-50 space-y-1 animate-fadeIn text-xs">
+              <button type="button" onclick="seleccionarEstadoTaskFlow('01_Backlog')"
+                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium">
+                01 Backlog
+              </button>
+              <button type="button" onclick="seleccionarEstadoTaskFlow('02_Por_Hacer')"
+                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold">
+                02 Por Hacer
+              </button>
+              <button type="button" onclick="seleccionarEstadoTaskFlow('03_En_Proceso')"
+                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold">
+                03 En Proceso
+              </button>
+              <button type="button" onclick="seleccionarEstadoTaskFlow('04_Completado')"
+                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold">
+                04 Completado
+              </button>
+            </div>
+          </div>
+          <span id="task-flow-badge-notas"></span>
+        </div>
+
+        <!-- Botón de cierre .btn-portal-icon -->
+        <button type="button" onclick="cerrarModalTareaFlow()"
+          class="btn-portal-icon"
+          title="Cerrar ventana (Esc)">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Fila 2: Contexto WBS Canónico (Modo Informativo para EDITAR / Selectores para CREAR) -->
+      <div>
+        <!-- A) MODO EDITAR / LECTURA: Breadcrumb WBS Resuelto Precargado (Solo Lectura) -->
+        <div id="task-flow-wbs-info" class="flex items-center gap-2 flex-wrap text-xs">
+          <!-- Proyecto Asignado -->
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold bg-slate-900/90 text-slate-200 border border-slate-700/70 shadow-2xs"
+            title="Proyecto canónico asignado">
+            <span class="text-indigo-400 flex items-center justify-center shrink-0">
+              <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+            </span>
+            <span id="task-flow-wbs-proy-text" class="max-w-[200px] sm:max-w-xs truncate font-medium">Proyecto</span>
+          </span>
+
+          <span class="text-slate-600 select-none">›</span>
+
+          <!-- Fase Asociada (Condicional) -->
+          <span id="task-flow-wbs-fase-container" class="hidden items-center gap-1.5">
+            <span id="task-flow-wbs-fase-text" class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/50">Fase</span>
+            <span class="text-slate-600 select-none">›</span>
+          </span>
+
+          <!-- Paquete de Trabajo / Hito Asignado -->
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold bg-purple-950/40 text-purple-200 border border-purple-800/60 shadow-2xs"
+            title="Paquete de Trabajo (WP-XXX) asignado">
+            <span class="text-purple-400 flex items-center justify-center shrink-0">
+              <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="6" r="1"/><circle cx="12" cy="18" r="1"/></svg>
+            </span>
+            <span id="task-flow-wbs-hito-text" class="max-w-[200px] sm:max-w-xs truncate font-medium">Paquete de Trabajo</span>
+          </span>
+
+          <!-- Indicador WBS Estructurado -->
+          <span class="inline-flex items-center gap-1 text-[10px] text-slate-500 font-mono pl-1 select-none" title="Pertenencia WBS fija">
+            <svg class="w-3 h-3 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>WBS</span>
+          </span>
+        </div>
+
+        <!-- B) MODO CREAR: Selectores Dropdown Interactivos -->
+        <div id="task-flow-wbs-selectors" class="hidden flex items-center gap-2 flex-wrap text-xs">
+          <!-- Selector de Proyecto -->
+          <div class="relative">
+            <button type="button" id="task-flow-pry-btn" onclick="toggleSelectorProyectoTaskFlow(event)"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 hover:border-indigo-500/60 transition shadow-2xs"
+              title="Clic para asignar proyecto">
+              <span class="icon-slot flex items-center justify-center shrink-0 text-indigo-400">
+                <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+              </span>
+              <span id="task-flow-pry-label" class="max-w-[150px] truncate">Seleccionar Proyecto</span>
+              <svg class="portal-icon-sm opacity-50 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div id="task-flow-pry-dropdown"
+              class="hidden absolute left-0 top-full mt-1.5 w-64 bg-slate-900 rounded-xl shadow-2xl border border-slate-800 p-2 z-50 max-h-60 overflow-y-auto custom-scrollbar space-y-1 animate-fadeIn text-xs">
+            </div>
+          </div>
+
+          <span class="text-slate-600 select-none">›</span>
+
+          <!-- Selector de Hito / Paquete -->
+          <div class="relative">
+            <button type="button" id="task-flow-hit-btn" onclick="toggleSelectorHitoTaskFlow(event)"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-semibold bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 hover:border-purple-500/60 transition shadow-2xs"
+              title="Clic para asignar hito">
+              <span class="icon-slot flex items-center justify-center shrink-0 text-purple-400">
+                <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="6" r="1"/><circle cx="12" cy="18" r="1"/></svg>
+              </span>
+              <span id="task-flow-hit-label" class="max-w-[130px] truncate">Seleccionar Hito</span>
+              <svg class="portal-icon-sm opacity-50 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div id="task-flow-hit-dropdown"
+              class="hidden absolute left-0 top-full mt-1.5 w-64 bg-slate-900 rounded-xl shadow-2xl border border-slate-800 p-2 z-50 max-h-60 overflow-y-auto custom-scrollbar space-y-1 animate-fadeIn text-xs">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fila 3: Título editable prominente -->
+      <h3 class="w-full">
+        <input type="text" id="task-flow-titulo"
+          class="text-xl font-bold text-slate-100 placeholder:text-slate-500 bg-transparent outline-none w-full border-b border-transparent focus:border-indigo-500/60 transition-colors py-0.5"
+          placeholder="Título de la tarea o entregable..."
+          autocomplete="off">
+      </h3>
+    </div>
+
+    <!-- CUERPO DE CONTENIDO CON SCROLL EXCLUSIVO VERTICAL (ZERO JITTER) -->
+    <div class="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar">
+
+      <!-- 2. BENTO GRID DE METADATOS ESTRUCTURADOS (TIEMPO, OPERATIVO Y FINANCIERO) -->
+      <div class="bg-slate-900/50 border border-slate-800/60 rounded-xl p-3 sm:p-3.5">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        
+        <!-- CARD 1: TIEMPOS Y ESFUERZO -->
+        <div class="bg-slate-900/80 border border-slate-800/70 rounded-xl p-2.5 flex flex-col justify-between hover:border-indigo-500/30 transition shadow-2xs group">
+          <div class="flex items-center justify-between gap-1 pb-1.5 border-b border-slate-800/50">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <svg class="portal-icon-sm text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+                <line x1="16" x2="16" y1="2" y2="6"/>
+                <line x1="8" x2="8" y1="2" y2="6"/>
+                <line x1="3" x2="21" y1="10" y2="10"/>
+              </svg>
+              <span>Tiempo & Esfuerzo</span>
+            </span>
+            <button type="button" onclick="abrirDatePickerTaskFlow(event)" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold transition">Editar</button>
+          </div>
+          <div class="pt-2 space-y-1.5">
+            <!-- Botón clickeable para abrir el selector de fecha y hora -->
+            <button type="button" id="task-flow-chip-datetime" onclick="abrirDatePickerTaskFlow(event)"
+              class="w-full text-left inline-flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-slate-950/60 hover:bg-slate-800/80 text-slate-200 border border-slate-800/80 hover:border-indigo-500/50 transition">
+              <span class="flex items-center gap-1.5 truncate">
+                <svg class="portal-icon-sm text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span id="task-flow-chip-datetime-label" class="font-mono text-xs font-semibold tabular-nums truncate">Fecha y Hora</span>
+              </span>
+              <svg class="portal-icon-sm opacity-40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <!-- Badge resumen de horas (Estimadas vs Reales) -->
+            <div class="flex items-center justify-between px-1 text-[11px] font-mono tabular-nums text-slate-400">
+              <span class="flex items-center gap-1">
+                <span class="text-slate-500">Est:</span>
+                <span id="task-flow-bento-horas-est" class="text-indigo-300 font-bold">1.0h</span>
+              </span>
+              <span class="text-slate-700">|</span>
+              <span class="flex items-center gap-1">
+                <span class="text-slate-500">Real:</span>
+                <span id="task-flow-bento-horas-rea" class="text-emerald-300 font-bold">0.0h</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 2: OPERATIVO Y FLUJO -->
+        <div class="bg-slate-900/80 border border-slate-800/70 rounded-xl p-2.5 flex flex-col justify-between hover:border-amber-500/30 transition shadow-2xs group">
+          <div class="flex items-center justify-between gap-1 pb-1.5 border-b border-slate-800/50">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <svg class="portal-icon-sm text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              <span>Operativo & Flujo</span>
+            </span>
+            <!-- Selector de Prioridad semántico con acento sutil -->
+            <button type="button" id="task-flow-chip-prioridad" onclick="togglePrioridadTaskFlow(event)"
+              class="badge-sem-amber inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition shadow-2xs hover:scale-105 active:scale-95 cursor-pointer"
+              title="Clic para alternar prioridad (P1 Alta, P2 Media, P3 Baja)">
+              <svg class="w-2.5 h-2.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
+              <span id="task-flow-chip-prioridad-label">P2 Media</span>
+            </button>
+          </div>
+          <div class="pt-2 space-y-1.5">
+            <!-- Nivel de Energía / Enfoque -->
+            <button type="button" id="task-flow-chip-energia" onclick="toggleEnergiaTaskFlow(event)"
+              class="w-full text-left inline-flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-slate-950/60 hover:bg-slate-800/80 text-slate-200 border border-slate-800/80 hover:border-amber-500/50 transition"
+              title="Alternar nivel de energía (Estratégica, Operativa, Automática)">
+              <span class="flex items-center gap-1.5 truncate">
+                <svg class="portal-icon-sm text-amber-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <span class="text-xs font-semibold text-slate-300">Energía:</span>
+                <span id="task-flow-chip-energia-label" class="text-xs font-bold text-amber-300">Operativa</span>
+              </span>
+              <span class="text-[10px] text-slate-500">↻</span>
+            </button>
+            <!-- Predecesora -->
+            <button type="button" id="task-flow-chip-dependencia" onclick="abrirDepPickerTaskFlow(event)"
+              class="w-full text-left inline-flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-slate-950/60 hover:bg-slate-800/80 text-slate-300 border border-slate-800/80 hover:border-amber-500/50 transition"
+              title="Seleccionar tarea predecesora en el grafo">
+              <span class="flex items-center gap-1.5 truncate">
+                <svg class="portal-icon-sm text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                <span id="task-flow-chip-dependencia-label" class="text-xs font-medium truncate">Predecesora</span>
+              </span>
+              <svg class="portal-icon-sm opacity-40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- CARD 3: FINANCIERO Y ENTORNO -->
+        <div class="bg-slate-900/80 border border-slate-800/70 rounded-xl p-2.5 flex flex-col justify-between hover:border-emerald-500/30 transition shadow-2xs group">
+          <div class="flex items-center justify-between gap-1 pb-1.5 border-b border-slate-800/50">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <svg class="portal-icon-sm text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              <span>Financiero & Entorno</span>
+            </span>
+            <button type="button" onclick="toggleGastoSectionTaskFlow(event)" class="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold transition">Gestionar</button>
+          </div>
+          <div class="pt-2 space-y-1.5">
+            <!-- Gasto Asociado -->
+            <button type="button" id="task-flow-chip-gasto" onclick="toggleGastoSectionTaskFlow(event)"
+              class="w-full text-left inline-flex items-center justify-between gap-1 px-2 py-1 rounded-lg bg-slate-950/60 hover:bg-slate-800/80 text-slate-300 border border-slate-800/80 hover:border-emerald-500/50 transition"
+              title="Vincular o registrar gasto financiero">
+              <span class="flex items-center gap-1.5 truncate">
+                <svg class="portal-icon-sm text-emerald-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span class="text-xs text-slate-400">Gasto:</span>
+                <span id="task-flow-chip-gasto-label" class="font-mono text-xs font-bold text-emerald-400 tabular-nums truncate">+ Gasto</span>
+              </span>
+              <svg class="portal-icon-sm opacity-40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <!-- Lugar y Notas en sub-fila -->
+            <div class="grid grid-cols-2 gap-1.5">
+              <button type="button" id="task-flow-chip-lugar" onclick="toggleLugarSectionTaskFlow(event)"
+                class="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg bg-slate-950/60 hover:bg-slate-800/80 text-slate-300 border border-slate-800/80 hover:border-slate-500 transition text-xs"
+                title="Lugar o sede de ejecución">
+                <svg class="portal-icon-sm text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                <span id="task-flow-chip-lugar-label" class="truncate max-w-[65px]">Lugar</span>
+              </button>
+              <button type="button" id="task-flow-chip-notas" onclick="toggleNotasSectionTaskFlow(event)"
+                class="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg bg-slate-950/60 hover:bg-slate-800/80 text-slate-300 border border-slate-800/80 hover:border-purple-500/50 transition text-xs"
+                title="Vincular o consultar notas asociadas a esta tarea">
+                <svg class="portal-icon-sm text-purple-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+                <span id="task-flow-chip-notas-label" class="font-mono tabular-nums truncate max-w-[65px]">+ Notas</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- POPOVERS Y SECCIONES DESPLEGABLES CONTEXTUALES -->
+    <div class="space-y-2.5">
+      <!-- POPOVER PREDECESORA -->
+      <div id="task-flow-dep-popover"
+        class="hidden bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 animate-fadeIn text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-slate-200 flex items-center gap-1.5">
+            <svg class="portal-icon-sm text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <span>Tarea Predecesora</span>
+          </span>
+          <button type="button" onclick="cerrarDepPickerTaskFlow()" class="btn-portal-icon" title="Cerrar">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+        <input type="text" id="task-flow-dep-search-input" placeholder="Buscar tarea..."
+          class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:ring-1 focus:ring-amber-500"
+          oninput="filtrarListaPredecesorasTaskFlow(this.value)">
+        <div id="task-flow-dep-lista" class="max-h-36 overflow-y-auto custom-scrollbar space-y-1 pr-1"></div>
+      </div>
+
+      <!-- SECCIÓN GASTO ASOCIADO -->
+      <div id="task-flow-gasto-section"
+        class="hidden bg-emerald-950/30 border border-emerald-800/60 rounded-xl p-3 space-y-2.5 animate-fadeIn text-xs">
+        <div class="flex items-center justify-between gap-2 pb-2 border-b border-emerald-800/40">
+          <div class="flex items-center gap-1.5">
+            <svg class="portal-icon-sm text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <span class="font-bold text-emerald-200">Gasto Asociado</span>
+          </div>
+          <div class="inline-flex p-0.5 bg-emerald-900/60 rounded-lg text-[11px]">
+            <button type="button" id="task-tab-gasto-nuevo" onclick="cambiarTabGastoTaskFlow('NUEVO')"
+              class="px-2 py-0.5 rounded-md font-bold bg-emerald-600 text-white">Nuevo</button>
+            <button type="button" id="task-tab-gasto-vincular" onclick="cambiarTabGastoTaskFlow('VINCULAR')"
+              class="px-2 py-0.5 rounded-md font-medium text-emerald-300 hover:text-white">Vincular</button>
+          </div>
+          <button type="button" onclick="toggleGastoSectionTaskFlow()" class="btn-portal-icon ml-auto" title="Cerrar">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- TAB 1: NUEVO GASTO -->
+        <div id="task-panel-gasto-nuevo" class="space-y-2">
+          <div class="grid grid-cols-12 gap-2">
+            <div class="col-span-5">
+              <input type="hidden" id="task-flow-gasto-moneda" value="PEN">
+              <div class="inline-flex p-0.5 bg-slate-800 rounded-lg border border-slate-700 w-full justify-between text-xs">
+                <button type="button" id="task-btn-moneda-pen" onclick="seleccionarMonedaTaskFlow('PEN')" class="flex-1 py-0.5 rounded font-bold bg-emerald-600 text-white">PEN</button>
+                <button type="button" id="task-btn-moneda-usd" onclick="seleccionarMonedaTaskFlow('USD')" class="flex-1 py-0.5 rounded font-medium text-slate-300">USD</button>
+                <button type="button" id="task-btn-moneda-eur" onclick="seleccionarMonedaTaskFlow('EUR')" class="flex-1 py-0.5 rounded font-medium text-slate-300">EUR</button>
+              </div>
+            </div>
+            <div class="col-span-7 relative">
+              <span id="task-flow-gasto-simbolo" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-slate-400">S/</span>
+              <input type="number" step="0.01" min="0" id="task-flow-gasto-monto" placeholder="0.00"
+                class="w-full pl-8 pr-2 py-1.5 border border-slate-800 rounded-lg bg-slate-900 font-mono tabular-nums font-bold text-emerald-300 outline-none focus:ring-1 focus:ring-emerald-500/40 text-xs">
+            </div>
+          </div>
+          <div class="space-y-1">
+            <select id="task-flow-gasto-categoria" class="w-full border border-slate-800 rounded-lg p-1.5 bg-slate-900 text-xs text-slate-200">
+              <option value="Servicios_Contratados" selected>Servicios Contratados</option>
+              <option value="Materiales">Materiales e Insumos</option>
+              <option value="Licencias_Software">Licencias y Software</option>
+              <option value="Logistica_Transporte">Logística y Transporte</option>
+              <option value="Otros">Otros</option>
+            </select>
+            <input type="text" id="task-flow-gasto-desc" placeholder="Concepto del gasto..."
+              class="w-full border border-slate-800 rounded-lg p-1.5 bg-slate-900 text-xs text-slate-200">
+          </div>
+          <div class="flex items-center justify-end gap-2 pt-1">
+            <button type="button" id="task-btn-guardar-gasto-inmediato" onclick="guardarGastoAtomicoTaskFlow()"
+              class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-xs transition flex items-center gap-1">
+              <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span>Guardar Gasto</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB 2: VINCULAR GASTO -->
+        <div id="task-panel-gasto-vincular" class="hidden space-y-2">
+          <input type="text" id="task-flow-gasto-search-input" placeholder="Buscar gasto..."
+            class="w-full border border-slate-800 rounded-lg p-1.5 bg-slate-900 text-xs text-slate-200"
+            oninput="filtrarGastosParaVincularTaskFlow(this.value)">
+          <div id="task-flow-gastos-disponibles-list" class="max-h-32 overflow-y-auto custom-scrollbar space-y-1"></div>
+        </div>
+
+        <!-- EGRESOS VINCULADOS -->
+        <div id="task-flow-gastos-asociados-box" class="pt-2 border-t border-emerald-800/40 hidden">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[10px] text-emerald-300 font-bold uppercase">Vinculados:</span>
+            <span id="task-flow-gastos-total-badge" class="font-mono tabular-nums text-[10px] text-emerald-400 font-bold">Total: S/ 0.00</span>
+          </div>
+          <div id="task-flow-gastos-asociados-list" class="space-y-1 text-[11px]"></div>
+        </div>
+      </div>
+
+      <!-- SECCIÓN LUGAR -->
+      <div id="task-flow-lugar-section"
+        class="hidden bg-slate-900/60 border border-slate-800 rounded-xl p-2.5 space-y-1.5 animate-fadeIn text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-slate-300">Lugar de Ejecución</span>
+          <button type="button" onclick="abrirBuscadorMapsDesdeTaskFlow()" class="text-[10px] text-indigo-400 hover:underline font-bold">Ver en Maps</button>
+        </div>
+        <input type="text" id="task-flow-lugar-input" placeholder="Dirección, sede o sala..."
+          class="w-full border border-slate-800 rounded-lg p-1.5 bg-slate-950 text-xs text-slate-200">
+      </div>
+
+      <!-- SECCIÓN NOTAS VINCULADAS (MODO RECÍPROCO Y BITEMÁTICO MINIMALISTA) -->
+      <div id="task-flow-notas-section"
+        class="hidden bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 rounded-2xl p-3 space-y-2.5 animate-fadeIn text-xs">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5">
+            <svg class="portal-icon-sm text-purple-600 dark:text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+            <span class="font-bold text-xs text-purple-900 dark:text-purple-200">Notas Vinculadas</span>
+          </div>
+          <button type="button" onclick="toggleNotasSectionTaskFlow()" class="btn-portal-icon" title="Cerrar panel de notas">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+
+        <!-- Lista de notas ya vinculadas a esta tarea -->
+        <div id="task-flow-notas-vinculadas-list" class="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar"></div>
+
+        <!-- Buscador en tiempo real de notas -->
+        <div class="space-y-1 pt-1 border-t border-purple-200/60 dark:border-purple-800/40">
+          <div class="relative">
+            <input type="text" id="task-flow-notas-search-input"
+              placeholder="Buscar nota para vincular..."
+              class="w-full pl-8 pr-3 py-1.5 border border-purple-200 dark:border-purple-800/80 rounded-xl bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-purple-500/20"
+              oninput="filtrarNotasParaVincularTaskFlow(this.value)">
+            <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+              <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+          </div>
+          <div id="task-flow-notas-disponibles-list" class="max-h-36 overflow-y-auto custom-scrollbar space-y-1 pr-1"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. ÁREA CENTRAL AMPLIA Y DESPEJADA -->
+    <div class="space-y-4">
+      <!-- a) Campo Descripción / Notas -->
+      <div class="space-y-1.5">
+        <label class="block font-bold text-xs text-slate-400 flex items-center gap-1.5">
+          <svg class="portal-icon-sm text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+          <span>Descripción y Especificaciones Técnicas</span>
+        </label>
+        <textarea id="task-flow-notas" rows="3"
+          placeholder="Especificaciones técnicas, notas de ejecución, criterios de aceptación o entregables esperados..."
+          class="w-full bg-slate-900/50 border border-slate-800/60 rounded-xl p-3.5 text-sm text-slate-200 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition resize-y custom-scrollbar"></textarea>
+      </div>
+
+      <!-- b) Bloque Procedural de Pasos / Subtareas -->
+      <div class="p-4 bg-slate-900/40 border border-slate-800/60 rounded-xl space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="icon-slot p-1.5 bg-indigo-950/60 text-indigo-400 rounded-lg text-xs font-black shrink-0">
+              <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+            </span>
+            <div>
+              <h4 class="font-bold text-slate-200 text-xs">Pasos / Subtareas</h4>
+              <p class="text-[10px] text-slate-400">Procedimiento guiado y secuencial (0 ms de latencia)</p>
+            </div>
+          </div>
+          <!-- Contador font-mono tabular-nums -->
+          <div id="task-flow-pasos-progreso-badge"
+            class="font-mono tabular-nums text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 shrink-0 border border-slate-700/60">
+            0/0 pasos (0%)
+          </div>
+        </div>
+
+        <!-- Micro barra de progreso -->
+        <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+          <div id="task-flow-pasos-progreso-bar"
+            class="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+
+        <!-- Lista limpia de pasos con asa drag y checkbox -->
+        <div id="task-flow-lista-pasos" class="space-y-1.5 max-h-64 overflow-y-auto pr-1 custom-scrollbar"></div>
+
+        <!-- Input único con botón "+" para agregar nuevo paso -->
+        <div class="flex items-center gap-2 pt-1">
+          <input type="text" id="task-flow-nuevo-paso-input"
+            placeholder="Escribe el siguiente paso y pulsa Enter..."
+            class="flex-1 border border-slate-800 rounded-lg px-3 py-2 text-xs bg-slate-900/60 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/40"
+            onkeydown="if(event.key === 'Enter'){ event.preventDefault(); agregarSubtareaProceduralTaskFlow(); }">
+          <button type="button" onclick="agregarSubtareaProceduralTaskFlow()"
+            class="btn-portal-primary text-xs px-3 py-2 flex items-center justify-center gap-1 shrink-0 rounded-lg"
+            title="Agregar paso (Enter)">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- FIN CUERPO DE CONTENIDO CON SCROLL EXCLUSIVO VERTICAL (ZERO JITTER) -->
+    </div>
+
+    <!-- 4. PIE DE DIÁLOGO / FOOTER -->
+    <div class="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between gap-3">
+      <!-- Izquierda: Eliminar / Archivar -->
+      <div class="flex items-center gap-2">
+        <button type="button" id="task-flow-btn-eliminar" onclick="confirmarEliminarTareaDesdeModalFlow()"
+          class="hidden px-3 py-1.5 border border-rose-800 text-rose-400 hover:bg-rose-950/50 rounded-lg font-bold flex items-center gap-1.5 transition text-xs active:scale-95"
+          title="Eliminar esta tarea permanentemente">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+          <span>Eliminar</span>
+        </button>
+        <button type="button" id="task-flow-btn-archivar" onclick="confirmarArchivarTareaTaskFlow()"
+          class="hidden btn-portal-secondary text-xs"
+          title="Archivar esta tarea del tablero">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+          <span>Archivar</span>
+        </button>
+      </div>
+
+      <!-- Derecha: Cancelar + Guardar Tarea -->
+      <div class="flex items-center gap-3 ml-auto">
+        <button type="button" onclick="cerrarModalTareaFlow()"
+          class="btn-portal-secondary text-xs">
+          Cancelar
+        </button>
+        <button type="button" id="task-flow-btn-submit" onclick="guardarTareaFlow()"
+          class="btn-portal-primary text-xs flex items-center gap-1.5">
+          <span>Guardar Tarea</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- POPOVER TEMPORAL DE FECHA, HORA Y ESTIMACIÓN -->
+    <div id="task-flow-datepicker-popover"
+      class="hidden absolute inset-x-3 sm:inset-x-5 top-12 bottom-3 z-40 bg-slate-900/98 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl p-4 sm:p-5 overflow-y-auto custom-scrollbar space-y-4 animate-fadeIn">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <svg class="portal-icon text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+          <div>
+            <h4 class="text-xs font-bold text-slate-100">Fecha, Hora y Estimación de Duración</h4>
+            <p class="text-[10px] text-slate-400">Entregable de proyecto (sin recurrencia)</p>
+          </div>
+        </div>
+        <button type="button" onclick="cerrarDatePickerTaskFlow()" class="btn-portal-icon" title="Cerrar">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Calendario -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <button type="button" onclick="navegarMesDatePickerTask(-1)" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 transition" title="Mes anterior">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <div class="flex items-center gap-2">
+            <span id="task-flow-cal-mes-ano" class="text-xs font-bold text-slate-200 uppercase tracking-wide">Septiembre 2026</span>
+            <button type="button" onclick="irAHoyDatePickerTask()" class="text-[10px] font-bold text-indigo-400 hover:underline px-1.5 py-0.5 rounded bg-indigo-950/40">Hoy</button>
+          </div>
+          <button type="button" onclick="navegarMesDatePickerTask(1)" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 transition" title="Mes siguiente">
+            <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-slate-500 uppercase">
+          <span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sá</span><span>Do</span>
+        </div>
+        <div id="task-flow-cal-dias-grid" class="grid grid-cols-7 gap-1 text-xs"></div>
+      </div>
+
+      <!-- Hora -->
+      <div class="pt-3 border-t border-slate-800 space-y-2">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+            <svg class="portal-icon-sm text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Hora de Inicio / Bloque de Trabajo</span>
+          </label>
+          <input type="time" id="task-flow-picker-time-input" value="09:00"
+            class="text-xs font-mono tabular-nums font-bold px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-lg outline-none text-slate-200 focus:ring-1 focus:ring-indigo-500"
+            onchange="actualizarHoraTaskPicker(this.value)">
+        </div>
+      </div>
+
+      <!-- Horas Estimadas -->
+      <div class="pt-3 border-t border-slate-800 space-y-2">
+        <label class="text-xs font-bold text-slate-300 flex items-center justify-between">
+          <span class="flex items-center gap-1.5">
+            <svg class="portal-icon-sm text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+            <span>Horas Estimadas (Esfuerzo)</span>
+          </span>
+          <span id="task-flow-horas-label" class="font-mono tabular-nums text-indigo-400 font-bold">1.0 h</span>
+        </label>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button type="button" onclick="fijarHorasEstimadasTask(0.5)" class="px-2 py-1 text-[11px] font-mono tabular-nums font-bold rounded-lg border border-slate-700 hover:border-indigo-400 text-slate-300 transition">0.5h</button>
+          <button type="button" onclick="fijarHorasEstimadasTask(1.0)" class="px-2 py-1 text-[11px] font-mono tabular-nums font-bold rounded-lg border border-slate-700 hover:border-indigo-400 text-slate-300 transition">1.0h</button>
+          <button type="button" onclick="fijarHorasEstimadasTask(1.5)" class="px-2 py-1 text-[11px] font-mono tabular-nums font-bold rounded-lg border border-slate-700 hover:border-indigo-400 text-slate-300 transition">1.5h</button>
+          <button type="button" onclick="fijarHorasEstimadasTask(2.0)" class="px-2 py-1 text-[11px] font-mono tabular-nums font-bold rounded-lg border border-slate-700 hover:border-indigo-400 text-slate-300 transition">2.0h</button>
+          <button type="button" onclick="fijarHorasEstimadasTask(3.0)" class="px-2 py-1 text-[11px] font-mono tabular-nums font-bold rounded-lg border border-slate-700 hover:border-indigo-400 text-slate-300 transition">3.0h</button>
+          <button type="button" onclick="fijarHorasEstimadasTask(4.0)" class="px-2 py-1 text-[11px] font-mono tabular-nums font-bold rounded-lg border border-slate-700 hover:border-indigo-400 text-slate-300 transition">4.0h</button>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <button type="button" onclick="ajustarHorasEstimadasTask(-0.5)" class="w-7 h-7 rounded-lg border border-slate-700 flex items-center justify-center font-bold text-slate-400 hover:bg-slate-800 transition">-</button>
+          <input type="number" step="0.5" min="0.5" id="task-flow-picker-horas-input" value="1.0" class="w-20 text-center font-mono tabular-nums font-bold text-xs border border-slate-700 rounded-lg p-1 bg-slate-900 text-slate-200" onchange="actualizarHorasManualTaskPicker(this.value)">
+          <button type="button" onclick="ajustarHorasEstimadasTask(0.5)" class="w-7 h-7 rounded-lg border border-slate-700 flex items-center justify-center font-bold text-slate-400 hover:bg-slate-800 transition">+</button>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+        <button type="button" onclick="limpiarDatePickerTaskFlow()" class="text-[11px] font-bold text-slate-500 hover:text-rose-400 transition">Limpiar Fecha</button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="cerrarDatePickerTaskFlow()" class="btn-portal-secondary text-xs">Cancelar</button>
+          <button type="button" onclick="aplicarDatePickerTaskFlow()" class="btn-portal-primary text-xs">Aplicar</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

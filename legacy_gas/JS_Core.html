@@ -1,0 +1,2718 @@
+<!--
+ * ============================================================================
+ * ARCHIVO: JS_Core.html
+ * SISTEMA: PMO Personal Modular & Gestión Integral de Vida
+ * ============================================================================
+-->
+<script>
+  // ============================================================================
+  // SECCIÓN 1: CONFIGURACIÓN Y VARIABLES GLOBALES
+  // ============================================================================
+
+  /**
+   * 1.1. Estado central reactivo de la Suite Ejecutiva
+   */
+  var state = {
+    vistaActual: 'kanban',
+    proyectos: [],
+    tareas: [],
+    hitos: [],
+    gastos: [],
+    actividadesPersonales: [],
+    ingresos: [],
+    subtareas: [],
+    notas: [],
+    filtroNotas: 'TODAS',
+    filtroColorNotas: '',
+    filtroBusquedaNotas: '',
+    filtrosNotas: {
+      tipos: new Set(),
+      tags: new Set(),
+      query: '',
+      color: ''
+    },
+    etiquetasNotas: [],
+    vistaModoNotas: 'masonry',
+    kanbanContextFilter: 'TODOS',
+    kanbanTimeFilter: 'TODO',
+    selectedProjectId: null,
+    proyectoDetalleActivo: null,
+    isSidebarCollapsed: (function () {
+      try {
+        return localStorage.getItem('pmo_sidebar_collapsed') === 'true';
+      } catch (e) {
+        return false;
+      }
+    })(),
+    tabPdfActivo: 'activos',
+    tabFinanzasActiva: 'general',
+    tipoCambioActual: 3.750,
+    filtroMesFinanzas: 'MES_ACTUAL',
+    transaccionDetalleActiva: null,
+    filtros: { tipo: '', hitoTarea: '', prioridadTarea: '', energiaTarea: '', plazoTarea: '', dependenciaTarea: '', buscarTarea: '', categoriaVida: '', busquedaSidebar: '' }
+  };
+
+  // Asegurar disponibilidad global universal e inmediata del estado reactivo
+  window.state = state;
+
+  /**
+   * 1.2. Variables de control de UI, Wizards y Drag & Drop
+   */
+  var currentWizardStep = 1;
+  var draggedTaskId = null;
+
+  // 1.3. Estado específico del Grafo de Red (Vis.js)
+  var networkInstance = null;
+  var mostrarGastosEnGrafo = true;
+  var fisicaGrafoActiva = true;
+
+  // ============================================================================
+  // UTILIDADES GLOBALES DE FORMATEO (FECHA Y HORA)
+  // ============================================================================
+  /**
+   * Formateador estricto e infalible de hora (elimina epochs 1899 y desbordes de Google Sheets)
+   */
+  function formatHoraLimpia(val) {
+    if (!val) return "--:--";
+    if (val instanceof Date) {
+      var hh = String(val.getHours()).padStart(2, '0');
+      var mm = String(val.getMinutes()).padStart(2, '0');
+      return hh + ':' + mm;
+    }
+    var str = String(val).trim();
+    // Si contiene la cadena fecha de 1899 o GMT, extraer únicamente HH:mm
+    var match = str.match(/(\d{1,2}):(\d{2})/);
+    if (match) {
+      return match[1].padStart(2, '0') + ':' + match[2];
+    }
+    return str.length >= 5 ? str.substring(0, 5) : str;
+  }
+
+  /**
+   * Formateador de Fecha Humana amigable sin desfases horarios
+   */
+  function formatFechaHumana(fechaStr) {
+    if (!fechaStr) return "Sin fecha";
+    var clean = String(fechaStr).split("T")[0].split(" ")[0];
+    var parts = clean.split("-");
+    if (parts.length !== 3) return clean;
+    var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    return d.toLocaleDateString("es-PE", { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+
+  /**
+   * Helper reactivo de archivado automático tras 10 días calendario de completado/conciliado (>10 días).
+   * Acepta un string de fecha, objeto Date o entidad del sistema (Tarea, Actividad, Proyecto, Gasto, Ingreso).
+   * Devuelve true únicamente si han transcurrido más de 10 días calendario (>10) desde la fecha de completado o conciliación.
+   */
+  function esElementoArchivado(param) {
+    if (!param) return false;
+    if (typeof param === 'object' && param._desarchivado === true) return false;
+    try {
+      var fechaVal = null;
+      if (typeof param === 'string' || param instanceof Date) {
+        fechaVal = param;
+      } else if (typeof param === 'object') {
+        var isComp = false;
+        // 1. Tarea de Proyecto o Actividad Personal
+        var est = String(param.Estado_Tarea || param.Estado || param.estado || '').trim();
+        if (est === '04_Completado' || est === '04_Hecho' || est.indexOf('04_Completad') !== -1 || param.Completado === true || param.completado === true) {
+          isComp = true;
+          fechaVal = param.Fecha_Completado || param.Fecha_Fin_Real || param.Fecha_Programada || param.Fecha || param.fecha;
+        }
+        // 2. Proyecto de Portafolio
+        else if (param.Estado_Proyecto === '06_Cerrado' || param.Estado === '06_Cerrado' || param.Estado_Proyecto === '04_Completado' || param.Estado === '04_Completado' || (param.Avance_Real_Pct !== undefined && Number(param.Avance_Real_Pct) >= 100)) {
+          isComp = true;
+          fechaVal = param.Fecha_Fin_Real || param.Fecha_Fin_Plan || param.Fecha_Actualizacion || param.Fecha_Creacion;
+        }
+        // 3. Hábitos (registro completado o frecuencia)
+        else if (param.Estado_Habito === 'Completado' || param.Estado_Habito === '04_Completado') {
+          isComp = true;
+          fechaVal = param.Fecha_Completado || param.Fecha || param.fecha || param.Fecha_Programada;
+        }
+        // 4. Finanzas (Gastos / Ingresos / Transacciones)
+        else if (param.Conciliado === true || param.conciliado === true || (param.Estado_Pago && String(param.Estado_Pago).toLowerCase() === 'pagado') || (param.Estado_Cobro && String(param.Estado_Cobro).toLowerCase() === 'cobrado') || param.isReal === true) {
+          isComp = true;
+          fechaVal = param.Fecha_Conciliacion || param.Fecha_Gasto || param.Fecha_Ingreso || param.fecha || param.Fecha || param.Fecha_Registro;
+        }
+        // 5. Ideas (Procesadas o Archivadas)
+        else if (param.Estado === 'Procesada' || param.Estado === 'Archivada') {
+          isComp = true;
+          fechaVal = param.Fecha_Archivado || param.Fecha_Procesada || param.Fecha_Captura;
+        }
+
+        if (!isComp || !fechaVal) return false;
+      }
+
+      if (!fechaVal) return false;
+
+      var d;
+      if (fechaVal instanceof Date) {
+        d = new Date(fechaVal.getFullYear(), fechaVal.getMonth(), fechaVal.getDate());
+      } else {
+        var clean = String(fechaVal).split('T')[0].split(' ')[0].trim();
+        var parts = clean.split('-');
+        if (parts.length === 3) {
+          d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else {
+          d = new Date(fechaVal);
+          d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        }
+      }
+
+      if (isNaN(d.getTime())) return false;
+
+      var hoy = new Date();
+      var hoyMedianoche = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+      var diffMs = hoyMedianoche.getTime() - d.getTime();
+      var diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      return diffDias > 10;
+    } catch (err) {
+      console.warn('[esElementoArchivado] Error de evaluación defensiva:', err);
+      return false;
+    }
+  }
+  window.esElementoArchivado = esElementoArchivado;
+
+  /**
+   * Conmutador global reactivo para la visibilidad de elementos archivados (>10 días).
+   * Ahora abre contextualmente la Bóveda / Drawer lateral derecho con alta fluidez.
+   */
+  function toggleVerArchivados(modulo) {
+    abrirDrawerArchivados(modulo);
+  }
+  window.toggleVerArchivados = toggleVerArchivados;
+
+  /**
+   * Escape defensivo de caracteres HTML para prevenir inyecciones y fallos de renderizado
+   */
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+  window.escapeHtml = escapeHtml;
+
+  /**
+   * Toast Esquinero Operativo Instantáneo (No bloqueante, 60fps)
+   * Diseñado para máxima fluidez y retroalimentación no invasiva (2.5s a 3.0s)
+   */
+  function mostrarToastOperativo(icono, titulo, detalle, duracion) {
+    if (typeof Swal !== 'undefined' && typeof Swal.mixin === 'function') {
+      var Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: duracion || 2800,
+        timerProgressBar: true,
+        didOpen: function (toast) {
+          toast.addEventListener('mouseenter', Swal.stopTimer);
+          toast.addEventListener('mouseleave', Swal.resumeTimer);
+        }
+      });
+      Toast.fire({
+        icon: icono || 'success',
+        title: titulo || '',
+        text: detalle || ''
+      });
+    }
+  }
+  window.mostrarToastOperativo = mostrarToastOperativo;
+
+  /**
+   * Notificación rápida de Creación exitosa (CRUD)
+   * - Icono: Check verde ('success')
+   * - Duración: 2800ms
+   */
+  function notificarCreacion(entidad, nombre, genero) {
+    var esFem = genero === 'f';
+    var titular = (entidad || 'Elemento') + (esFem ? ' creada correctamente' : ' creado correctamente');
+    mostrarToastOperativo('success', titular, nombre || '', 2800);
+  }
+  window.notificarCreacion = notificarCreacion;
+
+  /**
+   * Notificación rápida de Modificación / Actualización exitosa (CRUD)
+   * - Icono: Info azul/ámbar ('info')
+   * - Duración: 2800ms
+   */
+  function notificarModificacion(entidad, nombre, genero) {
+    var esFem = genero === 'f';
+    var titular = (entidad || 'Elemento') + (esFem ? ' actualizada correctamente' : ' actualizado correctamente');
+    mostrarToastOperativo('info', titular, nombre || '', 2800);
+  }
+  window.notificarModificacion = notificarModificacion;
+
+  /**
+   * Notificación rápida de Restauración / Deshacer (Undo)
+   * - Icono: 'success'
+   * - Duración: 2500ms
+   */
+  function notificarRestauracion(entidad, nombre, genero) {
+    var esFem = genero === 'f';
+    var titular = '↺ ' + (entidad || 'Elemento') + (esFem ? ' restaurada' : ' restaurado');
+    mostrarToastOperativo('success', titular, nombre || '', 2500);
+  }
+  window.notificarRestauracion = notificarRestauracion;
+
+  // ============================================================================
+  // SECCIÓN 2: CICLO DE VIDA E INICIALIZACIÓN
+  // ============================================================================
+
+  /**
+   * 2.1. Listener del DOM para inicio de escuchadores y sincronización remota
+   */
+  document.addEventListener('DOMContentLoaded', function () {
+    if (typeof initTheme === 'function') initTheme();
+    if (typeof aplicarEstadoSidebarDOM === 'function') aplicarEstadoSidebarDOM();
+    if (typeof setupDragAndDropKanban === 'function') setupDragAndDropKanban();
+    if (typeof inicializarFormularios === 'function') inicializarFormularios();
+    if (typeof initShortcuts === 'function') initShortcuts();
+
+    // Restaurar pestaña activa desde localStorage si existe
+    try {
+      var savedTab = localStorage.getItem('PMO_ACTIVE_TAB');
+      if (savedTab && ['kanban', 'portafolio', 'habitos', 'financiero', 'notas'].indexOf(savedTab) !== -1) {
+        cambiarVistaGlobal(savedTab);
+      }
+    } catch (e) { }
+
+    // =========================================================================
+    // 0ms PRECARGA INMEDIATA: STALE-WHILE-REVALIDATE DESDE LOCALSTORAGE
+    // =========================================================================
+    var hayCacheValida = false;
+    try {
+      var rawLocalCache = localStorage.getItem('PMO_LOCAL_STATE_CACHE');
+      if (rawLocalCache) {
+        var cachedData = JSON.parse(rawLocalCache);
+        if (cachedData && typeof cachedData === 'object' && Array.isArray(cachedData.tareas) && cachedData.tareas.length > 0) {
+          aplicarDatosDashboard(cachedData, true);
+          hayCacheValida = true;
+        }
+      }
+    } catch (errLocal) {
+      console.warn('[Stale-While-Revalidate] Advertencia al precargar caché local:', errLocal);
+    }
+
+    // Inyectar skeleton loaders al inicio de la carga cuando no haya datos en DOM o caché
+    if (!hayCacheValida && typeof renderKanbanSkeletons === 'function') {
+      renderKanbanSkeletons();
+    }
+
+    refreshData();
+    if (typeof consultarTipoCambioActual === 'function') {
+      consultarTipoCambioActual(false);
+    }
+  });
+
+  // ============================================================================
+  // SECCIÓN 3: CAPA DE RED Y BACKEND (google.script.run)
+  // ============================================================================
+
+  /**
+   * 3.0. Control del Indicador de Sincronización en Vivo (Header Sync Status)
+   */
+  function setSyncStatus(estado, mensaje) {
+    var cont = document.getElementById('sync-status-container');
+    var led = document.getElementById('sync-status-led');
+    var txt = document.getElementById('sync-status-text');
+    var iconRef = document.getElementById('icon-header-refresh');
+
+    if (!cont) return;
+
+    if (estado === 'syncing') {
+      cont.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-default bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/60 shadow-2xs';
+      if (led) {
+        led.innerHTML = '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>';
+      }
+      if (txt) txt.textContent = mensaje || 'Sincronizando...';
+      if (iconRef) iconRef.classList.add('animate-spin');
+    } else if (estado === 'synced') {
+      var now = new Date();
+      var horaStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      cont.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-default bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 shadow-2xs';
+      cont.title = 'Última sincronización: ' + horaStr;
+      if (led) {
+        led.innerHTML = '<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>';
+      }
+      if (txt) txt.textContent = 'Al día';
+      if (iconRef) iconRef.classList.remove('animate-spin');
+    } else if (estado === 'error') {
+      cont.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-default bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60 shadow-2xs';
+      cont.title = 'Error en la última sincronización';
+      if (led) {
+        led.innerHTML = '<span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>';
+      }
+      if (txt) txt.textContent = 'Error de red';
+      if (iconRef) iconRef.classList.remove('animate-spin');
+    }
+  }
+
+  /**
+   * Set en memoria para rastrear firmas 'action:payload' de llamadas RPC en vuelo
+   * y evitar peticiones concurrentes idénticas en paralelo.
+   */
+  var _pendingRpcCalls = new Set();
+
+  /**
+   * 3.1. Cliente RPC desacoplado con soporte para deduplicación y respuestas stringificadas
+   */
+  function callBackend(action, payload, callback, fallback, opts) {
+    opts = opts || {};
+
+    var callSignature = action;
+    try {
+      callSignature += ':' + (payload !== undefined ? JSON.stringify(payload) : '');
+    } catch (eSig) {
+      callSignature += ':' + String(payload);
+    }
+
+    if (_pendingRpcCalls.has(callSignature)) {
+      console.warn('[callBackend] Petición RPC idéntica en vuelo descartada:', callSignature);
+      return;
+    }
+    _pendingRpcCalls.add(callSignature);
+
+    setSyncStatus('syncing');
+
+    google.script.run
+      .withSuccessHandler(function (rawRes) {
+        _pendingRpcCalls.delete(callSignature);
+        setSyncStatus('synced');
+        var res = rawRes;
+
+        if (typeof rawRes === 'string') {
+          try {
+            res = JSON.parse(rawRes);
+          } catch (e) {
+            console.error('[Error al parsear JSON RPC]:', e, rawRes);
+          }
+        }
+
+        if (!res || typeof res !== 'object') {
+          res = { success: false, error: 'Respuesta nula o inválida del servidor: ' + String(rawRes) };
+        }
+
+        if (callback) callback(res);
+      })
+      .withFailureHandler(function (err) {
+        _pendingRpcCalls.delete(callSignature);
+        setSyncStatus('error');
+        console.error('[Error Backend PMO]:', err);
+        if (fallback) fallback(err);
+        if (!opts.silent) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Error en Servidor',
+            text: err.message || err,
+            confirmButtonColor: '#4f46e5'
+          });
+        }
+      })
+      .apiRouter(action, payload);
+  }
+  window.callBackend = callBackend;
+
+  /**
+   * 3.2. Hidratación y renderizado reactivo de entidades del Dashboard
+   * Permite ejecución instantánea (0ms) en precarga local y reconciliación suave desde el servidor
+   */
+  function aplicarDatosDashboard(data, esPrecargaLocal) {
+    if (!data || typeof data !== 'object') return;
+
+    var tieneDatos = (
+      Array.isArray(data.proyectos) ||
+      Array.isArray(data.tareas) ||
+      Array.isArray(data.hitos) ||
+      Array.isArray(data.gastos) ||
+      Array.isArray(data.actividadesPersonales) ||
+      Array.isArray(data.actividades) ||
+      Array.isArray(data.ingresos) ||
+      Array.isArray(data.notas) ||
+      Array.isArray(data.ideas)
+    );
+    if (!tieneDatos) return;
+
+    state.proyectos = Array.isArray(data.proyectos) ? data.proyectos : [];
+    state.hitos = (Array.isArray(data.hitos) ? data.hitos : []).map(function (h) {
+      if (!h || typeof h !== 'object') h = {};
+      var idH = String(h.ID_Hito || h.idHito || h.id_hito || '').trim();
+      var idP = String(h.ID_Proyecto || h.idProyecto || h.id_proyecto || '').trim();
+      if (idH.toUpperCase().startsWith('PRO-') && (!idP || idP.toUpperCase().startsWith('HIT-'))) {
+        var tempH = idH;
+        idH = idP;
+        idP = tempH;
+      }
+      h.ID_Hito = idH;
+      h.idHito = idH;
+      h.id_hito = idH;
+      h.ID_Proyecto = idP;
+      h.idProyecto = idP;
+      h.id_proyecto = idP;
+      return h;
+    });
+
+    // Indexación O(1) de hitos para resolución instantánea de proyecto padre
+    var hitoToProyectoMap = new Map();
+    state.hitos.forEach(function (h) {
+      var hid = String(h.ID_Hito || '').trim().toUpperCase();
+      var pid = String(h.ID_Proyecto || '').trim();
+      if (hid && pid) {
+        hitoToProyectoMap.set(hid, pid);
+      }
+    });
+
+    state.gastos = (Array.isArray(data.gastos) ? data.gastos : []).map(function (g) {
+      if (!g || typeof g !== 'object') g = {};
+      var idProy = String(g.ID_Proyecto || g.idProyecto || '').trim().toUpperCase();
+      var idTar = String(g.ID_Tarea || g.idTarea || g.ID_Entidad_Vinculada || g.idEntidadVinculada || '').trim().toUpperCase();
+      var idHit = String(g.ID_Hito || g.idHito || '').trim().toUpperCase();
+      var rawTg = String(g.tipoGasto || g.Tipo_Gasto || g.Clasificacion_Origen || g.clasificacionOrigen || '').trim();
+
+      var esProy = (idProy && idProy !== 'PERSONAL' && idProy !== 'VIDA') ||
+                   (idTar && idTar.startsWith('TAR-')) ||
+                   (idHit && idHit !== 'PERSONAL' && idHit !== '') ||
+                   rawTg.toLowerCase().includes('proy') || rawTg.toLowerCase().includes('tarea');
+
+      var tg = esProy ? 'Tarea Proyecto' : 'Actividad Personal';
+      g.tipoGasto = tg;
+      g.Tipo_Gasto = tg;
+      g.Clasificacion_Origen = esProy ? 'Proyecto' : 'Personal';
+      g.clasificacionOrigen = g.Clasificacion_Origen;
+      return g;
+    });
+    state.notas = Array.isArray(data.notas) ? data.notas : [];
+    if (typeof invalidarCacheNotasVinculadas === 'function') {
+      invalidarCacheNotasVinculadas();
+    }
+    state.ideas = Array.isArray(data.ideas) ? data.ideas : (state.ideas || []);
+    if (typeof sincronizarIdeasDesdeState === 'function') {
+      try {
+        sincronizarIdeasDesdeState();
+      } catch (err) {
+        console.warn('Advertencia no bloqueante en Ideas:', err);
+      }
+    }
+    state.cuotas = Array.isArray(data.cuotas) ? data.cuotas : (state.cuotas || []);
+
+    if (typeof actualizarCatalogoEtiquetasGlobales === 'function') {
+      actualizarCatalogoEtiquetasGlobales();
+    }
+
+    var rawActividades = Array.isArray(data.actividadesPersonales) ? data.actividadesPersonales : (Array.isArray(data.actividades) ? data.actividades : []);
+    state.actividadesPersonales = rawActividades.map(function (a) {
+      if (!a || typeof a !== 'object') a = {};
+      var idA = String(a.ID_Actividad || a.ID_Tarea || '').trim();
+      a.ID_Actividad = idA;
+      a.ID_Tarea = idA;
+      a.Nombre_Actividad = String(a.Nombre_Actividad || a.Nombre_Tarea_Actividad || a.Nombre_Tarea || '').trim();
+      a.Nombre_Tarea_Actividad = a.Nombre_Actividad;
+      var st = (typeof normalizarEstadoTarea === 'function')
+        ? normalizarEstadoTarea(a.Estado || a.Estado_Tarea)
+        : String(a.Estado || a.Estado_Tarea || 'POR_HACER').trim();
+      a.Estado = st;
+      a.Estado_Tarea = st;
+      a.Categoria_Vida = String(a.Categoria_Vida || 'PERSONAL').trim().toUpperCase();
+      a.Tipo_Compromiso = String(a.Tipo_Compromiso || 'HABITUAL').trim().toUpperCase();
+      a.Frecuencia_Ciclo = String(a.Frecuencia_Ciclo || 'DIARIA').trim().toUpperCase();
+      a.Regla_Repeticion = String(a.Regla_Repeticion || a.reglaRepeticion || '').trim();
+      a.Racha_Actual = parseInt(a.Racha_Actual, 10) || 0;
+
+      // Normalización matemática estricta: preserva explícitamente 0 como número
+      if (a.Duracion_Horas !== undefined && a.Duracion_Horas !== null && a.Duracion_Horas !== '' && !isNaN(Number(a.Duracion_Horas))) {
+        a.Duracion_Horas = Number(a.Duracion_Horas);
+      } else {
+        a.Duracion_Horas = 1.0;
+      }
+
+      // Protección contra race conditions: si la actividad está en tránsito de actualización local, no sobreescribir su estado
+      if (window._actividadesEnTransito && window._actividadesEnTransito.has(idA)) {
+        var actLocal = (state.actividadesPersonales || []).find(function (loc) {
+          return String(loc.ID_Actividad || loc.ID_Tarea || '').trim() === idA;
+        });
+        if (actLocal) {
+          a.Estado = actLocal.Estado;
+          a.Estado_Tarea = actLocal.Estado;
+          a.Racha_Actual = actLocal.Racha_Actual;
+        }
+      }
+      return a;
+    });
+
+    state.ingresos = Array.isArray(data.ingresos) ? data.ingresos : [];
+    state.subtareas = (Array.isArray(data.subtareas) ? data.subtareas : []).map(function (s) {
+      if (!s || typeof s !== 'object') s = {};
+      var sId = String(s.ID_Subtarea || s.idSubtarea || '').trim();
+      var sTipo = String(s.Tipo_Padre || s.tipoPadre || 'TAREA').trim().toUpperCase();
+      var sPadre = String(s.ID_Padre || s.idPadre || '').trim();
+      var sPaso = parseInt(s.Numero_Paso || s.numeroPaso, 10) || 1;
+      var sDesc = String(s.Descripcion_Paso || s.descripcionPaso || '').trim();
+      var sComp = (s.Completado === true || String(s.Completado).toLowerCase() === 'true' || String(s.Completado).toLowerCase() === 'sí');
+      return {
+        ID_Subtarea: sId,
+        Tipo_Padre: sTipo,
+        ID_Padre: sPadre,
+        Numero_Paso: sPaso,
+        Descripcion_Paso: sDesc,
+        Completado: sComp,
+        Fecha_Completado: s.Fecha_Completado || ''
+      };
+    });
+
+    // Normalización, saneamiento defensivo e indexación estricta de pertenencia de tareas
+    state.tareas = (Array.isArray(data.tareas) ? data.tareas : []).map(function (t) {
+      if (!t || typeof t !== 'object') t = {};
+      t.ID_Tarea = String(t.ID_Tarea || t.idTarea || t.id_tarea || '').trim();
+      t.idTarea = t.ID_Tarea;
+      t.id_tarea = t.ID_Tarea;
+      var rawDep = String(t.ID_Dependencia || '').trim();
+      t.ID_Dependencia = (rawDep && !rawDep.includes('@')) ? rawDep : '';
+      var rawCal = (t.Agendado_Calendar != null) ? t.Agendado_Calendar : t.Agendado_En_Calendar;
+      t.Agendado_Calendar = (rawCal != null) ? String(rawCal).trim() : 'No';
+      t.Estado_Tarea = (typeof kanban !== 'undefined' && kanban && typeof kanban.normalizeState === 'function')
+        ? kanban.normalizeState(t.Estado_Tarea)
+        : ((typeof normalizarEstadoTarea === 'function') ? normalizarEstadoTarea(t.Estado_Tarea) : String(t.Estado_Tarea || 'POR_HACER').trim());
+
+      var idProy = String(t.ID_Proyecto || t.idProyecto || t.id_proyecto || '').trim();
+      var idHito = String(t.ID_Hito || t.idHito || t.id_hito || '').trim();
+
+      // Detección y autocorrección de inversión accidental de columnas (ej. ID_Proyecto en Col B e ID_Hito en Col C)
+      if (idProy.toUpperCase().startsWith('HIT-') || (idHito.toUpperCase().startsWith('PRO-') && !idProy.toUpperCase().startsWith('PRO-'))) {
+        var tempP = idProy;
+        idProy = idHito;
+        idHito = tempP;
+      }
+
+      if (!idProy && idHito) {
+        var proyFromMap = hitoToProyectoMap.get(idHito.toUpperCase());
+        if (proyFromMap) {
+          idProy = proyFromMap;
+        } else if (idHito.indexOf('-H') !== -1) {
+          idProy = idHito.substring(0, idHito.lastIndexOf('-H')).trim();
+        }
+      }
+      t.ID_Proyecto = idProy;
+      t.idProyecto = idProy;
+      t.id_proyecto = idProy;
+      t.ID_Hito = idHito;
+      t.idHito = idHito;
+      t.id_hito = idHito;
+      return t;
+    });
+
+    try {
+      if (typeof renderSidebarProyectos === 'function') {
+        renderSidebarProyectos();
+      }
+    } catch (errSidebar) {
+      console.warn('Error no bloqueante en vista (renderSidebarProyectos):', errSidebar);
+    }
+
+    try {
+      if (typeof actualizarSelectorHitosKanban === 'function') {
+        actualizarSelectorHitosKanban(true);
+      }
+    } catch (errHitos) {
+      console.warn('Error no bloqueante en vista (actualizarSelectorHitosKanban):', errHitos);
+    }
+
+    try {
+      if (typeof aplicarFiltrosCruzados === 'function') {
+        aplicarFiltrosCruzados();
+      }
+    } catch (errFiltros) {
+      console.warn('Error no bloqueante en vista (aplicarFiltrosCruzados):', errFiltros);
+    }
+
+    try {
+      if (typeof header !== 'undefined' && header && typeof header.updateBadges === 'function') {
+        header.updateBadges(state);
+      }
+    } catch (errHeader) {
+      console.warn('Error no bloqueante en vista (header.updateBadges):', errHeader);
+    }
+
+    try {
+      if (typeof actualizarBadgeContadorArchivadosGlobal === 'function') {
+        actualizarBadgeContadorArchivadosGlobal();
+      }
+    } catch (errArchivados) {
+      console.warn('Error no bloqueante en vista (actualizarBadgeContadorArchivadosGlobal):', errArchivados);
+    }
+
+    // Refresco condicional según la vista activa
+    var vistaActiva = state.vistaActual || 'kanban';
+    if (vistaActiva === 'portafolio') {
+      try {
+        if (typeof renderKPIsPortafolio === 'function') renderKPIsPortafolio();
+      } catch (errKPIs) {
+        console.warn('Error no bloqueante en vista (renderKPIsPortafolio):', errKPIs);
+      }
+      try {
+        if (typeof renderGridProyectos === 'function') renderGridProyectos();
+      } catch (errGrid) {
+        console.warn('Error no bloqueante en vista (renderGridProyectos):', errGrid);
+      }
+    } else if (vistaActiva === 'habitos' || vistaActiva === 'vida') {
+      try {
+        if (typeof renderTableroActividadesPersonales === 'function') {
+          renderTableroActividadesPersonales();
+        }
+      } catch (errHabitos) {
+        console.warn('Error no bloqueante en vista (renderTableroActividadesPersonales):', errHabitos);
+      }
+    } else if (vistaActiva === 'financiero') {
+      try {
+        if (typeof renderTableroFinanciero === 'function') renderTableroFinanciero();
+      } catch (errFin) {
+        console.warn('Error no bloqueante en vista (renderTableroFinanciero):', errFin);
+      }
+    } else if (vistaActiva === 'notas') {
+      try {
+        if (typeof renderVistaNotas === 'function') renderVistaNotas();
+      } catch (errNotas) {
+        console.warn('Error no bloqueante en vista (renderVistaNotas):', errNotas);
+      }
+    }
+
+    // Si la vista de detalle 360° está abierta, actualizar en caliente
+    if (state.proyectoDetalleActivo) {
+      var idActivo = String(state.proyectoDetalleActivo.ID_Proyecto || '').trim().toUpperCase();
+      var pAct = state.proyectos.find(function (p) {
+        return String(p.ID_Proyecto || '').trim().toUpperCase() === idActivo;
+      });
+      if (pAct) {
+        state.proyectoDetalleActivo = pAct;
+        try {
+          if (typeof abrirDetalle360 === 'function' && state.vistaActual === 'detalle') {
+            abrirDetalle360(pAct.ID_Proyecto);
+          } else if (typeof renderCascadaHitos === 'function') {
+            renderCascadaHitos(pAct.ID_Proyecto);
+          }
+        } catch (errDetalle) {
+          console.warn('Error no bloqueante en vista (detalle 360):', errDetalle);
+        }
+      }
+    }
+
+    // Sincronización masiva de selectores de Proyecto en modales
+    var idsSelectoresProy = [
+      'tarea-idProyecto-select',
+      'selector-idProyecto-gasto',
+      'selector-proyecto-pdf',
+      'hito-idProyecto'
+    ];
+
+    idsSelectoresProy.forEach(function (elemId) {
+      var sel = document.getElementById(elemId);
+      if (sel && state.proyectos.length > 0 && sel.tagName === 'SELECT') {
+        var valorPrevio = sel.value;
+        var placeholder = elemId.includes('pdf') ? 'Selecciona iniciativa...' : 'Selecciona Proyecto...';
+        sel.innerHTML = '<option value="">' + placeholder + '</option>';
+        state.proyectos.forEach(function (p) {
+          var opt = document.createElement('option');
+          opt.value = p.ID_Proyecto;
+          opt.textContent = '[' + p.ID_Proyecto + '] ' + p.Nombre_Proyecto;
+          sel.appendChild(opt);
+        });
+        if (valorPrevio && state.proyectos.some(function (p) { return p.ID_Proyecto === valorPrevio; })) {
+          sel.value = valorPrevio;
+        }
+      }
+    });
+
+    var contenedorHabitos = document.getElementById('vista-habitos-wrapper') || document.getElementById('contenedor-actividades-personales');
+    if (contenedorHabitos && typeof renderTableroActividadesPersonales === 'function') {
+      try {
+        renderTableroActividadesPersonales();
+      } catch (errHabitosFallback) {
+        console.warn('Error no bloqueante en vista (renderTableroActividadesPersonales fallback):', errHabitosFallback);
+      }
+    }
+
+    if (esPrecargaLocal) {
+      setSyncStatus('syncing', 'Actualizando en segundo plano...');
+    } else {
+      setSyncStatus('synced');
+    }
+  }
+
+  /**
+   * 3.2. Sincroniza el estado actual en memoria hacia localStorage (PMO_LOCAL_STATE_CACHE).
+   * Se ejecuta de forma inmediata e imperativa tras cualquier eliminación o mutación para erradicar
+   * el "efecto fantasma" o desfase de lectura al recargar la página (F5).
+   */
+  function sincronizarCacheLocalState() {
+    try {
+      var payloadCache = {
+        proyectos: state.proyectos || [],
+        hitos: state.hitos || [],
+        tareas: state.tareas || [],
+        gastos: state.gastos || [],
+        actividadesPersonales: state.actividadesPersonales || [],
+        ingresos: state.ingresos || [],
+        subtareas: state.subtareas || [],
+        notas: state.notas || [],
+        ideas: state.ideas || [],
+        cuotas: state.cuotas || [],
+        timestamp: Date.now()
+      };
+      localStorage.setItem('PMO_LOCAL_STATE_CACHE', JSON.stringify(payloadCache));
+    } catch (eStorage) {
+      console.warn('[PMO_LOCAL_STATE_CACHE] No se pudo guardar en localStorage (cuota excedida o almacenamiento inhabilitado):', eStorage);
+    }
+  }
+  window.sincronizarCacheLocalState = sincronizarCacheLocalState;
+
+  /**
+   * 3.3. Sincronización íntegra de las entidades maestras y reconciliación silenciosa
+   */
+  function refreshData(forceRefresh) {
+    if (typeof renderKanbanSkeletons === 'function') {
+      var colBacklog = document.getElementById('col-backlog');
+      if (colBacklog && colBacklog.querySelectorAll('.kanban-card:not(.kanban-skeleton-card)').length === 0) {
+        renderKanbanSkeletons();
+      }
+    }
+    var reqPayload = forceRefresh ? { forceRefresh: true } : {};
+    callBackend('getDashboardData', reqPayload, function (res) {
+      var data = res;
+      if (data && data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+        data = data.data;
+      }
+
+      var tieneDatos = data && typeof data === 'object' && (
+        Array.isArray(data.proyectos) ||
+        Array.isArray(data.tareas) ||
+        Array.isArray(data.hitos) ||
+        Array.isArray(data.gastos) ||
+        Array.isArray(data.actividadesPersonales) ||
+        Array.isArray(data.ingresos) ||
+        Array.isArray(data.notas)
+      );
+
+      if (data && (data.success === true || data.success === 'true' || tieneDatos)) {
+        aplicarDatosDashboard(data, false);
+        sincronizarCacheLocalState();
+        if (forceRefresh && typeof mostrarToastOperativo === 'function') {
+          mostrarToastOperativo('success', 'Sincronización Completa', 'Datos actualizados en tiempo real desde Google Sheets');
+        }
+      } else {
+        var detalle = (data && data.error) ? data.error : JSON.stringify(res);
+        console.error('[Fallo Sincronización Sheets]:', res);
+        Swal.fire({
+          icon: 'error',
+          title: 'Error de Sincronización',
+          text: 'No se pudieron sincronizar los datos desde Google Sheets: ' + detalle,
+          confirmButtonColor: '#4f46e5'
+        });
+      }
+    }, function (err) {
+      console.error('[Error RPC refreshData]:', err);
+    });
+  }
+
+  /**
+   * ============================================================================
+   * 2.3.b. SINCRONIZACIÓN BATCH ELIMINADA — GOBERNANZA REACTIVA
+   * La sincronización ahora es automática al crear/editar cada registro.
+   * Esta función se mantiene como stub por compatibilidad con referencias residuales.
+   * ============================================================================
+   */
+  function sincronizarCalendariosDedicadosManual(btnElement) {
+    if (typeof Swal !== 'undefined') {
+      Swal.fire({
+        icon: 'info',
+        title: 'Sincronización Automática',
+        html: '<div class="text-left text-xs space-y-2 p-1 text-slate-700 dark:text-slate-300">' +
+          '<p>La sincronización con Google Calendar y Google Tasks ahora es <b>automática y reactiva</b>.</p>' +
+          '<p>Cada registro se sincroniza al momento de ser creado o editado:</p>' +
+          '<ul class="list-disc pl-4 space-y-1">' +
+          '<li><b>Tareas y hábitos con duración > 0h</b> → Evento en Google Calendar</li>' +
+          '<li><b>Actividades puntuales (0h)</b> → Google Task con fecha límite</li>' +
+          '<li><b>Ingresos y gastos programados</b> → Google Task con recordatorio</li>' +
+          '</ul>' +
+          '<p class="mt-2 text-emerald-600 dark:text-emerald-400 font-semibold">No es necesaria ninguna acción manual.</p>' +
+          '</div>',
+        confirmButtonColor: '#4f46e5'
+      });
+    }
+  }
+  window.sincronizarCalendariosDedicadosManual = sincronizarCalendariosDedicadosManual;
+
+  /**
+   * ============================================================================
+   * 2.4. RESET GLOBAL TRANSVERSAL DE FILTROS DEL SISTEMA (Multi-Pestaña)
+   * ============================================================================
+   * Restablece de forma absoluta todo tipo de filtro en todas las pestañas:
+   *  - Deselecciona proyecto activo (vuelve a '🌐 Vista Global').
+   *  - Apaga Modo Enfoque MAV.
+   *  - Restablece contextos y horizontes de tiempo (Todos / Todo).
+   *  - Limpia todos los inputs de búsqueda de texto (Kanban, Portafolio, Finanzas, Sidebar).
+   *  - Restablece dropdowns (Hitos, Prioridad, Energía, Plazo, Dependencias, Tipo, Estado, Salud, Finanzas).
+   *  - Restablece badges de filtro activo y banners contextuales.
+   *  - Sincroniza reactivamente el renderizado de la vista visible a 60 fps.
+   */
+  // ============================================================================
+  // UNIFICACIÓN GLOBAL DE LIMPIEZA DE FILTROS Y DESPACHADOR REACTIVO (60 FPS)
+  // ============================================================================
+
+  /**
+   * Restablece exclusivamente los filtros de la vista Kanban
+   */
+  function limpiarFiltrosKanban() {
+    try {
+      if (typeof window.limpiarTodosLosFiltrosKanban === 'function' && window.limpiarTodosLosFiltrosKanban !== limpiarFiltrosKanban) {
+        window.limpiarTodosLosFiltrosKanban();
+        return;
+      }
+
+      if (typeof state !== 'undefined') {
+        state.selectedProjectId = null;
+        state.proyectoActivoId = null;
+        state.modoEnfoqueMav = false;
+        try { localStorage.removeItem('pmo_kanban_modo_mav'); } catch (eStorageMav) {}
+        state.kanbanContextFilter = 'TODOS';
+        state.kanbanTimeFilter = 'TODO';
+
+        if (!state.filtros) state.filtros = {};
+        state.filtros.tipo = '';
+        state.filtros.hitoTarea = '';
+        state.filtros.prioridadTarea = '';
+        state.filtros.energiaTarea = '';
+        state.filtros.plazoTarea = '';
+        state.filtros.dependenciaTarea = '';
+        state.filtros.buscarTarea = '';
+        state.filtros.busquedaSidebar = '';
+        state.filtros.categoriaVida = '';
+      }
+
+      // Vaciar y desenfocar inputs de búsqueda
+      var elBuscarTarea = document.getElementById('filter-buscar-tarea');
+      if (elBuscarTarea) {
+        elBuscarTarea.value = '';
+        elBuscarTarea.blur();
+      }
+      var btnClearTask = document.getElementById('btn-clear-task-search');
+      if (btnClearTask) btnClearTask.classList.add('hidden');
+
+      var elBusquedaSidebar = document.getElementById('sidebar-search-proyectos');
+      if (elBusquedaSidebar) elBusquedaSidebar.value = '';
+      var btnClearSidebar = document.getElementById('btn-clear-search-sidebar');
+      if (btnClearSidebar) btnClearSidebar.classList.add('hidden');
+
+      // Restablecer píldoras de tipo en sidebar
+      document.querySelectorAll('.pill-tipo').forEach(function (btn) {
+        btn.className = (btn.dataset.tipo === '')
+          ? 'pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-600 text-white transition'
+          : 'pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-400 hover:text-white transition';
+      });
+
+      // Restablecer dropdowns y micro-popovers Kanban
+      var elHito = document.getElementById('filter-hito-tarea');
+      if (elHito) elHito.value = '';
+      if (typeof setKanbanHitoFilter === 'function') setKanbanHitoFilter('', true);
+      if (typeof actualizarSelectorHitosKanban === 'function') actualizarSelectorHitosKanban(false);
+
+      var elPrio = document.getElementById('filter-prioridad-tarea');
+      if (elPrio) elPrio.value = '';
+      if (typeof setKanbanPrioridadFilter === 'function') setKanbanPrioridadFilter('', true);
+
+      var elEnergia = document.getElementById('filter-energia-tarea');
+      if (elEnergia) elEnergia.value = '';
+      if (typeof setKanbanEnergiaFilter === 'function') setKanbanEnergiaFilter('', true);
+
+      var elPlazo = document.getElementById('filter-plazo-tarea');
+      if (elPlazo) elPlazo.value = '';
+      if (typeof setKanbanPlazoFilter === 'function') setKanbanPlazoFilter('', true);
+
+      var elDep = document.getElementById('filter-dependencia-tarea');
+      if (elDep) elDep.value = '';
+      if (typeof setKanbanDependenciaFilter === 'function') setKanbanDependenciaFilter('', true);
+
+      // Apagar Modo Enfoque MAV con estado ghost inactivo real
+      var btnMav = document.getElementById('btn-toggle-modo-mav');
+      if (btnMav) {
+        btnMav.className = 'filter-ghost-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 bg-transparent border border-transparent transition-all duration-150 cursor-pointer shrink-0';
+        btnMav.removeAttribute('data-active');
+        var svgMav = btnMav.querySelector('svg');
+        if (svgMav) svgMav.setAttribute('class', 'portal-icon-sm shrink-0 text-slate-400');
+      }
+      var badgeCountMav = document.getElementById('badge-count-mav');
+      if (badgeCountMav) badgeCountMav.classList.add('hidden');
+
+      // Restablecer indicador de proyecto activo en tablero
+      var lblActivo = document.getElementById('label-proyecto-activo');
+      if (lblActivo) {
+        lblActivo.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><span class="truncate">Vista Global</span>';
+        lblActivo.className = 'text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700 truncate max-w-[260px] inline-flex items-center gap-1.5 transition-all duration-200';
+      }
+
+      if (typeof actualizarBarraMetadatosProyectoKanban === 'function') {
+        actualizarBarraMetadatosProyectoKanban(null);
+      }
+
+      // Badges y botones de estado de filtro
+      var badgeFiltro = document.getElementById('badge-filtro-activo-resumen');
+      if (badgeFiltro) {
+        badgeFiltro.classList.add('hidden');
+        badgeFiltro.classList.remove('flex');
+      }
+
+      var btnLimpiarKanban = document.getElementById('btn-limpiar-filtros-kanban');
+      if (btnLimpiarKanban) {
+        btnLimpiarKanban.classList.add('hidden');
+        btnLimpiarKanban.classList.remove('inline-flex', 'flex');
+      }
+
+      var bannerFiltros = document.getElementById('banner-filtros-activos');
+      if (bannerFiltros) {
+        bannerFiltros.classList.add('hidden');
+        bannerFiltros.classList.remove('flex');
+      }
+
+      // Restablecer chips de contexto y horizonte temporal
+      if (typeof setKanbanContextFilter === 'function') {
+        setKanbanContextFilter('TODOS', true);
+      }
+      if (typeof setKanbanTimeFilter === 'function') {
+        setKanbanTimeFilter('TODO', true);
+      }
+
+      if (typeof renderSidebarProyectos === 'function') {
+        renderSidebarProyectos();
+      }
+      if (typeof aplicarFiltrosCruzados === 'function') {
+        aplicarFiltrosCruzados();
+      }
+    } catch (eKanban) {
+      console.warn('[limpiarFiltrosKanban] Error:', eKanban);
+    }
+  }
+
+  /**
+   * Restablece exclusivamente los filtros de la vista Portafolio
+   */
+  function limpiarFiltrosPortafolio() {
+    try {
+      var inputSearchPort = document.getElementById('portafolio-search');
+      if (inputSearchPort) {
+        inputSearchPort.value = '';
+        inputSearchPort.blur();
+      }
+      var btnClearPort = document.getElementById('btn-clear-portafolio-search');
+      if (btnClearPort) btnClearPort.classList.add('hidden');
+
+      var elTipoPort = document.getElementById('grid-filter-tipo');
+      if (elTipoPort) elTipoPort.value = '';
+      var elEstadoPort = document.getElementById('grid-filter-estado');
+      if (elEstadoPort) elEstadoPort.value = '';
+      var elSaludPort = document.getElementById('grid-filter-salud');
+      if (elSaludPort) elSaludPort.value = '';
+      var elOrdenPort = document.getElementById('grid-filter-orden');
+      if (elOrdenPort) elOrdenPort.value = 'avance_desc';
+
+      var btnLimpiarPort = document.getElementById('btn-limpiar-filtros-portafolio');
+      if (btnLimpiarPort) {
+        btnLimpiarPort.classList.add('hidden');
+        btnLimpiarPort.classList.remove('flex', 'inline-flex');
+      }
+
+      if (typeof renderKPIsPortafolio === 'function') renderKPIsPortafolio();
+      if (typeof renderGridProyectos === 'function') renderGridProyectos();
+    } catch (ePort) {
+      console.warn('[limpiarFiltrosPortafolio] Error:', ePort);
+    }
+  }
+
+  /**
+   * Restablece exclusivamente los filtros de la vista Finanzas
+   */
+  function limpiarFiltrosFinanzas() {
+    try {
+      if (typeof state !== 'undefined') {
+        state.filtroMesFinanzas = 'TODOS';
+      }
+      var inputSearchFin = document.getElementById('input-busqueda-finanzas');
+      if (inputSearchFin) {
+        inputSearchFin.value = '';
+        inputSearchFin.blur();
+      }
+      var btnClearFin = document.getElementById('btn-clear-finanzas-search');
+      if (btnClearFin) btnClearFin.classList.add('hidden');
+
+      var elMesFin = document.getElementById('filtro-mes-finanzas');
+      if (elMesFin) elMesFin.value = 'TODOS';
+      var elCatGastos = document.getElementById('filtro-categoria-gastos');
+      if (elCatGastos) elCatGastos.value = 'TODAS';
+
+      if (typeof renderTableroFinanciero === 'function') renderTableroFinanciero();
+    } catch (eFin) {
+      console.warn('[limpiarFiltrosFinanzas] Error:', eFin);
+    }
+  }
+
+  /**
+   * Restablece exclusivamente los filtros de la vista Hábitos & Vida
+   */
+  function limpiarFiltrosHabitos() {
+    try {
+      if (typeof state !== 'undefined') {
+        state.filtroTipoHabito = 'TODOS';
+        state.filtroTextoHabito = '';
+      }
+      var inputSearchHab = document.getElementById('filtro-buscar-habito');
+      if (inputSearchHab) {
+        inputSearchHab.value = '';
+        inputSearchHab.blur();
+      }
+      var btnClearHab = document.getElementById('btn-limpiar-busqueda-habito');
+      if (btnClearHab) btnClearHab.classList.add('hidden');
+
+      if (typeof renderTableroActividadesPersonales === 'function') {
+        renderTableroActividadesPersonales();
+      }
+    } catch (eHab) {
+      console.warn('[limpiarFiltrosHabitos] Error:', eHab);
+    }
+  }
+
+  /**
+   * Restablece exclusivamente los filtros de la vista Notas
+   */
+  function limpiarFiltrosNotas() {
+    try {
+      if (typeof window.limpiarFiltrosNotas === 'function' && window.limpiarFiltrosNotas !== limpiarFiltrosNotas) {
+        window.limpiarFiltrosNotas();
+        return;
+      }
+
+      var inpNotaBusq = document.getElementById('input-busqueda-notas');
+      if (inpNotaBusq) {
+        inpNotaBusq.value = '';
+        inpNotaBusq.blur();
+      }
+      var btnClearNota = document.getElementById('btn-limpiar-busqueda-notas');
+      if (btnClearNota) btnClearNota.classList.add('hidden');
+
+      var btnLimpiarNotas = document.getElementById('btn-limpiar-filtros-notas');
+      if (btnLimpiarNotas) {
+        btnLimpiarNotas.classList.add('hidden');
+        btnLimpiarNotas.classList.remove('inline-flex');
+      }
+
+      if (typeof state !== 'undefined') {
+        if (!state.filtrosNotas) {
+          state.filtrosNotas = { tipos: new Set(), tags: new Set(), query: '', color: '' };
+        } else {
+          if (state.filtrosNotas.tipos instanceof Set) state.filtrosNotas.tipos.clear();
+          if (state.filtrosNotas.tags instanceof Set) state.filtrosNotas.tags.clear();
+          state.filtrosNotas.query = '';
+          state.filtrosNotas.color = '';
+        }
+        state.filtroNotas = 'TODAS';
+        state.filtroColorNotas = '';
+        state.filtroBusquedaNotas = '';
+        state.filtroEtiquetaNotas = '';
+      }
+
+      if (typeof actualizarUiChipsFiltrosNotas === 'function') actualizarUiChipsFiltrosNotas();
+      if (typeof actualizarEstadoFiltroEtiquetasUI === 'function') actualizarEstadoFiltroEtiquetasUI();
+      if (typeof actualizarEstadoBotonesLimpiezaNotas === 'function') actualizarEstadoBotonesLimpiezaNotas();
+      if (typeof renderVistaNotas === 'function') renderVistaNotas();
+    } catch (eNotas) {
+      console.warn('[limpiarFiltrosNotas] Error:', eNotas);
+    }
+  }
+
+  /**
+   * DESPACHADOR GLOBAL UNIFICADO DE LIMPIEZA DE FILTROS:
+   * Identifica la pestaña activa en pantalla y ejecuta el restablecimiento total
+   * de los filtros de esa vista en una sola pulsación a 60 fps.
+   */
+  function limpiarFiltrosVistaActiva(silent) {
+    try {
+      var scope = (typeof getActiveScope === 'function')
+        ? getActiveScope()
+        : ((state && state.vistaActual) ? String(state.vistaActual).toLowerCase() : 'kanban');
+      if (scope === 'detalle') scope = 'portafolio';
+      if (scope === 'vida') scope = 'habitos';
+      if (scope === 'financiero' || scope === 'financiera') scope = 'finanzas';
+
+      if (scope === 'kanban') {
+        if (typeof window.limpiarTodosLosFiltrosKanban === 'function') {
+          window.limpiarTodosLosFiltrosKanban();
+        } else if (typeof window.limpiarFiltrosKanban === 'function') {
+          window.limpiarFiltrosKanban();
+        }
+      } else if (scope === 'portafolio') {
+        if (typeof window.limpiarFiltrosPortafolio === 'function') {
+          window.limpiarFiltrosPortafolio();
+        }
+      } else if (scope === 'habitos') {
+        if (typeof window.limpiarFiltrosHabitos === 'function') {
+          window.limpiarFiltrosHabitos();
+        } else {
+          if (typeof window.limpiarBusquedaHabito === 'function') window.limpiarBusquedaHabito();
+          if (typeof window.filtrarTipoActividadPersonal === 'function') window.filtrarTipoActividadPersonal('TODOS');
+        }
+      } else if (scope === 'finanzas') {
+        if (typeof window.limpiarFiltrosFinanzas === 'function') {
+          window.limpiarFiltrosFinanzas();
+        }
+      } else if (scope === 'notas') {
+        if (typeof window.limpiarFiltrosNotas === 'function') {
+          window.limpiarFiltrosNotas();
+        }
+      } else {
+        if (typeof window.limpiarFiltrosKanban === 'function') window.limpiarFiltrosKanban();
+        if (typeof window.limpiarFiltrosPortafolio === 'function') window.limpiarFiltrosPortafolio();
+      }
+
+      if (!silent) {
+        var nombres = {
+          'kanban': 'Kanban (Contexto, Plazo y Búsqueda)',
+          'portafolio': 'Portafolio (Cartera y Búsqueda)',
+          'habitos': 'Hábitos & Vida (Frecuencia y Búsqueda)',
+          'finanzas': 'Finanzas (Segmento, Filtros y Mes)',
+          'notas': 'Notas (Filtros, Etiquetas y Búsqueda)'
+        };
+        var mensaje = '🧹 Filtros restablecidos: ' + (nombres[scope] || scope);
+        if (typeof mostrarToastAtajo === 'function') {
+          mostrarToastAtajo(mensaje);
+        } else if (typeof Swal !== 'undefined' && typeof Swal.mixin === 'function') {
+          var Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 1400
+          });
+          Toast.fire({ icon: 'success', title: mensaje });
+        }
+      }
+    } catch (errActiva) {
+      console.warn('[limpiarFiltrosVistaActiva] Error:', errActiva);
+    }
+  }
+  window.limpiarFiltrosVistaActiva = limpiarFiltrosVistaActiva;
+
+  /**
+   * RESET MAESTRO DE TODO EL SISTEMA:
+   * Restablece todos los módulos y regresa a la Vista Global de Proyectos
+   */
+  function resetGlobalFiltrosSistema(silent) {
+    try {
+      if (typeof state !== 'undefined') {
+        state.selectedProjectId = null;
+        state.proyectoDetalleActivo = null;
+        if (state.filtros) {
+          state.filtros.tipo = '';
+          state.filtros.busquedaSidebar = '';
+        }
+      }
+
+      // Sidebar de proyectos
+      var elBusquedaSidebar = document.getElementById('sidebar-search-proyectos');
+      if (elBusquedaSidebar) elBusquedaSidebar.value = '';
+      var btnClearSidebar = document.getElementById('btn-clear-search-sidebar');
+      if (btnClearSidebar) btnClearSidebar.classList.add('hidden');
+
+      document.querySelectorAll('.pill-tipo').forEach(function (btn) {
+        btn.className = (btn.dataset.tipo === '')
+          ? 'pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-600 text-white transition'
+          : 'pill-tipo text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-800 text-slate-400 hover:text-white transition';
+      });
+
+      var lblActivo = document.getElementById('label-proyecto-activo');
+      if (lblActivo) {
+        lblActivo.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="portal-icon-sm shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg><span class="truncate">Vista Global</span>';
+        lblActivo.className = 'text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700 truncate max-w-[260px] inline-flex items-center gap-1.5 transition-all duration-200';
+      }
+      var metaBar = document.getElementById('kanban-proy-meta-bar');
+      if (metaBar) {
+        metaBar.classList.add('hidden');
+        metaBar.classList.remove('flex', 'inline-flex');
+      }
+
+      if (typeof actualizarBarraMetadatosProyectoKanban === 'function') {
+        actualizarBarraMetadatosProyectoKanban(null);
+      }
+      if (typeof actualizarSelectorHitosKanban === 'function') {
+        actualizarSelectorHitosKanban(false);
+      }
+      if (typeof renderSidebarProyectos === 'function') {
+        renderSidebarProyectos();
+      }
+
+      // Limpiar filtros específicos de cada subsistema
+      limpiarFiltrosKanban();
+      limpiarFiltrosPortafolio();
+      limpiarFiltrosFinanzas();
+      limpiarFiltrosHabitos();
+      limpiarFiltrosNotas();
+
+      if (!silent) {
+        if (typeof mostrarToastAtajo === 'function') {
+          mostrarToastAtajo('🌐 Filtros restablecidos a Vista Global');
+        }
+      }
+    } catch (errReset) {
+      console.warn('[resetGlobalFiltrosSistema] Advertencia durante reset global:', errReset);
+    }
+  }
+
+  // Exportación universal en window para acceso desde cualquier módulo y evento HTML
+  window.limpiarFiltrosVistaActiva = limpiarFiltrosVistaActiva;
+  window.limpiarFiltrosKanban = limpiarFiltrosKanban;
+  window.limpiarTodosLosFiltrosKanban = limpiarFiltrosKanban;
+  window.limpiarFiltrosSecundarios = limpiarFiltrosKanban;
+  window.limpiarFiltrosPortafolio = limpiarFiltrosPortafolio;
+  window.limpiarFiltrosFinanzas = limpiarFiltrosFinanzas;
+  window.limpiarFiltrosHabitos = limpiarFiltrosHabitos;
+  window.limpiarFiltrosNotas = limpiarFiltrosNotas;
+  window.resetGlobalFiltrosSistema = resetGlobalFiltrosSistema;
+  window.limpiarTodosLosFiltrosGlobales = resetGlobalFiltrosSistema;
+
+  // ============================================================================
+  // SECCIÓN: VINCULACIÓN BIDIRECCIONAL DE NOTAS CON ENTIDADES DESTINO
+  // ============================================================================
+
+  // Cache reactivo en memoria para búsqueda O(1) ultrarrápida de notas vinculadas
+  var _cacheNotasVinculadas = null;
+  var _notasCacheVersion = 0;
+  var _indiceVersionConstruida = -1;
+
+  function invalidarCacheNotasVinculadas() {
+    _cacheNotasVinculadas = null;
+    _indiceVersionConstruida = -1;
+    _notasCacheVersion++;
+  }
+
+  /**
+   * Construye un índice en memoria { "TAR-001": [nota1, nota2], "PRO-001": [...] }
+   * garantizando consultas O(1) a 60 FPS en tablas y tableros masivos.
+   */
+  function construirIndiceNotasVinculadas() {
+    var st = window.state || (typeof state !== 'undefined' ? state : null);
+    if (!st || !Array.isArray(st.notas)) return {};
+    if (_cacheNotasVinculadas && _indiceVersionConstruida === _notasCacheVersion) {
+      return _cacheNotasVinculadas;
+    }
+
+    var indice = {};
+    function registrarVinculo(idEnt, nota) {
+      if (!idEnt || !nota) return;
+      var clean = String(idEnt).trim().replace(/^[@#]+/, '').toUpperCase();
+      if (!clean) return;
+
+      var idNotaActual = String(nota.ID_Nota || nota.idNota || nota.id || '').trim().toUpperCase();
+
+      function agregarAClave(k) {
+        if (!k) return;
+        if (!indice[k]) indice[k] = [];
+        var yaReg = indice[k].some(function (n) {
+          var idN = String(n.ID_Nota || n.idNota || n.id || '').trim().toUpperCase();
+          return idN && idN === idNotaActual;
+        });
+        if (!yaReg) {
+          indice[k].push(nota);
+        }
+      }
+
+      // Registrar clave exacta
+      agregarAClave(clean);
+
+      // Extractor universal de identificadores (ej. "🌱 GYM (ACT-009)", "ACT-009", "TAR-001", etc.)
+      var matchId = String(clean).match(/\b(ACT|HAB|TAR|PRO|HIT|ING|GAS)-0*(\d+)\b/i);
+      if (matchId) {
+        var prefixId = matchId[1].toUpperCase();
+        var numSoloId = parseInt(matchId[2], 10);
+        if (!isNaN(numSoloId)) {
+          var pad3 = ('000' + numSoloId).slice(-3);
+          var pad4 = ('0000' + numSoloId).slice(-4);
+          var pad2 = ('00' + numSoloId).slice(-2);
+          var strNum = String(numSoloId);
+
+          agregarAClave(prefixId + '-' + pad3);
+          agregarAClave(prefixId + '-' + strNum);
+          agregarAClave(prefixId + '-' + pad4);
+          agregarAClave(prefixId + '-' + pad2);
+          agregarAClave(strNum);
+
+          if (prefixId === 'ACT' || prefixId === 'HAB') {
+            var altP = (prefixId === 'ACT') ? 'HAB' : 'ACT';
+            agregarAClave(altP + '-' + pad3);
+            agregarAClave(altP + '-' + strNum);
+            agregarAClave(altP + '-' + pad4);
+            agregarAClave(altP + '-' + pad2);
+          }
+        }
+      }
+
+      // Soporte para identificadores puramente numéricos hacia hábitos y actividades (ej: "1" <-> "ACT-001" y "HAB-001")
+      if (/^\d+$/.test(clean)) {
+        var numSolo = parseInt(clean, 10);
+        if (!isNaN(numSolo)) {
+          agregarAClave(String(numSolo));
+          agregarAClave('ACT-' + numSolo);
+          agregarAClave('ACT-' + ('000' + numSolo).slice(-3));
+          agregarAClave('HAB-' + numSolo);
+          agregarAClave('HAB-' + ('000' + numSolo).slice(-3));
+        }
+      }
+
+      // Intercambio automático bidireccional ACT- <-> HAB- (Hábitos y Actividades Personales)
+      if (clean.startsWith('ACT-')) {
+        agregarAClave('HAB-' + clean.slice(4));
+        var numA = clean.slice(4).replace(/^0+/, '');
+        if (numA) agregarAClave(numA);
+      } else if (clean.startsWith('HAB-')) {
+        agregarAClave('ACT-' + clean.slice(4));
+        var numH = clean.slice(4).replace(/^0+/, '');
+        if (numH) agregarAClave(numH);
+      }
+
+      // Normalizaciones numéricas universales para TAR-, ACT-, HAB-, PRO-, HIT-, GAS-, ING-
+      // Soporta prefijos complejos con múltiples guiones (ej. PRO-P-M-I-01 <-> PRO-P-M-I-1, TAR-2026-0001 <-> TAR-2026-1)
+      var matchNum = clean.match(/^(.*-)(0*)(\d+)$/);
+      if (matchNum) {
+        var prefix = matchNum[1];
+        var numVal = parseInt(matchNum[3], 10);
+        if (!isNaN(numVal)) {
+          agregarAClave(prefix + numVal);
+          agregarAClave(prefix + ('0000' + numVal).slice(-4));
+          agregarAClave(prefix + ('000' + numVal).slice(-3));
+          agregarAClave(prefix + ('00' + numVal).slice(-2));
+          agregarAClave(String(numVal));
+
+          if (prefix.startsWith('ACT-')) {
+            var pAlt = 'HAB-' + prefix.slice(4);
+            agregarAClave(pAlt + numVal);
+            agregarAClave(pAlt + ('0000' + numVal).slice(-4));
+            agregarAClave(pAlt + ('000' + numVal).slice(-3));
+            agregarAClave(pAlt + ('00' + numVal).slice(-2));
+          } else if (prefix.startsWith('HAB-')) {
+            var pAlt = 'ACT-' + prefix.slice(4);
+            agregarAClave(pAlt + numVal);
+            agregarAClave(pAlt + ('0000' + numVal).slice(-4));
+            agregarAClave(pAlt + ('000' + numVal).slice(-3));
+            agregarAClave(pAlt + ('00' + numVal).slice(-2));
+          }
+        }
+      }
+    }
+
+    st.notas.forEach(function (n) {
+      if (!n) return;
+
+      // 1. Campo directo de entidad vinculada
+      var vDirect = n.ID_Entidad_Vinculada || n.idEntidadVinculada || n.id_entidad || n.ID_Entidad || n.entidadVinculada;
+      if (vDirect) registrarVinculo(vDirect, n);
+
+      // 2. Vínculos estructurados: Array o JSON serializado (soporte n.Vinculos y n.vinculos)
+      var rawVinculos = n.Vinculos || n.vinculos;
+      if (typeof rawVinculos === 'string' && rawVinculos.trim()) {
+        try {
+          rawVinculos = JSON.parse(rawVinculos);
+        } catch (eVinc) {
+          var matchesV = String(rawVinculos).toUpperCase().match(/\b(TAR|PRO|HIT|ACT|HAB|GAS|ING)-[A-Z0-9_-]+\b/g);
+          if (matchesV) {
+            matchesV.forEach(function (m) { registrarVinculo(m, n); });
+          }
+        }
+      }
+
+      if (Array.isArray(rawVinculos)) {
+        rawVinculos.forEach(function (v) {
+          if (!v) return;
+          if (typeof v === 'string') {
+            registrarVinculo(v, n);
+            return;
+          }
+          var cod = v.codigo || v.id || v.idEntidad || v.ID_Entidad || v.idTarea || v.idActividad || v.ID_Tarea || v.ID_Actividad || v.ID_Proyecto || v.ID_Hito || v.ID_Gasto || v.ID_Ingreso;
+          if (cod) registrarVinculo(cod, n);
+          if (v.titulo) registrarVinculo(v.titulo, n);
+        });
+      } else if (rawVinculos && typeof rawVinculos === 'object') {
+        var codObj = rawVinculos.codigo || rawVinculos.id || rawVinculos.idEntidad || rawVinculos.ID_Entidad || rawVinculos.idTarea || rawVinculos.idActividad;
+        if (codObj) registrarVinculo(codObj, n);
+        if (rawVinculos.titulo) registrarVinculo(rawVinculos.titulo, n);
+      }
+
+      // 3. Enlaces_Entidades_JSON
+      var rawEnlaces = n.Enlaces_Entidades_JSON || n.enlaces_entidades_json;
+      if (rawEnlaces) {
+        try {
+          var parsed = typeof rawEnlaces === 'string' ? JSON.parse(rawEnlaces) : rawEnlaces;
+          if (Array.isArray(parsed)) {
+            parsed.forEach(function (v) {
+              if (!v) return;
+              if (typeof v === 'string') {
+                registrarVinculo(v, n);
+                return;
+              }
+              var cod = v.codigo || v.id || v.idEntidad || v.ID_Entidad;
+              if (cod) registrarVinculo(cod, n);
+            });
+          } else if (typeof parsed === 'object' && parsed !== null) {
+            var codObjE = parsed.codigo || parsed.id || parsed.idEntidad || parsed.ID_Entidad;
+            if (codObjE) registrarVinculo(codObjE, n);
+          }
+        } catch (e) {
+          var strJson = String(rawEnlaces).toUpperCase();
+          var matchesJson = strJson.match(/\b(TAR|PRO|HIT|ACT|HAB|GAS|ING)-[A-Z0-9_-]+\b/g);
+          if (matchesJson) {
+            matchesJson.forEach(function (m) { registrarVinculo(m, n); });
+          }
+        }
+      }
+
+      // 4. WishlistMeta (Gasto vinculado)
+      var wMeta = n.WishlistMeta || n.wishlistMeta;
+      if (wMeta && wMeta.idGastoVinculado) {
+        registrarVinculo(wMeta.idGastoVinculado, n);
+      }
+
+      // 5. Fallback en Etiquetas / tags
+      var rawTags = n.Etiquetas || n.tags || n.etiquetas;
+      if (typeof rawTags === 'string' && rawTags.trim()) {
+        try {
+          var parsedTags = JSON.parse(rawTags);
+          if (Array.isArray(parsedTags)) rawTags = parsedTags;
+          else rawTags = [rawTags];
+        } catch (eTags) {
+          rawTags = rawTags.split(/[,;\s]+/);
+        }
+      }
+      if (Array.isArray(rawTags)) {
+        rawTags.forEach(function (tag) {
+          var tStr = String(tag || '').trim().replace(/^[@#]+/, '').toUpperCase();
+          if (tStr.startsWith('TAR-') || tStr.startsWith('PRO-') || tStr.startsWith('HIT-') || tStr.startsWith('ACT-') || tStr.startsWith('HAB-') || tStr.startsWith('GAS-') || tStr.startsWith('ING-')) {
+            registrarVinculo(tStr, n);
+          }
+        });
+      }
+
+      // 6. Fallback en Menciones textuales en Titulo o Contenido (ej. @TAR-12345 o TAR-12345)
+      var strFull = (String(n.Titulo || n.titulo || '') + ' ' + String(n.Contenido || n.contenido || '')).toUpperCase();
+      var matches = strFull.match(/\b(TAR|PRO|HIT|ACT|HAB|GAS|ING)-[A-Z0-9_-]+\b/g);
+      if (matches) {
+        matches.forEach(function (m) {
+          registrarVinculo(m, n);
+        });
+      }
+    });
+
+    // 7. Enlace inverso bidireccional desde Tareas y Actividades si referencian notas
+    if (Array.isArray(st.tareas)) {
+      st.tareas.forEach(function (t) {
+        if (!t) return;
+        var notStr = String(t.Notas_Impedimentos || t.Notas || t.notas || '').toUpperCase();
+        var matchNot = notStr.match(/\bNOT-[A-Z0-9_-]+\b/g);
+        if (matchNot) {
+          matchNot.forEach(function (idN) {
+            var notaRef = st.notas.find(function (x) {
+              var xId = String(x.ID_Nota || x.idNota || x.id || '').toUpperCase();
+              return xId === idN || xId.replace(/-0+/, '-') === idN.replace(/-0+/, '-');
+            });
+            if (notaRef && t.ID_Tarea) registrarVinculo(t.ID_Tarea, notaRef);
+          });
+        }
+      });
+    }
+
+    if (Array.isArray(st.actividadesPersonales)) {
+      st.actividadesPersonales.forEach(function (a) {
+        if (!a) return;
+        var notStrA = String(a.Notas_Checklist || a.Notas || a.notas || '').toUpperCase();
+        var matchNotA = notStrA.match(/\bNOT-[A-Z0-9_-]+\b/g);
+        if (matchNotA) {
+          matchNotA.forEach(function (idN) {
+            var notaRefA = st.notas.find(function (x) {
+              var xId = String(x.ID_Nota || x.idNota || x.id || '').toUpperCase();
+              return xId === idN || xId.replace(/-0+/, '-') === idN.replace(/-0+/, '-');
+            });
+            var idAct = a.ID_Actividad || a.ID_Habito || a.id || a.ID_Tarea;
+            if (notaRefA && idAct) registrarVinculo(idAct, notaRefA);
+          });
+        }
+      });
+    }
+
+    _cacheNotasVinculadas = indice;
+    _indiceVersionConstruida = _notasCacheVersion;
+    return indice;
+  }
+
+  /**
+   * Helper unificado global para clasificar el tipo semántico de una nota
+   * (WISHLIST 🛒, CHECKLIST ☑️, NOTA 📝)
+   */
+  function clasificarTipoNota(nota) {
+    if (!nota) return 'NOTA';
+    var t = String(nota.Tipo_Nota || nota.tipoNota || '').toUpperCase();
+    if (t === 'WISHLIST' || nota.WishlistMeta || nota.wishlistMeta) {
+      return 'WISHLIST';
+    }
+    if (t === 'CHECKLIST' || (Array.isArray(nota.Checklist) && nota.Checklist.length > 0) || (Array.isArray(nota.checklist) && nota.checklist.length > 0) || nota.Tabla || nota.tabla) {
+      return 'CHECKLIST';
+    }
+    return 'NOTA';
+  }
+
+  var CONFIG_TIPO_NOTA = {
+    WISHLIST: {
+      nombre: 'Wishlist',
+      colorIcono: 'text-amber-400',
+      svg: '<svg class="portal-icon-sm shrink-0 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>',
+      bgClass: 'bg-slate-900/80 hover:bg-slate-800 text-amber-300 border-slate-700/60 hover:border-amber-500/60'
+    },
+    CHECKLIST: {
+      nombre: 'Checklist',
+      colorIcono: 'text-sky-400',
+      svg: '<svg class="portal-icon-sm shrink-0 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>',
+      bgClass: 'bg-slate-900/80 hover:bg-slate-800 text-sky-300 border-slate-700/60 hover:border-sky-500/60'
+    },
+    NOTA: {
+      nombre: 'Nota',
+      colorIcono: 'text-purple-400',
+      svg: '<svg class="portal-icon-sm shrink-0 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>',
+      bgClass: 'bg-slate-900/80 hover:bg-slate-800 text-purple-300 border-slate-700/60 hover:border-purple-500/60'
+    }
+  };
+
+  /**
+   * Helper unificado global para consultar las notas vinculadas a cualquier entidad del sistema
+   * (Proyectos, Hitos, Tareas, Actividades Personales, Gastos, Ingresos)
+   * Incluye fallback directo en state.notas para garantizar 100% de éxito.
+   */
+  function obtenerNotasVinculadasAEntidad(idEntidad, tipoEntidad) {
+    var st = window.state || (typeof state !== 'undefined' ? state : null);
+    if (!idEntidad || !st || !Array.isArray(st.notas)) return [];
+    var idNorm = String(idEntidad).trim().replace(/^[@#]+/, '').toUpperCase();
+    if (!idNorm) return [];
+
+    var indice = construirIndiceNotasVinculadas();
+    if (indice[idNorm] && indice[idNorm].length > 0) {
+      return indice[idNorm];
+    }
+
+    // Extractor universal de identificadores para consulta (ej. "🌱 GYM (ACT-009)")
+    var matchEnt = String(idNorm).match(/\b(ACT|HAB|TAR|PRO|HIT|ING|GAS)-0*(\d+)\b/i);
+    if (matchEnt) {
+      var pEnt = matchEnt[1].toUpperCase();
+      var nEnt = parseInt(matchEnt[2], 10);
+      if (!isNaN(nEnt)) {
+        var cPad3 = pEnt + '-' + ('000' + nEnt).slice(-3);
+        var cNormNum = pEnt + '-' + nEnt;
+        var cDig = String(nEnt);
+        if (indice[cPad3] && indice[cPad3].length > 0) return indice[cPad3];
+        if (indice[cNormNum] && indice[cNormNum].length > 0) return indice[cNormNum];
+        if (indice[cDig] && indice[cDig].length > 0) return indice[cDig];
+
+        if (pEnt === 'ACT' || pEnt === 'HAB') {
+          var altEnt = (pEnt === 'ACT') ? 'HAB' : 'ACT';
+          var aPad3 = altEnt + '-' + ('000' + nEnt).slice(-3);
+          var aNorm = altEnt + '-' + nEnt;
+          if (indice[aPad3] && indice[aPad3].length > 0) return indice[aPad3];
+          if (indice[aNorm] && indice[aNorm].length > 0) return indice[aNorm];
+        }
+      }
+    }
+
+    // Comprobación de alias ACT- <-> HAB-
+    var altPref = '';
+    if (idNorm.startsWith('ACT-')) altPref = 'HAB-' + idNorm.slice(4);
+    else if (idNorm.startsWith('HAB-')) altPref = 'ACT-' + idNorm.slice(4);
+    if (altPref && indice[altPref] && indice[altPref].length > 0) {
+      return indice[altPref];
+    }
+
+    // Comprobación de variante sin ceros / con ceros en el índice
+    var matchNum = idNorm.match(/^(.*-)(0*)(\d+)$/);
+    if (matchNum) {
+      var prefix = matchNum[1];
+      var numVal = parseInt(matchNum[3], 10);
+      if (!isNaN(numVal)) {
+        var alt1 = prefix + numVal;
+        if (indice[alt1] && indice[alt1].length > 0) return indice[alt1];
+        var alt4 = prefix + ('0000' + numVal).slice(-4);
+        if (indice[alt4] && indice[alt4].length > 0) return indice[alt4];
+        var alt3 = prefix + ('000' + numVal).slice(-3);
+        if (indice[alt3] && indice[alt3].length > 0) return indice[alt3];
+        var alt2 = prefix + ('00' + numVal).slice(-2);
+        if (indice[alt2] && indice[alt2].length > 0) return indice[alt2];
+
+        if (altPref) {
+          var mAlt = altPref.match(/^(.*-)(0*)(\d+)$/);
+          if (mAlt) {
+            var pAlt = mAlt[1];
+            if (indice[pAlt + numVal] && indice[pAlt + numVal].length > 0) return indice[pAlt + numVal];
+            if (indice[pAlt + ('0000' + numVal).slice(-4)] && indice[pAlt + ('0000' + numVal).slice(-4)].length > 0) return indice[pAlt + ('0000' + numVal).slice(-4)];
+            if (indice[pAlt + ('000' + numVal).slice(-3)] && indice[pAlt + ('000' + numVal).slice(-3)].length > 0) return indice[pAlt + ('000' + numVal).slice(-3)];
+          }
+        }
+      }
+    }
+
+    // Fallback directo sobre st.notas para resiliencia absoluta
+    var directList = [];
+    var yaVistas = {};
+    var normSinCeros = idNorm.replace(/-0+/, '-');
+    var tipoNorm = String(tipoEntidad || '').trim().toUpperCase();
+    var esHabitoOAct = (tipoNorm === 'HABITO' || tipoNorm === 'ACTIVIDAD');
+    var esTrx = (tipoNorm === 'GASTO' || tipoNorm === 'INGRESO' || tipoNorm === 'FINANZAS');
+    var idDigits = idNorm.replace(/\D/g, '');
+
+    st.notas.forEach(function (n) {
+      if (!n) return;
+      var idN = String(n.ID_Nota || n.idNota || n.id || '').toUpperCase();
+      if (yaVistas[idN]) return;
+
+      var match = false;
+
+      // Directo
+      var vDir = String(n.ID_Entidad_Vinculada || n.idEntidadVinculada || n.id_entidad || n.ID_Entidad || n.entidadVinculada || '').trim().replace(/^[@#]+/, '').toUpperCase();
+      if (vDir) {
+        if (vDir === idNorm || vDir.replace(/-0+/, '-') === normSinCeros) match = true;
+        if (!match && altPref && (vDir === altPref || vDir.replace(/-0+/, '-') === altPref.replace(/-0+/, '-'))) match = true;
+        if (!match && esHabitoOAct && idDigits && vDir.replace(/\D/g, '') === idDigits) match = true;
+        if (!match && esTrx && idDigits && vDir.replace(/\D/g, '') === idDigits) match = true;
+        if (!match && matchEnt) {
+          var mVDir = vDir.match(/\b(ACT|HAB|TAR|PRO|HIT|ING|GAS)-0*(\d+)\b/i);
+          if (mVDir && parseInt(mVDir[2], 10) === parseInt(matchEnt[2], 10)) {
+            var pVDir = mVDir[1].toUpperCase();
+            var pEDir = matchEnt[1].toUpperCase();
+            if (pVDir === pEDir || ((pVDir === 'ACT' || pVDir === 'HAB') && (pEDir === 'ACT' || pEDir === 'HAB'))) {
+              match = true;
+            }
+          }
+        }
+      }
+
+      // Vinculos
+      if (!match) {
+        var rawV = n.Vinculos || n.vinculos;
+        if (typeof rawV === 'string' && rawV.trim()) {
+          try { rawV = JSON.parse(rawV); } catch (e) {}
+        }
+        var arrV = Array.isArray(rawV) ? rawV : (rawV && typeof rawV === 'object' ? [rawV] : []);
+        match = arrV.some(function (v) {
+          if (!v) return false;
+          var c = typeof v === 'string' ? v : (v.codigo || v.id || v.idEntidad || v.ID_Entidad || v.idTarea || v.idActividad || v.ID_Tarea || v.ID_Actividad);
+          var cNorm = String(c || '').trim().replace(/^[@#]+/, '').toUpperCase();
+          if (!cNorm) return false;
+          if (cNorm === idNorm || cNorm.replace(/-0+/, '-') === normSinCeros) return true;
+          if (altPref && (cNorm === altPref || cNorm.replace(/-0+/, '-') === altPref.replace(/-0+/, '-'))) return true;
+
+          // Extractor universal sobre el código de vínculo
+          if (matchEnt) {
+            var mVC = cNorm.match(/\b(ACT|HAB|TAR|PRO|HIT|ING|GAS)-0*(\d+)\b/i);
+            if (mVC && parseInt(mVC[2], 10) === parseInt(matchEnt[2], 10)) {
+              var pVC = mVC[1].toUpperCase();
+              var pEC = matchEnt[1].toUpperCase();
+              if (pVC === pEC || ((pVC === 'ACT' || pVC === 'HAB') && (pEC === 'ACT' || pEC === 'HAB'))) {
+                return true;
+              }
+            }
+          }
+
+          // Normalización cruzada de tipos (HABITO <-> ACTIVIDAD, GASTO/INGRESO)
+          var cDigits = cNorm.replace(/\D/g, '');
+          var vTipo = String((v && v.tipo) || '').trim().toUpperCase();
+          if (esHabitoOAct && (vTipo === 'HABITO' || vTipo === 'ACTIVIDAD' || !vTipo)) {
+            if (cDigits && idDigits && cDigits === idDigits) return true;
+            if (cNorm.replace(/^(ACT|HAB)-0*/, '') === idNorm.replace(/^(ACT|HAB)-0*/, '')) return true;
+          }
+          if (esTrx && (vTipo === 'GASTO' || vTipo === 'INGRESO' || vTipo === 'FINANZAS' || !vTipo)) {
+            if (cDigits && idDigits && cDigits === idDigits) return true;
+          }
+          return false;
+        });
+      }
+
+      // Mención textual
+      if (!match) {
+        var fullTxt = (String(n.Titulo || n.titulo || '') + ' ' + String(n.Contenido || n.contenido || '') + ' ' + String(n.Etiquetas || n.tags || '')).toUpperCase();
+        if (fullTxt.indexOf(idNorm) !== -1 || fullTxt.indexOf(normSinCeros) !== -1) {
+          match = true;
+        }
+        if (!match && altPref && (fullTxt.indexOf(altPref) !== -1 || fullTxt.indexOf(altPref.replace(/-0+/, '-')) !== -1)) {
+          match = true;
+        }
+        if (!match && esHabitoOAct && idDigits && (fullTxt.indexOf('ACT-' + idDigits) !== -1 || fullTxt.indexOf('HAB-' + idDigits) !== -1)) {
+          match = true;
+        }
+      }
+
+      if (match) {
+        yaVistas[idN] = true;
+        directList.push(n);
+      }
+    });
+
+    if (directList.length > 0) {
+      indice[idNorm] = directList;
+    }
+    return directList;
+  }
+
+  /**
+   * Extrae un snippet limpio de texto libre de tags HTML y entidades para tooltips y previews
+   */
+  function extraerSnippetTextoNota(contenido, maxLen) {
+    if (!contenido) return '';
+    var txt = String(contenido)
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<br\s*[\/]?>/gi, ' ')
+      .replace(/<\/p>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\r/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    var limite = maxLen || 120;
+    if (txt.length > limite) {
+      return txt.substring(0, limite) + '...';
+    }
+    return txt;
+  }
+
+  /**
+   * Abre directamente la nota si es única, o despliega un selector emergente elegante si hay múltiples notas
+   */
+  function abrirSelectorNotasVinculadas(idEntidad, tipoEntidad) {
+    var notas = obtenerNotasVinculadasAEntidad(idEntidad, tipoEntidad);
+    if (!notas || notas.length === 0) return;
+    if (notas.length === 1) {
+      var idN = notas[0].ID_Nota || notas[0].idNota || notas[0].id;
+      if (typeof window.abrirModalEditarNotaConDatos === 'function') {
+        window.abrirModalEditarNotaConDatos(idN);
+      } else if (typeof window.abrirModalEditarNota === 'function') {
+        window.abrirModalEditarNota(idN);
+      }
+      return;
+    }
+
+    if (typeof Swal !== 'undefined') {
+      var html = '<div class="space-y-2 text-left max-h-72 overflow-y-auto custom-scrollbar p-1">';
+      notas.forEach(function (n, idx) {
+        var tipo = clasificarTipoNota(n);
+        var cfg = CONFIG_TIPO_NOTA[tipo] || CONFIG_TIPO_NOTA.NOTA;
+        var titulo = n.Titulo || n.titulo || (cfg.nombre + ' sin título');
+        var snippet = extraerSnippetTextoNota(n.Contenido || n.contenido, 130);
+        var fecha = n.Fecha_Actualizacion || n.Fecha_Creacion || '';
+        var fLabel = fecha ? String(fecha).split('T')[0] : '';
+        var idN = n.ID_Nota || n.idNota || n.id;
+        html += '<div onclick="Swal.close(); if(typeof window.abrirModalEditarNotaConDatos===\'function\'){ window.abrirModalEditarNotaConDatos(\'' + idN + '\'); }else if(typeof window.abrirModalEditarNota===\'function\'){ window.abrirModalEditarNota(\'' + idN + '\'); }" ' +
+          'class="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 bg-slate-50 dark:bg-slate-800/80 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40 cursor-pointer transition shadow-2xs group">' +
+          '<div class="flex items-center justify-between gap-1 mb-1">' +
+          '<span class="font-bold text-xs text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 flex items-center gap-1.5">' +
+          '<span>' + cfg.icono + '</span>' +
+          '<span>' + (idx + 1) + '. ' + escapeHtml(titulo) + '</span>' +
+          '</span>' +
+          '<span class="text-[9px] font-mono font-bold text-indigo-600 dark:text-indigo-400">Abrir ↗</span>' +
+          '</div>' +
+          (snippet ? '<p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 italic">' + escapeHtml(snippet) + '</p>' : '') +
+          (fLabel ? '<div class="text-[9px] text-slate-400 mt-1 font-mono">' + fLabel + '</div>' : '') +
+          '</div>';
+      });
+      html += '</div>';
+
+      Swal.fire({
+        title: 'Notas Vinculadas (' + notas.length + ')',
+        html: html,
+        showConfirmButton: false,
+        showCloseButton: true,
+        customClass: {
+          popup: 'rounded-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800'
+        }
+      });
+    } else {
+      var idN = notas[0].ID_Nota || notas[0].idNota || notas[0].id;
+      if (typeof window.abrirModalEditarNotaConDatos === 'function') {
+        window.abrirModalEditarNotaConDatos(idN);
+      } else if (typeof window.abrirModalEditarNota === 'function') {
+        window.abrirModalEditarNota(idN);
+      }
+    }
+  }
+
+  /**
+   * Genera el micro-badge interactivo (HTML) para una entidad vinculada
+   * - Discrimina visualmente según el tipo de nota:
+   *   * Wishlist: 🛒 (Color Ámbar)
+   *   * Checklist: ☑️ (Color Sky/Azul)
+   *   * Nota simple: 📝 (Color Púrpura)
+   * - Si hay más de 1 nota del mismo tipo, acompaña con un micro-contador (ej. ☑️ 2)
+   * - Si hay notas de múltiples tipos, renderiza los badges distintivos correspondientes
+   * - Hover: Tooltip nativo multilínea con tipo, título y primeras líneas de contenido
+   * - Clic: Abre de inmediato el modal de lectura/edición sin ir a la pestaña Notas
+   */
+  function generarBadgeNotasVinculadas(idEntidad, tipoEntidad, extraClass) {
+    var notas = obtenerNotasVinculadasAEntidad(idEntidad, tipoEntidad);
+    if (!notas || notas.length === 0) return '';
+
+    // Agrupar notas por tipo semántico
+    var grupos = { WISHLIST: [], CHECKLIST: [], NOTA: [] };
+    notas.forEach(function (n) {
+      var tipo = clasificarTipoNota(n);
+      if (grupos[tipo]) grupos[tipo].push(n);
+      else grupos.NOTA.push(n);
+    });
+
+    var tiposPresentes = ['WISHLIST', 'CHECKLIST', 'NOTA'].filter(function (t) {
+      return grupos[t].length > 0;
+    });
+
+    var badges = tiposPresentes.map(function (tipo) {
+      var cfg = CONFIG_TIPO_NOTA[tipo] || CONFIG_TIPO_NOTA.NOTA;
+      var subLista = grupos[tipo];
+      var count = subLista.length;
+      var primeraNota = subLista[0];
+      var idPrimeraNota = primeraNota.ID_Nota || primeraNota.idNota || primeraNota.id || '';
+
+      var tooltip = '';
+      if (count === 1) {
+        var tit = primeraNota.Titulo || primeraNota.titulo || (cfg.nombre + ' sin título');
+        var snip = extraerSnippetTextoNota(primeraNota.Contenido || primeraNota.contenido, 130);
+        tooltip = '[' + cfg.nombre + '] ' + tit + (snip ? '\n"' + snip + '"' : '') + '\n\n(Clic para abrir ' + cfg.nombre.toLowerCase() + ')';
+      } else {
+        tooltip = '[' + cfg.nombre + '] ' + count + ' ' + cfg.nombre + 's vinculadas:\n' +
+          subLista.slice(0, 4).map(function (n, i) {
+            var t = n.Titulo || n.titulo || (cfg.nombre + ' ' + (i + 1));
+            var s = extraerSnippetTextoNota(n.Contenido || n.contenido, 60);
+            return (i + 1) + '. ' + t + (s ? ': "' + s + '"' : '');
+          }).join('\n') +
+          (count > 4 ? '\n... y ' + (count - 4) + ' más' : '') +
+          '\n\n(Clic para ver y abrir)';
+      }
+
+      var onclickAttr = count === 1
+        ? 'event.stopPropagation(); if(typeof window.abrirModalEditarNotaConDatos===\'function\'){ window.abrirModalEditarNotaConDatos(\'' + idPrimeraNota + '\'); }else if(typeof window.abrirModalEditarNota===\'function\'){ window.abrirModalEditarNota(\'' + idPrimeraNota + '\'); }'
+        : 'event.stopPropagation(); if(typeof window.abrirSelectorNotasVinculadas===\'function\') window.abrirSelectorNotasVinculadas(\'' + idEntidad + '\', \'' + (tipoEntidad || '') + '\');';
+
+      var contadorHtml = count > 1
+        ? '<span class="font-mono text-[9px] font-bold tabular-nums leading-none ml-0.5">' + count + '</span>'
+        : '';
+
+      return '<span onclick="' + onclickAttr + '" ' +
+        'onmouseenter="if(typeof window.mostrarPopoverNotaHover===\'function\') window.mostrarPopoverNotaHover(event, \'' + idPrimeraNota + '\');" ' +
+        'onmouseleave="if(typeof window.ocultarPopoverNotaHover===\'function\') window.ocultarPopoverNotaHover();" ' +
+        'onmousemove="if(typeof window.moverPopoverNotaHover===\'function\') window.moverPopoverNotaHover(event);" ' +
+        'class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] font-semibold border ' + cfg.bgClass + ' ' + (extraClass || '') + ' transition-all active:scale-95 cursor-pointer shadow-2xs z-10" ' +
+        'data-tooltip="' + escapeHtml(tooltip) + '">' +
+        cfg.svg +
+        contadorHtml +
+        '</span>';
+    });
+
+    return badges.join(' ');
+  }
+
+  /**
+   * Actualiza reactivamente TODAS las vistas del sistema cuando se crea, edita o elimina una nota
+   * No condiciona el re-renderizado solo a la vista activa, garantizando sincronía total instantánea.
+   */
+  function actualizarVistasActivasNotas() {
+    try {
+      invalidarCacheNotasVinculadas();
+
+      // 1. Tablero Kanban (Tareas de Proyectos y Actividades Personales en Kanban)
+      if (typeof window.aplicarFiltrosCruzados === 'function') {
+        try { window.aplicarFiltrosCruzados(); } catch (eK) { console.warn('[actualizarVistasActivasNotas] Kanban:', eK); }
+      }
+      if (typeof window.renderKanban === 'function' && window.renderKanban !== window.aplicarFiltrosCruzados) {
+        try { window.renderKanban(); } catch (eK2) {}
+      }
+
+      // 2. Tablero Hábitos y Vida (Actividades Personales)
+      if (typeof window.renderTableroActividadesPersonales === 'function') {
+        try { window.renderTableroActividadesPersonales(); } catch (eH) { console.warn('[actualizarVistasActivasNotas] Hábitos:', eH); }
+      }
+      if (typeof window.renderHabitos === 'function' && window.renderHabitos !== window.renderTableroActividadesPersonales) {
+        try { window.renderHabitos(); } catch (eH2) {}
+      }
+
+      // 2.1 Refresco quirúrgico directo de los slots de micro-badges en DOM
+      if (typeof generarBadgeNotasVinculadas === 'function') {
+        var slotsHabDom = document.querySelectorAll('.habit-badge-notas-slot[data-id-actividad]');
+        if (slotsHabDom && slotsHabDom.length > 0) {
+          slotsHabDom.forEach(function (s) {
+            var idA = s.getAttribute('data-id-actividad');
+            if (idA) s.innerHTML = generarBadgeNotasVinculadas(idA, 'ACTIVIDAD');
+          });
+        }
+        var slotsTaskDom = document.querySelectorAll('.kanban-badge-notas-slot[data-id-tarea]');
+        if (slotsTaskDom && slotsTaskDom.length > 0) {
+          slotsTaskDom.forEach(function (s) {
+            var idT = s.getAttribute('data-id-tarea');
+            if (idT) s.innerHTML = generarBadgeNotasVinculadas(idT, 'TAREA');
+          });
+        }
+      }
+
+      // 3. Portafolio de Proyectos
+      if (typeof window.renderPortafolioProyectos === 'function') {
+        try { window.renderPortafolioProyectos(); } catch (eP) {}
+      } else if (typeof window.renderTarjetasPortafolio === 'function') {
+        try { window.renderTarjetasPortafolio(); } catch (eP2) {}
+      }
+
+      // 4. Módulo Financiero
+      if (typeof window.renderTabTransaccionesUnificada === 'function') {
+        try { window.renderTabTransaccionesUnificada(); } catch (eF) {}
+      }
+      if (typeof window.renderTableroFinanciero === 'function') {
+        try { window.renderTableroFinanciero(); } catch (eF2) {}
+      }
+
+      // 5. Vista de Detalle 360 si hay un proyecto activo abierto
+      var st = window.state || (typeof state !== 'undefined' ? state : null);
+      if (st && st.proyectoDetalleActivo) {
+        var idProyAct = st.proyectoDetalleActivo.ID_Proyecto;
+        if (typeof window.renderCascadaHitos === 'function') {
+          try { window.renderCascadaHitos(idProyAct); } catch (eD1) {}
+        }
+        if (st.vistaActual === 'detalle' && typeof window.abrirDetalle360 === 'function') {
+          try { window.abrirDetalle360(idProyAct); } catch (eD2) {}
+        }
+      }
+
+      // 6. Header badges de conteo global
+      if (typeof header !== 'undefined' && header.updateBadges) {
+        try { header.updateBadges(st || state); } catch (eHb) {}
+      }
+    } catch (eR) {
+      console.warn('[actualizarVistasActivasNotas] Advertencia en refresco reactivo:', eR);
+    }
+  }
+
+  window.invalidarCacheNotasVinculadas = invalidarCacheNotasVinculadas;
+  window.obtenerNotasVinculadasAEntidad = obtenerNotasVinculadasAEntidad;
+  window.abrirSelectorNotasVinculadas = abrirSelectorNotasVinculadas;
+  window.generarBadgeNotasVinculadas = generarBadgeNotasVinculadas;
+  window.clasificarTipoNota = clasificarTipoNota;
+  window.actualizarVistasActivasNotas = actualizarVistasActivasNotas;
+  window.aplicarDatosDashboard = aplicarDatosDashboard;
+  window.escapeHtmlSeguro = escapeHtml;
+  if (typeof window.abrirModalEditarNota !== 'function' && typeof window.abrirModalEditarNotaConDatos === 'function') {
+    window.abrirModalEditarNota = window.abrirModalEditarNotaConDatos;
+  }
+
+  // ==========================================================================
+  // CONFIGURACIÓN Y CÁLCULO DE INVERSIÓN EN BIENESTAR (LIFE OS & HÁBITOS)
+  // ==========================================================================
+  window.CATEGORIAS_VIDA_CONFIG = window.CATEGORIAS_VIDA_CONFIG || {
+    'SALUD_DEPORTE': {
+      clave: 'SALUD_DEPORTE',
+      nombre: 'Salud & Deporte',
+      icono: '🏃',
+      color: '#10b981',
+      colorBarra: 'bg-emerald-500',
+      badgeClase: 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/50',
+      accentBorder: 'hover:border-emerald-300 dark:hover:border-emerald-700/60'
+    },
+    'DESARROLLO_ESTUDIO': {
+      clave: 'DESARROLLO_ESTUDIO',
+      nombre: 'Desarrollo Personal',
+      icono: '📚',
+      color: '#3b82f6',
+      colorBarra: 'bg-blue-500',
+      badgeClase: 'bg-blue-50 text-blue-700 border-blue-200/80 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/50',
+      accentBorder: 'hover:border-blue-300 dark:hover:border-blue-700/60'
+    },
+    'LABORAL_HONORARIO': {
+      clave: 'LABORAL_HONORARIO',
+      nombre: 'Trabajo & Carrera',
+      icono: '💼',
+      color: '#8b5cf6',
+      colorBarra: 'bg-violet-500',
+      badgeClase: 'bg-violet-50 text-violet-700 border-violet-200/80 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800/50',
+      accentBorder: 'hover:border-violet-300 dark:hover:border-violet-700/60'
+    },
+    'FINANZAS_TRAMITES': {
+      clave: 'FINANZAS_TRAMITES',
+      nombre: 'Finanzas & Admin',
+      icono: '💳',
+      color: '#a855f7',
+      colorBarra: 'bg-purple-500',
+      badgeClase: 'bg-purple-50 text-purple-700 border-purple-200/80 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/50',
+      accentBorder: 'hover:border-purple-300 dark:hover:border-purple-700/60'
+    },
+    'SOCIAL_FAMILIA': {
+      clave: 'SOCIAL_FAMILIA',
+      nombre: 'Hogar & Familia',
+      icono: '👥',
+      color: '#f59e0b',
+      colorBarra: 'bg-amber-500',
+      badgeClase: 'bg-amber-50 text-amber-700 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/50',
+      accentBorder: 'hover:border-amber-300 dark:hover:border-amber-700/60'
+    },
+    'PERSONAL_DESCANSO': {
+      clave: 'PERSONAL_DESCANSO',
+      nombre: 'Ocio & Social',
+      icono: '🧘',
+      color: '#ec4899',
+      colorBarra: 'bg-pink-500',
+      badgeClase: 'bg-pink-50 text-pink-700 border-pink-200/80 dark:bg-pink-950/40 dark:text-pink-300 dark:border-pink-800/50',
+      accentBorder: 'hover:border-pink-300 dark:hover:border-pink-700/60'
+    }
+  };
+
+  window.normalizarCategoriaVida = function (catRaw) {
+    var raw = String(catRaw || '').trim().toUpperCase().replace(/[\s-]/g, '_');
+    if (raw === 'SALUD_DEPORTE' || raw === 'SALUD' || raw === 'DEPORTE') return 'SALUD_DEPORTE';
+    if (raw === 'DESARROLLO_PERSONAL' || raw === 'DESARROLLO_ESTUDIO' || raw === 'ESTUDIO' || raw === 'DESARROLLO') return 'DESARROLLO_ESTUDIO';
+    if (raw === 'TRABAJO_CARRERA' || raw === 'LABORAL_HONORARIO' || raw === 'TRABAJO' || raw === 'LABORAL' || raw === 'CARRERA') return 'LABORAL_HONORARIO';
+    if (raw === 'FINANZAS_ADMIN' || raw === 'FINANZAS_TRAMITES' || raw === 'FINANZAS' || raw === 'ADMIN') return 'FINANZAS_TRAMITES';
+    if (raw === 'HOGAR_FAMILIA' || raw === 'SOCIAL_FAMILIA' || raw === 'HOGAR' || raw === 'FAMILIA' || raw === 'SOCIAL') return 'SOCIAL_FAMILIA';
+    if (raw === 'OCIO_SOCIAL' || raw === 'PERSONAL_DESCANSO' || raw === 'OCIO' || raw === 'DESCANSO' || raw === 'PERSONAL') return 'PERSONAL_DESCANSO';
+    return 'SALUD_DEPORTE';
+  };
+
+  window.calcularDesgloseInversionBienestar = function () {
+    var actividades = (window.state && Array.isArray(state.actividadesPersonales)) ? state.actividadesPersonales : [];
+    var gastos = (window.state && Array.isArray(state.gastos)) ? state.gastos : [];
+
+    var mapaActividadACategoria = {};
+    actividades.forEach(function (act) {
+      var idA = String(act.ID_Actividad || act.ID_Tarea || '').trim().toUpperCase();
+      if (idA) {
+        mapaActividadACategoria[idA] = window.normalizarCategoriaVida(act.Categoria_Vida);
+      }
+    });
+
+    var keys = ['SALUD_DEPORTE', 'DESARROLLO_ESTUDIO', 'LABORAL_HONORARIO', 'FINANZAS_TRAMITES', 'SOCIAL_FAMILIA', 'PERSONAL_DESCANSO'];
+    var desglose = {};
+    keys.forEach(function (k) {
+      desglose[k] = {
+        clave: k,
+        config: window.CATEGORIAS_VIDA_CONFIG[k] || { nombre: k, icono: '✨', color: '#10b981' },
+        gastoRealPEN: 0,
+        actividadesCount: 0,
+        gastosCount: 0,
+        gastosItems: []
+      };
+    });
+
+    var actividadesConGastoContabilizado = {};
+
+    // 1. Sumar egresos de state.gastos vinculados a actividades personales (ACT-)
+    gastos.forEach(function (g) {
+      var idTar = String(g.ID_Tarea || g.ID_Entidad_Vinculada || '').trim().toUpperCase();
+      if (idTar && (idTar.startsWith('ACT-') || mapaActividadACategoria[idTar])) {
+        var catKey = mapaActividadACategoria[idTar] || 'SALUD_DEPORTE';
+        var mPEN = parseFloat(g.Monto_PEN || g.Monto_Original || 0);
+        if (desglose[catKey]) {
+          desglose[catKey].gastoRealPEN += mPEN;
+          desglose[catKey].gastosCount++;
+          desglose[catKey].gastosItems.push(g);
+        }
+        actividadesConGastoContabilizado[idTar] = true;
+      }
+    });
+
+    // 2. Sumar actividades que tienen Monto_Gasto_Asociado directo sin fila separada en gastos
+    actividades.forEach(function (act) {
+      var idA = String(act.ID_Actividad || act.ID_Tarea || '').trim().toUpperCase();
+      var catKey = window.normalizarCategoriaVida(act.Categoria_Vida);
+      if (desglose[catKey]) {
+        desglose[catKey].actividadesCount++;
+        if (!actividadesConGastoContabilizado[idA]) {
+          var mDirecto = parseFloat(act.Monto_Gasto_Asociado) || 0;
+          if (mDirecto > 0) {
+            desglose[catKey].gastoRealPEN += mDirecto;
+          }
+        }
+      }
+    });
+
+    var totalMacroPEN = 0;
+    keys.forEach(function (k) {
+      totalMacroPEN += desglose[k].gastoRealPEN;
+    });
+
+    return {
+      totalMacroPEN: totalMacroPEN,
+      desglose: desglose,
+      dimensiones: keys
+    };
+  };
+
+  // ============================================================================
+  // SECCIÓN 20: CONTROLADOR DE PERSONALIZACIÓN VISUAL (DROPDOWN DE TEMA '🎨')
+  // ============================================================================
+  function toggleThemeDropdown(e) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    var menu = document.getElementById('menu-theme-dropdown');
+    var caret = document.getElementById('icon-theme-caret');
+    if (!menu) return;
+    var isHidden = menu.classList.contains('hidden');
+    if (isHidden) {
+      menu.classList.remove('hidden');
+      if (caret) caret.classList.add('rotate-180');
+      actualizarOpcionesThemeDropdown();
+    } else {
+      menu.classList.add('hidden');
+      if (caret) caret.classList.remove('rotate-180');
+    }
+  }
+  window.toggleThemeDropdown = toggleThemeDropdown;
+
+  function cerrarThemeDropdown() {
+    var menu = document.getElementById('menu-theme-dropdown');
+    var caret = document.getElementById('icon-theme-caret');
+    if (menu && !menu.classList.contains('hidden')) {
+      menu.classList.add('hidden');
+      if (caret) caret.classList.remove('rotate-180');
+    }
+  }
+  window.cerrarThemeDropdown = cerrarThemeDropdown;
+
+  document.addEventListener('click', function (e) {
+    var container = document.getElementById('container-theme-dropdown');
+    if (container && !container.contains(e.target)) {
+      cerrarThemeDropdown();
+    }
+  });
+
+  function seleccionarSaborTema(flavor) {
+    var nuevo = flavor === 'rose' ? 'rose' : 'slate';
+    document.documentElement.setAttribute('data-theme', nuevo);
+    try {
+      localStorage.setItem('pmo_theme_flavor', nuevo);
+    } catch (e) { }
+    actualizarOpcionesThemeDropdown();
+    if (typeof mostrarToastOperativo === 'function') {
+      var tit = nuevo === 'rose' ? '🌸 Champagne & Dusty Rose' : '⚡ Executive Metallic Slate';
+      mostrarToastOperativo('info', 'Paleta Visual Actualizada', tit, 2200);
+    }
+  }
+  window.seleccionarSaborTema = seleccionarSaborTema;
+
+  function seleccionarModoColor(mode) {
+    var esDark = mode === 'dark';
+    if (esDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    try {
+      localStorage.setItem('pmo_theme', esDark ? 'dark' : 'light');
+    } catch (e) { }
+    actualizarOpcionesThemeDropdown();
+    if (typeof mostrarToastOperativo === 'function') {
+      mostrarToastOperativo('info', 'Modo de Iluminación', esDark ? '🌙 Modo Oscuro Activado' : '☀️ Modo Claro Activado', 2000);
+    }
+  }
+  window.seleccionarModoColor = seleccionarModoColor;
+
+  function actualizarOpcionesThemeDropdown() {
+    var flavor = document.documentElement.getAttribute('data-theme') || 'slate';
+    var isDark = document.documentElement.classList.contains('dark');
+
+    var optSlate = document.getElementById('opt-theme-slate');
+    var optRose = document.getElementById('opt-theme-rose');
+    var indSlate = document.querySelector('.check-indicator-slate');
+    var indRose = document.querySelector('.check-indicator-rose');
+    var lblTheme = document.getElementById('lbl-theme-active');
+    var iconMode = document.getElementById('icon-theme-mode-indicator');
+
+    if (iconMode) {
+      var sunIcon = iconMode.querySelector('.lucide-sun');
+      var moonIcon = iconMode.querySelector('.lucide-moon');
+      if (sunIcon && moonIcon) {
+        sunIcon.classList.toggle('hidden', isDark);
+        sunIcon.classList.toggle('block', !isDark);
+        moonIcon.classList.toggle('hidden', !isDark);
+        moonIcon.classList.toggle('block', isDark);
+      } else if (!iconMode.querySelector('svg')) {
+        iconMode.textContent = isDark ? '🌙' : '☀️';
+      }
+    }
+
+    if (lblTheme) {
+      lblTheme.textContent = flavor === 'rose' ? 'Rose' : 'Slate';
+    }
+
+    if (optSlate && optRose) {
+      if (flavor === 'rose') {
+        optRose.classList.add('border-rose-400', 'bg-rose-50/70', 'dark:bg-rose-950/40', 'ring-1', 'ring-rose-400/60');
+        optRose.classList.remove('border-slate-200', 'dark:border-slate-800');
+        optSlate.classList.remove('border-indigo-400', 'bg-indigo-50/70', 'dark:bg-indigo-950/40', 'ring-1', 'ring-indigo-400/60');
+        optSlate.classList.add('border-slate-200', 'dark:border-slate-800');
+        if (indRose) indRose.classList.remove('hidden');
+        if (indSlate) indSlate.classList.add('hidden');
+      } else {
+        optSlate.classList.add('border-indigo-400', 'bg-indigo-50/70', 'dark:bg-indigo-950/40', 'ring-1', 'ring-indigo-400/60');
+        optSlate.classList.remove('border-slate-200', 'dark:border-slate-800');
+        optRose.classList.remove('border-rose-400', 'bg-rose-50/70', 'dark:bg-rose-950/40', 'ring-1', 'ring-rose-400/60');
+        optRose.classList.add('border-slate-200', 'dark:border-slate-800');
+        if (indSlate) indSlate.classList.remove('hidden');
+        if (indRose) indRose.classList.add('hidden');
+      }
+    }
+
+    var optLight = document.getElementById('opt-mode-light');
+    var optDark = document.getElementById('opt-mode-dark');
+    if (optLight && optDark) {
+      if (isDark) {
+        optDark.classList.add('border-indigo-400', 'bg-indigo-50/40', 'dark:bg-slate-800', 'ring-1', 'ring-indigo-400/60');
+        optDark.classList.remove('border-slate-200', 'dark:border-slate-800');
+        optLight.classList.remove('border-amber-400', 'bg-amber-50/60', 'ring-1', 'ring-amber-400/60');
+        optLight.classList.add('border-slate-200', 'dark:border-slate-800');
+      } else {
+        optLight.classList.add('border-amber-400', 'bg-amber-50/60', 'ring-1', 'ring-amber-400/60');
+        optLight.classList.remove('border-slate-200', 'dark:border-slate-800');
+        optDark.classList.remove('border-indigo-400', 'bg-indigo-50/40', 'dark:bg-slate-800', 'ring-1', 'ring-indigo-400/60');
+        optDark.classList.add('border-slate-200', 'dark:border-slate-800');
+      }
+    }
+  }
+  window.actualizarOpcionesThemeDropdown = actualizarOpcionesThemeDropdown;
+
+  // ============================================================================
+  // SECCIÓN 21: BÓVEDA DE ARCHIVADOS (DRAWER LATERAL DERECHO CON BENTO CARDS)
+  // ============================================================================
+  var drawerArchivadosEstado = {
+    tabActivo: 'todos',
+    busqueda: ''
+  };
+
+  function calcularDiasArchivado(param) {
+    if (!param) return 0;
+    try {
+      var fVal = null;
+      if (typeof param === 'string' || param instanceof Date) {
+        fVal = param;
+      } else if (typeof param === 'object') {
+        fVal = param.Fecha_Completado || param.Fecha_Fin_Real || param.Fecha_Conciliacion || param.Fecha_Gasto || param.Fecha_Ingreso || param.Fecha_Programada || param.Fecha_Actualizacion || param.Fecha || param.fecha;
+      }
+      if (!fVal) return 0;
+      var d;
+      if (fVal instanceof Date) {
+        d = new Date(fVal.getFullYear(), fVal.getMonth(), fVal.getDate());
+      } else {
+        var clean = String(fVal).split('T')[0].split(' ')[0].trim();
+        var parts = clean.split('-');
+        if (parts.length === 3) {
+          d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else {
+          d = new Date(fVal);
+          d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        }
+      }
+      if (isNaN(d.getTime())) return 0;
+      var hoy = new Date();
+      var hoyMed = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+      var diffMs = hoyMed.getTime() - d.getTime();
+      return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    } catch (e) {
+      return 0;
+    }
+  }
+  window.calcularDiasArchivado = calcularDiasArchivado;
+
+  function abrirDrawerArchivados(tabOpcional) {
+    var ov = document.getElementById('drawer-archivados-overlay');
+    var dr = document.getElementById('drawer-archivados');
+    if (!dr) return;
+
+    if (tabOpcional && ['todos', 'kanban', 'portafolio', 'habitos', 'finanzas'].indexOf(tabOpcional) !== -1) {
+      drawerArchivadosEstado.tabActivo = tabOpcional;
+    } else {
+      var vAct = (state.vistaActual || '').toLowerCase();
+      if (vAct === 'kanban') drawerArchivadosEstado.tabActivo = 'kanban';
+      else if (vAct === 'portafolio') drawerArchivadosEstado.tabActivo = 'portafolio';
+      else if (vAct === 'habitos') drawerArchivadosEstado.tabActivo = 'habitos';
+      else if (vAct === 'financiero' || vAct === 'finanzas') drawerArchivadosEstado.tabActivo = 'finanzas';
+      else drawerArchivadosEstado.tabActivo = 'todos';
+    }
+
+    if (ov) {
+      ov.classList.remove('opacity-0', 'pointer-events-none');
+      ov.classList.add('opacity-100');
+    }
+    dr.classList.remove('translate-x-full');
+    dr.classList.add('translate-x-0');
+
+    renderListaDrawerArchivados();
+  }
+  window.abrirDrawerArchivados = abrirDrawerArchivados;
+
+  function cerrarDrawerArchivados() {
+    var ov = document.getElementById('drawer-archivados-overlay');
+    var dr = document.getElementById('drawer-archivados');
+    if (ov) {
+      ov.classList.remove('opacity-100');
+      ov.classList.add('opacity-0', 'pointer-events-none');
+    }
+    if (dr) {
+      dr.classList.add('translate-x-full');
+      dr.classList.remove('translate-x-0');
+    }
+  }
+  window.cerrarDrawerArchivados = cerrarDrawerArchivados;
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' || e.keyCode === 27) {
+      cerrarDrawerArchivados();
+      cerrarThemeDropdown();
+    }
+  });
+
+  function cambiarTabDrawerArchivados(tabId) {
+    drawerArchivadosEstado.tabActivo = tabId || 'todos';
+    renderListaDrawerArchivados();
+  }
+  window.cambiarTabDrawerArchivados = cambiarTabDrawerArchivados;
+
+  function filtrarDrawerArchivados(texto) {
+    drawerArchivadosEstado.busqueda = (texto || '').trim().toLowerCase();
+    var btnClear = document.getElementById('btn-clear-busqueda-drawer');
+    if (btnClear) {
+      if (drawerArchivadosEstado.busqueda) btnClear.classList.remove('hidden');
+      else btnClear.classList.add('hidden');
+    }
+    renderListaDrawerArchivados();
+  }
+  window.filtrarDrawerArchivados = filtrarDrawerArchivados;
+
+  function limpiarBusquedaDrawerArchivados() {
+    var inp = document.getElementById('input-busqueda-drawer-archivados');
+    if (inp) inp.value = '';
+    filtrarDrawerArchivados('');
+  }
+  window.limpiarBusquedaDrawerArchivados = limpiarBusquedaDrawerArchivados;
+
+  function desarchivarElemento(tipo, id) {
+    if (!tipo || !id) return;
+    var hoyStr = new Date().toISOString().split('T')[0];
+    var encontrado = false;
+    var nombreElem = '';
+
+    if (tipo === 'tarea') {
+      var t = (state.tareas || []).find(function (x) {
+        return String(x.ID_Tarea || '').trim().toUpperCase() === String(id).trim().toUpperCase();
+      });
+      if (t) {
+        t._desarchivado = true;
+        t.Fecha_Completado = hoyStr;
+        t.Fecha_Modificacion = hoyStr;
+        nombreElem = t.Nombre_Tarea_Actividad || t.Nombre_Tarea || id;
+        encontrado = true;
+      }
+    } else if (tipo === 'actividad') {
+      var a = (state.actividadesPersonales || []).find(function (x) {
+        return String(x.ID_Actividad || '').trim().toUpperCase() === String(id).trim().toUpperCase();
+      });
+      if (a) {
+        a._desarchivado = true;
+        a.Fecha_Completado = hoyStr;
+        a.Fecha_Programada = hoyStr;
+        nombreElem = a.Nombre_Actividad || id;
+        encontrado = true;
+      }
+    } else if (tipo === 'proyecto') {
+      var p = (state.proyectos || []).find(function (x) {
+        return String(x.ID_Proyecto || '').trim().toUpperCase() === String(id).trim().toUpperCase();
+      });
+      if (p) {
+        p._desarchivado = true;
+        p.Fecha_Fin_Real = hoyStr;
+        p.Fecha_Actualizacion = hoyStr;
+        nombreElem = p.Nombre_Proyecto || id;
+        encontrado = true;
+      }
+    } else if (tipo === 'gasto') {
+      var g = (state.gastos || []).find(function (x) {
+        return String(x.ID_Gasto || '').trim().toUpperCase() === String(id).trim().toUpperCase();
+      });
+      if (g) {
+        g._desarchivado = true;
+        g.Fecha_Conciliacion = hoyStr;
+        g.Fecha_Gasto = hoyStr;
+        nombreElem = g.Descripcion_Gasto || id;
+        encontrado = true;
+      }
+    } else if (tipo === 'ingreso') {
+      var ing = (state.ingresos || []).find(function (x) {
+        return String(x.ID_Ingreso || '').trim().toUpperCase() === String(id).trim().toUpperCase();
+      });
+      if (ing) {
+        ing._desarchivado = true;
+        ing.Fecha_Conciliacion = hoyStr;
+        ing.Fecha_Ingreso = hoyStr;
+        nombreElem = ing.Descripcion_Ingreso || id;
+        encontrado = true;
+      }
+    }
+
+    if (encontrado) {
+      if (typeof mostrarToastOperativo === 'function') {
+        mostrarToastOperativo('success', 'Elemento restaurado', '"' + nombreElem + '" ha vuelto al canvas activo');
+      }
+      if (typeof aplicarFiltrosCruzados === 'function') aplicarFiltrosCruzados();
+      if (typeof renderGridProyectos === 'function') renderGridProyectos();
+      if (typeof renderTableroActividadesPersonales === 'function') renderTableroActividadesPersonales();
+      if (typeof renderTabTransaccionesUnificada === 'function') renderTabTransaccionesUnificada();
+      if (typeof renderTableroFinanciero === 'function') renderTableroFinanciero();
+
+      renderListaDrawerArchivados();
+      actualizarBadgeContadorArchivadosGlobal();
+    }
+  }
+  window.desarchivarElemento = desarchivarElemento;
+
+  function actualizarBadgeContadorArchivadosGlobal() {
+    var count = 0;
+    (state.tareas || []).forEach(function (t) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(t)) count++;
+    });
+    (state.actividadesPersonales || []).forEach(function (a) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(a)) count++;
+    });
+    (state.proyectos || []).forEach(function (p) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(p)) count++;
+    });
+    (state.gastos || []).forEach(function (g) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(g)) count++;
+    });
+    (state.ingresos || []).forEach(function (ing) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(ing)) count++;
+    });
+    (state.ideas || []).forEach(function (ide) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(ide)) count++;
+    });
+
+    var badgeHeader = document.getElementById('badge-header-archivados');
+    if (badgeHeader) badgeHeader.textContent = count;
+
+    var cTodos = document.getElementById('count-tab-arch-todos');
+    if (cTodos) cTodos.textContent = count;
+
+    return count;
+  }
+  window.actualizarBadgeContadorArchivadosGlobal = actualizarBadgeContadorArchivadosGlobal;
+
+  function renderListaDrawerArchivados() {
+    var cont = document.getElementById('lista-elementos-drawer-archivados');
+    if (!cont) return;
+
+    var query = (drawerArchivadosEstado.busqueda || '').toLowerCase();
+    var tabActivo = drawerArchivadosEstado.tabActivo || 'todos';
+
+    var itemsTodos = [];
+    var countKanban = 0;
+    var countPortafolio = 0;
+    var countHabitos = 0;
+    var countFinanzas = 0;
+
+    // 1. Tareas de Proyecto
+    (state.tareas || []).forEach(function (t) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(t)) {
+        countKanban++;
+        itemsTodos.push({
+          id: t.ID_Tarea,
+          titulo: t.Nombre_Tarea_Actividad || t.Nombre_Tarea || 'Tarea sin título',
+          tipo: 'tarea',
+          seccion: 'kanban',
+          tipoLabel: 'Tarea Proyecto',
+          icono: '📋',
+          badgeClase: 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+          barColor: 'bg-indigo-500',
+          fecha: t.Fecha_Completado || t.Fecha_Fin_Real || t.Fecha_Programada || '',
+          subtitulo: t.ID_Proyecto ? 'Proyecto: ' + t.ID_Proyecto : 'Sin Proyecto',
+          dias: calcularDiasArchivado(t)
+        });
+      }
+    });
+
+    // 2. Actividades Personales / Hábitos
+    (state.actividadesPersonales || []).forEach(function (a) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(a)) {
+        var esHab = String(a.Tipo_Compromiso || '').toUpperCase() === 'HABITUAL';
+        if (esHab) countHabitos++;
+        else countKanban++;
+
+        itemsTodos.push({
+          id: a.ID_Actividad,
+          titulo: a.Nombre_Actividad || a.Nombre_Tarea_Actividad || 'Actividad sin título',
+          tipo: 'actividad',
+          seccion: esHab ? 'habitos' : 'kanban',
+          tipoLabel: esHab ? 'Hábito Personal' : 'Actividad Personal',
+          icono: esHab ? '🏃' : '👤',
+          badgeClase: esHab ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+          barColor: esHab ? 'bg-emerald-500' : 'bg-slate-500',
+          fecha: a.Fecha_Completado || a.Fecha_Programada || '',
+          subtitulo: a.Categoria_Vida || 'Personal',
+          dias: calcularDiasArchivado(a)
+        });
+      }
+    });
+
+    // 3. Proyectos de Portafolio
+    (state.proyectos || []).forEach(function (p) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(p)) {
+        countPortafolio++;
+        itemsTodos.push({
+          id: p.ID_Proyecto,
+          titulo: p.Nombre_Proyecto || 'Proyecto sin nombre',
+          tipo: 'proyecto',
+          seccion: 'portafolio',
+          tipoLabel: 'Proyecto Portafolio',
+          icono: '💼',
+          badgeClase: 'bg-rose-50 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
+          barColor: 'bg-rose-500',
+          fecha: p.Fecha_Fin_Real || p.Fecha_Fin_Plan || p.Fecha_Actualizacion || '',
+          subtitulo: 'Avance: ' + (p.Avance_Real_Pct || 100) + '%',
+          dias: calcularDiasArchivado(p)
+        });
+      }
+    });
+
+    // 4. Finanzas (Gastos e Ingresos)
+    (state.gastos || []).forEach(function (g) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(g)) {
+        countFinanzas++;
+        itemsTodos.push({
+          id: g.ID_Gasto,
+          titulo: g.Descripcion_Gasto || 'Gasto conciliado',
+          tipo: 'gasto',
+          seccion: 'finanzas',
+          tipoLabel: 'Gasto Conciliado',
+          icono: '💳',
+          badgeClase: 'bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+          barColor: 'bg-amber-500',
+          fecha: g.Fecha_Conciliacion || g.Fecha_Gasto || '',
+          subtitulo: (g.Moneda_Original || 'PEN') + ' ' + (parseFloat(g.Monto_Original || g.Monto_PEN || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })),
+          dias: calcularDiasArchivado(g)
+        });
+      }
+    });
+
+    (state.ingresos || []).forEach(function (ing) {
+      if (typeof esElementoArchivado === 'function' && esElementoArchivado(ing)) {
+        countFinanzas++;
+        itemsTodos.push({
+          id: ing.ID_Ingreso,
+          titulo: ing.Descripcion_Ingreso || 'Ingreso conciliado',
+          tipo: 'ingreso',
+          seccion: 'finanzas',
+          tipoLabel: 'Ingreso Conciliado',
+          icono: '💰',
+          badgeClase: 'bg-teal-50 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800',
+          barColor: 'bg-teal-500',
+          fecha: ing.Fecha_Conciliacion || ing.Fecha_Ingreso || '',
+          subtitulo: (ing.Moneda_Original || 'PEN') + ' ' + (parseFloat(ing.Monto_Original || ing.Monto_PEN || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })),
+          dias: calcularDiasArchivado(ing)
+        });
+      }
+    });
+
+    // Actualizar contadores de las pestañas
+    var cTodos = document.getElementById('count-tab-arch-todos');
+    var cKanban = document.getElementById('count-tab-arch-kanban');
+    var cPort = document.getElementById('count-tab-arch-portafolio');
+    var cHab = document.getElementById('count-tab-arch-habitos');
+    var cFin = document.getElementById('count-tab-arch-finanzas');
+    var lblFoot = document.getElementById('lbl-total-archivados-footer');
+
+    if (cTodos) cTodos.textContent = itemsTodos.length;
+    if (cKanban) cKanban.textContent = countKanban;
+    if (cPort) cPort.textContent = countPortafolio;
+    if (cHab) cHab.textContent = countHabitos;
+    if (cFin) cFin.textContent = countFinanzas;
+    if (lblFoot) lblFoot.textContent = itemsTodos.length + ' archivados';
+
+    // Actualizar estilos activos de las pestañas del Drawer
+    ['todos', 'kanban', 'portafolio', 'habitos', 'finanzas'].forEach(function (tab) {
+      var btnTab = document.getElementById('tab-drawer-' + tab);
+      if (btnTab) {
+        if (tab === tabActivo) {
+          btnTab.className = 'tab-drawer-pill px-3 py-1.5 rounded-xl font-bold transition-all duration-150 flex items-center gap-1.5 shrink-0 bg-amber-500 text-white shadow-2xs cursor-pointer';
+        } else {
+          btnTab.className = 'tab-drawer-pill px-3 py-1.5 rounded-xl font-medium transition-all duration-150 flex items-center gap-1.5 shrink-0 text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer';
+        }
+      }
+    });
+
+    // Filtrar por pestaña y por query
+    var itemsFiltrados = itemsTodos.filter(function (item) {
+      if (tabActivo !== 'todos' && item.seccion !== tabActivo) return false;
+      if (query) {
+        var matchTit = (item.titulo || '').toLowerCase().indexOf(query) !== -1;
+        var matchId = (item.id || '').toLowerCase().indexOf(query) !== -1;
+        var matchSub = (item.subtitulo || '').toLowerCase().indexOf(query) !== -1;
+        var matchTipo = (item.tipoLabel || '').toLowerCase().indexOf(query) !== -1;
+        if (!matchTit && !matchId && !matchSub && !matchTipo) return false;
+      }
+      return true;
+    });
+
+    // Ordenar de mayor a menor antigüedad de archivado
+    itemsFiltrados.sort(function (a, b) {
+      return (b.dias || 0) - (a.dias || 0);
+    });
+
+    if (itemsFiltrados.length === 0) {
+      cont.innerHTML = '<div class="flex flex-col items-center justify-center py-20 text-center text-slate-400 dark:text-slate-500 space-y-3">' +
+        '<div class="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-slate-800/60 flex items-center justify-center text-3xl shadow-inner border border-slate-200/60 dark:border-slate-800">📦</div>' +
+        '<div><h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Bóveda vacía en este segmento</h4>' +
+        '<p class="text-xs text-slate-400 max-w-xs mt-1">No hay elementos finalizados con más de 10 días o coincidentes con tu búsqueda.</p></div></div>';
+      return;
+    }
+
+    var htmlCards = '';
+    itemsFiltrados.forEach(function (item) {
+      var fechaHum = item.fecha ? formatFechaHumana(item.fecha) : 'Sin fecha';
+      var diasBadge = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 font-mono shrink-0">⏱️ +' + item.dias + 'd</span>';
+
+      htmlCards += '<div class="drawer-bento-card group p-3.5 pl-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all duration-150 relative overflow-hidden flex flex-col gap-2.5 select-none">' +
+        '<div class="absolute left-0 top-0 bottom-0 w-1.5 ' + item.barColor + ' transition-all duration-150 group-hover:w-2"></div>' +
+        '<div class="flex items-center justify-between gap-2 flex-wrap">' +
+        '  <div class="flex items-center gap-1.5 flex-wrap min-w-0">' +
+        '    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9.5px] font-extrabold uppercase border ' + item.badgeClase + ' font-mono shrink-0 shadow-2xs">' +
+        '      <span>' + item.icono + '</span><span>' + item.tipoLabel + '</span>' +
+        '    </span>' +
+        '    <span class="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 shrink-0">' + item.id + '</span>' +
+        '  </div>' +
+        '  ' + diasBadge +
+        '</div>' +
+        '<div>' +
+        '  <h4 class="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-2 leading-relaxed">' + escapeHtml(item.titulo) + '</h4>' +
+        '  <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400">' +
+        '    <span class="truncate font-medium">' + escapeHtml(item.subtitulo) + '</span>' +
+        '    <span>•</span>' +
+        '    <span class="text-[10.5px]">Finalizado: ' + fechaHum + '</span>' +
+        '  </div>' +
+        '</div>' +
+        '<div class="pt-2 border-t border-slate-100 dark:border-slate-800/70 flex items-center justify-between gap-2 mt-0.5">' +
+        '  <span class="text-[10px] text-slate-400 italic">Retirado del canvas activo</span>' +
+        '  <button type="button" onclick="desarchivarElemento(\'' + item.tipo + '\', \'' + item.id + '\')" class="px-2.5 py-1 rounded-xl text-xs font-bold transition-all duration-150 flex items-center gap-1.5 shadow-2xs bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-500 dark:hover:text-white border border-amber-200 dark:border-amber-800/70 active:scale-95 cursor-pointer ml-auto shrink-0" title="Restaurar al canvas activo (actualiza fecha y hace visible de nuevo)">' +
+        '    <span class="text-sm">↩️</span><span>Restaurar</span>' +
+        '  </button>' +
+        '</div>' +
+        '</div>';
+    });
+
+    cont.innerHTML = htmlCards;
+  }
+  window.renderListaDrawerArchivados = renderListaDrawerArchivados;
+
+</script>

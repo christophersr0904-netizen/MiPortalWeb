@@ -1,0 +1,2107 @@
+<!--
+ * ============================================================================
+ * ARCHIVO: JS_GrafoRed.html
+ * SISTEMA: PMO Personal Modular & Gestión Integral de Vida
+ * COMPONENTE: Motor Interactivo "Red Lógica & Topología WBS" (Framer/SaaS Style)
+ * Jerarquía estricta 4 Niveles + Notas Asociadas + Hover Tooltips 360° + Pan/Zoom
+ * Enrutamiento Ortogonal de Dependencias sin Colisión + Modo Inmersivo Fullscreen
+ * ============================================================================
+-->
+<script>
+  /**
+   * Estado y configuración global del motor de Topología WBS
+   */
+  var wbsState = {
+    idProyectoActivo: null,
+    panX: 0,
+    panY: 0,
+    zoom: 1,
+    isPanning: false,
+    startX: 0,
+    startY: 0,
+    hasMovedDuringPan: false,
+    tooltipTimer: null,
+    hideTooltipTimer: null,
+    activeTooltipNodeId: null,
+    soloHitos: false,           // Filtro para mostrar solo Nivel 1 y 2 (Hitos)
+    modoEnfoqueCritica: false,  // Ilumina solo la Ruta Crítica y dependencias activas
+    hoveredNodeId: null,        // Nodo enfocado interactivamente
+    nodesDataMap: {},
+    connectorsData: [],
+    dependenciesMap: {},        // Mapa de dependencias por tarea { idTarea: { pred: [], succ: [] } }
+    bounds: { minX: 0, maxX: 1000, minY: 0, maxY: 800 }
+  };
+
+  var mostrarGastosEnGrafo = false;
+
+  /**
+   * 0. MOTOR CANÓNICO DE RUTA CRÍTICA (CPM - CRITICAL PATH METHOD)
+   * Ejecuta Forward Pass y Backward Pass determinando ES, EF, LS, LF y Holgura (Total Float).
+   * Identifica tareas de la Ruta Crítica (Float <= 0.05) y alerta desviaciones dinámicas.
+   */
+  function calcularCPMCanoico(tareas, depMap) {
+    var tareasList = Array.isArray(tareas) ? tareas : [];
+    var tMap = {};
+    var rutaCriticaSet = new Set();
+    var holgurasMap = {};
+    var esMap = {};
+    var efMap = {};
+    var lsMap = {};
+    var lfMap = {};
+
+    if (tareasList.length === 0) {
+      return {
+        rutaCriticaSet: rutaCriticaSet,
+        duracionProyectoHoras: 0,
+        holgurasMap: holgurasMap,
+        esMap: esMap,
+        efMap: efMap,
+        lsMap: lsMap,
+        lfMap: lfMap,
+        tareasCriticas: []
+      };
+    }
+
+    tareasList.forEach(function (t) {
+      var id = String(t.ID_Tarea || '').trim();
+      var dur = Math.max(0.5, parseFloat(t.Horas_Estimadas) || 1.0);
+      tMap[id] = { tarea: t, duracion: dur };
+    });
+
+    // 1. FORWARD PASS: Calcular Early Start (ES) y Early Finish (EF)
+    var ids = Object.keys(tMap);
+    ids.forEach(function (id) {
+      esMap[id] = 0;
+      efMap[id] = tMap[id].duracion;
+    });
+
+    var iterLimit = ids.length * 2;
+    var changed = true;
+    var iter = 0;
+    while (changed && iter < iterLimit) {
+      changed = false;
+      iter++;
+      ids.forEach(function (id) {
+        var preds = (depMap && depMap[id] && depMap[id].pred) ? depMap[id].pred : [];
+        if (preds.length > 0) {
+          var maxPredEF = 0;
+          preds.forEach(function (pId) {
+            if (efMap[pId] !== undefined && efMap[pId] > maxPredEF) {
+              maxPredEF = efMap[pId];
+            }
+          });
+          if (maxPredEF > esMap[id]) {
+            esMap[id] = maxPredEF;
+            efMap[id] = maxPredEF + tMap[id].duracion;
+            changed = true;
+          }
+        }
+      });
+    }
+
+    var duracionProyectoHoras = 0;
+    ids.forEach(function (id) {
+      if (efMap[id] > duracionProyectoHoras) {
+        duracionProyectoHoras = efMap[id];
+      }
+    });
+
+    // 2. BACKWARD PASS: Calcular Late Finish (LF) y Late Start (LS)
+    ids.forEach(function (id) {
+      lfMap[id] = duracionProyectoHoras;
+      lsMap[id] = duracionProyectoHoras - tMap[id].duracion;
+    });
+
+    changed = true;
+    iter = 0;
+    while (changed && iter < iterLimit) {
+      changed = false;
+      iter++;
+      ids.forEach(function (id) {
+        var succs = (depMap && depMap[id] && depMap[id].succ) ? depMap[id].succ : [];
+        if (succs.length > 0) {
+          var minSuccLS = duracionProyectoHoras;
+          succs.forEach(function (sId) {
+            if (lsMap[sId] !== undefined && lsMap[sId] < minSuccLS) {
+              minSuccLS = lsMap[sId];
+            }
+          });
+          if (minSuccLS < lfMap[id]) {
+            lfMap[id] = minSuccLS;
+            lsMap[id] = minSuccLS - tMap[id].duracion;
+            changed = true;
+          }
+        }
+      });
+    }
+
+    // 3. HOLGURA TOTAL (Total Float) = LS - ES
+    var tareasCriticas = [];
+    ids.forEach(function (id) {
+      var floatVal = Math.round((lsMap[id] - esMap[id]) * 100) / 100;
+      holgurasMap[id] = floatVal;
+      if (floatVal <= 0.05) {
+        rutaCriticaSet.add(id);
+        tareasCriticas.push(tMap[id].tarea);
+      }
+    });
+
+    return {
+      rutaCriticaSet: rutaCriticaSet,
+      duracionProyectoHoras: duracionProyectoHoras,
+      holgurasMap: holgurasMap,
+      esMap: esMap,
+      efMap: efMap,
+      lsMap: lsMap,
+      lfMap: lfMap,
+      tareasCriticas: tareasCriticas
+    };
+  }
+  window.calcularCPMCanoico = calcularCPMCanoico;
+
+  /**
+   * Helper seguro de escape HTML
+   */
+  function escapeHtmlSeguroWbs(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Helper para obtener notas asociadas a una entidad específica
+   */
+  function obtenerNotasVinculadasAEntidad(idEntidad, tipoEntidad) {
+    if (!idEntidad || !Array.isArray(state.notas)) return [];
+    var idNorm = String(idEntidad).trim().toUpperCase();
+    var tipoNorm = String(tipoEntidad || '').trim().toUpperCase();
+
+    return state.notas.filter(function (n) {
+      if (!n) return false;
+      // 1. Chequeo en Vínculos estructurados: [{ id, tipo, codigo, titulo }]
+      if (Array.isArray(n.Vinculos)) {
+        var matchVinc = n.Vinculos.some(function (v) {
+          if (!v) return false;
+          var cod = String(v.codigo || v.id || '').trim().toUpperCase();
+          var tip = String(v.tipo || '').trim().toUpperCase();
+          if (cod === idNorm) {
+            if (!tipoNorm || !tip || tip === tipoNorm) return true;
+          }
+          return false;
+        });
+        if (matchVinc) return true;
+      }
+
+      // 2. Chequeo en Enlaces_Entidades_JSON
+      if (n.Enlaces_Entidades_JSON) {
+        try {
+          var parsed = typeof n.Enlaces_Entidades_JSON === 'string' ? JSON.parse(n.Enlaces_Entidades_JSON) : n.Enlaces_Entidades_JSON;
+          if (Array.isArray(parsed)) {
+            var matchP = parsed.some(function (v) {
+              return String(v.codigo || v.id || '').trim().toUpperCase() === idNorm;
+            });
+            if (matchP) return true;
+          } else if (typeof parsed === 'object' && parsed !== null) {
+            if (String(parsed.codigo || parsed.id || '').trim().toUpperCase() === idNorm) return true;
+          }
+        } catch (e) {
+          if (String(n.Enlaces_Entidades_JSON).toUpperCase().indexOf(idNorm) !== -1) return true;
+        }
+      }
+
+      // 3. Fallback: Chequeo en Etiquetas
+      if (Array.isArray(n.Etiquetas)) {
+        var matchTag = n.Etiquetas.some(function (tag) {
+          return String(tag).trim().toUpperCase() === idNorm;
+        });
+        if (matchTag) return true;
+      }
+
+      return false;
+    });
+  }
+
+  /**
+   * Helper para generar trazo ortogonal jerárquico con esquinas redondeadas suaves (fillet Bézier)
+   */
+  function generarCaminoConectorOrtogonal(x1, y1, x2, y2, radio) {
+    var r = Math.min(radio || 14, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2);
+    if (Math.abs(x1 - x2) < 2) {
+      return 'M ' + x1 + ' ' + y1 + ' V ' + y2;
+    }
+    var midY = y1 + (y2 - y1) / 2;
+    var dirX = x2 > x1 ? 1 : -1;
+    var dirY = y2 > y1 ? 1 : -1;
+
+    return 'M ' + x1 + ' ' + y1 +
+      ' V ' + (midY - r * dirY) +
+      ' Q ' + x1 + ' ' + midY + ' ' + (x1 + r * dirX) + ' ' + midY +
+      ' H ' + (x2 - r * dirX) +
+      ' Q ' + x2 + ' ' + midY + ' ' + x2 + ' ' + (midY + r * dirY) +
+      ' V ' + y2;
+  }
+
+  /**
+   * Helper para generar enrutamiento Manhattan de dependencias SIN COLISIÓN (Offset Channel Routing)
+   */
+  function generarCaminoDependenciaSinColision(nodoDep, nodoSucc, depIndex, cardWidth, cardHeight, channelBaseY) {
+    // Si son vecinos horizontales inmediatos en la misma fila sin nodos en medio
+    var esVecinoInmediato = (nodoSucc.x > nodoDep.x) &&
+      (Math.abs(nodoSucc.x - (nodoDep.x + cardWidth + 56)) < 15) &&
+      (nodoDep.y === nodoSucc.y);
+
+    if (esVecinoInmediato) {
+      // Puente horizontal directo y limpio entre las dos tarjetas
+      var bridgeY = nodoDep.y + 55;
+      return {
+        path: 'M ' + (nodoDep.x + cardWidth) + ' ' + bridgeY + ' H ' + nodoSucc.x,
+        marker: 'url(#wbs-arrow-indigo)'
+      };
+    }
+
+    // Para dependencias a distancia o entre diferentes hitos:
+    // Canal de enrutamiento dedicado con offset escalonado (14px por pista) para evitar solapamientos
+    var channelY = channelBaseY + (depIndex * 14);
+    var staggerExit = 180 + ((depIndex % 4) * 16);
+    var staggerEntry = 40 + ((depIndex % 4) * 16);
+
+    var exitX = nodoDep.x + staggerExit;
+    var exitY = nodoDep.y + cardHeight;
+
+    var entryX = nodoSucc.x + staggerEntry;
+    var entryY = nodoSucc.y + cardHeight + 4;
+
+    var distH = Math.abs(entryX - exitX);
+    if (distH < 4) {
+      return {
+        path: 'M ' + exitX + ' ' + exitY + ' V ' + channelY + ' V ' + entryY,
+        marker: 'url(#wbs-arrow-indigo)'
+      };
+    }
+
+    var r = Math.min(10, Math.max(2, distH / 2));
+    var dirX = entryX > exitX ? 1 : -1;
+
+    // Trazo ortogonal que baja al canal, corre por su propia pista paralela y sube a la sucesora
+    var path = 'M ' + exitX + ' ' + exitY +
+      ' V ' + (channelY - r) +
+      ' Q ' + exitX + ' ' + channelY + ' ' + (exitX + dirX * r) + ' ' + channelY +
+      ' H ' + (entryX - dirX * r) +
+      ' Q ' + entryX + ' ' + channelY + ' ' + entryX + ' ' + (channelY - r) +
+      ' V ' + entryY;
+
+    return {
+      path: path,
+      marker: 'url(#wbs-arrow-indigo)'
+    };
+  }
+
+  /**
+   * Compila el dataset completo y calcula el layout matricial y espaciado de la topología
+   */
+  function compilarDatasetGrafoProyecto(idProyecto) {
+    var idLimpio = String(idProyecto || '').trim().toUpperCase();
+    var proy = (state.proyectos || []).find(function (p) {
+      return String(p.ID_Proyecto || '').trim().toUpperCase() === idLimpio;
+    });
+
+    if (!proy) {
+      return { nodes: [], connectors: [], bounds: { minX: 0, maxX: 800, minY: 0, maxY: 600 } };
+    }
+
+    // 1. Hitos asociados
+    var hitosAsociados = (state.hitos || []).filter(function (h) {
+      var idProyHito = String(h.ID_Proyecto || '').trim().toUpperCase();
+      var idHito = String(h.ID_Hito || '').trim().toUpperCase();
+      return idProyHito === idLimpio || (idLimpio !== '' && idHito.indexOf(idLimpio) === 0);
+    }).sort(function (a, b) {
+      var fA = a.Fecha_Limite_Plan ? new Date(String(a.Fecha_Limite_Plan).split('T')[0]).getTime() : 0;
+      var fB = b.Fecha_Limite_Plan ? new Date(String(b.Fecha_Limite_Plan).split('T')[0]).getTime() : 0;
+      return fA - fB;
+    });
+
+    var idsHitosMap = {};
+    hitosAsociados.forEach(function (h) {
+      idsHitosMap[String(h.ID_Hito).trim().toUpperCase()] = true;
+    });
+
+    // 2. Tareas asociadas
+    var tareasAsociadas = (state.tareas || []).filter(function (t) {
+      var tProy = String(t.ID_Proyecto || '').trim().toUpperCase();
+      var tHito = String(t.ID_Hito || '').trim().toUpperCase();
+      return tProy === idLimpio || (tHito && idsHitosMap[tHito]);
+    }).sort(function (a, b) {
+      var fA = a.Fecha_Programada ? new Date(String(a.Fecha_Programada).split(' ')[0]).getTime() : 0;
+      var fB = b.Fecha_Programada ? new Date(String(b.Fecha_Programada).split(' ')[0]).getTime() : 0;
+      return fA - fB;
+    });
+
+    // 3. Gastos asociados
+    var gastosAsociados = (state.gastos || []).map(function (g) {
+      return (typeof normalizarGasto === 'function') ? normalizarGasto(g) : g;
+    }).filter(function (g) {
+      var gProy = String(g.ID_Proyecto || '').trim().toUpperCase();
+      var gHito = String(g.ID_Hito || '').trim().toUpperCase();
+      return gProy === idLimpio || (gHito && idsHitosMap[gHito]);
+    });
+
+    // 4. CPM (Ruta Crítica)
+    var tareasMap = {};
+    wbsState.dependenciesMap = {};
+
+    tareasAsociadas.forEach(function (t) {
+      var idPred = (t.ID_Dependencia && String(t.ID_Dependencia).trim().toUpperCase().startsWith('TAR-'))
+        ? String(t.ID_Dependencia).trim()
+        : null;
+
+      tareasMap[t.ID_Tarea] = {
+        tarea: t,
+        duracion: parseFloat(t.Horas_Estimadas) || 1.0,
+        predecesora: idPred
+      };
+
+      if (!wbsState.dependenciesMap[t.ID_Tarea]) {
+        wbsState.dependenciesMap[t.ID_Tarea] = { pred: [], succ: [] };
+      }
+      if (idPred) {
+        wbsState.dependenciesMap[t.ID_Tarea].pred.push(idPred);
+        if (!wbsState.dependenciesMap[idPred]) {
+          wbsState.dependenciesMap[idPred] = { pred: [], succ: [] };
+        }
+        wbsState.dependenciesMap[idPred].succ.push(t.ID_Tarea);
+      }
+    });
+
+    // =========================================================================
+    // 4. MOTOR CANÓNICO CPM (CRITICAL PATH METHOD): FORWARD & BACKWARD PASS
+    // =========================================================================
+    var cpmResult = calcularCPMCanoico(tareasAsociadas, wbsState.dependenciesMap);
+    var rutaCriticaSet = cpmResult.rutaCriticaSet;
+    wbsState.cpmResult = cpmResult;
+
+    // 5. Pesos efectivos de hitos
+    var pesosHitos = (typeof obtenerPesosEfectivosHitos === 'function')
+      ? obtenerPesosEfectivosHitos(idLimpio, hitosAsociados, tareasAsociadas)
+      : {};
+
+    // =========================================================================
+    // 6. EVALUACIÓN DE FEATURE FLAGS Y TOPOLOGÍA ADAPTATIVA WBS v4.1
+    // =========================================================================
+    var flagsObj = null;
+    if (proy.featureFlags) {
+      flagsObj = (proy.featureFlags.flags) ? proy.featureFlags.flags : proy.featureFlags;
+    } else if (typeof evaluarFeatureFlagsProyecto === 'function') {
+      var arq = proy.Arquetipo_Proyecto || proy.arquetipoProyecto || proy.Criterio_Dominante || '';
+      var mag = proy.Magnitud_Complejidad || proy.magnitudComplejidad || proy.Categoria_TShirt || '';
+      var evalRes = evaluarFeatureFlagsProyecto(arq, mag);
+      flagsObj = evalRes ? evalRes.flags : null;
+    }
+
+    if (!flagsObj) {
+      var magStr = String(proy.Magnitud_Complejidad || proy.magnitudComplejidad || proy.Categoria_TShirt || '').trim();
+      var esLight = (/^light$/i.test(magStr)) || (magStr.startsWith('XS') || magStr.startsWith('S-'));
+      flagsObj = {
+        modoUltraLigero: esLight,
+        arbolWbsCompleto: !esLight,
+        rutaCriticaCpm: !esLight
+      };
+    }
+
+    var nodes = [];
+    var connectors = [];
+    var nodesMap = {};
+
+    // -------------------------------------------------------------------------
+    // ÁRBOL WBS CANÓNICO DE 4 NIVELES + HITOS MARCADORES
+    // Nivel 1: Proyecto (PRO-XXX)
+    // Nivel 2: Fases (agrupador extraído de 'Fase_Asociada' en BBDD_Hitos)
+    // Nivel 3: Paquetes de Trabajo (WP-XXX) e Hitos Marcadores (HIT-XXX)
+    // Nivel 4: Tareas Operativas (TAR-XXX) asociadas a cada WP-XXX mediante Col B (ID_Hito)
+    // (+ Nivel 5 opcional: Gastos imputados si está habilitado)
+    // -------------------------------------------------------------------------
+    var CARD_WIDTH_PROYECTO = 350;
+    var CARD_HEIGHT_PROYECTO = 110;
+    var CARD_WIDTH_FASE = 250;
+    var CARD_HEIGHT_FASE = 75;
+    var CARD_WIDTH_HITO = 290;
+    var CARD_HEIGHT_HITO = 125;
+    var CARD_WIDTH_MARCADOR = 230;
+    var CARD_HEIGHT_MARCADOR = 80;
+    var CARD_WIDTH_TAREA = 260;
+    var CARD_HEIGHT_TAREA = 115;
+    var CARD_WIDTH_GASTO = 230;
+    var CARD_HEIGHT_GASTO = 85;
+
+    var GAP_HORIZONTAL_TAREAS = 48;
+    var GAP_ENTRE_ELEMENTOS = 56;
+    var GAP_ENTRE_FASES = 72;
+
+    var Y_NIVEL_0 = 40;          // Nivel 0: Proyecto Matriz
+    var Y_NIVEL_1 = 200;         // Nivel 1: Fases agrupadoras
+    var Y_NIVEL_2 = 380;         // Nivel 2: Paquetes WP y Marcadores de Control
+    var Y_NIVEL_3 = 570;         // Nivel 3: Tareas hijas
+    var CHANNEL_ROUTING_Y = 705; // Canal horizontal exclusivo dependencias CPM
+    var Y_NIVEL_4 = 820;         // Nivel 4: Gastos imputados
+
+    // Pre-agrupar tareas y gastos por ID_Hito
+    var tareasPorHitoMap = new Map();
+    var tareasDirectas = [];
+    tareasAsociadas.forEach(function (t) {
+      var tHito = String(t.ID_Hito || '').trim().toUpperCase();
+      if (tHito && idsHitosMap[tHito]) {
+        if (!tareasPorHitoMap.has(tHito)) tareasPorHitoMap.set(tHito, []);
+        tareasPorHitoMap.get(tHito).push(t);
+      } else {
+        tareasDirectas.push(t);
+      }
+    });
+
+    var gastosPorHitoMap = new Map();
+    var gastosDirectos = [];
+    gastosAsociados.forEach(function (g) {
+      var gHito = String(g.ID_Hito || '').trim().toUpperCase();
+      if (gHito && idsHitosMap[gHito]) {
+        if (!gastosPorHitoMap.has(gHito)) gastosPorHitoMap.set(gHito, []);
+        gastosPorHitoMap.get(gHito).push(g);
+      } else {
+        gastosDirectos.push(g);
+      }
+    });
+
+    // Agrupación jerárquica en Fases (Nivel 1 WBS)
+    var fasesMap = new Map();
+    var fasesKeys = [];
+
+    hitosAsociados.forEach(function (h) {
+      var rawFase = String(h.Fase_Asociada || h.faseAsociada || h.Fase || '').trim();
+      var fKey = rawFase || 'Fase General';
+
+      if (!fasesMap.has(fKey)) {
+        fasesMap.set(fKey, {
+          id: 'FASE-' + fKey.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase(),
+          nombre: fKey,
+          elementos: [],
+          pesoTotal: 0
+        });
+        fasesKeys.push(fKey);
+      }
+
+      var hId = String(h.ID_Elemento_WBS || h.ID_Hito || '').trim();
+      var tipoWbs = String(h.Tipo_Elemento_WBS || h.tipoElementoWbs || '').trim().toUpperCase();
+      if (!tipoWbs) {
+        tipoWbs = hId.startsWith('WP-') ? 'PAQUETE_TRABAJO' : (hId.startsWith('HIT-') ? 'HITO_MARCADOR' : 'PAQUETE_TRABAJO');
+      }
+
+      var tareasH = (tipoWbs === 'HITO_MARCADOR') ? [] : (tareasPorHitoMap.get(hId.toUpperCase()) || []);
+      var gastosH = (tipoWbs === 'HITO_MARCADOR') ? [] : (gastosPorHitoMap.get(hId.toUpperCase()) || []);
+      var notasH = (typeof obtenerNotasVinculadasAEntidad === 'function')
+        ? obtenerNotasVinculadasAEntidad(hId, 'HITO')
+        : [];
+      var peso = pesosHitos[hId] || 0;
+
+      var fGrupo = fasesMap.get(fKey);
+      fGrupo.pesoTotal += peso;
+      fGrupo.elementos.push({
+        h: h,
+        id: hId,
+        tipoWbs: tipoWbs,
+        tareas: tareasH,
+        gastos: gastosH,
+        notas: notasH,
+        pesoPct: Math.round(peso * 100)
+      });
+    });
+
+    if (tareasDirectas.length > 0) {
+      var fGenKey = 'Entregables Directos';
+      if (!fasesMap.has(fGenKey)) {
+        fasesMap.set(fGenKey, {
+          id: 'FASE-DIRECTAS',
+          nombre: fGenKey,
+          elementos: [],
+          pesoTotal: 0
+        });
+        fasesKeys.push(fGenKey);
+      }
+      fasesMap.get(fGenKey).elementos.push({
+        h: {
+          ID_Hito: 'WP-DIRECTAS',
+          Nombre_Hito: 'Entregables Generales del Proyecto',
+          Estado_Hito: '02_En_Proceso',
+          Fecha_Limite_Plan: proy.Fecha_Fin_Plan || ''
+        },
+        id: 'WP-DIRECTAS',
+        tipoWbs: 'PAQUETE_TRABAJO',
+        esDirecto: true,
+        tareas: tareasDirectas,
+        gastos: gastosDirectos,
+        notas: [],
+        pesoPct: 0
+      });
+    }
+
+    // Cálculo matricial de anchos y centroides de cada Fase y sus Entregables
+    var cursorX = 60;
+    var fasesLayout = [];
+
+    fasesKeys.forEach(function (fKey) {
+      var fObj = fasesMap.get(fKey);
+      var elemLayouts = [];
+      var elemCursorX = cursorX;
+
+      fObj.elementos.forEach(function (elem) {
+        var numTar = (!wbsState.soloHitos) ? elem.tareas.length : 0;
+        var numGas = (mostrarGastosEnGrafo && !wbsState.soloHitos) ? elem.gastos.length : 0;
+
+        var anchoTarFila = numTar > 0
+          ? (numTar * CARD_WIDTH_TAREA + (numTar - 1) * GAP_HORIZONTAL_TAREAS)
+          : (elem.tipoWbs === 'HITO_MARCADOR' ? CARD_WIDTH_MARCADOR : CARD_WIDTH_HITO);
+
+        var anchoGasFila = numGas > 0
+          ? (numGas * CARD_WIDTH_GASTO + (numGas - 1) * GAP_HORIZONTAL_TAREAS)
+          : 0;
+
+        var cardWidth = (elem.tipoWbs === 'HITO_MARCADOR') ? CARD_WIDTH_MARCADOR : CARD_WIDTH_HITO;
+        var elemColWidth = Math.max(cardWidth, anchoTarFila, anchoGasFila);
+        var elemCentroX = elemCursorX + (elemColWidth / 2);
+
+        elemLayouts.push({
+          elem: elem,
+          colWidth: elemColWidth,
+          centroX: elemCentroX,
+          nodeX: elemCentroX - (cardWidth / 2),
+          nodeY: Y_NIVEL_2,
+          anchoTarFila: anchoTarFila,
+          anchoGasFila: anchoGasFila
+        });
+
+        elemCursorX += elemColWidth + GAP_ENTRE_ELEMENTOS;
+      });
+
+      var anchoFaseContent = elemCursorX - cursorX - GAP_ENTRE_ELEMENTOS;
+      var anchoFase = Math.max(CARD_WIDTH_FASE, anchoFaseContent);
+      var centroFaseX = cursorX + (anchoFase / 2);
+      var faseNodeX = centroFaseX - (CARD_WIDTH_FASE / 2);
+
+      fasesLayout.push({
+        fase: fObj,
+        anchoFase: anchoFase,
+        centroFaseX: centroFaseX,
+        faseNodeX: faseNodeX,
+        faseNodeY: Y_NIVEL_1,
+        elementosLayout: elemLayouts
+      });
+
+      cursorX += anchoFase + GAP_ENTRE_FASES;
+    });
+
+    var maxXTotal = Math.max(cursorX, 900);
+    var proyectoX = (60 + maxXTotal) / 2 - (CARD_WIDTH_PROYECTO / 2);
+    var proyectoY = Y_NIVEL_0;
+
+    // -------------------------------------------------------------------------
+    // NODO NIVEL 0: PROYECTO MATRIZ
+    // -------------------------------------------------------------------------
+    var notasProy = (typeof obtenerNotasVinculadasAEntidad === 'function')
+      ? obtenerNotasVinculadasAEntidad(proy.ID_Proyecto, 'PROYECTO')
+      : [];
+    var proyNode = {
+      id: proy.ID_Proyecto,
+      tipo: 'PROYECTO',
+      data: proy,
+      notas: notasProy,
+      x: proyectoX,
+      y: proyectoY,
+      width: CARD_WIDTH_PROYECTO,
+      height: CARD_HEIGHT_PROYECTO,
+      bottomCenterX: proyectoX + (CARD_WIDTH_PROYECTO / 2),
+      bottomCenterY: proyectoY + CARD_HEIGHT_PROYECTO,
+      topCenterX: proyectoX + (CARD_WIDTH_PROYECTO / 2),
+      topCenterY: proyectoY
+    };
+    nodes.push(proyNode);
+    nodesMap[proy.ID_Proyecto] = proyNode;
+
+    // -------------------------------------------------------------------------
+    // ENSAMBLAJE DE NODOS DE FASE (N1), ENTREGABLES (N2), TAREAS (N3) Y GASTOS (N4)
+    // -------------------------------------------------------------------------
+    fasesLayout.forEach(function (fl, fIdx) {
+      var f = fl.fase;
+      var numWP = f.elementos.filter(function (e) { return e.tipoWbs === 'PAQUETE_TRABAJO'; }).length;
+      var numMarcadores = f.elementos.filter(function (e) { return e.tipoWbs === 'HITO_MARCADOR'; }).length;
+      var numTareasTotal = f.elementos.reduce(function (acc, e) { return acc + (e.tareas ? e.tareas.length : 0); }, 0);
+
+      var faseNode = {
+        id: f.id,
+        tipo: 'FASE',
+        nombreFase: f.nombre,
+        pesoPct: Math.round(f.pesoTotal * 100),
+        numWP: numWP,
+        numMarcadores: numMarcadores,
+        numTareasTotal: numTareasTotal,
+        x: fl.faseNodeX,
+        y: fl.faseNodeY,
+        width: CARD_WIDTH_FASE,
+        height: CARD_HEIGHT_FASE,
+        bottomCenterX: fl.faseNodeX + (CARD_WIDTH_FASE / 2),
+        bottomCenterY: fl.faseNodeY + CARD_HEIGHT_FASE,
+        topCenterX: fl.faseNodeX + (CARD_WIDTH_FASE / 2),
+        topCenterY: fl.faseNodeY,
+        leftCenterX: fl.faseNodeX,
+        leftCenterY: fl.faseNodeY + (CARD_HEIGHT_FASE / 2),
+        rightCenterX: fl.faseNodeX + CARD_WIDTH_FASE,
+        rightCenterY: fl.faseNodeY + (CARD_HEIGHT_FASE / 2)
+      };
+      nodes.push(faseNode);
+      nodesMap[f.id] = faseNode;
+
+      // Conector Proyecto -> Fase (Ortogonal Violeta / Índigo)
+      connectors.push({
+        id: 'conn-' + proy.ID_Proyecto + '-' + f.id,
+        fromId: proy.ID_Proyecto,
+        toId: f.id,
+        tipo: 'PROY_FASE',
+        path: generarCaminoConectorOrtogonal(proyNode.bottomCenterX, proyNode.bottomCenterY, faseNode.topCenterX, faseNode.topCenterY, 16),
+        stroke: '#8b5cf6',
+        strokeWidth: 2,
+        strokeDash: '',
+        marker: 'url(#wbs-arrow-indigo)'
+      });
+
+      // Conector horizontal entre Fases consecutivas (Secuencia de ciclo de vida)
+      if (fIdx > 0) {
+        var fPrevNode = nodesMap[fasesLayout[fIdx - 1].fase.id];
+        if (fPrevNode) {
+          connectors.push({
+            id: 'conn-seq-' + fPrevNode.id + '-' + f.id,
+            fromId: fPrevNode.id,
+            toId: f.id,
+            tipo: 'SECUENCIA_FASE',
+            path: 'M ' + (fPrevNode.rightCenterX) + ' ' + (fPrevNode.rightCenterY) + ' H ' + (faseNode.leftCenterX),
+            stroke: '#cbd5e1',
+            strokeWidth: 1.5,
+            strokeDash: '4,4',
+            marker: 'url(#wbs-arrow-default)'
+          });
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // NODOS NIVEL 2: PAQUETES DE TRABAJO (WP) Y HITOS MARCADORES (HIT)
+      // -----------------------------------------------------------------------
+      fl.elementosLayout.forEach(function (el) {
+        var elem = el.elem;
+        var h = elem.h;
+        var esMarcador = (elem.tipoWbs === 'HITO_MARCADOR');
+
+        var elemNode = {
+          id: elem.id,
+          tipo: esMarcador ? 'HITO_MARCADOR' : 'HITO',
+          data: h,
+          esDirecto: elem.esDirecto === true,
+          pesoPct: elem.pesoPct,
+          tareasHito: elem.tareas,
+          gastosHito: elem.gastos,
+          notas: elem.notas,
+          x: el.nodeX,
+          y: el.nodeY,
+          width: esMarcador ? CARD_WIDTH_MARCADOR : CARD_WIDTH_HITO,
+          height: esMarcador ? CARD_HEIGHT_MARCADOR : CARD_HEIGHT_HITO,
+          bottomCenterX: el.nodeX + ((esMarcador ? CARD_WIDTH_MARCADOR : CARD_WIDTH_HITO) / 2),
+          bottomCenterY: el.nodeY + (esMarcador ? CARD_HEIGHT_MARCADOR : CARD_HEIGHT_HITO),
+          topCenterX: el.nodeX + ((esMarcador ? CARD_WIDTH_MARCADOR : CARD_WIDTH_HITO) / 2),
+          topCenterY: el.nodeY
+        };
+        nodes.push(elemNode);
+        nodesMap[elem.id] = elemNode;
+
+        // Conector Fase -> Paquete WP / Hito Marcador
+        connectors.push({
+          id: 'conn-' + f.id + '-' + elem.id,
+          fromId: f.id,
+          toId: elem.id,
+          tipo: 'FASE_ELEMENTO',
+          path: generarCaminoConectorOrtogonal(faseNode.bottomCenterX, faseNode.bottomCenterY, elemNode.topCenterX, elemNode.topCenterY, 14),
+          stroke: esMarcador ? '#6366f1' : '#0ea5e9',
+          strokeWidth: 1.6,
+          strokeDash: esMarcador ? '4,3' : '',
+          marker: esMarcador ? 'url(#wbs-arrow-indigo)' : 'url(#wbs-arrow-default)'
+        });
+
+        // ---------------------------------------------------------------------
+        // NODOS NIVEL 3: TAREAS HIJAS (SOLO PARA PAQUETES DE TRABAJO)
+        // ---------------------------------------------------------------------
+        if (!esMarcador && !wbsState.soloHitos && elem.tareas.length > 0) {
+          var tareasHito = elem.tareas;
+          var numT = tareasHito.length;
+          var startXTareas = el.centroX - ((numT * CARD_WIDTH_TAREA + (numT - 1) * GAP_HORIZONTAL_TAREAS) / 2);
+
+          tareasHito.forEach(function (t, tIdx) {
+            var taskX = startXTareas + tIdx * (CARD_WIDTH_TAREA + GAP_HORIZONTAL_TAREAS);
+            var taskY = Y_NIVEL_3;
+            var esCritica = rutaCriticaSet.has(t.ID_Tarea);
+            var notasT = (typeof obtenerNotasVinculadasAEntidad === 'function')
+              ? obtenerNotasVinculadasAEntidad(t.ID_Tarea, 'TAREA')
+              : [];
+
+            var taskNode = {
+              id: t.ID_Tarea,
+              tipo: 'TAREA',
+              data: t,
+              esCritica: esCritica,
+              notas: notasT,
+              x: taskX,
+              y: taskY,
+              width: CARD_WIDTH_TAREA,
+              height: CARD_HEIGHT_TAREA,
+              bottomCenterX: taskX + (CARD_WIDTH_TAREA / 2),
+              bottomCenterY: taskY + CARD_HEIGHT_TAREA,
+              topCenterX: taskX + (CARD_WIDTH_TAREA / 2),
+              topCenterY: taskY,
+              leftCenterX: taskX,
+              leftCenterY: taskY + (CARD_HEIGHT_TAREA / 2),
+              rightCenterX: taskX + CARD_WIDTH_TAREA,
+              rightCenterY: taskY + (CARD_HEIGHT_TAREA / 2)
+            };
+            nodes.push(taskNode);
+            nodesMap[t.ID_Tarea] = taskNode;
+
+            // Conector Paquete WP -> Tarea
+            connectors.push({
+              id: 'conn-' + elem.id + '-' + t.ID_Tarea,
+              fromId: elem.id,
+              toId: t.ID_Tarea,
+              tipo: 'HITO_TAREA',
+              path: generarCaminoConectorOrtogonal(elemNode.bottomCenterX, elemNode.bottomCenterY, taskNode.topCenterX, taskNode.topCenterY, 14),
+              stroke: esCritica ? '#f59e0b' : '#94a3b8',
+              strokeWidth: esCritica ? 2 : 1.5,
+              strokeDash: '',
+              marker: esCritica ? 'url(#wbs-arrow-critica)' : 'url(#wbs-arrow-default)'
+            });
+          });
+
+          // -------------------------------------------------------------------
+          // NODOS NIVEL 4: GASTOS ASOCIADOS (CONDICIONAL CON BOTÓN GASTOS)
+          // -------------------------------------------------------------------
+          if (mostrarGastosEnGrafo && elem.gastos.length > 0) {
+            var gastosHito = elem.gastos;
+            var numG = gastosHito.length;
+            var startXGastos = el.centroX - ((numG * CARD_WIDTH_GASTO + (numG - 1) * GAP_HORIZONTAL_TAREAS) / 2);
+
+            gastosHito.forEach(function (g, gIdx) {
+              var gastoX = startXGastos + gIdx * (CARD_WIDTH_GASTO + GAP_HORIZONTAL_TAREAS);
+              var gastoY = Y_NIVEL_4;
+
+              var gastoNode = {
+                id: g.ID_Gasto,
+                tipo: 'GASTO',
+                data: g,
+                x: gastoX,
+                y: gastoY,
+                width: CARD_WIDTH_GASTO,
+                height: CARD_HEIGHT_GASTO,
+                bottomCenterX: gastoX + (CARD_WIDTH_GASTO / 2),
+                bottomCenterY: gastoY + CARD_HEIGHT_GASTO,
+                topCenterX: gastoX + (CARD_WIDTH_GASTO / 2),
+                topCenterY: gastoY
+              };
+              nodes.push(gastoNode);
+              nodesMap[g.ID_Gasto] = gastoNode;
+
+              var parentId = (g.ID_Tarea && nodesMap[g.ID_Tarea]) ? g.ID_Tarea : elem.id;
+              var parentNode = nodesMap[parentId];
+
+              if (parentNode) {
+                connectors.push({
+                  id: 'conn-gasto-' + parentId + '-' + g.ID_Gasto,
+                  fromId: parentId,
+                  toId: g.ID_Gasto,
+                  tipo: 'GASTO',
+                  path: generarCaminoConectorOrtogonal(parentNode.bottomCenterX, parentNode.bottomCenterY, gastoNode.topCenterX, gastoNode.topCenterY, 12),
+                  stroke: '#10b981',
+                  strokeWidth: 1.4,
+                  strokeDash: '3,3',
+                  marker: 'url(#wbs-arrow-gastos)'
+                });
+              }
+            });
+          }
+        }
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // ENRUTAMIENTO ORTOGONAL DE DEPENDENCIAS SIN COLISIÓN (MANHATTAN HIGHWAY)
+    // -------------------------------------------------------------------------
+    var depCounter = 0;
+    if (!wbsState.soloHitos) {
+      tareasAsociadas.forEach(function (t) {
+        if (t.ID_Dependencia && String(t.ID_Dependencia).trim().toUpperCase().startsWith('TAR-')) {
+          var idDep = String(t.ID_Dependencia).trim();
+          var nodoDep = nodesMap[idDep];
+          var nodoSucc = nodesMap[t.ID_Tarea];
+
+          if (nodoDep && nodoSucc) {
+            var esEnlaceCritico = rutaCriticaSet.has(t.ID_Tarea) && rutaCriticaSet.has(idDep);
+            var routing = generarCaminoDependenciaSinColision(
+              nodoDep, nodoSucc, depCounter,
+              CARD_WIDTH_TAREA, CARD_HEIGHT_TAREA, CHANNEL_ROUTING_Y
+            );
+            depCounter++;
+
+            connectors.push({
+              id: 'conn-dep-' + idDep + '-' + t.ID_Tarea,
+              fromId: idDep,
+              toId: t.ID_Tarea,
+              tipo: 'DEPENDENCIA_TAREA',
+              esCritica: esEnlaceCritico,
+              path: routing.path,
+              stroke: esEnlaceCritico ? '#f59e0b' : '#818cf8',
+              strokeWidth: esEnlaceCritico ? 2.5 : 1.8,
+              strokeDash: esEnlaceCritico ? '' : '5,4',
+              claseExtra: esEnlaceCritico ? 'wbs-connector-critical' : '',
+              marker: esEnlaceCritico ? 'url(#wbs-arrow-critica)' : 'url(#wbs-arrow-indigo)'
+            });
+          }
+        }
+      });
+    }
+
+    var maxYTotal = wbsState.soloHitos
+      ? Y_NIVEL_2 + CARD_HEIGHT_HITO + 100
+      : (mostrarGastosEnGrafo ? Y_NIVEL_4 + CARD_HEIGHT_GASTO + 90 : CHANNEL_ROUTING_Y + (depCounter * 14) + 80);
+
+    return {
+      nodes: nodes,
+      connectors: connectors,
+      bounds: {
+        minX: 0,
+        maxX: maxXTotal + 80,
+        minY: 0,
+        maxY: maxYTotal
+      }
+    };
+  }
+
+  // ============================================================================
+  // RENDERIZADO VISUAL DEL GRAFO TOPOLÓGICO (SVG + BENTO HTML)
+  // ============================================================================
+
+  function renderGrafoRedProyecto(idProyecto) {
+    var container = document.getElementById('network-graph-canvas');
+    var viewport = document.getElementById('wbs-viewport');
+    var svgLayer = document.getElementById('wbs-svg-connectors');
+    var nodesLayer = document.getElementById('wbs-nodes-layer');
+
+    if (!container || !viewport || !svgLayer || !nodesLayer) return;
+
+    var idLimpio = String(idProyecto || '').trim();
+    if (!idLimpio) return;
+
+    wbsState.idProyectoActivo = idLimpio;
+
+    // Actualizar botones de toolbar
+    actualizarBotonesToolbarWBS();
+
+    // Compilar elementos del árbol
+    var dataset = compilarDatasetGrafoProyecto(idLimpio);
+    wbsState.nodesDataMap = {};
+    dataset.nodes.forEach(function (n) { wbsState.nodesDataMap[n.id] = n; });
+    wbsState.connectorsData = dataset.connectors;
+    wbsState.bounds = dataset.bounds;
+
+    // Limpiar canvas
+    svgLayer.innerHTML = '';
+    nodesLayer.innerHTML = '';
+
+    // Inyectar definiciones SVG completas (Flechas horizontales y verticales hacia arriba)
+    var svgDefs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    svgDefs.innerHTML =
+      '<marker id="wbs-arrow-default" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#94a3b8" />' +
+      '</marker>' +
+      '<marker id="wbs-arrow-indigo" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#6366f1" />' +
+      '</marker>' +
+      '<marker id="wbs-arrow-right" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#818cf8" />' +
+      '</marker>' +
+      '<marker id="wbs-arrow-critica" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+      '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f59e0b" />' +
+      '</marker>' +
+      '<marker id="wbs-arrow-up-critica" viewBox="0 0 10 10" refX="5" refY="2" markerWidth="6" markerHeight="6" orient="auto">' +
+      '<path d="M 1.5 8 L 5 0 L 8.5 8 z" fill="#f59e0b" />' +
+      '</marker>' +
+      '<marker id="wbs-arrow-up-indigo" viewBox="0 0 10 10" refX="5" refY="2" markerWidth="6" markerHeight="6" orient="auto">' +
+      '<path d="M 1.5 8 L 5 0 L 8.5 8 z" fill="#818cf8" />' +
+      '</marker>' +
+      '<marker id="wbs-arrow-up" viewBox="0 0 10 10" refX="5" refY="2" markerWidth="6" markerHeight="6" orient="auto">' +
+      '<path d="M 1.5 8 L 5 0 L 8.5 8 z" fill="#818cf8" />' +
+      '</marker>' +
+      '<marker id="wbs-arrow-gastos" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10b981" />' +
+      '</marker>' +
+      '<marker id="wbs-arrow-notas" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#a855f7" />' +
+      '</marker>';
+    svgLayer.appendChild(svgDefs);
+
+    // Dibujar conectores vectoriales SVG
+    dataset.connectors.forEach(function (c) {
+      var pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      pathEl.setAttribute('id', c.id);
+      pathEl.setAttribute('data-from', c.fromId);
+      pathEl.setAttribute('data-to', c.toId);
+      pathEl.setAttribute('d', c.path);
+      pathEl.setAttribute('fill', 'none');
+      pathEl.setAttribute('stroke', c.stroke);
+      pathEl.setAttribute('stroke-width', c.strokeWidth);
+      if (c.strokeDash) pathEl.setAttribute('stroke-dasharray', c.strokeDash);
+      if (c.marker) pathEl.setAttribute('marker-end', c.marker);
+      pathEl.setAttribute('class', 'wbs-connector-path ' + (c.claseExtra || ''));
+      svgLayer.appendChild(pathEl);
+    });
+
+    // Renderizar tarjetas Bento HTML
+    var htmlCards = '';
+    dataset.nodes.forEach(function (node) {
+      htmlCards += construirHtmlTarjetaNodo(node);
+    });
+    nodesLayer.innerHTML = htmlCards;
+
+    // Vincular interactividad táctil, pan y zoom
+    inicializarEventosCanvasWbs(container);
+
+    // Aplicar estado de enfoque si está activo
+    if (wbsState.modoEnfoqueCritica) {
+      aplicarEstadoEnfoqueCritica();
+    }
+
+    // Centrar automáticamente con animación
+    setTimeout(function () {
+      centrarGrafoRed();
+    }, 60);
+  }
+
+  function actualizarBotonesToolbarWBS() {
+    // 1. Botón Gastos
+    var btnGastos = document.getElementById('btn-toggle-gastos');
+    if (btnGastos) {
+      btnGastos.innerHTML = '💳 Gastos: ' + (mostrarGastosEnGrafo ? 'ON' : 'OFF');
+      if (mostrarGastosEnGrafo) {
+        btnGastos.className = 'px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold text-[11px] flex items-center gap-1 transition shadow-xs';
+      } else {
+        btnGastos.className = 'px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-[11px] flex items-center gap-1 transition shadow-xs';
+      }
+    }
+    var btnFsGastos = document.getElementById('btn-fs-gastos');
+    if (btnFsGastos) {
+      btnFsGastos.innerHTML = '💳 Gastos: ' + (mostrarGastosEnGrafo ? 'ON' : 'OFF');
+      btnFsGastos.className = mostrarGastosEnGrafo
+        ? 'px-2.5 py-1 rounded-xl bg-emerald-600/40 text-emerald-300 border border-emerald-500/60 font-bold text-[11px] transition shadow-xs'
+        : 'px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium text-[11px] transition shadow-xs';
+    }
+
+    // 2. Botón Colapsar / Expandir Niveles
+    var btnColapsar = document.getElementById('btn-toggle-colapsar-wbs');
+    var iconColapsarSvg = '<svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.9a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 12.5-8.58 3.9a2 2 0 0 1-1.66 0L2 12.5"/><path d="m22 17.5-8.58 3.9a2 2 0 0 1-1.66 0L2 17.5"/></svg>';
+    if (btnColapsar) {
+      btnColapsar.innerHTML = iconColapsarSvg + '<span>' + (wbsState.soloHitos ? 'Vista: Hitos / Paquetes' : 'Vista: Árbol Completo') + '</span>';
+      if (wbsState.soloHitos) {
+        btnColapsar.className = 'px-2.5 py-1 rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 font-bold text-[11px] flex items-center gap-1.5 transition shadow-xs';
+      } else {
+        btnColapsar.className = 'px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-[11px] flex items-center gap-1.5 transition shadow-xs';
+      }
+    }
+    var btnFsColapsar = document.getElementById('btn-fs-colapsar');
+    if (btnFsColapsar) {
+      btnFsColapsar.innerHTML = iconColapsarSvg + '<span>' + (wbsState.soloHitos ? 'Vista: Hitos / Paquetes' : 'Vista: Árbol Completo') + '</span>';
+      btnFsColapsar.className = wbsState.soloHitos
+        ? 'px-2.5 py-1 rounded-xl bg-sky-600/40 text-sky-300 border border-sky-500/60 font-bold text-[11px] transition shadow-xs flex items-center gap-1.5'
+        : 'px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium text-[11px] transition shadow-xs flex items-center gap-1.5';
+    }
+
+    // 3. Botón Enfoque Ruta Crítica
+    var btnEnfoque = document.getElementById('btn-toggle-enfoque-critica');
+    var iconZapSvg = '<svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+    if (btnEnfoque) {
+      btnEnfoque.innerHTML = iconZapSvg + '<span>' + (wbsState.modoEnfoqueCritica ? 'Ruta Crítica: ON' : 'Ruta Crítica: OFF') + '</span>';
+      if (wbsState.modoEnfoqueCritica) {
+        btnEnfoque.className = 'px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold text-[11px] flex items-center gap-1.5 transition shadow-xs ring-1 ring-amber-400';
+      } else {
+        btnEnfoque.className = 'px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/50 text-slate-700 dark:text-slate-200 hover:text-amber-600 dark:hover:text-amber-400 font-semibold text-[11px] flex items-center gap-1.5 transition shadow-xs';
+      }
+    }
+    var btnFsEnfoque = document.getElementById('btn-fs-enfoque');
+    if (btnFsEnfoque) {
+      btnFsEnfoque.innerHTML = iconZapSvg + '<span>' + (wbsState.modoEnfoqueCritica ? 'Ruta Crítica: ON' : 'Ruta Crítica: OFF') + '</span>';
+      btnFsEnfoque.className = wbsState.modoEnfoqueCritica
+        ? 'px-2.5 py-1 rounded-xl bg-amber-500/40 text-amber-300 border border-amber-500/70 font-bold text-[11px] transition shadow-xs ring-1 ring-amber-400 flex items-center gap-1.5'
+        : 'px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium text-[11px] transition shadow-xs flex items-center gap-1.5';
+    }
+  }
+
+  /**
+   * Alterna entre ver el árbol completo o colapsar todas las tareas (Solo Hitos)
+   */
+  function toggleColapsarNivelesWBS() {
+    wbsState.soloHitos = !wbsState.soloHitos;
+    actualizarBotonesToolbarWBS();
+    if (wbsState.idProyectoActivo) {
+      renderGrafoRedProyecto(wbsState.idProyectoActivo);
+    }
+  }
+
+  /**
+   * Alterna el modo de enfoque para resaltar la Ruta Crítica y atenuar el resto
+   */
+  function toggleModoEnfoqueWBS() {
+    wbsState.modoEnfoqueCritica = !wbsState.modoEnfoqueCritica;
+    actualizarBotonesToolbarWBS();
+    aplicarEstadoEnfoqueCritica();
+  }
+
+  function aplicarEstadoEnfoqueCritica() {
+    var cards = document.querySelectorAll('.wbs-card');
+    var connectors = document.querySelectorAll('.wbs-connector-path');
+
+    if (wbsState.modoEnfoqueCritica) {
+      cards.forEach(function (c) {
+        var id = c.dataset.id;
+        var node = wbsState.nodesDataMap[id];
+        if (node && (node.tipo === 'PROYECTO' || node.esCritica)) {
+          c.classList.remove('wbs-node-dimmed');
+          c.classList.add('wbs-node-focused');
+        } else {
+          c.classList.remove('wbs-node-focused');
+          c.classList.add('wbs-node-dimmed');
+        }
+      });
+
+      connectors.forEach(function (conn) {
+        if (conn.classList.contains('wbs-connector-critical')) {
+          conn.classList.add('wbs-connector-highlighted-critical');
+        } else {
+          conn.style.opacity = '0.15';
+        }
+      });
+    } else {
+      cards.forEach(function (c) {
+        c.classList.remove('wbs-node-dimmed', 'wbs-node-focused');
+      });
+      connectors.forEach(function (conn) {
+        conn.classList.remove('wbs-connector-highlighted-critical');
+        conn.style.opacity = '';
+      });
+    }
+  }
+
+  /**
+   * Construye el markup HTML de cada nodo según su nivel jerárquico
+   */
+  function construirHtmlTarjetaNodo(node) {
+    var id = node.id;
+    var tipo = node.tipo;
+    var x = node.x;
+    var y = node.y;
+
+    if (tipo === 'PROYECTO') {
+      var p = node.data;
+      var fIni = p.Fecha_Inicio_Plan ? String(p.Fecha_Inicio_Plan).split('T')[0] : '-';
+      var fFin = p.Fecha_Fin_Plan ? String(p.Fecha_Fin_Plan).split('T')[0] : '-';
+      var rangoFechas = fIni + ' → ' + fFin;
+      var pctAvance = (parseFloat(p.Avance_Real_Pct) || 0).toFixed(0);
+
+      var health = p.Health_Status || '🟢';
+      var healthLabel = health.indexOf('🟢') !== -1 ? 'En Tiempo' : (health.indexOf('🟡') !== -1 ? 'Riesgo' : 'Crítico');
+      var badgeHealthClass = health.indexOf('🟢') !== -1
+        ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200'
+        : (health.indexOf('🟡') !== -1
+          ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border-amber-200'
+          : 'bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 border-rose-200');
+
+      var notasCount = node.notas ? node.notas.length : 0;
+      var badgeNotas = notasCount > 0
+        ? '<span onclick="event.stopPropagation(); abrirModalEditarNotaConDatos(\'' + node.notas[0].ID_Nota + '\')" class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-200 cursor-pointer shadow-2xs transition" title="Ver ' + notasCount + ' notas asociadas">📝 ' + notasCount + '</span>'
+        : '';
+
+      return '<div id="wbs-card-' + id + '" data-id="' + id + '" data-tipo="PROYECTO" ' +
+        'style="position: absolute; left: ' + x + 'px; top: ' + y + 'px; width: ' + node.width + 'px;" ' +
+        'class="wbs-card rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 shadow-md hover:shadow-lg border-t-4 border-t-indigo-600 dark:border-t-indigo-500 p-3.5 cursor-pointer select-none">' +
+        '<div class="flex items-center justify-between gap-2 mb-1.5">' +
+        '<div class="flex items-center gap-1.5">' +
+        '<span class="font-mono text-[10px] font-extrabold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60">' + id + '</span>' +
+        '<span class="text-[10px] font-bold text-slate-500 dark:text-slate-400">👑 PROYECTO MATRIZ</span>' +
+        '</div>' +
+        '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + badgeHealthClass + '">' + health + ' ' + healthLabel + '</span>' +
+        '</div>' +
+        '<h3 class="font-black text-slate-900 dark:text-slate-100 text-sm leading-snug truncate mb-2" title="' + escapeHtmlSeguroWbs(p.Nombre_Proyecto) + '">' +
+        escapeHtmlSeguroWbs(p.Nombre_Proyecto) +
+        '</h3>' +
+        '<div class="flex items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px]">' +
+        '<div class="flex items-center gap-1 text-slate-500 dark:text-slate-400">' +
+        '<span>📅</span>' +
+        '<span class="font-mono text-[10px]">' + rangoFechas + '</span>' +
+        '</div>' +
+        '<div class="flex items-center gap-2">' +
+        badgeNotas +
+        '<div class="flex items-center gap-1.5">' +
+        '<div class="w-16 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">' +
+        '<div class="h-full bg-indigo-600 dark:bg-indigo-500 rounded-full transition-all duration-300" style="width: ' + pctAvance + '%"></div>' +
+        '</div>' +
+        '<span class="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs">' + pctAvance + '%</span>' +
+        '</div>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+
+    } else if (tipo === 'FASE') {
+      return '<div id="wbs-card-' + id + '" data-id="' + id + '" data-tipo="FASE" ' +
+        'style="position: absolute; left: ' + x + 'px; top: ' + y + 'px; width: ' + node.width + 'px;" ' +
+        'class="wbs-card rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 shadow-xs hover:shadow-md border-t-4 border-t-violet-600 dark:border-t-violet-500 p-3 cursor-pointer select-none">' +
+        '<div class="flex items-center justify-between gap-1.5 mb-1">' +
+        '<span class="font-mono text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-950/70 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">Nivel 1 • Fase</span>' +
+        '<span class="text-[9px] font-mono tabular-nums font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">' + (node.pesoPct || 0) + '%</span>' +
+        '</div>' +
+        '<h4 class="font-black text-slate-900 dark:text-slate-100 text-xs leading-snug truncate mb-1.5" title="' + escapeHtmlSeguroWbs(node.nombreFase) + '">' +
+        escapeHtmlSeguroWbs(node.nombreFase) +
+        '</h4>' +
+        '<div class="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400">' +
+        '<span>' + (node.numWP || 0) + ' WP • ' + (node.numMarcadores || 0) + ' Hitos</span>' +
+        '<span class="font-bold text-violet-600 dark:text-violet-400 font-mono tabular-nums">' + (node.numTareasTotal || 0) + ' tareas</span>' +
+        '</div>' +
+        '</div>';
+
+    } else if (tipo === 'HITO_MARCADOR') {
+      var hMarc = node.data;
+      var esDoneMarc = (hMarc.Estado === '03_Completado' || hMarc.Estado_Hito === '03_Completado');
+      var fLimMarc = hMarc.Fecha_Limite_Plan ? String(hMarc.Fecha_Limite_Plan).split('T')[0] : 'S/F';
+      var nomMarc = hMarc.Nombre_Elemento || hMarc.Nombre_Hito || '';
+
+      return '<div id="wbs-card-' + id + '" data-id="' + id + '" data-tipo="HITO_MARCADOR" ' +
+        'style="position: absolute; left: ' + x + 'px; top: ' + y + 'px; width: ' + node.width + 'px;" ' +
+        'class="wbs-card rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 shadow-xs hover:shadow-md border-t-4 ' + (esDoneMarc ? 'border-t-emerald-500' : 'border-t-indigo-500') + ' p-2.5 cursor-pointer select-none">' +
+        '<div class="flex items-center justify-between gap-1 mb-1">' +
+        '<div class="flex items-center gap-1.5">' +
+        '<span class="inline-flex items-center justify-center w-3.5 h-3.5 rotate-45 border border-indigo-400 bg-indigo-100 dark:bg-indigo-900/60 text-[8px] text-indigo-700 dark:text-indigo-300 font-black shadow-2xs">◆</span>' +
+        '<span class="font-mono text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/60">' + id + '</span>' +
+        '<span class="text-[9px] font-extrabold ' + (esDoneMarc ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400') + '">' + (esDoneMarc ? '✓ Control' : 'Control') + '</span>' +
+        '</div>' +
+        '<span class="text-[9px] font-mono tabular-nums font-bold text-slate-500 dark:text-slate-400">' + (node.pesoPct || 0) + '%</span>' +
+        '</div>' +
+        '<h4 class="font-bold text-slate-900 dark:text-slate-100 text-xs leading-snug truncate mb-1 ' + (esDoneMarc ? 'line-through text-slate-400' : '') + '" title="' + escapeHtmlSeguroWbs(nomMarc) + '">' +
+        escapeHtmlSeguroWbs(nomMarc) +
+        '</h4>' +
+        '<div class="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800 text-[9.5px] text-slate-500 dark:text-slate-400">' +
+        '<span class="font-mono tabular-nums font-bold text-slate-400 dark:text-slate-500">$0.00 • 0d</span>' +
+        '<span class="font-mono tabular-nums">' + fLimMarc + '</span>' +
+        '</div>' +
+        '</div>';
+
+    } else if (tipo === 'HITO') {
+      var h = node.data;
+      var esDone = (h.Estado_Hito === '03_Completado');
+      var esProg = (h.Estado_Hito === '02_En_Proceso');
+
+      var estadoLabel = esDone ? '✓ Completado' : (esProg ? 'En Proceso' : 'Pendiente');
+      var badgeEstadoClass = esDone
+        ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200'
+        : (esProg
+          ? 'bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 border-sky-200'
+          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200');
+
+      var pctHito = 0;
+      if (typeof calcularAvanceHito === 'function') {
+        pctHito = calcularAvanceHito(h);
+      } else {
+        var tComps = (node.tareasHito || []).filter(function (t) {
+          return String(t.Estado_Tarea || '').indexOf('04_') !== -1 || String(t.Estado_Tarea || '').toLowerCase().indexOf('completad') !== -1;
+        }).length;
+        pctHito = node.tareasHito && node.tareasHito.length > 0 ? Math.round((tComps / node.tareasHito.length) * 100) : 0;
+      }
+
+      var fLim = h.Fecha_Limite_Plan ? String(h.Fecha_Limite_Plan).split('T')[0] : 'S/F';
+      var numT = node.tareasHito ? node.tareasHito.length : 0;
+      var numG = node.gastosHito ? node.gastosHito.length : 0;
+      var notasHCount = node.notas ? node.notas.length : 0;
+
+      var badgeNotasH = notasHCount > 0
+        ? '<span onclick="event.stopPropagation(); abrirModalEditarNotaConDatos(\'' + node.notas[0].ID_Nota + '\')" class="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-200 cursor-pointer shadow-2xs transition" title="Ver ' + notasHCount + ' notas asociadas al hito">📝 ' + notasHCount + '</span>'
+        : '';
+
+      return '<div id="wbs-card-' + id + '" data-id="' + id + '" data-tipo="HITO" ' +
+        'style="position: absolute; left: ' + x + 'px; top: ' + y + 'px; width: ' + node.width + 'px;" ' +
+        'class="wbs-card rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 shadow-sm hover:shadow-md border-t-4 border-t-sky-500 dark:border-t-sky-400 p-3 cursor-pointer select-none">' +
+        '<div class="flex items-center justify-between gap-1.5 mb-1.5">' +
+        '<div class="flex items-center gap-1.5">' +
+        '<span class="font-mono text-[9px] font-bold bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 px-1.5 py-0.5 rounded border border-sky-200 dark:border-sky-800/60">' + id + '</span>' +
+        '<span class="text-[9px] font-mono font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">⚖️ ' + node.pesoPct + '%</span>' +
+        '</div>' +
+        '<span class="text-[9px] font-bold px-2 py-0.5 rounded-full border ' + badgeEstadoClass + '">' + estadoLabel + '</span>' +
+        '</div>' +
+        '<h4 class="font-bold text-slate-900 dark:text-slate-100 text-xs leading-snug truncate mb-2" title="' + escapeHtmlSeguroWbs(h.Nombre_Hito) + '">' +
+        escapeHtmlSeguroWbs(h.Nombre_Hito) +
+        '</h4>' +
+        '<div class="flex items-center gap-2 mb-2">' +
+        '<div class="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">' +
+        '<div class="h-full bg-sky-500 rounded-full transition-all duration-300" style="width: ' + pctHito + '%"></div>' +
+        '</div>' +
+        '<span class="font-mono font-bold text-[10px] text-sky-600 dark:text-sky-400">' + pctHito + '%</span>' +
+        '</div>' +
+        '<div class="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400">' +
+        '<span>' + numT + ' tareas • ' + numG + ' gastos</span>' +
+        '<div class="flex items-center gap-1.5">' +
+        badgeNotasH +
+        '<span class="font-mono text-[9px] text-slate-400">📅 ' + fLim + '</span>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+
+    } else if (tipo === 'TAREA') {
+      var t = node.data;
+      var esCritica = node.esCritica;
+      var esDone = (t.Estado_Tarea === '04_Completado' || String(t.Estado_Tarea || '').toLowerCase().indexOf('completad') !== -1);
+      var esArch = (t.Estado_Tarea === '05_Archivado' || String(t.Estado_Tarea || '').toLowerCase().indexOf('archiv') !== -1);
+      var esProg = (t.Estado_Tarea === '03_En_Proceso');
+
+      var borderTopClass = esCritica
+        ? 'border-t-4 border-t-amber-500 ring-1 ring-amber-400/50 bg-amber-50/20 dark:bg-amber-950/20'
+        : (esArch
+          ? 'border-t-4 border-t-slate-400 opacity-80'
+          : (esDone
+            ? 'border-t-4 border-t-emerald-500'
+            : (esProg ? 'border-t-4 border-t-indigo-500' : 'border-t-4 border-t-slate-400 dark:border-t-slate-600')));
+
+      var estadoLabel = esArch ? '📦 Archivado' : (esDone ? '✓ Hecho' : (esProg ? 'Proceso' : 'Por Hacer'));
+      var badgeEstadoClass = esArch
+        ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+        : (esDone
+          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+          : (esProg ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'));
+
+      var prioRaw = String(t.Prioridad || '02_P2_Media').toUpperCase();
+      var badgePrio = prioRaw.indexOf('ALTA') !== -1 || prioRaw.indexOf('P1') !== -1
+        ? '<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200">Alta</span>'
+        : '<span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">Media</span>';
+
+      var notasTCount = node.notas ? node.notas.length : 0;
+      var badgeNotasT = notasTCount > 0
+        ? '<span onclick="event.stopPropagation(); abrirModalEditarNotaConDatos(\'' + node.notas[0].ID_Nota + '\')" class="inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.2 rounded bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-200 cursor-pointer shadow-2xs transition" title="Ver ' + notasTCount + ' notas asociadas">📝 ' + notasTCount + '</span>'
+        : '';
+
+      return '<div id="wbs-card-' + id + '" data-id="' + id + '" data-tipo="TAREA" ' +
+        'style="position: absolute; left: ' + x + 'px; top: ' + y + 'px; width: ' + node.width + 'px;" ' +
+        'class="wbs-card rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 shadow-xs hover:shadow-md ' + borderTopClass + ' p-2.5 cursor-pointer select-none">' +
+        '<div class="flex items-center justify-between gap-1 mb-1">' +
+        '<div class="flex items-center gap-1">' +
+        '<span class="font-mono text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">' + id + '</span>' +
+        (esCritica ? '<span class="text-[8px] font-extrabold px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300">⚡ Crítica</span>' : '') +
+        '</div>' +
+        '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ' + badgeEstadoClass + '">' + estadoLabel + '</span>' +
+        '</div>' +
+        '<div class="font-semibold text-slate-900 dark:text-slate-100 text-xs leading-tight line-clamp-2 mb-1.5" title="' + escapeHtmlSeguroWbs(t.Nombre_Tarea_Actividad) + '">' +
+        escapeHtmlSeguroWbs(t.Nombre_Tarea_Actividad) +
+        '</div>' +
+        '<div class="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400">' +
+        '<div class="flex items-center gap-1 truncate max-w-[130px]">' +
+        badgePrio +
+        (t.Responsable ? '<span class="truncate">👤 ' + escapeHtmlSeguroWbs(t.Responsable) + '</span>' : '') +
+        '</div>' +
+        '<div class="flex items-center gap-1 shrink-0">' +
+        badgeNotasT +
+        '<span class="font-mono text-[9px] text-slate-400">⏱️ ' + (t.Horas_Estimadas || 1) + 'h</span>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+
+    } else if (tipo === 'GASTO') {
+      var g = node.data;
+      var montoNum = (typeof montoPenGasto === 'function') ? montoPenGasto(g) : (parseFloat(g.Monto_PEN || g.Monto_Original) || 0);
+
+      var badgeNotasG = (typeof generarBadgeNotasVinculadas === 'function')
+        ? generarBadgeNotasVinculadas(id, 'GASTO')
+        : '';
+
+      return '<div id="wbs-card-' + id + '" data-id="' + id + '" data-tipo="GASTO" ' +
+        'style="position: absolute; left: ' + x + 'px; top: ' + y + 'px; width: ' + node.width + 'px;" ' +
+        'class="wbs-card rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/80 shadow-2xs hover:shadow-xs border-t-4 border-t-amber-500 dark:border-t-amber-400 p-2.5 cursor-pointer select-none">' +
+        '<div class="flex items-center justify-between gap-1 mb-1">' +
+        '<div class="flex items-center gap-1 min-w-0">' +
+        '<span class="font-mono text-[9px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800/60">' + id + '</span>' +
+        badgeNotasG +
+        '</div>' +
+        '<span class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 font-mono shrink-0">PEN ' + Number(montoNum || 0).toLocaleString() + '</span>' +
+        '</div>' +
+        '<div class="font-semibold text-slate-800 dark:text-slate-200 text-[11px] leading-tight line-clamp-1 mb-1" title="' + escapeHtmlSeguroWbs(g.Descripcion_Gasto) + '">' +
+        escapeHtmlSeguroWbs(g.Descripcion_Gasto || 'Gasto') +
+        '</div>' +
+        '<div class="flex items-center justify-between text-[9px] text-slate-400 dark:text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">' +
+        '<span class="truncate max-w-[120px]">🏷️ ' + escapeHtmlSeguroWbs(g.Categoria_Gasto || 'General') + '</span>' +
+        (g.Comprobante_Drive_URL ? '<span class="text-indigo-500 font-bold">📎 Recibo</span>' : '') +
+        '</div>' +
+        '</div>';
+    }
+    return '';
+  }
+
+  // ============================================================================
+  // INTERACCIÓN: PAN, ZOOM, CENTRADO Y PANTALLA COMPLETA INMERSIVA
+  // ============================================================================
+
+  function aplicarTransformWbs(animar) {
+    var viewport = document.getElementById('wbs-viewport');
+    if (!viewport) return;
+    if (animar) {
+      viewport.style.transition = 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)';
+      setTimeout(function () {
+        if (viewport) viewport.style.transition = '';
+      }, 360);
+    } else {
+      viewport.style.transition = '';
+    }
+    viewport.style.transform = 'translate(' + wbsState.panX + 'px, ' + wbsState.panY + 'px) scale(' + wbsState.zoom + ')';
+  }
+
+  function centrarGrafoRed() {
+    var container = document.getElementById('network-graph-canvas');
+    if (!container || !wbsState.bounds) return;
+
+    var cRect = container.getBoundingClientRect();
+    var b = wbsState.bounds;
+    var contentWidth = b.maxX - b.minX;
+    var contentHeight = b.maxY - b.minY;
+
+    if (contentWidth <= 0 || contentHeight <= 0) return;
+
+    var scaleX = (cRect.width - 80) / contentWidth;
+    var scaleY = (cRect.height - 80) / contentHeight;
+    var idealScale = Math.min(scaleX, scaleY);
+    idealScale = Math.max(0.28, Math.min(1.1, idealScale));
+
+    wbsState.zoom = idealScale;
+    wbsState.panX = (cRect.width - contentWidth * idealScale) / 2 - (b.minX * idealScale);
+    wbsState.panY = 30;
+
+    aplicarTransformWbs(true);
+  }
+
+  function zoomGrafoRed(factor) {
+    var container = document.getElementById('network-graph-canvas');
+    if (!container) return;
+
+    var cRect = container.getBoundingClientRect();
+    var centerX = cRect.width / 2;
+    var centerY = cRect.height / 2;
+
+    var newZoom = Math.max(0.25, Math.min(2.5, wbsState.zoom * factor));
+    wbsState.panX = centerX - (centerX - wbsState.panX) * (newZoom / wbsState.zoom);
+    wbsState.panY = centerY - (centerY - wbsState.panY) * (newZoom / wbsState.zoom);
+    wbsState.zoom = newZoom;
+
+    aplicarTransformWbs(true);
+  }
+
+  function toggleCapaGastosGrafo() {
+    mostrarGastosEnGrafo = !mostrarGastosEnGrafo;
+    if (wbsState.idProyectoActivo) {
+      renderGrafoRedProyecto(wbsState.idProyectoActivo);
+    }
+  }
+
+  // ============================================================================
+  // MODO PANTALLA COMPLETA INMERSIVO ("SUMERGIRSE DENTRO DEL GRÁFICO")
+  // ============================================================================
+
+  var _wbsEnFullscreen = false;
+  function toggleFullscreenWBS() {
+    var card = document.getElementById('wbs-canvas-card');
+    var canvas = document.getElementById('network-graph-canvas');
+    var txtBtn = document.getElementById('txt-btn-fullscreen-wbs');
+    var standardToolbar = document.getElementById('wbs-toolbar-container');
+    var standardLegend = document.getElementById('wbs-legend-container');
+    if (!card || !canvas) return;
+
+    _wbsEnFullscreen = !_wbsEnFullscreen;
+
+    // Buscar o crear barra HUD superior para pantalla completa
+    var hudHeader = document.getElementById('wbs-fullscreen-hud');
+
+    if (_wbsEnFullscreen) {
+      card.dataset.prevClass = card.className;
+      canvas.dataset.prevClass = canvas.className;
+
+      card.className = 'fixed inset-0 z-[100] w-screen h-screen bg-slate-900/98 dark:bg-slate-950 backdrop-blur-2xl flex flex-col p-3 md:p-5 overflow-hidden rounded-none shadow-2xl transition-all duration-300';
+      canvas.className = 'w-full flex-1 h-full min-h-[500px] relative overflow-hidden select-none wbs-viewport-container bg-slate-950/60 rounded-2xl border border-slate-800';
+
+      if (txtBtn) txtBtn.textContent = 'Salir Pantalla Completa';
+
+      // Ocultar barra de herramientas y leyenda inferiores estándar para maximizar inmersión
+      if (standardToolbar) standardToolbar.style.display = 'none';
+      if (standardLegend) standardLegend.style.display = 'none';
+
+      // Crear barra superior minimalista flotante si no existe
+      if (!hudHeader) {
+        hudHeader = document.createElement('div');
+        hudHeader.id = 'wbs-fullscreen-hud';
+        hudHeader.className = 'flex flex-wrap items-center justify-between gap-3 mb-2.5 bg-slate-900/90 border border-slate-700/80 px-4 py-2 rounded-2xl shadow-xl backdrop-blur-md text-white shrink-0';
+
+        var proyNombre = state.proyectoDetalleActivo ? state.proyectoDetalleActivo.Nombre_Proyecto : 'Proyecto';
+        var proyId = state.proyectoDetalleActivo ? state.proyectoDetalleActivo.ID_Proyecto : '';
+
+        hudHeader.innerHTML =
+          '<div class="flex items-center gap-2.5 min-w-0">' +
+          '<span class="text-base">🗺️</span>' +
+          '<span class="font-mono text-xs font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded">' + proyId + '</span>' +
+          '<h2 class="font-black text-sm text-slate-100 truncate max-w-[220px] md:max-w-xs lg:max-w-md" title="' + escapeHtmlSeguroWbs(proyNombre) + '">' + escapeHtmlSeguroWbs(proyNombre) + '</h2>' +
+          '<span class="text-[10px] text-slate-400 hidden xl:inline">• Modo Inmersivo 360°</span>' +
+          '</div>' +
+          '<!-- Leyenda Cromática por Niveles -->' +
+          '<div class="hidden lg:flex items-center gap-3 text-[11px] text-slate-300">' +
+          '<span class="flex items-center gap-1.5 font-medium"><span class="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block"></span> N1 Proy</span>' +
+          '<span class="flex items-center gap-1.5 font-medium"><span class="w-2.5 h-2.5 rounded bg-sky-500 inline-block"></span> N2 Hitos</span>' +
+          '<span class="flex items-center gap-1.5 font-medium"><span class="w-2.5 h-2.5 rounded bg-emerald-500 inline-block"></span> N3 Tareas</span>' +
+          '<span class="flex items-center gap-1.5 font-medium"><span class="w-2.5 h-2.5 rounded bg-amber-500 inline-block animate-pulse"></span> Crítica</span>' +
+          '<span class="flex items-center gap-1.5 font-medium"><span class="w-2.5 h-2.5 rounded bg-purple-500 inline-block"></span> Notas</span>' +
+          '</div>' +
+          '<!-- Controles Interactivos del HUD Inmersivo -->' +
+          '<div class="flex items-center gap-1.5 flex-wrap text-xs">' +
+          '<button type="button" id="btn-fs-gastos" onclick="toggleCapaGastosGrafo()" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold transition" title="Mostrar/ocultar gastos">Gastos</button>' +
+          '<button type="button" id="btn-fs-colapsar" onclick="toggleColapsarNivelesWBS()" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold transition" title="Alternar entre árbol completo o solo hitos">Vista: Árbol</button>' +
+          '<button type="button" id="btn-fs-enfoque" onclick="toggleModoEnfoqueWBS()" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold transition" title="Iluminar Ruta Crítica">Ruta Crítica</button>' +
+          '<div class="h-4 w-px bg-slate-700 mx-1 hidden sm:block"></div>' +
+          '<button type="button" onclick="zoomGrafoRed(1.2)" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-[11px] transition" title="Acercar">+</button>' +
+          '<button type="button" onclick="zoomGrafoRed(0.8)" class="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-[11px] transition" title="Alejar">-</button>' +
+          '<button type="button" onclick="centrarGrafoRed()" class="px-2.5 py-1 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/50 font-bold text-[11px] transition flex items-center gap-1" title="Centrar y ajustar todo a pantalla">Ajustar</button>' +
+          '<button type="button" onclick="toggleFullscreenWBS()" class="px-3 py-1 rounded-xl bg-rose-600/30 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/50 font-bold text-[11px] transition flex items-center gap-1.5 shadow-sm active:scale-95 ml-1" title="Salir de Pantalla Completa (ESC)">' +
+          '<span>Salir (ESC)</span>' +
+          '</button>' +
+          '</div>';
+
+        card.insertBefore(hudHeader, card.firstChild);
+      } else {
+        hudHeader.classList.remove('hidden');
+      }
+
+      actualizarBotonesToolbarWBS();
+      window.addEventListener('keydown', _handleEscFullscreenWBS);
+    } else {
+      if (standardToolbar) standardToolbar.style.display = '';
+      if (standardLegend) standardLegend.style.display = '';
+
+      if (card.dataset.prevClass) card.className = card.dataset.prevClass;
+      if (canvas.dataset.prevClass) canvas.className = canvas.dataset.prevClass;
+      if (txtBtn) txtBtn.textContent = 'Pantalla Completa';
+
+      if (hudHeader) {
+        hudHeader.classList.add('hidden');
+      }
+
+      window.removeEventListener('keydown', _handleEscFullscreenWBS);
+    }
+
+    setTimeout(function () {
+      centrarGrafoRed();
+    }, 180);
+  }
+
+  function _handleEscFullscreenWBS(e) {
+    if (e.key === 'Escape' && _wbsEnFullscreen) {
+      toggleFullscreenWBS();
+    }
+  }
+
+  // ============================================================================
+  // EVENTOS DEL CANVAS (DRAG PAN, WHEEL ZOOM & HOVER SPOTLIGHT)
+  // ============================================================================
+
+  var _canvasEventosIniciados = false;
+  function inicializarEventosCanvasWbs(container) {
+    if (_canvasEventosIniciados) return;
+    _canvasEventosIniciados = true;
+
+    // Pan por arrastre de ratón
+    container.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      wbsState.isPanning = true;
+      wbsState.hasMovedDuringPan = false;
+      wbsState.startX = e.clientX - wbsState.panX;
+      wbsState.startY = e.clientY - wbsState.panY;
+      container.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', function (e) {
+      if (!wbsState.isPanning) return;
+      var newPanX = e.clientX - wbsState.startX;
+      var newPanY = e.clientY - wbsState.startY;
+
+      if (Math.abs(newPanX - wbsState.panX) > 4 || Math.abs(newPanY - wbsState.panY) > 4) {
+        wbsState.hasMovedDuringPan = true;
+        ocultarTooltipInmediato();
+      }
+
+      wbsState.panX = newPanX;
+      wbsState.panY = newPanY;
+      aplicarTransformWbs(false);
+    });
+
+    window.addEventListener('mouseup', function () {
+      if (wbsState.isPanning) {
+        wbsState.isPanning = false;
+        container.style.cursor = 'grab';
+      }
+    });
+
+    // Zoom por rueda del ratón centrado en el cursor (0.25x - 2.5x)
+    container.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var rect = container.getBoundingClientRect();
+      var mouseX = e.clientX - rect.left;
+      var mouseY = e.clientY - rect.top;
+
+      var factor = e.deltaY < 0 ? 1.12 : 0.88;
+      var newZoom = Math.max(0.25, Math.min(2.5, wbsState.zoom * factor));
+
+      wbsState.panX = mouseX - (mouseX - wbsState.panX) * (newZoom / wbsState.zoom);
+      wbsState.panY = mouseY - (mouseY - wbsState.panY) * (newZoom / wbsState.zoom);
+      wbsState.zoom = newZoom;
+
+      ocultarTooltipInmediato();
+      aplicarTransformWbs(false);
+    }, { passive: false });
+
+    // Delegación de clic en tarjetas para navegación hacia la cascada
+    container.addEventListener('click', function (e) {
+      if (wbsState.hasMovedDuringPan) return;
+
+      var card = e.target.closest('.wbs-card');
+      if (!card) return;
+
+      var nodeId = card.dataset.id;
+      var tipo = card.dataset.tipo;
+      if (!nodeId || !tipo) return;
+
+      if (tipo === 'HITO' || tipo === 'HITO_MARCADOR' || tipo === 'FASE') {
+        navegarAHito(nodeId);
+      } else if (tipo === 'TAREA') {
+        navegarATarea(nodeId);
+      } else if (tipo === 'GASTO') {
+        navegarAGasto(nodeId);
+      } else if (tipo === 'PROYECTO') {
+        var elCascada = document.getElementById('contenedor-hitos-cascada');
+        if (elCascada) elCascada.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+
+    // Delegación de Hover para Tooltip 360° y Spotlight de Dependencias Activas
+    container.addEventListener('mouseover', function (e) {
+      var card = e.target.closest('.wbs-card');
+      if (!card) return;
+
+      var nodeId = card.dataset.id;
+      if (!nodeId) return;
+
+      // Spotlight de dependencias al pasar el cursor
+      iluminarCadenaDependencias(nodeId);
+
+      if (wbsState.hideTooltipTimer) {
+        clearTimeout(wbsState.hideTooltipTimer);
+        wbsState.hideTooltipTimer = null;
+      }
+
+      if (wbsState.activeTooltipNodeId === nodeId) return;
+
+      if (wbsState.tooltipTimer) clearTimeout(wbsState.tooltipTimer);
+      wbsState.tooltipTimer = setTimeout(function () {
+        mostrarTooltipWbs(nodeId, card);
+      }, 150);
+    });
+
+    container.addEventListener('mouseout', function (e) {
+      var card = e.target.closest('.wbs-card');
+      if (!card) return;
+
+      // Apagar spotlight si no está forzado el modo enfoque
+      apagarCadenaDependencias();
+
+      if (wbsState.tooltipTimer) {
+        clearTimeout(wbsState.tooltipTimer);
+        wbsState.tooltipTimer = null;
+      }
+
+      if (wbsState.hideTooltipTimer) clearTimeout(wbsState.hideTooltipTimer);
+      wbsState.hideTooltipTimer = setTimeout(function () {
+        ocultarTooltipWbs();
+      }, 150);
+    });
+
+    // Mantener tooltip abierto si el usuario posa el ratón sobre el popover
+    var tooltipEl = document.getElementById('wbs-floating-tooltip');
+    if (tooltipEl) {
+      tooltipEl.addEventListener('mouseenter', function () {
+        if (wbsState.hideTooltipTimer) {
+          clearTimeout(wbsState.hideTooltipTimer);
+          wbsState.hideTooltipTimer = null;
+        }
+      });
+      tooltipEl.addEventListener('mouseleave', function () {
+        if (wbsState.hideTooltipTimer) clearTimeout(wbsState.hideTooltipTimer);
+        wbsState.hideTooltipTimer = setTimeout(function () {
+          ocultarTooltipWbs();
+        }, 150);
+      });
+    }
+  }
+
+  // ============================================================================
+  // SPOTLIGHT DE DEPENDENCIAS ACTIVAS (PREDECESORAS Y SUCESORAS DIRECTAS)
+  // ============================================================================
+
+  function iluminarCadenaDependencias(nodeId) {
+    if (!nodeId || !nodeId.startsWith('TAR-')) return;
+    var depInfo = wbsState.dependenciesMap[nodeId];
+    if (!depInfo) return;
+
+    var nodosVinculados = new Set([nodeId]);
+    (depInfo.pred || []).forEach(function (id) { nodosVinculados.add(id); });
+    (depInfo.succ || []).forEach(function (id) { nodosVinculados.add(id); });
+
+    // Iluminar conectores que tocan este nodo
+    var conns = document.querySelectorAll('.wbs-connector-path');
+    conns.forEach(function (conn) {
+      var f = conn.getAttribute('data-from');
+      var t = conn.getAttribute('data-to');
+      if (f === nodeId || t === nodeId) {
+        conn.classList.add('wbs-connector-highlighted');
+      }
+    });
+
+    // Resaltar nodos involucrados y atenuar otros
+    var allCards = document.querySelectorAll('.wbs-card');
+    allCards.forEach(function (c) {
+      var cId = c.dataset.id;
+      if (nodosVinculados.has(cId)) {
+        c.classList.remove('wbs-node-dimmed');
+        c.classList.add('wbs-node-focused');
+      } else {
+        c.classList.add('wbs-node-dimmed');
+      }
+    });
+  }
+
+  function apagarCadenaDependencias() {
+    var conns = document.querySelectorAll('.wbs-connector-path');
+    conns.forEach(function (conn) {
+      conn.classList.remove('wbs-connector-highlighted');
+    });
+
+    if (wbsState.modoEnfoqueCritica) {
+      aplicarEstadoEnfoqueCritica();
+    } else {
+      var allCards = document.querySelectorAll('.wbs-card');
+      allCards.forEach(function (c) {
+        c.classList.remove('wbs-node-dimmed', 'wbs-node-focused');
+      });
+    }
+  }
+
+  // ============================================================================
+  // NAVEGACIÓN Y SCROLL SUAVE CON DESTELLO DE HALO (HIGHLIGHT)
+  // ============================================================================
+
+  function aplicarDestelloResaltado(el, ringColorClass, bgPulseClass) {
+    if (!el) return;
+    var classes = ['ring-4', ringColorClass, 'transition-all', 'duration-500', 'wbs-destello-highlight'];
+    var bgParts = bgPulseClass.split(' ');
+
+    classes.forEach(function (c) { el.classList.add(c); });
+    bgParts.forEach(function (c) { el.classList.add(c); });
+
+    setTimeout(function () {
+      classes.forEach(function (c) { el.classList.remove(c); });
+      bgParts.forEach(function (c) { el.classList.remove(c); });
+    }, 2200);
+  }
+
+  function navegarAHito(idHito) {
+    if (typeof expandirHito === 'function') expandirHito(idHito);
+    var el = document.getElementById('card-hito-' + idHito);
+    if (!el && idHito && idHito.startsWith('FASE-')) {
+      var node = (wbsState && wbsState.nodesDataMap) ? wbsState.nodesDataMap[idHito] : null;
+      if (node && node.nombreFase) {
+        el = document.querySelector('.wbs-fase-grupo[data-fase="' + node.nombreFase.replace(/"/g, '\\"') + '"]');
+      }
+    }
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      aplicarDestelloResaltado(el, 'ring-indigo-500', 'bg-indigo-50/50 dark:bg-indigo-950/50');
+    }
+  }
+
+  function navegarATarea(idTarea) {
+    var tObj = (state.tareas || []).find(function (t) { return String(t.ID_Tarea).trim() === idTarea; });
+    if (tObj && tObj.ID_Hito && typeof expandirHito === 'function') {
+      expandirHito(tObj.ID_Hito);
+    }
+    var el = document.getElementById('tarjeta-360-' + idTarea);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      aplicarDestelloResaltado(el, 'ring-indigo-500', 'bg-indigo-50/80 dark:bg-indigo-950/80');
+    } else if (typeof abrirModalDetalleTarea === 'function') {
+      abrirModalDetalleTarea(idTarea);
+    }
+  }
+
+  function navegarAGasto(idGasto) {
+    var gObj = (state.gastos || []).find(function (g) { return String(g.ID_Gasto).trim() === idGasto; });
+    if (gObj && gObj.ID_Hito && typeof expandirHito === 'function') {
+      expandirHito(gObj.ID_Hito);
+    }
+    var el = document.getElementById('gasto-360-' + idGasto);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      aplicarDestelloResaltado(el, 'ring-emerald-500', 'bg-emerald-50/80 dark:bg-emerald-950/80');
+    } else if (typeof abrirModalEditarGasto === 'function') {
+      abrirModalEditarGasto(idGasto);
+    }
+  }
+
+  // ============================================================================
+  // POPOVER / HOVER TOOLTIP 360° INTELIGENTE (SIN COLISIONES DE BORDES)
+  // ============================================================================
+
+  function mostrarTooltipWbs(nodeId, cardElement) {
+    var tooltip = document.getElementById('wbs-floating-tooltip');
+    var container = document.getElementById('network-graph-canvas');
+    if (!tooltip || !container || !cardElement) return;
+
+    var node = wbsState.nodesDataMap[nodeId];
+    if (!node) return;
+
+    wbsState.activeTooltipNodeId = nodeId;
+
+    var htmlContent = '';
+    if (node.tipo === 'HITO') {
+      htmlContent = generarHtmlTooltipHito(node);
+    } else if (node.tipo === 'HITO_MARCADOR') {
+      htmlContent = generarHtmlTooltipMarcador(node);
+    } else if (node.tipo === 'FASE') {
+      htmlContent = generarHtmlTooltipFase(node);
+    } else if (node.tipo === 'TAREA') {
+      htmlContent = generarHtmlTooltipTarea(node);
+    } else if (node.tipo === 'GASTO') {
+      htmlContent = generarHtmlTooltipGasto(node);
+    } else if (node.tipo === 'PROYECTO') {
+      htmlContent = generarHtmlTooltipProyecto(node);
+    }
+
+    tooltip.innerHTML = htmlContent;
+
+    tooltip.classList.remove('hidden');
+    var cRect = container.getBoundingClientRect();
+    var nRect = cardElement.getBoundingClientRect();
+    var tipRect = tooltip.getBoundingClientRect();
+
+    var tipWidth = tipRect.width || 320;
+    var tipHeight = tipRect.height || 180;
+
+    var relLeft = nRect.left - cRect.left;
+    var relTop = nRect.top - cRect.top;
+    var relWidth = nRect.width;
+    var relHeight = nRect.height;
+
+    var tipX = relLeft + (relWidth / 2) - (tipWidth / 2);
+    var tipY = relTop - tipHeight - 12;
+
+    if (tipY < 10) {
+      tipY = relTop + relHeight + 12;
+    }
+
+    if (tipX < 12) tipX = 12;
+    if (tipX + tipWidth > cRect.width - 12) {
+      tipX = cRect.width - tipWidth - 12;
+    }
+
+    tooltip.style.left = tipX + 'px';
+    tooltip.style.top = tipY + 'px';
+
+    tooltip.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
+    tooltip.classList.add('opacity-100', 'scale-100');
+  }
+
+  function ocultarTooltipWbs() {
+    var tooltip = document.getElementById('wbs-floating-tooltip');
+    if (!tooltip) return;
+
+    tooltip.classList.remove('opacity-100', 'scale-100');
+    tooltip.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
+
+    setTimeout(function () {
+      if (tooltip.classList.contains('opacity-0')) {
+        tooltip.classList.add('hidden');
+        wbsState.activeTooltipNodeId = null;
+      }
+    }, 150);
+  }
+
+  function ocultarTooltipInmediato() {
+    var tooltip = document.getElementById('wbs-floating-tooltip');
+    if (!tooltip) return;
+    tooltip.classList.add('hidden', 'opacity-0', 'scale-95', 'pointer-events-none');
+    tooltip.classList.remove('opacity-100', 'scale-100');
+    wbsState.activeTooltipNodeId = null;
+  }
+
+  // ============================================================================
+  // GENERADORES DE CONTENIDO DEL TOOLTIP 360°
+  // ============================================================================
+
+  function generarHtmlTooltipFase(node) {
+    return '<div class="space-y-2 select-none">' +
+      '<div class="flex items-center justify-between gap-2">' +
+      '<span class="font-mono text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">Nivel 1 • Fase Agrupadora</span>' +
+      '<span class="text-[9.5px] font-mono font-bold text-slate-500 dark:text-slate-400">⚖️ ' + (node.pesoPct || 0) + '% peso</span>' +
+      '</div>' +
+      '<h4 class="font-black text-slate-900 dark:text-slate-100 text-sm leading-snug">' + escapeHtmlSeguroWbs(node.nombreFase) + '</h4>' +
+      '<div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-center">' +
+      '<div class="p-1.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg">' +
+      '<span class="block text-[9px] text-slate-400 font-bold uppercase">Paquetes WP</span>' +
+      '<span class="font-bold text-slate-800 dark:text-slate-200 text-xs">' + (node.numWP || 0) + '</span>' +
+      '</div>' +
+      '<div class="p-1.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg">' +
+      '<span class="block text-[9px] text-slate-400 font-bold uppercase">Marcadores</span>' +
+      '<span class="font-bold text-slate-800 dark:text-slate-200 text-xs">' + (node.numMarcadores || 0) + '</span>' +
+      '</div>' +
+      '<div class="p-1.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg">' +
+      '<span class="block text-[9px] text-slate-400 font-bold uppercase">Tareas Totales</span>' +
+      '<span class="font-bold text-violet-600 dark:text-violet-400 text-xs">' + (node.numTareasTotal || 0) + '</span>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function generarHtmlTooltipMarcador(node) {
+    var h = node.data;
+    var esDone = (h.Estado === '03_Completado' || h.Estado_Hito === '03_Completado');
+    var fLim = h.Fecha_Limite_Plan ? String(h.Fecha_Limite_Plan).split('T')[0] : 'S/F';
+    var nom = h.Nombre_Elemento || h.Nombre_Hito || '';
+    var idMarc = h.ID_Elemento_WBS || h.ID_Hito || node.id;
+    var dod = h.Criterio_Aceptacion_DoD || 'Sin criterio DoD especificado';
+
+    return '<div class="space-y-2 select-none">' +
+      '<div class="flex items-center justify-between gap-2">' +
+      '<div class="flex items-center gap-1.5">' +
+      '<span class="font-mono text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">' + idMarc + '</span>' +
+      '<span class="text-[9.5px] font-extrabold ' + (esDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400') + '">' + (esDone ? '🏁' : '💎') + ' Hito Marcador</span>' +
+      '</div>' +
+      '<span class="text-[9px] font-bold px-2 py-0.5 rounded-full border ' + (esDone ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200' : 'bg-indigo-100 dark:bg-indigo-950/70 text-indigo-800 dark:text-indigo-300 border-indigo-200') + '">' + (esDone ? '✓ Cumplido' : 'Pendiente') + '</span>' +
+      '</div>' +
+      '<h4 class="font-bold text-slate-900 dark:text-slate-100 text-xs leading-snug ' + (esDone ? 'line-through text-slate-400' : '') + '">' + escapeHtmlSeguroWbs(nom) + '</h4>' +
+      '<div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[10px]">' +
+      '<div><span class="text-slate-400 block font-semibold uppercase text-[9px]">Costo Asignado:</span><span class="font-mono font-bold text-slate-400">$0.00 (Duración 0)</span></div>' +
+      '<div><span class="text-slate-400 block font-semibold uppercase text-[9px]">Fecha Límite:</span><span class="font-mono font-bold text-slate-700 dark:text-slate-300">📅 ' + fLim + '</span></div>' +
+      '</div>' +
+      '<div class="pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400">' +
+      '<span class="font-bold block text-[9px] uppercase tracking-wider text-slate-400 mb-0.5">Criterio DoD (Definición de Hecho):</span>' +
+      '<p class="text-[10px] text-slate-600 dark:text-slate-300 italic leading-snug">' + escapeHtmlSeguroWbs(dod) + '</p>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function generarHtmlTooltipHito(node) {
+    var h = node.data;
+    var fFin = h.Fecha_Limite_Plan ? String(h.Fecha_Limite_Plan).split('T')[0] : 'S/F';
+
+    var pct = 0;
+    if (typeof calcularAvanceHito === 'function') {
+      pct = calcularAvanceHito(h);
+    } else {
+      var tComps = (node.tareasHito || []).filter(function (t) {
+        return String(t.Estado_Tarea || '').indexOf('04_') !== -1 || String(t.Estado_Tarea || '').toLowerCase().indexOf('completad') !== -1;
+      }).length;
+      pct = node.tareasHito && node.tareasHito.length > 0 ? Math.round((tComps / node.tareasHito.length) * 100) : 0;
+    }
+
+    var totalGastado = (node.gastosHito || []).reduce(function (acc, g) {
+      return acc + ((typeof montoPenGasto === 'function') ? montoPenGasto(g) : (parseFloat(g.Monto_PEN || g.Monto_Original) || 0));
+    }, 0);
+
+    var tareasPendientes = (node.tareasHito || []).filter(function (t) {
+      return String(t.Estado_Tarea || '').indexOf('04_') === -1 && String(t.Estado_Tarea || '').toLowerCase().indexOf('completad') === -1;
+    }).slice(0, 3);
+
+    var listaTareasHtml = '';
+    if (tareasPendientes.length > 0) {
+      listaTareasHtml = '<div class="space-y-1 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">' +
+        '<span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Tareas Pendientes:</span>' +
+        tareasPendientes.map(function (t) {
+          return '<div class="flex items-center justify-between text-[10px] text-slate-600 dark:text-slate-300 gap-1.5 truncate">' +
+            '<span class="truncate">○ ' + escapeHtmlSeguroWbs(t.Nombre_Tarea_Actividad) + '</span>' +
+            '<span class="font-mono text-[9px] bg-slate-100 dark:bg-slate-800 px-1 rounded shrink-0">' + (t.Horas_Estimadas || 1) + 'h</span>' +
+            '</div>';
+        }).join('') +
+        '</div>';
+    }
+
+    return '<div class="space-y-2">' +
+      '<div class="flex items-center justify-between gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-1.5">' +
+      '<span class="font-mono text-[10px] font-extrabold bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 px-2 py-0.5 rounded">' + h.ID_Hito + '</span>' +
+      '<span class="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400">⚖️ Peso: ' + node.pesoPct + '%</span>' +
+      '</div>' +
+      '<h4 class="font-extrabold text-slate-900 dark:text-white text-xs leading-snug">' + escapeHtmlSeguroWbs(h.Nombre_Hito) + '</h4>' +
+      '<div class="grid grid-cols-2 gap-2 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-700/60">' +
+      '<div>📅 Límite: <b class="font-mono text-slate-700 dark:text-slate-200">' + fFin + '</b></div>' +
+      '<div>📈 Avance: <b class="font-mono text-sky-600 dark:text-sky-400">' + pct + '%</b></div>' +
+      '<div>💰 Egresos: <b class="font-mono text-emerald-600 dark:text-emerald-400">PEN ' + Number(totalGastado || 0).toLocaleString() + '</b></div>' +
+      '<div>📦 Tareas: <b class="font-mono text-slate-700 dark:text-slate-200">' + (node.tareasHito ? node.tareasHito.length : 0) + '</b></div>' +
+      '</div>' +
+      listaTareasHtml +
+      '</div>';
+  }
+
+  function generarHtmlTooltipTarea(node) {
+    var t = node.data;
+    var esCritica = node.esCritica;
+    var desc = t.Notas_Impedimentos || t.Descripcion || 'Sin notas adicionales.';
+    var fProg = t.Fecha_Programada ? String(t.Fecha_Programada).split(' ')[0] : 'Sin fecha';
+
+    var fHoy = new Date().getTime();
+    var fProgTime = t.Fecha_Programada ? new Date(fProg).getTime() : NaN;
+    var esDone = (t.Estado_Tarea === '04_Completado');
+    var estaVencida = (!esDone && !isNaN(fProgTime) && fProgTime < fHoy);
+
+    var semaforoHtml = estaVencida
+      ? '<span class="text-rose-600 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-200 text-[9px]">⚠️ Vencida</span>'
+      : '<span class="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200 text-[9px]">🟢 A tiempo</span>';
+
+    var pasosTar = (state.subtareas || []).filter(function (s) {
+      return String(s.Tipo_Padre || '').toUpperCase() === 'TAREA' && String(s.ID_Padre || '').trim() === String(t.ID_Tarea || '').trim();
+    });
+    var subtareasHtml = '';
+    if (pasosTar.length > 0) {
+      var compPasos = pasosTar.filter(function (s) {
+        return s.Completada === true || s.Completado === true || String(s.Completada).toLowerCase() === 'true';
+      }).length;
+      subtareasHtml = '<div class="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">' +
+        '<div class="flex items-center justify-between text-[10px] text-slate-500 mb-1">' +
+        '<span class="font-bold">Checklist / Pasos:</span>' +
+        '<span class="font-mono">' + compPasos + '/' + pasosTar.length + ' (' + Math.round((compPasos / pasosTar.length) * 100) + '%)</span>' +
+        '</div>' +
+        '<div class="space-y-0.5 max-h-16 overflow-y-auto pr-1">' +
+        pasosTar.slice(0, 4).map(function (p) {
+          var pDone = p.Completada === true || p.Completado === true || String(p.Completada).toLowerCase() === 'true';
+          return '<div class="text-[9px] truncate ' + (pDone ? 'line-through text-slate-400' : 'text-slate-700 dark:text-slate-300') + '">' +
+            (pDone ? '✓ ' : '○ ') + escapeHtmlSeguroWbs(p.Descripcion_Paso) +
+            '</div>';
+        }).join('') +
+        '</div>' +
+        '</div>';
+    }
+
+    return '<div class="space-y-2">' +
+      '<div class="flex items-center justify-between gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-1.5">' +
+      '<div class="flex items-center gap-1">' +
+      '<span class="font-mono text-[10px] font-extrabold bg-slate-900 text-white px-2 py-0.5 rounded">' + t.ID_Tarea + '</span>' +
+      (esCritica ? '<span class="text-[9px] font-extrabold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-300">⚡ Crítica</span>' : '') +
+      '</div>' +
+      semaforoHtml +
+      '</div>' +
+      '<h4 class="font-extrabold text-slate-900 dark:text-white text-xs leading-snug">' + escapeHtmlSeguroWbs(t.Nombre_Tarea_Actividad) + '</h4>' +
+      '<p class="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2 italic">' + escapeHtmlSeguroWbs(desc) + '</p>' +
+      '<div class="grid grid-cols-2 gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-700/60">' +
+      '<div>📅 Fecha: <b class="font-mono text-slate-700 dark:text-slate-200">' + fProg + '</b></div>' +
+      '<div>👤 Responsable: <b class="text-slate-700 dark:text-slate-200 truncate">' + (escapeHtmlSeguroWbs(t.Responsable) || 'Sin asignar') + '</b></div>' +
+      '<div>⏱️ Est: <b class="font-mono text-slate-700 dark:text-slate-200">' + (t.Horas_Estimadas || 1) + 'h</b></div>' +
+      '<div>⌛ Real: <b class="font-mono text-slate-700 dark:text-slate-200">' + (t.Horas_Reales || 0) + 'h</b></div>' +
+      '</div>' +
+      (t.ID_Dependencia ? '<div class="text-[9px] text-indigo-600 dark:text-indigo-400 font-mono font-bold bg-indigo-50 dark:bg-indigo-950/60 p-1.5 rounded-lg border border-indigo-200 dark:border-indigo-800/60 truncate">⛓️ Predecesora: ' + escapeHtmlSeguroWbs(t.ID_Dependencia) + '</div>' : '') +
+      subtareasHtml +
+      '</div>';
+  }
+
+  function generarHtmlTooltipGasto(node) {
+    var g = node.data;
+    var montoPen = (typeof montoPenGasto === 'function') ? montoPenGasto(g) : (parseFloat(g.Monto_PEN || g.Monto_Original) || 0);
+    var fGasto = g.Fecha_Gasto ? String(g.Fecha_Gasto).split('T')[0] : 'S/F';
+
+    var tcInfo = (g.Moneda_Original && g.Moneda_Original !== 'PEN')
+      ? '<span class="text-[9px] text-slate-400 block font-mono">Original: ' + g.Moneda_Original + ' ' + Number(g.Monto_Original || 0).toLocaleString() + ' (TC: ' + (g.Tipo_Cambio_Aplicado || '-') + ')</span>'
+      : '';
+
+    var linkDrive = g.Comprobante_Drive_URL
+      ? '<a href="' + g.Comprobante_Drive_URL + '" target="_blank" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition shadow-2xs mt-1">📎 Abrir Recibo en Google Drive</a>'
+      : '<span class="text-[9px] text-slate-400 italic">Sin comprobante Drive adjunto.</span>';
+
+    return '<div class="space-y-2">' +
+      '<div class="flex items-center justify-between gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-1.5">' +
+      '<span class="font-mono text-[10px] font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded">' + g.ID_Gasto + '</span>' +
+      '<span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">PEN ' + Number(montoPen || 0).toLocaleString() + '</span>' +
+      '</div>' +
+      '<h4 class="font-extrabold text-slate-900 dark:text-white text-xs leading-snug">' + escapeHtmlSeguroWbs(g.Descripcion_Gasto) + '</h4>' +
+      tcInfo +
+      '<div class="grid grid-cols-2 gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-700/60">' +
+      '<div>📅 Fecha: <b class="font-mono text-slate-700 dark:text-slate-200">' + fGasto + '</b></div>' +
+      '<div>🏷️ Cat: <b class="text-slate-700 dark:text-slate-200 truncate">' + escapeHtmlSeguroWbs(g.Categoria_Gasto || 'General') + '</b></div>' +
+      '<div>💳 Método: <b class="text-slate-700 dark:text-slate-200">' + escapeHtmlSeguroWbs(g.Metodo_Pago || 'Efectivo') + '</b></div>' +
+      '<div>📌 Estado: <b class="text-emerald-600 dark:text-emerald-400">Pagado</b></div>' +
+      '</div>' +
+      linkDrive +
+      '</div>';
+  }
+
+  function generarHtmlTooltipProyecto(node) {
+    var p = node.data;
+    var fIni = p.Fecha_Inicio_Plan ? String(p.Fecha_Inicio_Plan).split('T')[0] : 'S/F';
+    var fFin = p.Fecha_Fin_Plan ? String(p.Fecha_Fin_Plan).split('T')[0] : 'S/F';
+    var pct = (parseFloat(p.Avance_Real_Pct) || 0).toFixed(0);
+
+    return '<div class="space-y-2">' +
+      '<div class="flex items-center justify-between gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-1.5">' +
+      '<span class="font-mono text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded">' + p.ID_Proyecto + '</span>' +
+      '<span class="text-[10px] font-bold text-slate-500">' + escapeHtmlSeguroWbs(p.Tipo_Iniciativa || 'General') + '</span>' +
+      '</div>' +
+      '<h4 class="font-extrabold text-slate-900 dark:text-white text-xs leading-snug">' + escapeHtmlSeguroWbs(p.Nombre_Proyecto) + '</h4>' +
+      (p.North_Star_OKR ? '<p class="text-[10px] text-slate-500 italic line-clamp-2">🎯 OKR: ' + escapeHtmlSeguroWbs(p.North_Star_OKR) + '</p>' : '') +
+      '<div class="grid grid-cols-2 gap-1.5 text-[10px] text-slate-500 bg-slate-50 dark:bg-slate-800/50 p-2 rounded-xl border border-slate-100 dark:border-slate-700/60">' +
+      '<div>📅 Inicio: <b class="font-mono text-slate-700 dark:text-slate-200">' + fIni + '</b></div>' +
+      '<div>🏁 Fin: <b class="font-mono text-slate-700 dark:text-slate-200">' + fFin + '</b></div>' +
+      '<div>📈 Avance: <b class="font-mono text-indigo-600 dark:text-indigo-400">' + pct + '%</b></div>' +
+      '<div>🟢 Salud: <b class="text-slate-700 dark:text-slate-200">' + escapeHtmlSeguroWbs(p.Health_Status || '🟢 En Tiempo') + '</b></div>' +
+      '</div>' +
+      '</div>';
+  }
+
+  // ============================================================================
+  // COMPATIBILIDAD CON WINDOW Y CON LA API GLOBAL PREVIA
+  // ============================================================================
+  window.zoomGrafoRed = zoomGrafoRed;
+  window.centrarGrafoRed = centrarGrafoRed;
+  window.toggleCapaGastosGrafo = toggleCapaGastosGrafo;
+  window.toggleColapsarNivelesWBS = toggleColapsarNivelesWBS;
+  window.toggleModoEnfoqueWBS = toggleModoEnfoqueWBS;
+  window.toggleFullscreenWBS = toggleFullscreenWBS;
+  window.renderGrafoRedProyecto = renderGrafoRedProyecto;
+  window.compilarDatasetGrafoProyecto = compilarDatasetGrafoProyecto;
+  window.construirHtmlTarjetaNodo = construirHtmlTarjetaNodo;
+  window.renderTarjetaNodo = construirHtmlTarjetaNodo;
+
+  // Objeto de compatibilidad para scripts heredados
+  window.networkInstance = {
+    fit: function (opts) { centrarGrafoRed(); },
+    redraw: function () { centrarGrafoRed(); },
+    getScale: function () { return wbsState.zoom; },
+    moveTo: function (opts) {
+      if (opts && opts.scale) {
+        wbsState.zoom = opts.scale;
+        aplicarTransformWbs(true);
+      }
+    },
+    destroy: function () { },
+    setOptions: function () { }
+  };
+  window.networkDetalle360 = window.networkInstance;
+
+</script>

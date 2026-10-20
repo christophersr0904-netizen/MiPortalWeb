@@ -1,0 +1,503 @@
+<!--
+ * ============================================================================
+ * ARCHIVO: Modal_Notas.html
+ * SISTEMA: PMO Personal Modular & Gestión Integral de Vida
+ * ROL: Modal Ergonómico 360° de Notas, Checklist Dinámico y Vinculación Cruzada
+ * ============================================================================
+-->
+
+<!-- ===================================================================== -->
+<!-- 1. MODAL DE EDICIÓN COMPLETA Y DETALLE 360° DE NOTA                   -->
+<!-- ===================================================================== -->
+<div id="modal-editar-nota" style="z-index: 9999;" onclick="if (event.target === this) cerrarModalEditarNota();"
+  class="hidden fixed inset-0 z-[9999] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+
+  <div id="modal-editar-nota-card"
+    class="portal-surface elevation-3 w-full max-w-2xl max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative transition-all duration-200 ease-in-out transform scale-100 text-slate-800 dark:text-slate-100">
+
+    <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+    <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+    <!-- CABECERA PRINCIPAL DEL MODAL (JERARQUÍA ELEGANTE Y ESPACIOSA) -->
+    <div id="modal-editar-nota-header"
+      class="px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0 bg-white dark:bg-slate-900 transition-colors duration-200 ease-in-out">
+      
+      <!-- Lado Izquierdo: Identificador + Selector de Formato por Chips -->
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <span id="modal-nota-id-badge"
+          class="px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300/60 shadow-2xs">
+          NOT-00000
+        </span>
+
+        <!-- Identidad Canónica: Nota Híbrida Modular -->
+        <span class="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60 flex items-center gap-1.5 shadow-2xs">
+          <svg class="w-3 h-3 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/>
+            <path d="M15 3v6h6"/>
+          </svg>
+          <span>Nota Híbrida Modular</span>
+        </span>
+        <input type="hidden" id="modal-nota-tipo" value="HIBRIDA" />
+        <input type="hidden" id="modal-nota-color" value="default" />
+      </div>
+
+      <!-- Lado Derecho: Botón Vincular @ + Botón Pin + Botón Cerrar -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <!-- Botón Asistente de Vinculación Cruzada (@) -->
+        <button type="button" id="btn-vincular" data-action="vincular" data-contexto="modal" onclick="abrirModalVincularEntidadNota('modal')"
+          class="btn-vincular-trigger inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 transition shadow-2xs cursor-pointer active:scale-95"
+          title="Vincular con Proyectos, Hitos, Tareas, Hábitos o Finanzas">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span class="hidden sm:inline">Vincular</span>
+          <span id="badge-count-vinculos-modal" class="hidden px-1.5 py-0.2 rounded-full text-[9px] font-black bg-indigo-600 text-white">0</span>
+        </button>
+
+        <!-- Botón Fijar Nota (Pin) -->
+        <button type="button" id="modal-nota-pin-btn" onclick="toggleModalNotaPin()"
+          class="p-2 rounded-xl text-slate-400 hover:text-amber-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition active:scale-90 cursor-pointer"
+          title="Fijar nota en la parte superior">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="17" x2="12" y2="22"/>
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+          </svg>
+        </button>
+
+        <!-- Botón Cerrar Modal -->
+        <button type="button" onclick="cerrarModalEditarNota()"
+          class="btn-portal-icon" title="Cerrar modal">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- BARRA COMPACTA DE VÍNCULOS ACTIVOS (Visible únicamente si hay entidades vinculadas) -->
+    <div id="modal-nota-vinculos-bar"
+      class="hidden px-5 sm:px-6 py-2 bg-indigo-50/50 dark:bg-indigo-950/30 border-b border-indigo-100/80 dark:border-indigo-900/50 flex items-center justify-between gap-2 overflow-x-auto custom-scrollbar shrink-0 text-xs">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5 shrink-0">
+          <svg class="portal-icon-sm text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span>Vínculos:</span>
+        </span>
+        <div id="modal-nota-vinculos-list" class="flex items-center gap-1.5 flex-nowrap overflow-x-auto custom-scrollbar py-0.5">
+          <!-- Chips compactos removibles con boton de cierre -->
+        </div>
+      </div>
+      <button type="button" data-action="vincular" data-contexto="modal" onclick="abrirModalVincularEntidadNota('modal')"
+        class="btn-vincular-trigger text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-200 shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-indigo-100/60 dark:hover:bg-indigo-900/50 transition cursor-pointer"
+        title="Vincular otra entidad">
+        <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>Vincular</span>
+      </button>
+    </div>
+
+    <!-- CUERPO SCROLLABLE DEL MODAL -->
+    <div id="modal-editar-nota-body" class="p-5 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4 text-xs transition-colors duration-200">
+
+      <!-- CAMPO DE TÍTULO DESTACADO (ANCHO TOTAL, CERO RELLENOS FALSOS) -->
+      <div>
+        <input type="text" id="modal-nota-titulo" placeholder="Título de la nota..."
+          class="w-full text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 placeholder-slate-400 bg-transparent border-b border-transparent focus:border-amber-500 outline-hidden pb-1 transition-all" />
+      </div>
+
+      <!-- BANNER DE IMAGEN ADJUNTA (Si aplica) -->
+      <div id="modal-nota-image-banner-wrap" class="hidden rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-56">
+        <img id="modal-nota-image-banner" src="" alt="Banner nota" class="w-full h-full object-cover" />
+      </div>
+
+      <!-- SECCIÓN A: CONTENIDO GENERAL (EDITOR DE TEXTO / MARKDOWN) -->
+      <div id="modal-nota-contenido-wrap" class="space-y-1.5">
+        <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span>Sección A: Contenido General (Markdown & Notas)</span>
+        </label>
+        <textarea id="modal-nota-contenido" rows="4"
+          placeholder="Escribe el contenido de tu nota... Escribe @ para vincular elementos..."
+          class="w-full text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 bg-white/70 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 p-3 outline-hidden focus:ring-2 focus:ring-amber-500 resize-y custom-scrollbar leading-relaxed transition-colors duration-200"></textarea>
+      </div>
+
+      <!-- SECCIÓN B: CHECKLIST PROCEDURAL (CASILLAS ☑ / ☐ Y TABLA) -->
+      <div id="modal-nota-checklist-seccion" class="space-y-3 p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/60">
+        
+        <!-- Barra de Control de Checklist: Título, Progreso y Disparador de + Columna -->
+        <div class="flex flex-wrap items-center justify-between gap-2.5 pb-1">
+          <div class="flex items-center gap-2">
+            <svg class="portal-icon-sm text-indigo-600 dark:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                  Sección B: Checklist Procedural
+                </span>
+                <span id="modal-nota-checklist-pct" class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full border border-indigo-200/60 dark:border-indigo-800/60">
+                  0% completado (0/0)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mecanismo Limpio de Conversión a Tabla (Columnas bajo demanda) -->
+          <div class="flex items-center gap-1.5 ml-auto">
+            <input type="text" id="input-nueva-columna-nombre" placeholder="Nombre columna (ej. Prioridad)..."
+              onkeydown="if(event.key==='Enter'){event.preventDefault(); agregarColumnaDesdeInputModal();}"
+              class="w-36 sm:w-44 px-2.5 py-1 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-hidden focus:ring-1 focus:ring-indigo-500" />
+            <button type="button" onclick="agregarColumnaDesdeInputModal()"
+              class="px-2.5 py-1 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white transition shadow-2xs cursor-pointer shrink-0"
+              title="Añadir columna de criterio y convertir a tabla">
+              ＋ Columna
+            </button>
+          </div>
+        </div>
+
+        <!-- Único Input Limpio para Agregar Ítems con Botón [ Agregar ] o Enter -->
+        <div class="flex items-center gap-2 p-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 shadow-2xs">
+          <span class="text-slate-400 text-sm ml-2">＋</span>
+          <input type="text" id="modal-nota-new-check-input"
+            placeholder="Escribe una tarea o ítem y presiona Enter..."
+            onkeydown="handleModalChecklistKeydown(event)"
+            class="flex-1 text-xs bg-transparent border-none outline-hidden px-1 py-1 text-slate-800 dark:text-slate-100 placeholder-slate-400" />
+          <button type="button" onclick="agregarItemModalChecklist()"
+            class="px-3.5 py-1.5 rounded-lg font-bold text-xs bg-amber-500 hover:bg-amber-600 active:scale-95 text-white transition shadow-2xs cursor-pointer shrink-0">
+            Agregar
+          </button>
+        </div>
+
+        <!-- Contenedor Dinámico: Lista Simple o Tabla Multicolumna según existan columnas extra -->
+        <div id="modal-nota-checklist-items-container" class="space-y-1.5 max-h-72 overflow-y-auto custom-scrollbar">
+          <!-- Renderizado dinámico desde JS: lista vertical si 0 columnas extra, tabla si >= 1 columnas extra -->
+        </div>
+
+      </div>
+
+      <!-- SECCIÓN C: WISHLIST / ÍTEMS DESEADOS (OPCIONAL / COLAPSABLE) -->
+      <div id="modal-nota-wishlist-wrap" class="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/60 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+            <svg class="portal-icon-sm text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect width="20" height="5" x="2" y="7"/><line x1="12" x2="12" y1="22" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+            <span>Sección C: WishList / Ítems Deseados</span>
+          </span>
+          <span id="modal-wishlist-status-badge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200">
+            Pendiente
+          </span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Costo Estimado</label>
+            <div class="flex items-center gap-1">
+              <select id="modal-wishlist-moneda" class="text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-slate-800 dark:text-slate-100 outline-hidden">
+                <option value="PEN">S/</option>
+                <option value="USD">$</option>
+              </select>
+              <input type="number" id="modal-wishlist-costo" step="0.01" min="0" placeholder="0.00"
+                class="w-full text-xs font-mono font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-slate-800 dark:text-slate-100 outline-hidden" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Nivel de Deseo</label>
+            <select id="modal-wishlist-nivel" class="w-full text-xs font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-slate-800 dark:text-slate-100 outline-hidden">
+              <option value="">-- Opcional / Sin nivel --</option>
+              <option value="Alta">Prioridad Alta</option>
+              <option value="Media">Prioridad Media</option>
+              <option value="Baja">Baja / Capricho</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Estado</label>
+            <select id="modal-wishlist-estado" class="w-full text-xs font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-slate-800 dark:text-slate-100 outline-hidden">
+              <option value="Pendiente">Pendiente</option>
+              <option value="Conseguido">Conseguido</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">Enlace de Referencia / Tienda (Opcional)</label>
+          <div class="flex items-center gap-2">
+            <input type="url" id="modal-wishlist-enlace" placeholder="https://..."
+              class="w-full text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-slate-800 dark:text-slate-100 outline-hidden" />
+            <a id="modal-wishlist-enlace-btn" href="#" target="_blank"
+              class="hidden px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shrink-0 transition" title="Abrir enlace de referencia">
+              Visitar
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- GESTIÓN DINÁMICA DE ETIQUETAS (TAGS) -->
+      <div class="space-y-2">
+        <label class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
+          <span class="flex items-center gap-1.5"><svg class="portal-icon-sm text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg><span>Etiquetas de la Nota</span></span>
+          <span id="modal-nota-tags-count" class="text-[10px] font-normal text-slate-400 lowercase">0 etiquetas</span>
+        </label>
+        <div class="flex flex-wrap items-center gap-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80">
+          <div id="modal-nota-tags-list" class="flex flex-wrap gap-1.5">
+            <!-- Chips de etiquetas seleccionadas con botón de eliminación -->
+          </div>
+          <div class="relative inline-block flex-1 min-w-[140px]">
+            <input type="text" id="modal-nota-new-tag-input"
+              placeholder="+ Añadir nueva etiqueta (Enter o coma)..."
+              onkeydown="handleModalNotaTagKeydown(event)"
+              onfocus="mostrarSugerenciasEtiquetasModal(event)"
+              oninput="mostrarSugerenciasEtiquetasModal(event)"
+              class="w-full text-xs bg-transparent border-none outline-hidden focus:ring-0 p-1 text-slate-800 dark:text-slate-100 placeholder-slate-400" />
+            <div id="modal-nota-tags-autocomplete"
+              class="hidden absolute left-0 bottom-full mb-1 w-64 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 p-1.5 z-50 max-h-44 overflow-y-auto custom-scrollbar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARCHIVOS ADJUNTOS CON GOOGLE DRIVE -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <label class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <svg class="portal-icon-sm text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            <span>Archivos & Documentos Drive</span>
+          </label>
+          <button type="button" onclick="triggerFileInputModalNota()"
+            class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer">
+            ＋ Subir archivo a Drive
+          </button>
+          <input type="file" id="input-file-modal-nota" class="hidden" accept="image/*,application/pdf"
+            onchange="handleModalNotaFileSelect(event)" />
+        </div>
+        <div id="modal-nota-adjuntos-list" class="flex flex-wrap gap-2">
+          <!-- Chips de adjuntos -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- PIE DE ACCIONES DEL MODAL -->
+    <div id="modal-editar-nota-footer"
+      class="px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 transition-colors duration-200 ease-in-out">
+      
+      <!-- Selector de Color Desplegable Compacto (Popover Upward) -->
+      <div class="relative inline-block" id="modal-nota-color-picker-wrap">
+        <button type="button" id="btn-modal-nota-color" onclick="toggleModalNotaColorPicker(event)"
+          class="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-800 transition shadow-2xs flex items-center gap-2 text-slate-600 dark:text-slate-300 cursor-pointer"
+          title="Seleccionar color de la nota">
+          <span id="modal-nota-color-indicador" class="w-3.5 h-3.5 rounded-full bg-slate-500 inline-block shadow-2xs shrink-0 border border-white/20"></span>
+          <span class="text-xs font-semibold hidden sm:inline">Color</span>
+          <svg class="portal-icon-sm w-3.5 h-3.5 text-slate-400 transition-transform duration-150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+
+        <!-- Popover Flotante Interactivo hacia arriba con los 16 tonos Tailwind canónicos + HEX -->
+        <div id="modal-nota-color-picker-popover" onclick="event.stopPropagation()"
+          class="hidden absolute left-0 bottom-full mb-2 w-64 bg-white dark:bg-slate-800 rounded-2xl p-2.5 z-50 animate-in fade-in zoom-in-95 duration-150 portal-surface elevation-3 border border-slate-200 dark:border-slate-700 shadow-xl space-y-2">
+          <div class="flex items-center justify-between px-1">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Paleta 16 tonos Tailwind</span>
+            <span class="text-[9px] text-indigo-500 dark:text-indigo-400 font-bold">Fase 4.13</span>
+          </div>
+
+          <div class="grid grid-cols-4 gap-1.5 max-h-52 overflow-y-auto custom-scrollbar p-0.5">
+            <button type="button" data-color="default" onclick="setModalNotaColor('default'); cerrarModalNotaColorPicker();"
+              title="Predeterminado" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-slate-500 border border-slate-400 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Default</span>
+            </button>
+            <button type="button" data-color="slate" onclick="setModalNotaColor('slate'); cerrarModalNotaColorPicker();"
+              title="Pizarra (Slate)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/60 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-slate-600 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Slate</span>
+            </button>
+            <button type="button" data-color="red" onclick="setModalNotaColor('red'); cerrarModalNotaColorPicker();"
+              title="Rojo (Red)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-red-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Rojo</span>
+            </button>
+            <button type="button" data-color="orange" onclick="setModalNotaColor('orange'); cerrarModalNotaColorPicker();"
+              title="Naranja (Orange)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-orange-50 dark:hover:bg-orange-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-orange-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Naranja</span>
+            </button>
+            <button type="button" data-color="amber" onclick="setModalNotaColor('amber'); cerrarModalNotaColorPicker();"
+              title="Ámbar (Amber)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-amber-400 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Ámbar</span>
+            </button>
+            <button type="button" data-color="yellow" onclick="setModalNotaColor('yellow'); cerrarModalNotaColorPicker();"
+              title="Amarillo (Yellow)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-yellow-50 dark:hover:bg-yellow-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-yellow-400 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Amarillo</span>
+            </button>
+            <button type="button" data-color="lime" onclick="setModalNotaColor('lime'); cerrarModalNotaColorPicker();"
+              title="Lima (Lime)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-lime-50 dark:hover:bg-lime-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-lime-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Lima</span>
+            </button>
+            <button type="button" data-color="green" onclick="setModalNotaColor('green'); cerrarModalNotaColorPicker();"
+              title="Verde (Green)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-green-50 dark:hover:bg-green-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-green-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Verde</span>
+            </button>
+            <button type="button" data-color="emerald" onclick="setModalNotaColor('emerald'); cerrarModalNotaColorPicker();"
+              title="Esmeralda (Emerald)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-emerald-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Esmeralda</span>
+            </button>
+            <button type="button" data-color="teal" onclick="setModalNotaColor('teal'); cerrarModalNotaColorPicker();"
+              title="Turquesa (Teal)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-teal-50 dark:hover:bg-teal-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-teal-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Teal</span>
+            </button>
+            <button type="button" data-color="cyan" onclick="setModalNotaColor('cyan'); cerrarModalNotaColorPicker();"
+              title="Cian (Cyan)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-cyan-400 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Cian</span>
+            </button>
+            <button type="button" data-color="sky" onclick="setModalNotaColor('sky'); cerrarModalNotaColorPicker();"
+              title="Cielo (Sky)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-sky-50 dark:hover:bg-sky-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-sky-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Cielo</span>
+            </button>
+            <button type="button" data-color="blue" onclick="setModalNotaColor('blue'); cerrarModalNotaColorPicker();"
+              title="Azul (Blue)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-blue-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Azul</span>
+            </button>
+            <button type="button" data-color="indigo" onclick="setModalNotaColor('indigo'); cerrarModalNotaColorPicker();"
+              title="Índigo (Indigo)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-indigo-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Índigo</span>
+            </button>
+            <button type="button" data-color="violet" onclick="setModalNotaColor('violet'); cerrarModalNotaColorPicker();"
+              title="Violeta (Violet)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-purple-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Violeta</span>
+            </button>
+            <button type="button" data-color="purple" onclick="setModalNotaColor('purple'); cerrarModalNotaColorPicker();"
+              title="Púrpura (Purple)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-purple-600 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Púrpura</span>
+            </button>
+            <button type="button" data-color="rose" onclick="setModalNotaColor('rose'); cerrarModalNotaColorPicker();"
+              title="Rosa (Rose)" class="modal-color-swatch flex flex-col items-center gap-1 p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 transition text-center cursor-pointer">
+              <span class="w-4 h-4 rounded-full bg-rose-500 shadow-2xs"></span>
+              <span class="text-[9.5px] truncate w-full text-slate-600 dark:text-slate-300">Rosa</span>
+            </button>
+          </div>
+
+          <!-- Selector de Color HEX Libre -->
+          <div class="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center gap-2">
+            <input type="color" id="modal-nota-color-native-input" onchange="setModalNotaColor(this.value); cerrarModalNotaColorPicker();"
+              class="w-6 h-6 rounded-lg cursor-pointer border border-slate-300 dark:border-slate-600 bg-transparent p-0 shrink-0" title="Elegir color libre del selector" />
+            <input type="text" id="modal-nota-color-hex-text" placeholder="#HEX libre..." maxlength="9"
+              onchange="if(/^#[0-9a-fA-F]{3,8}$/.test(this.value.trim())){ setModalNotaColor(this.value.trim()); cerrarModalNotaColorPicker(); }"
+              onkeydown="if(event.key === 'Enter'){ event.preventDefault(); if(/^#[0-9a-fA-F]{3,8}$/.test(this.value.trim())){ setModalNotaColor(this.value.trim()); cerrarModalNotaColorPicker(); } }"
+              class="flex-1 px-2 py-1 text-[11px] font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 outline-hidden focus:ring-1 focus:ring-indigo-500" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Acciones: Eliminar, Cancelar, Guardar -->
+      <div class="flex items-center gap-2 ml-auto">
+        <button type="button" onclick="eliminarNotaDesdeModal()"
+          class="px-3 py-1.5 rounded-xl font-bold text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer">
+          Eliminar
+        </button>
+        <button type="button" onclick="cerrarModalEditarNota()"
+          class="btn-portal-secondary">
+          Cancelar
+        </button>
+        <button type="button" onclick="guardarNotaDesdeModal()"
+          class="btn-portal-primary">
+          Guardar Cambios
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===================================================================== -->
+<!-- 2. MINI-MODAL ASISTENTE DE VINCULACIÓN DE ENTIDADES CRUZADAS (@)      -->
+<!-- ===================================================================== -->
+<div id="modal-vincular-entidad-nota" style="z-index: 10050;" onclick="if (event.target === this) cerrarModalVincularEntidadNota();"
+  class="hidden fixed inset-0 z-[10050] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+
+  <div id="modal-vincular-entidad-nota-card"
+    class="portal-surface elevation-3 w-full max-w-lg max-h-[85vh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative transition-all duration-200 text-slate-800 dark:text-slate-100">
+
+    <!-- DRAG HANDLE MÓVIL (BOTTOM SHEET) -->
+    <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0"></div>
+
+    <!-- Cabecera -->
+    <div class="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-bold flex items-center justify-center shadow-2xs">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">Vincular Entidad a la Nota</h3>
+          <p class="text-[11px] text-slate-400">Selecciona una entidad para referenciarla directamente</p>
+        </div>
+      </div>
+      <button type="button" onclick="cerrarModalVincularEntidadNota()"
+        class="btn-portal-icon" title="Cerrar modal">
+        <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Pestañas de Dominio: [ Proyectos | Hitos | Tareas | Hábitos | Ingresos | Gastos ] -->
+    <div class="flex items-center gap-1.5 px-4 pt-3 border-b border-slate-100 dark:border-slate-800 text-xs overflow-x-auto custom-scrollbar select-none">
+      <button type="button" id="tab-vinc-proy" onclick="setTabVincularEntidad('PROYECTO')"
+        class="tab-vinc-btn px-3 py-1.5 rounded-t-xl font-bold border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30 whitespace-nowrap cursor-pointer transition inline-flex items-center gap-1.5">
+        <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M8 10v4"/><path d="M12 10v2"/><path d="M16 10v6"/></svg>
+        <span>Proyectos</span>
+      </button>
+      <button type="button" id="tab-vinc-hit" onclick="setTabVincularEntidad('HITO')"
+        class="tab-vinc-btn px-3 py-1.5 rounded-t-xl font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 whitespace-nowrap cursor-pointer transition inline-flex items-center gap-1.5">
+        <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
+        <span>Hitos</span>
+      </button>
+      <button type="button" id="tab-vinc-tar" onclick="setTabVincularEntidad('TAREA')"
+        class="tab-vinc-btn px-3 py-1.5 rounded-t-xl font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 whitespace-nowrap cursor-pointer transition inline-flex items-center gap-1.5">
+        <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        <span>Tareas</span>
+      </button>
+      <button type="button" id="tab-vinc-hab" onclick="setTabVincularEntidad('HABITO')"
+        class="tab-vinc-btn px-3 py-1.5 rounded-t-xl font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 whitespace-nowrap cursor-pointer transition inline-flex items-center gap-1.5">
+        <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        <span>Hábitos</span>
+      </button>
+      <button type="button" id="tab-vinc-ing" onclick="setTabVincularEntidad('INGRESO')"
+        class="tab-vinc-btn px-3 py-1.5 rounded-t-xl font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 whitespace-nowrap cursor-pointer transition inline-flex items-center gap-1.5">
+        <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+        <span>Ingresos</span>
+      </button>
+      <button type="button" id="tab-vinc-gas" onclick="setTabVincularEntidad('GASTO')"
+        class="tab-vinc-btn px-3 py-1.5 rounded-t-xl font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 whitespace-nowrap cursor-pointer transition inline-flex items-center gap-1.5">
+        <svg class="portal-icon-sm shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
+        <span>Gastos</span>
+      </button>
+    </div>
+
+    <!-- Buscador en tiempo real de entidades -->
+    <div class="px-4 py-2.5 bg-slate-50 dark:bg-slate-850 border-b border-slate-200/80 dark:border-slate-800">
+      <div class="relative">
+        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+          <svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </span>
+        <input type="text" id="input-buscar-entidad-vincular" oninput="filtrarEntidadesParaVincular()"
+          placeholder="Buscar por código, nombre o descripción..."
+          class="w-full pl-8 pr-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 outline-hidden transition shadow-2xs" />
+      </div>
+    </div>
+
+    <!-- Lista de resultados -->
+    <div id="lista-entidades-vincular" class="p-3 overflow-y-auto custom-scrollbar flex-1 space-y-1.5 text-xs max-h-72">
+      <!-- Elementos generados dinámicamente -->
+    </div>
+
+    <!-- Pie -->
+    <div class="p-3.5 bg-slate-50 dark:bg-slate-900 border-t border-slate-200/80 dark:border-slate-800 flex justify-end">
+      <button type="button" onclick="cerrarModalVincularEntidadNota()"
+        class="btn-portal-secondary">
+        Cerrar
+      </button>
+    </div>
+
+  </div>
+</div>

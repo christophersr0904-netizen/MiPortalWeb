@@ -1,0 +1,1088 @@
+<!--
+ * ============================================================================
+ * ARCHIVO: JS_Subtareas.html
+ * SISTEMA: PMO Personal Modular & Gestión Integral de Vida
+ * ============================================================================
+-->
+<script>
+  // ============================================================================
+  // MÓDULO PROCEDURAL: WORKFLOW DE PASOS / SUBTAREAS SECUENCIALES (SUB-XXX)
+  // ============================================================================
+
+  /**
+   * Auto-sintetiza pasos en state.subtareas a partir de un checklist legacy (- [ ] / - [x])
+   * presente en act.Notas_Checklist si aún no existen filas en state.subtareas.
+   */
+  // Caché interna indexada por ID_Padre para resolución O(1)
+  var _cacheSubtareasMap = null;
+  var _lastSubtareasRef = null;
+  var _lastSubtareasLength = -1;
+
+  function invalidarCacheSubtareas() {
+    _cacheSubtareasMap = null;
+    _lastSubtareasRef = null;
+    _lastSubtareasLength = -1;
+  }
+
+  /**
+   * Genera o retorna un Map pre-indexado O(1) de subtareas agrupadas por ID_Padre.
+   * Si state.subtareas no ha mutado su referencia ni su longitud, reutiliza la caché en memoria.
+   */
+  function indexarSubtareasPorPadre() {
+    if (!Array.isArray(state.subtareas)) state.subtareas = [];
+    if (_cacheSubtareasMap && _lastSubtareasRef === state.subtareas && _lastSubtareasLength === state.subtareas.length) {
+      return _cacheSubtareasMap;
+    }
+    var map = new Map();
+    for (var i = 0; i < state.subtareas.length; i++) {
+      var s = state.subtareas[i];
+      var idPadre = String(s.ID_Padre_Vinculado || s.idPadreVinculado || s.ID_Padre || s.idPadre || '').trim();
+      if (!idPadre) continue;
+      if (!map.has(idPadre)) {
+        map.set(idPadre, []);
+      }
+      map.get(idPadre).push(s);
+    }
+    map.forEach(function (lista) {
+      lista.sort(function (a, b) {
+        return (parseInt(a.Numero_Paso || a.Orden_Ejecucion || 1, 10) || 0) - (parseInt(b.Numero_Paso || b.Orden_Ejecucion || 1, 10) || 0);
+      });
+    });
+    _cacheSubtareasMap = map;
+    _lastSubtareasRef = state.subtareas;
+    _lastSubtareasLength = state.subtareas.length;
+    return map;
+  }
+
+  /**
+   * Auto-sintetiza pasos en state.subtareas a partir de un checklist legacy (- [ ] / - [x])
+   * presente en act.Notas_Checklist si aún no existen filas en state.subtareas.
+   */
+  function asegurarSubtareasDesdeChecklist(act) {
+    if (!act || !act.ID_Actividad) return;
+    if (!Array.isArray(state.subtareas)) state.subtareas = [];
+    var idNorm = String(act.ID_Actividad).trim();
+    var existentes = state.subtareas.filter(function (s) {
+      return String(s.ID_Padre_Vinculado || s.idPadreVinculado || s.ID_Padre || s.idPadre || '').trim() === idNorm;
+    });
+    if (existentes.length === 0 && act.Notas_Checklist && typeof act.Notas_Checklist === 'string') {
+      var lineas = act.Notas_Checklist.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+      var checks = lineas.filter(function (l) { return /^-\s*\[([ xX])\]/.test(l); });
+      if (checks.length > 0) {
+        checks.forEach(function (l, idx) {
+          var isDone = /^-\s*\[([xX])\]/.test(l);
+          var desc = l.replace(/^-\s*\[([ xX])\]\s*/, '').trim();
+          if (desc) {
+            state.subtareas.push({
+              ID_Subtarea: 'SUB-CHK-' + idNorm + '-' + (idx + 1),
+              idSubtarea: 'SUB-CHK-' + idNorm + '-' + (idx + 1),
+              Tipo_Padre: 'ACTIVIDAD',
+              tipoPadre: 'ACTIVIDAD',
+              ID_Padre_Vinculado: idNorm,
+              idPadreVinculado: idNorm,
+              ID_Padre: idNorm,
+              idPadre: idNorm,
+              Numero_Paso: idx + 1,
+              numeroPaso: idx + 1,
+              Descripcion_Paso: desc,
+              descripcionPaso: desc,
+              Completado: isDone,
+              completado: isDone,
+              Fecha_Completado: isDone ? new Date().toISOString() : '',
+              fechaCompletado: isDone ? new Date().toISOString() : ''
+            });
+          }
+        });
+        invalidarCacheSubtareas();
+      }
+    }
+  }
+
+  /**
+   * DESACOPLE ESTRICTO: Las subtareas y pasos procedurales se gestionan de forma
+   * totalmente independiente en BBDD_Subtareas_Pasos y state.subtareas.
+   * El campo Notas_Checklist está reservado exclusivamente para notas, observaciones y enlaces
+   * libres redactados por el usuario. Nunca se inyectan ni concatenan los pasos en Notas_Checklist.
+   */
+  function sincronizarNotasChecklistConSubtareas(idPadre) {
+    // No-op intencional para mantener compatibilidad de llamada sin sobreescribir las notas del usuario.
+    return;
+  }
+
+  /**
+   * Obtiene la lista ordenada de pasos asociados a una entidad padre (TAR-XXX o ACT-XXX)
+   */
+  function obtenerSubtareasPadre(idPadre, mapOpcional) {
+    var idNorm = String(idPadre || '').trim();
+    if (!idNorm) return [];
+    if (!Array.isArray(state.subtareas)) state.subtareas = [];
+
+    var mapa = mapOpcional || indexarSubtareasPorPadre();
+    var pasos = mapa.get(idNorm);
+
+    // Si es una actividad personal y no tiene subtareas cargadas aún, sintetizar desde Notas_Checklist si aplica
+    if ((!pasos || pasos.length === 0) && Array.isArray(state.actividadesPersonales)) {
+      var act = state.actividadesPersonales.find(function (a) { return String(a.ID_Actividad || '').trim() === idNorm; });
+      if (act) {
+        asegurarSubtareasDesdeChecklist(act);
+        invalidarCacheSubtareas();
+        mapa = indexarSubtareasPorPadre();
+        pasos = mapa.get(idNorm);
+      }
+    }
+
+    if (!pasos) return [];
+    return pasos.slice();
+  }
+
+  /**
+   * Calcula el progreso procedural cuantitativo de una entidad padre
+   */
+  function calcularProgresoSubtareas(idPadre, mapOpcional) {
+    var pasos = obtenerSubtareasPadre(idPadre, mapOpcional);
+    var total = pasos.length;
+    if (total === 0) {
+      return { total: 0, completados: 0, pct: 0, siguientePasoActivo: null, pasos: [] };
+    }
+    var completados = 0;
+    var siguientePasoActivo = null;
+    for (var i = 0; i < total; i++) {
+      var p = pasos[i];
+      var isDone = p.Completado === true || String(p.Completado).toLowerCase() === 'true';
+      if (isDone) {
+        completados++;
+      } else if (!siguientePasoActivo) {
+        siguientePasoActivo = p;
+      }
+    }
+    var pct = Math.round((completados / total) * 100);
+    return {
+      total: total,
+      completados: completados,
+      pct: pct,
+      siguientePasoActivo: siguientePasoActivo,
+      pasos: pasos
+    };
+  }
+
+  /**
+   * Genera el widget visual para la tarjeta Kanban / Hábitos:
+   * Si no hay pasos -> retorna cadena vacía (cero ruido visual)
+   * Si hay pasos -> píldora de progreso + microbarra + drawer desplegable
+   */
+  function renderWidgetSubtareasTarjeta(idPadre, mapOpcional) {
+    var prog = calcularProgresoSubtareas(idPadre, mapOpcional);
+    if (prog.total === 0) return '';
+
+    var esTotal = prog.completados === prog.total;
+    var colorPill = esTotal
+      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60'
+      : (prog.completados > 0
+        ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/60'
+        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/60');
+
+    var colorBarra = esTotal ? 'bg-emerald-500' : 'bg-indigo-500';
+
+    var drawerId = 'procedural-drawer-' + idPadre;
+
+    var pasosListHtml = prog.pasos.map(function (p, idx) {
+      var isDone = p.Completado === true || String(p.Completado).toLowerCase() === 'true';
+      var num = parseInt(p.Numero_Paso, 10) || (idx + 1);
+
+      // Regla secuencial: el paso 1 siempre habilitado. El paso N solo si paso N-1 está completado.
+      var estaBloqueado = false;
+      if (!isDone && idx > 0) {
+        var prevPaso = prog.pasos[idx - 1];
+        var prevDone = prevPaso.Completado === true || String(prevPaso.Completado).toLowerCase() === 'true';
+        if (!prevDone) estaBloqueado = true;
+      }
+
+      var iconChk = isDone
+        ? '<span class="w-4 h-4 min-w-[16px] min-h-[16px] rounded bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-2xs">' +
+          '<svg class="portal-icon-sm w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+          '</span>'
+        : (estaBloqueado
+          ? '<span class="w-4 h-4 min-w-[16px] min-h-[16px] rounded border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center shrink-0 select-none opacity-60" title="Bloqueado: completa el paso anterior primero">' +
+            '<svg class="portal-icon-sm w-3 h-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+            '</span>'
+          : '<span class="w-4 h-4 min-w-[16px] min-h-[16px] rounded border border-slate-300 dark:border-slate-600 hover:border-indigo-500 bg-white dark:bg-slate-800 shrink-0 transition-colors"></span>');
+
+      var strikeClass = isDone ? 'line-through text-slate-400 dark:text-slate-500' : (estaBloqueado ? 'text-slate-400 dark:text-slate-500 cursor-not-allowed' : 'text-slate-700 dark:text-slate-200 cursor-pointer');
+
+      return '<div class="flex items-center gap-1.5 py-1 px-1.5 rounded-lg hover:bg-slate-100/70 dark:hover:bg-slate-800/70 transition-colors group/step ' + (estaBloqueado ? 'opacity-60' : '') + '">' +
+        '<button type="button" ' + (estaBloqueado ? 'disabled' : '') + ' onclick="event.stopPropagation(); toggleSubtareaOptimista(\'' + p.ID_Subtarea + '\', \'' + idPadre + '\', ' + !isDone + ', event)" class="shrink-0 p-0.5 rounded transition active:scale-95 focus:outline-none flex items-center justify-center" title="' + (estaBloqueado ? 'Bloqueado: completa el Paso ' + (num - 1) + ' primero' : (isDone ? 'Marcar como pendiente (desmarca en cascada posteriores)' : 'Completar paso ' + num)) + '">' +
+        iconChk +
+        '</button>' +
+        '<span class="font-mono tabular-nums text-[9px] font-bold text-slate-400 dark:text-slate-500 shrink-0">P' + num + '</span>' +
+        '<span onclick="event.stopPropagation(); ' + (!estaBloqueado ? 'toggleSubtareaOptimista(\'' + p.ID_Subtarea + '\', \'' + idPadre + '\', ' + !isDone + ', event)' : '') + '" class="text-[11px] truncate select-none flex-1 ' + strikeClass + '" title="' + escapeHtml(p.Descripcion_Paso) + '">' +
+        escapeHtml(p.Descripcion_Paso) +
+        '</span>' +
+        '</div>';
+    }).join('');
+
+    return '<div class="pt-1.5" onclick="event.stopPropagation()">' +
+      '<div class="flex items-center justify-between gap-1.5 cursor-pointer select-none group/pill py-0.5" onclick="toggleDrawerSubtareasTarjeta(\'' + idPadre + '\', event, this)" title="Clic para ver/ocultar pasos procedurales">' +
+      '<div class="flex items-center gap-1.5">' +
+      '<span class="inline-flex items-center gap-1 text-[9.5px] font-bold px-2 py-0.5 rounded-full border shadow-2xs transition-transform group-hover/pill:scale-[1.02] ' + colorPill + '">' +
+      '<svg class="portal-icon-sm shrink-0" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg><span class="font-mono tabular-nums">' + prog.completados + '/' + prog.total + ' pasos</span>' +
+      '<span class="font-mono tabular-nums text-[8.5px] opacity-75">(' + prog.pct + '%)</span>' +
+      '</span>' +
+      '</div>' +
+      '<div class="flex items-center gap-1.5">' +
+      '<div class="w-16 bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden shrink-0">' +
+      '<div class="' + colorBarra + ' h-full rounded-full transition-all duration-300" style="width: ' + prog.pct + '%"></div>' +
+      '</div>' +
+      '<svg id="drawer-arrow-' + idPadre + '" class="drawer-arrow portal-icon-sm text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>' +
+      '</div>' +
+      '</div>' +
+      '<div id="' + drawerId + '" class="procedural-drawer bg-slate-50/70 dark:bg-slate-900/60 rounded-xl p-1.5 border border-slate-100 dark:border-slate-800/80 shadow-2xs space-y-0.5" onclick="event.stopPropagation()">' +
+      pasosListHtml +
+      '</div>' +
+      '</div>';
+  }
+
+  /**
+   * Alterna la apertura/cierre del cajón de pasos en una tarjeta.
+   * Resuelve contextualmente el contenedor directo de la tarjeta (this / triggerEl / nextElementSibling)
+   * garantizando 100% de aislamiento de instancia e inmunidad ante duplicación de IDs en el DOM.
+   */
+  function toggleDrawerSubtareasTarjeta(idPadre, event, triggerEl) {
+    if (event) {
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+      if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    }
+
+    var trigger = triggerEl || (event ? (event.currentTarget || event.target) : null);
+    if (trigger && !trigger.classList.contains('group/pill') && trigger.closest) {
+      var pillTrigger = trigger.closest('.group\\/pill') || trigger.closest('[onclick*="toggleDrawerSubtareasTarjeta"]');
+      if (pillTrigger) trigger = pillTrigger;
+    }
+
+    var drawer = null;
+    var arrow = null;
+
+    if (trigger) {
+      drawer = trigger.nextElementSibling;
+      if (!drawer || !drawer.classList.contains('procedural-drawer')) {
+        var parentWidget = trigger.closest ? (trigger.closest('.procedural-widget-container') || trigger.parentElement) : trigger.parentElement;
+        if (parentWidget) {
+          drawer = parentWidget.querySelector('.procedural-drawer');
+          arrow = parentWidget.querySelector('.drawer-arrow, svg');
+        }
+      } else {
+        arrow = trigger.querySelector ? trigger.querySelector('.drawer-arrow, svg') : null;
+      }
+    }
+
+    // Fallback por ID si no se ubicó contextualmente
+    if (!drawer) {
+      drawer = document.getElementById('procedural-drawer-' + idPadre);
+    }
+    if (!arrow) {
+      arrow = document.getElementById('drawer-arrow-' + idPadre);
+    }
+
+    if (!drawer) return;
+
+    var isOpen = drawer.classList.contains('open');
+    if (isOpen) {
+      drawer.classList.remove('open');
+      if (arrow) arrow.style.transform = 'rotate(0deg)';
+    } else {
+      drawer.classList.add('open');
+      if (arrow) arrow.style.transform = 'rotate(180deg)';
+    }
+  }
+
+  /**
+   * Marcado / desmarcado optimista de subtarea:
+   * Actualiza el estado local de inmediato a 60 FPS, actualiza la UI de tarjetas y modales,
+   * y despacha la llamada silenciosa al backend sin recargas ni falsos errores.
+   */
+  function toggleSubtareaOptimista(idSubtarea, idPadre, nuevoEstado, event) {
+    if (typeof idPadre === 'object' && idPadre !== null && (idPadre.preventDefault || idPadre.stopPropagation || idPadre.target)) {
+      event = idPadre;
+      idPadre = null;
+      nuevoEstado = undefined;
+    }
+    if (event) {
+      if (typeof event.preventDefault === 'function') event.preventDefault();
+      if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    }
+
+    if (!idPadre) {
+      var found = (state.subtareas || []).find(function (s) { return s.ID_Subtarea === idSubtarea; });
+      if (found) {
+        idPadre = found.ID_Padre_Vinculado || found.idPadreVinculado || found.ID_Padre || found.idPadre;
+        if (nuevoEstado === undefined) {
+          var isDoneNow = found.Completado === true || String(found.Completado).toLowerCase() === 'true';
+          nuevoEstado = !isDoneNow;
+        }
+      }
+    }
+    if (!idPadre) return;
+
+    var pasos = obtenerSubtareasPadre(idPadre);
+    var targetPaso = pasos.find(function (p) { return p.ID_Subtarea === idSubtarea; });
+    if (!targetPaso) return;
+
+    var currentDone = targetPaso.Completado === true || String(targetPaso.Completado).toLowerCase() === 'true';
+    var deseadoBool = (nuevoEstado === undefined) ? !currentDone : (nuevoEstado === true || String(nuevoEstado).toLowerCase() === 'true');
+
+    var numTarget = parseInt(targetPaso.Numero_Paso || targetPaso.Orden_Ejecucion || 1, 10) || 1;
+
+    // Snapshot del estado previo de los pasos para posible rollback defensivo
+    var snapshotPasos = pasos.map(function (p) {
+      return {
+        ID_Subtarea: p.ID_Subtarea,
+        Completado: p.Completado,
+        Fecha_Completado: p.Fecha_Completado
+      };
+    });
+
+    if (deseadoBool) {
+      // Validar regla secuencial: Paso N solo si todos los anteriores están completados
+      var incompletos = pasos.filter(function (p) {
+        var n = parseInt(p.Numero_Paso || p.Orden_Ejecucion || 1, 10) || 1;
+        var comp = p.Completado === true || String(p.Completado).toLowerCase() === 'true';
+        return n < numTarget && !comp;
+      });
+
+      if (incompletos.length > 0) {
+        var primerFaltante = incompletos[0];
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'info',
+            title: 'Secuencia Bloqueada',
+            text: 'Debes completar primero el Paso ' + (primerFaltante.Numero_Paso || 1) + ' ("' + (primerFaltante.Descripcion_Paso || primerFaltante.Descripcion || '') + '") para habilitar este paso.',
+            confirmButtonColor: '#4f46e5',
+            timer: 3000
+          });
+        }
+        return;
+      }
+
+      targetPaso.Completado = true;
+      targetPaso.Fecha_Completado = new Date().toISOString();
+    } else {
+      // Desmarcar target y aplicar DESMARCADO EN CASCADA a todos los pasos posteriores
+      targetPaso.Completado = false;
+      targetPaso.Fecha_Completado = '';
+
+      pasos.forEach(function (p) {
+        var n = parseInt(p.Numero_Paso || p.Orden_Ejecucion || 1, 10) || 1;
+        if (n > numTarget && (p.Completado === true || String(p.Completado).toLowerCase() === 'true')) {
+          p.Completado = false;
+          p.Fecha_Completado = '';
+        }
+      });
+    }
+
+    invalidarCacheSubtareas();
+
+    // Refrescar widget en tarjeta (inmediato)
+    actualizarWidgetSubtareasEnTarjetaDOM(idPadre);
+
+    // Refrescar lista en modal (si está abierto)
+    var tipoPadre = String(targetPaso.Tipo_Padre || (String(idPadre).startsWith('ACT-') ? 'ACTIVIDAD' : 'TAREA')).toUpperCase();
+    actualizarListaPasosModalDOM(idPadre, tipoPadre);
+
+    // Propagación continua de avance en cascada (Pasos -> Tarea -> Hito -> Proyecto)
+    if (typeof recalcularAvanceCascada === 'function' && String(idPadre).startsWith('TAR-')) {
+      recalcularAvanceCascada(idPadre);
+    }
+
+    // Si es un ID temporal generado en memoria (creación de tarea/actividad sin guardar en BD)
+    var esTemporal = String(idSubtarea).startsWith('TEMP-') || String(idSubtarea).startsWith('SUB-TMP-') || String(idPadre).startsWith('TEMP-');
+    if (esTemporal) {
+      if (typeof window.sincronizarCacheLocalState === 'function') {
+        window.sincronizarCacheLocalState();
+      }
+      return;
+    }
+
+    function ejecutarRollbackSubtarea() {
+      // Revertir en memoria desde el snapshot
+      snapshotPasos.forEach(function (snap) {
+        var subLocal = (state.subtareas || []).find(function (s) { return s.ID_Subtarea === snap.ID_Subtarea; });
+        if (subLocal) {
+          subLocal.Completado = snap.Completado;
+          subLocal.Fecha_Completado = snap.Fecha_Completado;
+        }
+      });
+      invalidarCacheSubtareas();
+
+      // Restaurar UI en tarjetas y modal
+      actualizarWidgetSubtareasEnTarjetaDOM(idPadre);
+      actualizarListaPasosModalDOM(idPadre, tipoPadre);
+      if (typeof recalcularAvanceCascada === 'function' && String(idPadre).startsWith('TAR-')) {
+        recalcularAvanceCascada(idPadre);
+      }
+    }
+
+    // Sincronizar en segundo plano silenciosamente en BBDD_Subtareas_Pasos
+    callBackend('updatesubtareacompletado', {
+      idSubtarea: idSubtarea,
+      idPadre: idPadre,
+      idPadreVinculado: idPadre,
+      completado: deseadoBool
+    }, function (res) {
+      if (res && res.success) {
+        if (Array.isArray(res.pasosActualizados)) {
+          res.pasosActualizados.forEach(function (pu) {
+            var local = (state.subtareas || []).find(function (s) { return s.ID_Subtarea === pu.ID_Subtarea; });
+            if (local) {
+              local.Completado = (pu.Completado === true || String(pu.Completado).toLowerCase() === 'true');
+              local.Fecha_Completado = pu.Fecha_Completado || '';
+            }
+          });
+        }
+        invalidarCacheSubtareas();
+        if (typeof window.sincronizarCacheLocalState === 'function') {
+          window.sincronizarCacheLocalState();
+        }
+      } else {
+        console.warn('[updatesubtareacompletado]: respuesta no exitosa del servidor', res);
+        // Solo revertir si hubo un fallo explícito de integridad
+        if (res && res.error && res.error.indexOf('no encontrado') === -1) {
+          ejecutarRollbackSubtarea();
+        }
+      }
+    }, function (err) {
+      console.error('[Fallo al actualizar paso]:', err);
+      // No hacer rollback destructivo si fue una interrupción transitoria de red
+    }, { silent: true });
+  }
+
+  /**
+   * Actualiza el widget de subtareas dentro de la tarjeta DOM correspondiente sin redibujar todo
+   */
+  function actualizarWidgetSubtareasEnTarjetaDOM(idPadre) {
+    var idNorm = String(idPadre || '').trim();
+    if (!idNorm) return;
+
+    var allContainers = document.querySelectorAll(
+      '#kanban-card-' + idNorm + ' .procedural-widget-container, ' +
+      '#card-act-' + idNorm + ' .procedural-widget-container, ' +
+      '[data-id-actividad="' + idNorm + '"] .procedural-widget-container, ' +
+      '[data-task-id="' + idNorm + '"] .procedural-widget-container, ' +
+      '#procedural-widget-ACT-' + idNorm
+    );
+
+    if (allContainers && allContainers.length > 0) {
+      allContainers.forEach(function (contWidget) {
+        var drawer = contWidget.querySelector('.procedural-drawer');
+        var wasOpen = drawer ? drawer.classList.contains('open') : false;
+        contWidget.innerHTML = renderWidgetSubtareasTarjeta(idNorm);
+        if (wasOpen) {
+          var newDrawer = contWidget.querySelector('.procedural-drawer');
+          var newArrow = contWidget.querySelector('.drawer-arrow, svg');
+          if (newDrawer) newDrawer.classList.add('open');
+          if (newArrow) newArrow.style.transform = 'rotate(180deg)';
+        }
+      });
+    }
+  }
+
+  /**
+   * Variables y controladores para Drag & Drop nativo de subtareas
+   */
+  var _draggedSubtaskId = null;
+
+  function iniciarDragSubtarea(e, idSubtarea) {
+    _draggedSubtaskId = idSubtarea;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', idSubtarea);
+    }
+    var row = e.currentTarget.closest('.procedural-step-row') || e.currentTarget;
+    if (row) {
+      row.classList.add('opacity-50');
+    }
+  }
+
+  function permitirDropSubtarea(e) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    var row = e.currentTarget.closest('.procedural-step-row');
+    if (row && !row.classList.contains('border-sky-400')) {
+      row.classList.add('border-t-2', 'border-sky-400');
+    }
+  }
+
+  function salirDropSubtarea(e) {
+    var row = e.currentTarget.closest('.procedural-step-row');
+    if (row) {
+      row.classList.remove('border-t-2', 'border-sky-400');
+    }
+  }
+
+  function finalizarDragSubtarea(e) {
+    if (e && e.currentTarget) {
+      var row = e.currentTarget.closest('.procedural-step-row') || e.currentTarget;
+      if (row) row.classList.remove('opacity-50');
+    }
+    document.querySelectorAll('.procedural-step-row').forEach(function (r) {
+      r.classList.remove('border-t-2', 'border-sky-400', 'opacity-50');
+    });
+  }
+
+  function ejecutarDropSubtarea(e, idDestino, idPadre, tipoPadre) {
+    e.preventDefault();
+    var row = e.currentTarget.closest('.procedural-step-row');
+    if (row) {
+      row.classList.remove('border-t-2', 'border-sky-400');
+    }
+
+    var idOrigen = _draggedSubtaskId || (e.dataTransfer ? e.dataTransfer.getData('text/plain') : null);
+    _draggedSubtaskId = null;
+    if (!idOrigen || idOrigen === idDestino) return;
+
+    moverSubtareaPosicion(idOrigen, idDestino, idPadre, tipoPadre);
+  }
+
+  /**
+   * Refresca números de paso ("Paso N") y habilita/deshabilita flechas subir y bajar
+   * directamente en el DOM a 0 ms sin reflow pesado
+   */
+  function actualizarNumeracionYControlesPasosDOM(contLista, idPadre, tipoPadre) {
+    if (!contLista) return;
+    var rows = Array.from(contLista.querySelectorAll('.procedural-step-row'));
+    var total = rows.length;
+
+    rows.forEach(function (row, idx) {
+      var num = idx + 1;
+      var numSpan = row.querySelector('.tabular-nums');
+      if (numSpan) numSpan.textContent = 'Paso ' + num;
+
+      var btnUp = row.querySelector('button[title*="Subir"]');
+      var btnDown = row.querySelector('button[title*="Bajar"]');
+
+      if (btnUp) {
+        if (idx === 0) {
+          btnUp.setAttribute('disabled', 'true');
+          btnUp.className = 'opacity-20 p-1 text-slate-500 cursor-not-allowed';
+        } else {
+          btnUp.removeAttribute('disabled');
+          btnUp.className = 'p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors';
+        }
+      }
+
+      if (btnDown) {
+        if (idx === total - 1) {
+          btnDown.setAttribute('disabled', 'true');
+          btnDown.className = 'opacity-20 p-1 text-slate-500 cursor-not-allowed';
+        } else {
+          btnDown.removeAttribute('disabled');
+          btnDown.className = 'p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors';
+        }
+      }
+    });
+
+    var isAct = tipoPadre === 'ACTIVIDAD';
+    var badgeProgreso = document.getElementById(isAct ? 'flow-pasos-progreso-badge' : 'task-flow-pasos-progreso-badge') ||
+                        document.getElementById(isAct ? 'modal-act-pasos-progreso-badge' : 'modal-tar-pasos-progreso-badge');
+    var barProgreso = document.getElementById(isAct ? 'flow-pasos-progreso-bar' : 'task-flow-pasos-progreso-bar') ||
+                      document.getElementById(isAct ? 'modal-act-pasos-progreso-bar' : 'modal-tar-pasos-progreso-bar');
+    if (idPadre) {
+      var prog = calcularProgresoSubtareas(idPadre);
+      if (badgeProgreso) {
+        badgeProgreso.textContent = prog.completados + '/' + prog.total + ' pasos (' + prog.pct + '%)';
+      }
+      if (barProgreso) {
+        barProgreso.style.width = prog.pct + '%';
+      }
+    }
+  }
+
+  function moverSubtareaPosicion(idOrigen, idDestino, idPadre, tipoPadre) {
+    var pasos = obtenerSubtareasPadre(idPadre);
+    var idxOrigen = pasos.findIndex(function (p) { return p.ID_Subtarea === idOrigen; });
+    var idxDestino = pasos.findIndex(function (p) { return p.ID_Subtarea === idDestino; });
+    if (idxOrigen === -1 || idxDestino === -1) return;
+
+    // Mover elemento en el array en memoria
+    var item = pasos.splice(idxOrigen, 1)[0];
+    pasos.splice(idxDestino, 0, item);
+
+    // Renumerar secuencialmente en memoria
+    pasos.forEach(function (p, i) {
+      p.Numero_Paso = i + 1;
+      p.Orden_Ejecucion = i + 1;
+    });
+
+    invalidarCacheSubtareas();
+
+    // Intercambiar nodos en el DOM local a 0 ms sin reconstruir la lista
+    var isAct = tipoPadre === 'ACTIVIDAD';
+    var contLista = document.getElementById(isAct ? 'act-flow-lista-pasos' : 'task-flow-lista-pasos') ||
+                    document.getElementById(isAct ? 'modal-act-lista-pasos' : 'modal-tar-lista-pasos');
+
+    if (contLista) {
+      var rowOrigen = contLista.querySelector('[data-id-subtarea="' + idOrigen + '"]');
+      var rowDestino = contLista.querySelector('[data-id-subtarea="' + idDestino + '"]');
+      if (rowOrigen && rowDestino) {
+        if (idxDestino > idxOrigen) {
+          contLista.insertBefore(rowOrigen, rowDestino.nextSibling);
+        } else {
+          contLista.insertBefore(rowOrigen, rowDestino);
+        }
+        actualizarNumeracionYControlesPasosDOM(contLista, idPadre, tipoPadre);
+      } else {
+        renderListaPasosProceduralesModal(idPadre, tipoPadre);
+      }
+    } else {
+      renderListaPasosProceduralesModal(idPadre, tipoPadre);
+    }
+
+    if (typeof recalcularAvanceCascada === 'function' && String(idPadre).startsWith('TAR-')) {
+      recalcularAvanceCascada(idPadre);
+    }
+
+    // Persistencia diferida al presionar "Guardar Tarea" (0 ms de latencia local garantizada)
+    window._reordenSubtareasPendiente = idPadre;
+  }
+
+  /**
+   * Guarda de inmediato en memoria el texto tecleado en un paso sin re-renderizar
+   * evitando pérdida de foco o saltos del cursor a 60 FPS
+   */
+  function actualizarTextoSubtareaEnMemoria(idSubtarea, nuevoTexto) {
+    var txt = String(nuevoTexto || '');
+    var paso = (state.subtareas || []).find(function (s) { return s.ID_Subtarea === idSubtarea; });
+    if (paso) {
+      paso.Descripcion_Paso = txt;
+      paso.Titulo_Subtarea = txt;
+      paso.Titulo = txt;
+      if (_cacheSubtareasMap) invalidarCacheSubtareas();
+    }
+    // Si existe en pasosTemporales de taskFlowState
+    if (typeof taskFlowState !== 'undefined' && Array.isArray(taskFlowState.pasosTemporales)) {
+      var pTemp = taskFlowState.pasosTemporales.find(function (s) { return s.ID_Subtarea === idSubtarea; });
+      if (pTemp) {
+        pTemp.Descripcion_Paso = txt;
+        pTemp.Titulo_Subtarea = txt;
+        pTemp.Titulo = txt;
+      }
+    }
+  }
+
+  /**
+   * Renderiza la lista completa de pasos dentro de los modales de detalle
+   */
+  function renderListaPasosProceduralesModal(idPadre, tipoPadre) {
+    var isAct = tipoPadre === 'ACTIVIDAD';
+    var contLista = document.getElementById(isAct ? 'act-flow-lista-pasos' : 'task-flow-lista-pasos') ||
+                    document.getElementById(isAct ? 'modal-act-lista-pasos' : 'modal-tar-lista-pasos');
+    var badgeProgreso = document.getElementById(isAct ? 'flow-pasos-progreso-badge' : 'task-flow-pasos-progreso-badge') ||
+                        document.getElementById(isAct ? 'modal-act-pasos-progreso-badge' : 'modal-tar-pasos-progreso-badge');
+    var barProgreso = document.getElementById(isAct ? 'flow-pasos-progreso-bar' : 'task-flow-pasos-progreso-bar') ||
+                      document.getElementById(isAct ? 'modal-act-pasos-progreso-bar' : 'modal-tar-pasos-progreso-bar');
+    var inputNuevo = document.getElementById(isAct ? 'act-flow-nuevo-paso-input' : 'task-flow-nuevo-paso-input') ||
+                     document.getElementById(isAct ? 'modal-act-nuevo-paso-input' : 'modal-tar-nuevo-paso-input');
+
+    if (inputNuevo) inputNuevo.value = '';
+
+    if (!contLista) return;
+
+    var prog = calcularProgresoSubtareas(idPadre);
+
+    if (badgeProgreso) {
+      badgeProgreso.textContent = prog.completados + '/' + prog.total + ' pasos (' + prog.pct + '%)';
+      badgeProgreso.className = 'font-mono tabular-nums text-[10px] font-bold px-2 py-0.5 rounded-full ' + (
+        prog.total > 0 && prog.completados === prog.total
+          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+          : (prog.completados > 0
+            ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300'
+            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300')
+      );
+    }
+
+    if (barProgreso) {
+      barProgreso.style.width = prog.pct + '%';
+      if (prog.total > 0 && prog.completados === prog.total) {
+        barProgreso.className = 'bg-emerald-500 h-full rounded-full transition-all duration-300';
+      } else {
+        barProgreso.className = 'bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300';
+      }
+    }
+
+    if (prog.total === 0) {
+      contLista.innerHTML = '<div class="py-4 text-center text-slate-400 dark:text-slate-500 text-xs italic bg-white/60 dark:bg-slate-900/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">' +
+        'No hay pasos definidos aún. Escribe arriba para desglosar el procedimiento.' +
+        '</div>';
+      return;
+    }
+
+    var html = prog.pasos.map(function (p, idx) {
+      var isDone = p.Completado === true || String(p.Completado).toLowerCase() === 'true';
+      var num = parseInt(p.Numero_Paso, 10) || (idx + 1);
+
+      // Regla secuencial: Paso N (N > 1) bloqueado si N-1 incompleto
+      var estaBloqueado = false;
+      if (!isDone && idx > 0) {
+        var prevPaso = prog.pasos[idx - 1];
+        var prevDone = prevPaso.Completado === true || String(prevPaso.Completado).toLowerCase() === 'true';
+        if (!prevDone) estaBloqueado = true;
+      }
+
+      var chkBtn = estaBloqueado
+        ? '<span class="w-5 h-5 rounded-md border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center select-none shrink-0" title="Bloqueado: completa el Paso ' + (num - 1) + ' primero">' +
+          '<svg class="portal-icon-sm text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+          '</span>'
+        : '<button type="button" onclick="toggleSubtareaOptimista(\'' + p.ID_Subtarea + '\', \'' + idPadre + '\', ' + !isDone + ', event)" class="w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ' + (isDone ? 'bg-emerald-500 border-emerald-500 text-white shadow-2xs' : 'border-slate-300 dark:border-slate-600 hover:border-indigo-500 bg-white dark:bg-slate-800 text-transparent') + '" title="' + (isDone ? 'Completado (Clic para desmarcar)' : 'Completar paso ' + num) + '">' +
+          (isDone ? '<svg class="portal-icon-sm text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '') +
+          '</button>';
+
+      var strikeClass = isDone ? 'line-through text-slate-400 dark:text-slate-500' : (estaBloqueado ? 'text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100 font-medium');
+
+      var canMoveUp = idx > 0;
+      var canMoveDown = idx < prog.pasos.length - 1;
+
+      return '<div class="procedural-step-row flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs transition group/item ' + (estaBloqueado ? 'procedural-step-locked opacity-75' : '') + '" ' +
+        'data-id-subtarea="' + p.ID_Subtarea + '" ' +
+        'draggable="true" ' +
+        'ondragstart="iniciarDragSubtarea(event, \'' + p.ID_Subtarea + '\')" ' +
+        'ondragend="finalizarDragSubtarea(event)" ' +
+        'ondragover="permitirDropSubtarea(event)" ' +
+        'ondragleave="salirDropSubtarea(event)" ' +
+        'ondrop="ejecutarDropSubtarea(event, \'' + p.ID_Subtarea + '\', \'' + idPadre + '\', \'' + tipoPadre + '\')">' +
+        
+        '<div class="flex items-center gap-1.5 flex-1 min-w-0">' +
+        // Asa de arrastre táctil/mouse inmediata
+        '<span class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-200 p-0.5 shrink-0 select-none touch-none" title="Arrastrar para reordenar">' +
+        '<svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>' +
+        '</span>' +
+        chkBtn +
+        '<span class="font-mono tabular-nums text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60 shrink-0 select-none">Paso ' + num + '</span>' +
+        '<input type="text" value="' + escapeHtml(p.Descripcion_Paso) + '" ' +
+        'oninput="actualizarTextoSubtareaEnMemoria(\'' + p.ID_Subtarea + '\', this.value)" ' +
+        'onblur="guardarEdicionTextoSubtarea(\'' + p.ID_Subtarea + '\', \'' + idPadre + '\', \'' + tipoPadre + '\', this.value)" ' +
+        'onkeydown="if(event.key === \'Enter\'){ event.preventDefault(); this.blur(); }" ' +
+        'class="text-xs bg-transparent border-0 focus:ring-1 focus:ring-indigo-500 rounded px-1.5 py-0.5 flex-1 min-w-0 outline-none truncate ' + strikeClass + '">' +
+        '</div>' +
+
+        '<div class="flex items-center gap-0.5 shrink-0">' +
+        '<button type="button" ' + (!canMoveUp ? 'disabled class="opacity-20 p-1 text-slate-500 cursor-not-allowed"' : 'class="p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"') + ' onclick="reordenarSubtareaProcedural(\'' + p.ID_Subtarea + '\', \'' + idPadre + '\', \'' + tipoPadre + '\', -1)" title="Subir orden">' +
+        '<svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>' +
+        '</button>' +
+        '<button type="button" ' + (!canMoveDown ? 'disabled class="opacity-20 p-1 text-slate-500 cursor-not-allowed"' : 'class="p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"') + ' onclick="reordenarSubtareaProcedural(\'' + p.ID_Subtarea + '\', \'' + idPadre + '\', \'' + tipoPadre + '\', 1)" title="Bajar orden">' +
+        '<svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '</button>' +
+        '<button type="button" onclick="eliminarSubtareaProcedural(\'' + p.ID_Subtarea + '\', \'' + idPadre + '\', \'' + tipoPadre + '\')" class="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-colors" title="Eliminar paso">' +
+        '<svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>' +
+        '</button>' +
+        '</div>' +
+
+        '</div>';
+    }).join('');
+
+    contLista.innerHTML = html;
+  }
+
+  function actualizarListaPasosModalDOM(idPadre, tipoPadre) {
+    // Si el modal de Tarea Flow está visible, refrescar sus pasos con el motor procedural interactivo
+    var modTaskFlow = document.getElementById('modal-tarea-flow');
+    if (modTaskFlow && !modTaskFlow.classList.contains('hidden')) {
+      var idModalTaskFlow = document.getElementById('task-flow-id')?.value;
+      if (String(idModalTaskFlow).trim() === String(idPadre).trim()) {
+        renderListaPasosProceduralesModal(idPadre, 'TAREA');
+      }
+    }
+
+    // Si el modal de Actividad Flow está visible, refrescar sus pasos
+    var modFlow = document.getElementById('modal-actividad-flow');
+    if (modFlow && !modFlow.classList.contains('hidden')) {
+      var idModalFlow = document.getElementById('act-flow-id')?.value;
+      if (String(idModalFlow).trim() === String(idPadre).trim()) {
+        if (typeof cargarPasosDesdeStateEnFlow === 'function') {
+          cargarPasosDesdeStateEnFlow(idPadre);
+        } else {
+          renderListaPasosProceduralesModal(idPadre, 'ACTIVIDAD');
+        }
+      }
+    }
+  }
+
+  // Bandera de control anti-doble pulsación para creación procedural
+  var isSubmittingSubtask = false;
+
+  /**
+   * 5. Manipulación de pasos 100% local en memoria dentro del modal (0 ms de latencia)
+   * Prohibido llamar a google.script.run al agregar, editar o eliminar un paso en el modal.
+   * La persistencia en backend se realiza ÚNICAMENTE al guardar la tarea.
+   */
+  function agregarSubtareaProceduralDesdeModal(tipoPadre) {
+    var isAct = tipoPadre === 'ACTIVIDAD';
+    var inputElem = isAct
+      ? (document.getElementById('act-flow-nuevo-paso-input') || document.getElementById('modal-act-nuevo-paso-input'))
+      : (document.getElementById('task-flow-nuevo-paso-input') || document.getElementById('modal-tar-nuevo-paso-input'));
+    if (!inputElem) return;
+    var texto = inputElem.value.trim();
+    if (!texto) {
+      inputElem.focus();
+      return;
+    }
+
+    var idPadre = isAct
+      ? (document.getElementById('act-flow-id')?.value || document.getElementById('edit-act-id')?.value)
+      : (document.getElementById('task-flow-id')?.value || document.getElementById('modal-tar-id-input')?.value);
+
+    if (!idPadre) return;
+
+    var contLista = document.getElementById(isAct ? 'act-flow-lista-pasos' : 'task-flow-lista-pasos') ||
+                    document.getElementById(isAct ? 'modal-act-lista-pasos' : 'modal-tar-lista-pasos');
+
+    var pasos = obtenerSubtareasPadre(idPadre);
+    var siguienteNumero = pasos.length + 1;
+    var tempId = 'SUB-TMP-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+
+    // 1. Agregar nuevo objeto paso al array local en memoria
+    var nuevoObj = {
+      ID_Subtarea: tempId,
+      idSubtarea: tempId,
+      Tipo_Padre: tipoPadre,
+      tipoPadre: tipoPadre,
+      ID_Padre_Vinculado: idPadre,
+      idPadreVinculado: idPadre,
+      ID_Padre: idPadre,
+      idPadre: idPadre,
+      Numero_Paso: siguienteNumero,
+      numeroPaso: siguienteNumero,
+      Descripcion_Paso: texto,
+      descripcionPaso: texto,
+      Completado: false,
+      completado: false,
+      Fecha_Completado: '',
+      fechaCompletado: ''
+    };
+
+    if (!state.subtareas) state.subtareas = [];
+    state.subtareas.push(nuevoObj);
+    invalidarCacheSubtareas();
+
+    // 2. Si el contenedor tenía el placeholder vacío, limpiarlo e insertar el nuevo nodo en 0 ms
+    if (contLista) {
+      if (pasos.length === 0) {
+        contLista.innerHTML = '';
+      }
+
+      // Regla secuencial: Paso N (N > 1) bloqueado si N-1 incompleto
+      var estaBloqueado = false;
+      if (siguienteNumero > 1) {
+        var ultimoPaso = pasos[pasos.length - 1];
+        if (ultimoPaso && !(ultimoPaso.Completado === true || String(ultimoPaso.Completado).toLowerCase() === 'true')) {
+          estaBloqueado = true;
+        }
+      }
+
+      var chkBtn = estaBloqueado
+        ? '<span class="w-4 h-4 min-w-[16px] min-h-[16px] rounded-md border border-slate-700 bg-slate-800 flex items-center justify-center select-none shrink-0" title="Bloqueado: completa el paso ' + (siguienteNumero - 1) + ' primero">' +
+          '<svg class="portal-icon-sm w-3 h-3 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+          '</span>'
+        : '<button type="button" onclick="toggleSubtareaOptimista(\'' + tempId + '\', \'' + idPadre + '\', true, event)" class="w-4 h-4 min-w-[16px] min-h-[16px] rounded-md border border-slate-600 hover:border-indigo-500 bg-slate-800 flex items-center justify-center transition-all shrink-0" title="Completar paso ' + siguienteNumero + '">' +
+          '</button>';
+
+      var filaHTML = '<div class="procedural-step-row flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs transition group/item ' + (estaBloqueado ? 'procedural-step-locked opacity-75' : '') + '" ' +
+        'data-id-subtarea="' + tempId + '" ' +
+        'draggable="true" ' +
+        'ondragstart="iniciarDragSubtarea(event, \'' + tempId + '\')" ' +
+        'ondragend="finalizarDragSubtarea(event)" ' +
+        'ondragover="permitirDropSubtarea(event)" ' +
+        'ondragleave="salirDropSubtarea(event)" ' +
+        'ondrop="ejecutarDropSubtarea(event, \'' + tempId + '\', \'' + idPadre + '\', \'' + tipoPadre + '\')">' +
+        '<div class="flex items-center gap-1.5 flex-1 min-w-0">' +
+        '<span class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-200 p-0.5 shrink-0 select-none touch-none" title="Arrastrar para reordenar">' +
+        '<svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>' +
+        '</span>' +
+        chkBtn +
+        '<span class="font-mono tabular-nums text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60 shrink-0 select-none">Paso ' + siguienteNumero + '</span>' +
+        '<input type="text" value="' + escapeHtml(texto) + '" ' +
+        'oninput="actualizarTextoSubtareaEnMemoria(\'' + tempId + '\', this.value)" ' +
+        'onblur="guardarEdicionTextoSubtarea(\'' + tempId + '\', \'' + idPadre + '\', \'' + tipoPadre + '\', this.value)" ' +
+        'onkeydown="if(event.key === \'Enter\'){ event.preventDefault(); this.blur(); }" ' +
+        'class="text-xs bg-transparent border-0 focus:ring-1 focus:ring-indigo-500 rounded px-1.5 py-0.5 flex-1 min-w-0 outline-none truncate text-slate-800 dark:text-slate-100 font-medium">' +
+        '</div>' +
+        '<div class="flex items-center gap-0.5 shrink-0">' +
+        '<button type="button" class="p-1 text-slate-500 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors" onclick="reordenarSubtareaProcedural(\'' + tempId + '\', \'' + idPadre + '\', \'' + tipoPadre + '\', -1)" title="Subir orden">' +
+        '<svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>' +
+        '</button>' +
+        '<button type="button" disabled class="opacity-20 p-1 text-slate-500 cursor-not-allowed" onclick="reordenarSubtareaProcedural(\'' + tempId + '\', \'' + idPadre + '\', \'' + tipoPadre + '\', 1)" title="Bajar orden">' +
+        '<svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '</button>' +
+        '<button type="button" onclick="eliminarSubtareaProcedural(\'' + tempId + '\', \'' + idPadre + '\', \'' + tipoPadre + '\')" class="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-colors" title="Eliminar paso">' +
+        '<svg class="portal-icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>' +
+        '</button>' +
+        '</div>' +
+        '</div>';
+
+      contLista.insertAdjacentHTML('beforeend', filaHTML);
+      actualizarNumeracionYControlesPasosDOM(contLista, idPadre, tipoPadre);
+    }
+
+    // 3. Limpiar input y mantener el foco
+    inputElem.value = '';
+    inputElem.focus();
+
+    // 4. Actualizar el contador font-mono tabular-nums localmente
+    var badgeProgreso = document.getElementById(isAct ? 'flow-pasos-progreso-badge' : 'task-flow-pasos-progreso-badge') ||
+                        document.getElementById(isAct ? 'modal-act-pasos-progreso-badge' : 'modal-tar-pasos-progreso-badge');
+    var barProgreso = document.getElementById(isAct ? 'flow-pasos-progreso-bar' : 'task-flow-pasos-progreso-bar') ||
+                      document.getElementById(isAct ? 'modal-act-pasos-progreso-bar' : 'modal-tar-pasos-progreso-bar');
+
+    var prog = calcularProgresoSubtareas(idPadre);
+    if (badgeProgreso) {
+      badgeProgreso.textContent = prog.completados + '/' + prog.total + ' pasos (' + prog.pct + '%)';
+    }
+    if (barProgreso) {
+      barProgreso.style.width = prog.pct + '%';
+    }
+  }
+
+  /**
+   * Elimina un paso de la lista 100% en memoria dentro del modal (0 ms)
+   */
+  function eliminarSubtareaProcedural(idSubtarea, idPadre, tipoPadre) {
+    if (!window._pasosEliminadosPendientes) window._pasosEliminadosPendientes = [];
+    if (idSubtarea && !String(idSubtarea).startsWith('SUB-TMP-') && !String(idSubtarea).startsWith('TEMP-')) {
+      window._pasosEliminadosPendientes.push(idSubtarea);
+    }
+
+    var idx = (state.subtareas || []).findIndex(function (s) { return s.ID_Subtarea === idSubtarea; });
+    if (idx !== -1) {
+      state.subtareas.splice(idx, 1);
+      invalidarCacheSubtareas();
+    }
+
+    var isAct = tipoPadre === 'ACTIVIDAD';
+    var contLista = document.getElementById(isAct ? 'act-flow-lista-pasos' : 'task-flow-lista-pasos') ||
+                    document.getElementById(isAct ? 'modal-act-lista-pasos' : 'modal-tar-lista-pasos');
+
+    if (contLista) {
+      var row = contLista.querySelector('[data-id-subtarea="' + idSubtarea + '"]') ||
+                contLista.querySelector('button[onclick*="' + idSubtarea + '"]')?.closest('.procedural-step-row');
+      if (row && row.parentNode) {
+        row.parentNode.removeChild(row);
+      }
+
+      // Renumerar los pasos restantes en el DOM y en memoria
+      var pasosRestantes = obtenerSubtareasPadre(idPadre);
+      pasosRestantes.forEach(function (p, i) { p.Numero_Paso = i + 1; });
+
+      var stepRows = contLista.querySelectorAll('.procedural-step-row');
+      if (stepRows.length === 0) {
+        contLista.innerHTML = '<div class="py-4 text-center text-slate-400 dark:text-slate-500 text-xs italic bg-white/60 dark:bg-slate-900/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">' +
+          'No hay pasos definidos aún. Escribe arriba para desglosar el procedimiento.' +
+          '</div>';
+      } else {
+        actualizarNumeracionYControlesPasosDOM(contLista, idPadre, tipoPadre);
+      }
+    }
+
+    // Actualizar contadores
+    var badgeProgreso = document.getElementById(isAct ? 'flow-pasos-progreso-badge' : 'task-flow-pasos-progreso-badge') ||
+                        document.getElementById(isAct ? 'modal-act-pasos-progreso-badge' : 'modal-tar-pasos-progreso-badge');
+    var barProgreso = document.getElementById(isAct ? 'flow-pasos-progreso-bar' : 'task-flow-pasos-progreso-bar') ||
+                      document.getElementById(isAct ? 'modal-act-pasos-progreso-bar' : 'modal-tar-pasos-progreso-bar');
+
+    var prog = calcularProgresoSubtareas(idPadre);
+    if (badgeProgreso) {
+      badgeProgreso.textContent = prog.completados + '/' + prog.total + ' pasos (' + prog.pct + '%)';
+    }
+    if (barProgreso) {
+      barProgreso.style.width = prog.pct + '%';
+    }
+  }
+
+  /**
+   * Reordena un paso hacia arriba (-1) o hacia abajo (+1) en memoria y DOM a 0 ms sin reflow
+   */
+  function reordenarSubtareaProcedural(idSubtarea, idPadre, tipoPadre, direccion) {
+    var pasos = obtenerSubtareasPadre(idPadre);
+    var indexActual = pasos.findIndex(function (p) { return p.ID_Subtarea === idSubtarea; });
+    if (indexActual === -1) return;
+
+    var nuevoIndex = indexActual + direccion;
+    if (nuevoIndex < 0 || nuevoIndex >= pasos.length) return;
+
+    // 1. Intercambio en memoria del array
+    var temp = pasos[indexActual];
+    pasos[indexActual] = pasos[nuevoIndex];
+    pasos[nuevoIndex] = temp;
+
+    pasos.forEach(function (p, i) {
+      p.Numero_Paso = i + 1;
+      p.Orden_Ejecucion = i + 1;
+    });
+
+    invalidarCacheSubtareas();
+
+    // 2. Intercambio de nodos en el DOM local a 0 ms sin reconstruir la lista
+    var isAct = tipoPadre === 'ACTIVIDAD';
+    var contLista = document.getElementById(isAct ? 'act-flow-lista-pasos' : 'task-flow-lista-pasos') ||
+                    document.getElementById(isAct ? 'modal-act-lista-pasos' : 'modal-tar-lista-pasos');
+
+    if (contLista) {
+      var rowActual = contLista.querySelector('[data-id-subtarea="' + idSubtarea + '"]') ||
+                      contLista.querySelector('button[onclick*="' + idSubtarea + '"]')?.closest('.procedural-step-row');
+      var idVecino = pasos[indexActual].ID_Subtarea;
+      var rowVecino = contLista.querySelector('[data-id-subtarea="' + idVecino + '"]') ||
+                      contLista.querySelector('button[onclick*="' + idVecino + '"]')?.closest('.procedural-step-row');
+
+      if (rowActual && rowVecino) {
+        if (direccion === -1) {
+          contLista.insertBefore(rowActual, rowVecino);
+        } else {
+          contLista.insertBefore(rowVecino, rowActual);
+        }
+        actualizarNumeracionYControlesPasosDOM(contLista, idPadre, tipoPadre);
+      } else {
+        renderListaPasosProceduralesModal(idPadre, tipoPadre);
+      }
+    } else {
+      renderListaPasosProceduralesModal(idPadre, tipoPadre);
+    }
+
+    if (typeof recalcularAvanceCascada === 'function' && String(idPadre).startsWith('TAR-')) {
+      recalcularAvanceCascada(idPadre);
+    }
+
+    // Persistencia diferida al presionar "Guardar Tarea" (0 ms de latencia local)
+    window._reordenSubtareasPendiente = idPadre;
+  }
+
+  /**
+   * Actualiza el texto de descripción de un paso en memoria (sin llamada backend en el modal)
+   */
+  function guardarEdicionTextoSubtarea(idSubtarea, idPadre, tipoPadre, nuevoTexto) {
+    var paso = (state.subtareas || []).find(function (s) { return s.ID_Subtarea === idSubtarea; });
+    if (!paso) return;
+    var txtLimpio = String(nuevoTexto || '').trim();
+    if (!txtLimpio) return;
+    paso.Descripcion_Paso = txtLimpio;
+    invalidarCacheSubtareas();
+  }
+
+  // Exportar utilidades de indexación, drag & drop e invalidación en memoria a window
+  window.indexarSubtareasPorPadre = indexarSubtareasPorPadre;
+  window.invalidarCacheSubtareas = invalidarCacheSubtareas;
+  window.actualizarTextoSubtareaEnMemoria = actualizarTextoSubtareaEnMemoria;
+  window.iniciarDragSubtarea = iniciarDragSubtarea;
+  window.finalizarDragSubtarea = finalizarDragSubtarea;
+  window.permitirDropSubtarea = permitirDropSubtarea;
+  window.salirDropSubtarea = salirDropSubtarea;
+  window.ejecutarDropSubtarea = ejecutarDropSubtarea;
+  window.moverSubtareaPosicion = moverSubtareaPosicion;
+  window.reordenarSubtareaProcedural = reordenarSubtareaProcedural;
+  window.actualizarNumeracionYControlesPasosDOM = actualizarNumeracionYControlesPasosDOM;
+  window.renderListaPasosProceduralesModal = renderListaPasosProceduralesModal;
+  window.renderWidgetSubtareasTarjeta = renderWidgetSubtareasTarjeta;
+  window.calcularProgresoSubtareas = calcularProgresoSubtareas;
+  window.obtenerSubtareasPadre = obtenerSubtareasPadre;
+  window.toggleSubtareaOptimista = toggleSubtareaOptimista;
+  window.toggleDrawerSubtareasTarjeta = toggleDrawerSubtareasTarjeta;
+  window.guardarEdicionTextoSubtarea = guardarEdicionTextoSubtarea;
+
+</script>
