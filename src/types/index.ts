@@ -141,6 +141,84 @@ export const CATEGORIAS_VIDA_MAP: Record<CategoriaVida, CategoriaConfig> = {
 };
 
 // ============================================================================
+// MÓDULO: METAS, PLANES E HITOS CUANTITATIVOS (N:M CON HÁBITOS)
+// ============================================================================
+
+export type TipoMeta = 'CUANTITATIVA' | 'CUALITATIVA' | 'PROYECTO_ASOCIADO';
+
+export interface MetaPlanRecord {
+  id: string; // UUID primary key
+  user_id: string;
+  codigo_legado: string; // MET-XXX
+  nombre_meta: string;
+  descripcion?: string;
+  categoria_vida: CategoriaVida;
+  tipo_meta?: TipoMeta | string;
+  unidad_medida?: string;
+  meta_objetivo_total: number;
+  valor_acumulado_actual: number;
+  nivel_rescate_minimo: number;
+  peso_hitos_pct: number;
+  peso_habitos_pct: number;
+  fecha_inicio?: string; // YYYY-MM-DD
+  fecha_fin?: string; // YYYY-MM-DD
+  estado: string; // '01_Backlog' | '02_En_Progreso' | '03_Completado' | '04_En_Pausa' | '05_Archivado'
+  proyecto_id?: string | null;
+  created_at?: string;
+  updated_at: string;
+  version: number;
+  sync_status: SyncStatus;
+}
+
+export interface HitoPlanRecord {
+  id: string; // UUID primary key
+  user_id: string;
+  codigo_legado: string; // HIT-PLN-XXX
+  meta_id: string;
+  titulo_hito: string;
+  orden_secuencia: number;
+  fecha_objetivo?: string; // YYYY-MM-DD
+  completado: boolean;
+  fecha_completado?: string; // YYYY-MM-DD
+  peso_relativo: number;
+  created_at?: string;
+  updated_at: string;
+  version: number;
+  sync_status: SyncStatus;
+}
+
+export type ModoComputoVinculo = 'VOLUMEN_DIRECTO' | 'TASA_CONVERSION' | 'CHECK_BINARIO';
+
+export interface HabitoMetaVinculo {
+  id: string; // UUID primary key
+  user_id: string;
+  habito_id: string; // Referencia a actividad_personal (hábito)
+  meta_id: string; // Referencia a meta_plan
+  modo_computo: ModoComputoVinculo | string;
+  factor_conversion: number;
+  peso_contribucion_pct: number;
+  meta_volumen_esperada: number;
+  created_at?: string;
+  updated_at: string;
+  sync_status: SyncStatus;
+}
+
+export interface HabitoLogRecord {
+  id: string; // UUID primary key
+  user_id: string;
+  habito_id: string;
+  fecha_registro: string; // YYYY-MM-DD
+  hora_registro?: string; // HH:mm
+  completado: boolean;
+  valor_cuantitativo_sumado?: number;
+  es_rescate?: boolean;
+  nota_contexto?: string;
+  created_at?: string;
+  updated_at: string;
+  sync_status: SyncStatus;
+}
+
+// ============================================================================
 // MÓDULO 3: HITOS / WBS Y GESTOR DE NOTAS MARKDOWN
 // ============================================================================
 

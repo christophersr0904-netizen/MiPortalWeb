@@ -9,7 +9,11 @@ import type {
   GastoRecord,
   IngresoRecord,
   IdeaRecord,
-  CuotaRecord
+  CuotaRecord,
+  MetaPlanRecord,
+  HitoPlanRecord,
+  HabitoMetaVinculo,
+  HabitoLogRecord
 } from '../types';
 import seedPmo from './seedPmo.json';
 import seedLife from './seedLife.json';
@@ -30,6 +34,10 @@ export class PMODatabase extends Dexie {
   ingresos!: Table<IngresoRecord, string>;
   ideas!: Table<IdeaRecord, string>;
   cuotas!: Table<CuotaRecord, string>;
+  metas_planes!: Table<MetaPlanRecord, string>;
+  planes_accion_hitos!: Table<HitoPlanRecord, string>;
+  habitos_metas_vinculos!: Table<HabitoMetaVinculo, string>;
+  habito_cumplimiento_logs!: Table<HabitoLogRecord, string>;
 
   constructor() {
     super('PMOPersonalModularDB');
@@ -54,6 +62,12 @@ export class PMODatabase extends Dexie {
       ingresos: 'id, user_id, codigo_legado, tipo_origen, categoria_ingreso, estado_cobro, fecha_ingreso, sync_status',
       ideas: 'id, user_id, codigo_legado, estado, tipo_captura, fecha_captura, sync_status',
       cuotas: 'id, user_id, codigo_legado, estado_cuota, fecha_vencimiento, sync_status'
+    });
+    this.version(4).stores({
+      metas_planes: 'id, user_id, codigo_legado, categoria_vida, estado, sync_status',
+      planes_accion_hitos: 'id, user_id, codigo_legado, meta_id, estado, sync_status',
+      habitos_metas_vinculos: 'id, user_id, habito_id, meta_id, sync_status',
+      habito_cumplimiento_logs: 'id, user_id, habito_id, fecha_registro, sync_status, [habito_id+fecha_registro]'
     });
   }
 }
@@ -82,11 +96,16 @@ export async function inicializarDatosSemillaSiVacio(_userId: string = '00000000
   const totalIngresosEsperados = initialSeed.ingresos?.length || 57;
   const totalIdeasEsperadas = initialSeed.ideas?.length || 8;
   const totalCuotasEsperadas = initialSeed.cuotas?.length || 2;
+  const totalMetasEsperadas = (initialSeed as any).metas_planes?.length || 0;
+  const totalHitosPlanesEsperados = (initialSeed as any).planes_accion_hitos?.length || 0;
+  const totalVinculosEsperados = (initialSeed as any).habitos_metas_vinculos?.length || 0;
+  const totalLogsEsperados = (initialSeed as any).habito_cumplimiento_logs?.length || 0;
 
   // Consulta de conteo concurrente en una sola ronda I/O (< 25 ms)
   const [
     countAct, countSub, countHit, countNot, countProy,
-    countTar, countGas, countIng, countIde, countCuo
+    countTar, countGas, countIng, countIde, countCuo,
+    countMetas, countHitosPln, countVin, countLogs
   ] = await Promise.all([
     db.actividades_personales.count(),
     db.subtareas_pasos.count(),
@@ -97,7 +116,11 @@ export async function inicializarDatosSemillaSiVacio(_userId: string = '00000000
     db.gastos.count(),
     db.ingresos.count(),
     db.ideas.count(),
-    db.cuotas.count()
+    db.cuotas.count(),
+    db.metas_planes.count(),
+    db.planes_accion_hitos.count(),
+    db.habitos_metas_vinculos.count(),
+    db.habito_cumplimiento_logs.count()
   ]);
 
   // Siembras condicionales en bloque si se detectan umbrales inferiores al canónico
@@ -133,6 +156,18 @@ export async function inicializarDatosSemillaSiVacio(_userId: string = '00000000
   if (countCuo < totalCuotasEsperadas && initialSeed.cuotas?.length) {
     tareasDeSiembra.push(db.cuotas.bulkPut(initialSeed.cuotas as CuotaRecord[]));
   }
+  if (countMetas < totalMetasEsperadas && (initialSeed as any).metas_planes?.length) {
+    tareasDeSiembra.push(db.metas_planes.bulkPut((initialSeed as any).metas_planes as MetaPlanRecord[]));
+  }
+  if (countHitosPln < totalHitosPlanesEsperados && (initialSeed as any).planes_accion_hitos?.length) {
+    tareasDeSiembra.push(db.planes_accion_hitos.bulkPut((initialSeed as any).planes_accion_hitos as HitoPlanRecord[]));
+  }
+  if (countVin < totalVinculosEsperados && (initialSeed as any).habitos_metas_vinculos?.length) {
+    tareasDeSiembra.push(db.habitos_metas_vinculos.bulkPut((initialSeed as any).habitos_metas_vinculos as HabitoMetaVinculo[]));
+  }
+  if (countLogs < totalLogsEsperados && (initialSeed as any).habito_cumplimiento_logs?.length) {
+    tareasDeSiembra.push(db.habito_cumplimiento_logs.bulkPut((initialSeed as any).habito_cumplimiento_logs as HabitoLogRecord[]));
+  }
 
   if (tareasDeSiembra.length > 0) {
     await Promise.all(tareasDeSiembra);
@@ -144,7 +179,7 @@ export async function inicializarDatosSemillaSiVacio(_userId: string = '00000000
 }
 
 /**
- * Función utilitaria para forzar la rehidratación completa de los 281 registros desde initialSeed.json
+ * Función utilitaria para forzar la rehidratación completa de los registros desde initialSeed.json
  */
 export async function forzarRecargaSemillaCompleta(): Promise<void> {
   if (!initialSeed) return;
@@ -158,7 +193,11 @@ export async function forzarRecargaSemillaCompleta(): Promise<void> {
     db.gastos,
     db.ingresos,
     db.ideas,
-    db.cuotas
+    db.cuotas,
+    db.metas_planes,
+    db.planes_accion_hitos,
+    db.habitos_metas_vinculos,
+    db.habito_cumplimiento_logs
   ], async () => {
     await db.actividades_personales.clear();
     await db.subtareas_pasos.clear();
@@ -170,6 +209,10 @@ export async function forzarRecargaSemillaCompleta(): Promise<void> {
     await db.ingresos.clear();
     await db.ideas.clear();
     await db.cuotas.clear();
+    await db.metas_planes.clear();
+    await db.planes_accion_hitos.clear();
+    await db.habitos_metas_vinculos.clear();
+    await db.habito_cumplimiento_logs.clear();
 
     if (initialSeed.actividades_personales) await db.actividades_personales.bulkPut(initialSeed.actividades_personales as ActividadPersonal[]);
     if (initialSeed.subtareas_pasos) await db.subtareas_pasos.bulkPut(initialSeed.subtareas_pasos as SubtareaPaso[]);
@@ -181,6 +224,10 @@ export async function forzarRecargaSemillaCompleta(): Promise<void> {
     if (initialSeed.ingresos) await db.ingresos.bulkPut(initialSeed.ingresos as IngresoRecord[]);
     if (initialSeed.ideas) await db.ideas.bulkPut(initialSeed.ideas as IdeaRecord[]);
     if (initialSeed.cuotas) await db.cuotas.bulkPut(initialSeed.cuotas as CuotaRecord[]);
+    if ((initialSeed as any).metas_planes) await db.metas_planes.bulkPut((initialSeed as any).metas_planes as MetaPlanRecord[]);
+    if ((initialSeed as any).planes_accion_hitos) await db.planes_accion_hitos.bulkPut((initialSeed as any).planes_accion_hitos as HitoPlanRecord[]);
+    if ((initialSeed as any).habitos_metas_vinculos) await db.habitos_metas_vinculos.bulkPut((initialSeed as any).habitos_metas_vinculos as HabitoMetaVinculo[]);
+    if ((initialSeed as any).habito_cumplimiento_logs) await db.habito_cumplimiento_logs.bulkPut((initialSeed as any).habito_cumplimiento_logs as HabitoLogRecord[]);
   });
 }
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ActividadPersonal, SubtareaPaso, AlcanceRecurrencia } from '../../types';
+import type { ActividadPersonal, SubtareaPaso, AlcanceRecurrencia, MetaPlanRecord } from '../../types';
 import { CATEGORIAS_VIDA_MAP } from '../../types';
 import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
 import { ModalAlcanceRecurrencia } from '../Modals/ModalAlcanceRecurrencia';
@@ -10,6 +10,7 @@ import {
 import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
+import { recalcularProgresoMetaLocal } from '../../services/metasService';
 
 export const renderIconoCategoriaVida = (icono: string, className = "w-3 h-3") => {
   switch (icono) {
@@ -26,6 +27,7 @@ export const renderIconoCategoriaVida = (icono: string, className = "w-3 h-3") =
 interface TarjetaHabitoProps {
   actividad: ActividadPersonal;
   subtareas: SubtareaPaso[];
+  metaVinculada?: MetaPlanRecord;
   onToggleCompletar: (actividad: ActividadPersonal, completadoDeseado: boolean) => Promise<{ actividadActualizada: ActividadPersonal; esRepetida: boolean; nuevaRacha: number }>;
   onRegistrarAvance: (actividad: ActividadPersonal, valor: number) => Promise<{ actividadActualizada: ActividadPersonal; rachaRescatada: boolean; metaCompletada: boolean }>;
   onToggleSubtarea: (idSubtarea: string, deseado?: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -36,6 +38,7 @@ interface TarjetaHabitoProps {
 export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
   actividad,
   subtareas,
+  metaVinculada,
   onToggleCompletar,
   onRegistrarAvance,
   onToggleSubtarea,
@@ -167,13 +170,27 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
     }
   };
 
+  // Normalización unificada de meta (REQ-HABITS-METAS-INTEGRATION-14)
+  const metaEfectiva = {
+    titulo: metaVinculada?.nombre_meta || actividad.meta_macro_nombre || 'Meta Cuantificable',
+    total: metaVinculada?.meta_objetivo_total || actividad.meta_objetivo_total || 0,
+    actual: actividad.valor_acumulado_actual || 0,
+    unidad: metaVinculada?.unidad_medida || actividad.unidad_medida || 'unidades',
+    rescateMin: metaVinculada?.nivel_rescate_minimo || actividad.nivel_rescate_minimo || 0
+  };
+
+  const metaTotal = metaEfectiva.total;
+  const valorAcum = metaEfectiva.actual;
+  const pctAvance = metaTotal > 0 ? Math.min(100, Math.round((valorAcum / metaTotal) * 100)) : 0;
+  const rescateMin = metaEfectiva.rescateMin;
+  const uMed = metaEfectiva.unidad;
+
   const handleAbrirAvanceCuantitativo = (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    const uMed = actividad.unidad_medida || 'unidades';
-    const valAcum = actividad.valor_acumulado_actual || 0;
-    const metaTot = actividad.meta_objetivo_total || 0;
-    const rescMin = actividad.nivel_rescate_minimo || 0;
+    const valAcum = metaEfectiva.actual;
+    const metaTot = metaEfectiva.total;
+    const rescMin = metaEfectiva.rescateMin;
     const metaDia = actividad.meta_diaria_estandar || 0;
 
     Swal.fire({
@@ -182,7 +199,7 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
       color: '#f8fafc',
       html: `
         <div class="text-left text-xs space-y-2 mb-3 text-slate-300">
-          <p><strong>Meta:</strong> ${actividad.nombre_actividad}</p>
+          <p><strong>Meta:</strong> ${metaEfectiva.titulo}</p>
           <p><strong>Acumulado actual:</strong> <span class="font-mono font-bold text-cyan-400">${valAcum} ${uMed}</span> ${metaTot > 0 ? `(de ${metaTot})` : ''}</p>
           ${rescMin > 0 ? `<p class="text-amber-400"><strong>Rescate mínimo de racha:</strong> ≥ ${rescMin} ${uMed}</p>` : ''}
           ${metaDia > 0 ? `<p class="text-slate-400"><strong>Meta diaria estándar:</strong> ${metaDia} ${uMed}</p>` : ''}
@@ -207,6 +224,13 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         const val = result.value;
         const res = await onRegistrarAvance(actividad, val);
 
+        // Recalcular progreso en la meta padre vinculada si existe
+        if (metaVinculada?.id) {
+          recalcularProgresoMetaLocal(metaVinculada.id).catch((err) =>
+            console.error('[TarjetaHabito] Error al recalcular progreso de meta padre:', err)
+          );
+        }
+
         if (res.rachaRescatada) {
           lanzarConfettiCelebracion(res.actividadActualizada.racha_actual);
           Swal.fire({
@@ -222,12 +246,6 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
       }
     });
   };
-
-  // Cálculo de avance cuantitativo
-  const metaTotal = actividad.meta_objetivo_total || 0;
-  const valorAcum = actividad.valor_acumulado_actual || 0;
-  const pctAvance = metaTotal > 0 ? Math.min(100, Math.round((valorAcum / metaTotal) * 100)) : 0;
-  const rescateMin = actividad.nivel_rescate_minimo || 0;
 
   return (
     <div
@@ -342,15 +360,22 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         />
       )}
 
-      {/* Barra de Avance Cuantitativo (Fase 4.8) */}
-      {(metaTotal > 0 || valorAcum > 0 || actividad.meta_macro_nombre) && (
+      {/* Barra de Avance Cuantitativo (Fase 4.8 / REQ-HABITS-METAS-INTEGRATION-14) */}
+      {(metaTotal > 0 || valorAcum > 0 || actividad.meta_macro_nombre || Boolean(metaVinculada)) && (
         <div className="space-y-1.5 p-2 rounded-xl bg-cyan-950/20 border border-cyan-800/40 text-[11px]">
           <div className="flex items-center justify-between gap-1 flex-wrap font-mono">
-            <span className="font-bold text-cyan-200 truncate" title={actividad.meta_macro_nombre || 'Meta'}>
-              {actividad.meta_macro_nombre || 'Meta Cuantificable'}
-            </span>
+            <div className="flex items-center gap-1.5 min-w-0 max-w-[65%]">
+              <span className="font-bold text-cyan-200 truncate" title={metaEfectiva.titulo}>
+                {metaEfectiva.titulo}
+              </span>
+              {metaVinculada && (
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-mono shrink-0">
+                  Plan Vinculado
+                </span>
+              )}
+            </div>
             <span className="font-bold text-cyan-300 tabular-nums">
-              {valorAcum}{metaTotal > 0 ? ` / ${metaTotal}` : ''} {actividad.unidad_medida || ''}
+              {valorAcum}{metaTotal > 0 ? ` / ${metaTotal}` : ''} {uMed}
             </span>
           </div>
 
@@ -366,7 +391,7 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
           <div className="flex items-center justify-between gap-1 pt-0.5">
             {rescateMin > 0 && (
               <span className="inline-flex items-center gap-1 text-[9.5px] px-1.5 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 font-semibold">
-                Rescate: ≥ {rescateMin} {actividad.unidad_medida}
+                Rescate: ≥ {rescateMin} {uMed}
               </span>
             )}
 

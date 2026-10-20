@@ -1,38 +1,76 @@
 import React, { useState } from 'react';
-import type { ActividadPersonal } from '../../../types';
+import type { ActividadPersonal, MetaPlanRecord } from '../../../types';
 import { CATEGORIAS_VIDA_MAP } from '../../../types';
 import { Target, Plus, ShieldCheck, ChevronRight } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface MetasCuantitativasProps {
   actividades: ActividadPersonal[];
-  onRegistrarAvance: (act: ActividadPersonal, valor: number) => Promise<unknown>;
+  metas?: MetaPlanRecord[];
+  onRegistrarAvance: (act: any, valor: number) => Promise<unknown>;
   onCrearMeta?: () => void;
+}
+
+interface ItemMetaCuantitativa {
+  id: string;
+  nombre: string;
+  categoria_vida: any;
+  meta_macro_nombre?: string;
+  unidad_medida: string;
+  valor_acumulado_actual: number;
+  meta_objetivo_total: number;
+  nivel_rescate_minimo: number;
+  targetRef: ActividadPersonal | MetaPlanRecord;
 }
 
 export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
   actividades,
+  metas,
   onRegistrarAvance,
   onCrearMeta
 }) => {
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  // Filtrar actividades cuantitativas
-  const metas = actividades.filter(
-    (a) => a.tipo_compromiso === 'META' || (a.meta_objetivo_total && a.meta_objetivo_total > 0)
-  );
+  // Mapear desde metas_planes si existen registros, o fallback transparente a actividades_personales
+  const itemsMetas: ItemMetaCuantitativa[] = (metas && metas.length > 0)
+    ? metas.map((m) => ({
+        id: m.id,
+        nombre: m.nombre_meta,
+        categoria_vida: m.categoria_vida,
+        meta_macro_nombre: m.descripcion,
+        unidad_medida: m.unidad_medida || 'unidades',
+        valor_acumulado_actual: m.valor_acumulado_actual || 0,
+        meta_objetivo_total: m.meta_objetivo_total || 1,
+        nivel_rescate_minimo: m.nivel_rescate_minimo || 0,
+        targetRef: m
+      }))
+    : actividades
+        .filter(
+          (a) => a.tipo_compromiso === 'META' || (a.meta_objetivo_total && a.meta_objetivo_total > 0)
+        )
+        .map((a) => ({
+          id: a.id,
+          nombre: a.nombre_actividad,
+          categoria_vida: a.categoria_vida,
+          meta_macro_nombre: a.meta_macro_nombre,
+          unidad_medida: a.unidad_medida || 'unidades',
+          valor_acumulado_actual: a.valor_acumulado_actual || 0,
+          meta_objetivo_total: a.meta_objetivo_total || 1,
+          nivel_rescate_minimo: a.nivel_rescate_minimo || 0,
+          targetRef: a
+        }));
 
-  const handleSumarAvance = async (act: ActividadPersonal, incremento: number) => {
+  const handleSumarAvance = async (item: ItemMetaCuantitativa, incremento: number) => {
     try {
-      setLoadingId(act.id);
-      const actual = act.valor_acumulado_actual || 0;
+      setLoadingId(item.id);
+      const actual = item.valor_acumulado_actual;
       const nuevoTotal = actual + incremento;
-      await onRegistrarAvance(act, nuevoTotal);
+      await onRegistrarAvance(item.targetRef, nuevoTotal);
       Swal.fire({
         toast: true,
         position: 'top-end',
         icon: 'success',
-        title: `+${incremento} ${act.unidad_medida || 'unidades'} registrado`,
+        title: `+${incremento} ${item.unidad_medida} registrado`,
         showConfirmButton: false,
         timer: 1500,
         background: '#0D1526',
@@ -43,11 +81,11 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
     }
   };
 
-  const handlePromptAvance = async (act: ActividadPersonal) => {
+  const handlePromptAvance = async (item: ItemMetaCuantitativa) => {
     const { value: cantidad } = await Swal.fire({
-      title: `Registrar avance en ${act.nombre_actividad}`,
+      title: `Registrar avance en ${item.nombre}`,
       input: 'number',
-      inputLabel: `Cantidad a sumar (${act.unidad_medida || 'unidades'})`,
+      inputLabel: `Cantidad a sumar (${item.unidad_medida})`,
       inputPlaceholder: 'Ej: 5',
       showCancelButton: true,
       confirmButtonText: 'Registrar',
@@ -63,7 +101,7 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
     });
 
     if (cantidad) {
-      await handleSumarAvance(act, Number(cantidad));
+      await handleSumarAvance(item, Number(cantidad));
     }
   };
 
@@ -86,12 +124,12 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
         </div>
 
         <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/30 font-mono tabular-nums">
-          {metas.length} en seguimiento
+          {itemsMetas.length} en seguimiento
         </span>
       </div>
 
       {/* LISTA DE METAS CUANTITATIVAS */}
-      {metas.length === 0 ? (
+      {itemsMetas.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
           <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-400 mb-2">
             <Target className="w-6 h-6" strokeWidth={1.75} />
@@ -113,12 +151,12 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 flex-1">
-          {metas.map((m) => {
+          {itemsMetas.map((m) => {
             const actual = m.valor_acumulado_actual || 0;
             const total = m.meta_objetivo_total || 1;
             const unidad = m.unidad_medida || 'unidades';
             const pct = Math.min(100, Math.round((actual / total) * 100));
-            const cfg = CATEGORIAS_VIDA_MAP[m.categoria_vida];
+            const cfg = CATEGORIAS_VIDA_MAP[m.categoria_vida as keyof typeof CATEGORIAS_VIDA_MAP];
 
             // Porcentaje del nivel de rescate mínimo
             const rescate = m.nivel_rescate_minimo || 0;
@@ -132,7 +170,7 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-teal-400 transition-colors">
-                      {m.nombre_actividad}
+                      {m.nombre}
                     </span>
                     {cfg && (
                       <span className={`text-[9.5px] font-bold px-2 py-0.2 rounded-md border ${cfg.badgeClase} truncate`}>

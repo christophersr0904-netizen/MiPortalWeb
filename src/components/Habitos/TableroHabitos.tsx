@@ -3,7 +3,7 @@ import { useHabitos } from '../../hooks/useHabitos';
 import { TarjetaHabito, renderIconoCategoriaVida } from './TarjetaHabito';
 import { ModalActividadFlow } from '../Modals/ModalActividadFlow';
 import { CATEGORIAS_VIDA_MAP, type CategoriaVida, type ActividadPersonal, type AlcanceRecurrencia } from '../../types';
-import { esElementoArchivado, evaluarFiltroTemporal } from '../../utils/entityNormalizer';
+import { esElementoArchivado, evaluarFiltroTemporal, evaluarFiltroMeta } from '../../utils/entityNormalizer';
 import {
   Flame,
   CheckCircle2,
@@ -50,6 +50,8 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
   const {
     actividades,
     subtareasPorPadre,
+    metasPorHabitoId,
+    metasPlanes,
     kpis,
     filtroTexto,
     setFiltroTexto,
@@ -59,6 +61,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     eliminarConAlcance
   } = useHabitos();
 
+  const [filtroMetaId, setFiltroMetaId] = useState<string>('TODAS');
   const [filtroCompromiso, setFiltroCompromiso] = useState<FiltroCompromiso>('TODOS');
   const [filtroTemporal, setFiltroTemporal] = useState<FiltroTemporal>('TODOS');
   const [modoOrden, setModoOrden] = useState<ModoOrden>('TIME');
@@ -70,12 +73,70 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<CategoriaVida>('SALUD_DEPORTE');
   const [alcanceEdicion, setAlcanceEdicion] = useState<AlcanceRecurrencia>('ALL');
 
-  const pctCumplimiento = kpis.total > 0 ? Math.round((kpis.completadosHoy / kpis.total) * 100) : 0;
-  const pilaresActivos = Object.values(kpis.pilarCounts).filter((c) => c > 0).length;
-
   const hoyStr = new Date().toISOString().split('T')[0];
 
-  // Filtrado y ordenamiento de actividades con exclusión de archivados (+10 días) y horizonte temporal
+  // Metas ordenadas alfabéticamente para el selector
+  const metasPlanesOrdenadas = useMemo(() => {
+    return [...(metasPlanes || [])].sort((a, b) =>
+      (a.nombre_meta || '').localeCompare(b.nombre_meta || '')
+    );
+  }, [metasPlanes]);
+
+  // Contextual KPIs y Contadores para el Tablero según filtroMetaId (REQ-HABITS-FILTER-BY-META-16)
+  const kpisTablero = useMemo(() => {
+    if (filtroMetaId === 'TODAS') {
+      return kpis;
+    }
+
+    const actsMeta = actividades.filter((a) => {
+      if (esElementoArchivado(a, 'actividades')) return false;
+      return evaluarFiltroMeta(a, filtroMetaId, metasPorHabitoId, metasPlanes);
+    });
+
+    const res = {
+      total: actsMeta.length,
+      countHabitual: 0,
+      countUnico: 0,
+      countRacha: 0,
+      maxRacha: 0,
+      completadosHoy: 0,
+      horasInvertidas: 0,
+      pilarCounts: {
+        SALUD_DEPORTE: 0,
+        DESARROLLO_ESTUDIO: 0,
+        LABORAL_HONORARIO: 0,
+        FINANZAS_TRAMITES: 0,
+        SOCIAL_FAMILIA: 0,
+        PERSONAL_DESCANSO: 0
+      } as Record<CategoriaVida, number>
+    };
+
+    for (const a of actsMeta) {
+      if (a.tipo_compromiso === 'HABITUAL') res.countHabitual++;
+      else res.countUnico++;
+
+      const racha = a.racha_actual || 0;
+      if (racha > 0) res.countRacha++;
+      if (racha > res.maxRacha) res.maxRacha = racha;
+
+      if (a.categoria_vida in res.pilarCounts) {
+        res.pilarCounts[a.categoria_vida]++;
+      }
+
+      const esCompletado = a.estado === '04_Completado' || a.ultima_fecha_completado === hoyStr;
+      if (esCompletado || (a.tipo_compromiso === 'HABITUAL' && a.fecha_programada > hoyStr && racha > 0)) {
+        res.completadosHoy++;
+        res.horasInvertidas += a.duracion_horas || 0;
+      }
+    }
+
+    return res;
+  }, [filtroMetaId, kpis, actividades, metasPorHabitoId, metasPlanes, hoyStr]);
+
+  const pctCumplimiento = kpisTablero.total > 0 ? Math.round((kpisTablero.completadosHoy / kpisTablero.total) * 100) : 0;
+  const pilaresActivos = Object.values(kpisTablero.pilarCounts).filter((c) => c > 0).length;
+
+  // Filtrado y ordenamiento de actividades con exclusión de archivados (+10 días), meta y horizonte temporal
   const actividadesProcesadas = useMemo(() => {
     let list = actividades.filter((a) => {
       // 1. Exclusión obligatoria de Bóveda de Archivados (+10 días desde su fecha terminal)
@@ -83,12 +144,17 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
         return false;
       }
 
-      // 2. Filtro por tipo de compromiso
+      // 2. Filtro por meta estratégica (REQ-HABITS-FILTER-BY-META-16)
+      if (!evaluarFiltroMeta(a, filtroMetaId, metasPorHabitoId, metasPlanes)) {
+        return false;
+      }
+
+      // 3. Filtro por tipo de compromiso
       if (filtroCompromiso === 'HABITUAL' && a.tipo_compromiso !== 'HABITUAL') return false;
       if (filtroCompromiso === 'UNICO' && a.tipo_compromiso === 'HABITUAL') return false;
       if (filtroCompromiso === 'RACHA' && (!a.racha_actual || a.racha_actual <= 0)) return false;
 
-      // 3. Filtro Temporal Canónico ('HOY' | 'SEMANA' | 'TODOS')
+      // 4. Filtro Temporal Canónico ('HOY' | 'SEMANA' | 'TODOS')
       if (filtroTemporal !== 'TODOS') {
         const tieneRec = Boolean(
           (a.frecuencia_ciclo && a.frecuencia_ciclo !== 'NINGUNA') ||
@@ -136,7 +202,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     });
 
     return list;
-  }, [actividades, filtroCompromiso, filtroTemporal, modoOrden, hoyStr]);
+  }, [actividades, filtroMetaId, metasPorHabitoId, metasPlanes, filtroCompromiso, filtroTemporal, modoOrden, hoyStr]);
 
   const handleCrearActividad = (categoriaPrevia?: CategoriaVida) => {
     setActividadEditar(null);
@@ -233,12 +299,12 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           </div>
           <div className="my-1.5">
             <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight font-mono tabular-nums" id="kpi-mayor-racha">
-              {kpis.maxRacha} días
+              {kpisTablero.maxRacha} días
             </span>
           </div>
           <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 truncate">
             <span id="kpi-racha-subtexto" className="truncate font-medium">
-              {kpis.maxRacha >= 7 ? 'Consistencia de alto rendimiento' : 'Construyendo hábito diario'}
+              {kpisTablero.maxRacha >= 7 ? 'Consistencia de alto rendimiento' : 'Construyendo hábito diario'}
             </span>
           </div>
         </div>
@@ -255,7 +321,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           </div>
           <div className="my-1.5 flex items-baseline justify-between">
             <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight font-mono tabular-nums" id="kpi-habitos-hoy-ratio">
-              {kpis.completadosHoy} / {kpis.total}
+              {kpisTablero.completadosHoy} / {kpisTablero.total}
             </span>
             <span className="text-xs font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400" id="kpi-habitos-global-cumplimiento">
               {pctCumplimiento}%
@@ -302,7 +368,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           </div>
           <div className="my-1.5">
             <span className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight font-mono tabular-nums" id="kpi-radar-habitos">
-              {kpis.total} en foco
+              {kpisTablero.total} en foco
             </span>
           </div>
           <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 truncate">
@@ -312,7 +378,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
 
         {/* BENTO 5: INVERSIÓN FINANCIERA EN BIENESTAR */}
         <div
-          onClick={() => Swal.fire({ title: 'Desglose de Bienestar', text: `${kpis.horasInvertidas.toFixed(1)} horas invertidas hoy en desarrollo personal y salud.`, icon: 'info', background: '#0D1526', color: '#f8fafc' })}
+          onClick={() => Swal.fire({ title: 'Desglose de Bienestar', text: `${kpisTablero.horasInvertidas.toFixed(1)} horas invertidas hoy en desarrollo personal y salud.`, icon: 'info', background: '#0D1526', color: '#f8fafc' })}
           className="col-span-2 sm:col-span-1 portal-surface bg-white dark:bg-[#0D1526] p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all"
           title="Clic para ver desglose detallado de inversión por tipo de hábito"
         >
@@ -341,7 +407,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           </div>
           <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 truncate pt-1 border-t border-slate-100 dark:border-slate-800/60">
             <span id="kpi-habitos-global-horas" className="font-mono tabular-nums">
-              {kpis.horasInvertidas.toFixed(1)}h invertidas hoy
+              {kpisTablero.horasInvertidas.toFixed(1)}h invertidas hoy
             </span>
           </div>
         </div>
@@ -362,7 +428,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
             }`}
           >
             <span>Todos</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-black font-mono tabular-nums">{kpis.total}</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-black font-mono tabular-nums">{kpisTablero.total}</span>
           </button>
 
           <button
@@ -376,7 +442,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           >
             <Repeat className="w-3.5 h-3.5" />
             <span>Hábitos Recurrentes</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-bold font-mono tabular-nums">{kpis.countHabitual}</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-bold font-mono tabular-nums">{kpisTablero.countHabitual}</span>
           </button>
 
           <button
@@ -390,7 +456,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           >
             <Target className="w-3.5 h-3.5" />
             <span>Metas Puntuales</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-bold font-mono tabular-nums">{kpis.countUnico}</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-bold font-mono tabular-nums">{kpisTablero.countUnico}</span>
           </button>
 
           <button
@@ -404,11 +470,44 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           >
             <Flame className="w-3.5 h-3.5" />
             <span>Con Racha Activa</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-bold font-mono tabular-nums">{kpis.countRacha}</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 font-bold font-mono tabular-nums">{kpisTablero.countRacha}</span>
           </button>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          {/* Selector de Filtro por Meta (REQ-HABITS-FILTER-BY-META-16) */}
+          <div className="bg-slate-900/60 border border-slate-800/60 rounded-xl px-2.5 py-1.5 flex items-center gap-2 shadow-xs">
+            <Target className="w-4 h-4 text-cyan-400 shrink-0" strokeWidth={1.75} />
+            <select
+              id="filtro-meta-select"
+              value={filtroMetaId}
+              onChange={(e) => setFiltroMetaId(e.target.value)}
+              className="bg-transparent text-xs text-slate-200 font-medium focus:outline-none cursor-pointer max-w-[160px] sm:max-w-[200px] truncate"
+            >
+              <option value="TODAS" className="bg-[#0D1526] text-slate-200">🎯 Todas las Metas</option>
+              <option value="__SIN_META__" className="bg-[#0D1526] text-slate-200">⚡ Hábitos de Rutina Base (Sin meta)</option>
+              {metasPlanesOrdenadas.length > 0 && (
+                <optgroup label="Metas y Planes Activos" className="bg-[#0D1526] text-cyan-400 font-bold">
+                  {metasPlanesOrdenadas.map((m) => (
+                    <option key={m.id} value={m.id} className="bg-[#0D1526] text-slate-200 font-normal">
+                      {m.codigo_legado} · {m.nombre_meta}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            {filtroMetaId !== 'TODAS' && (
+              <button
+                type="button"
+                onClick={() => setFiltroMetaId('TODAS')}
+                className="p-0.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                title="Restablecer filtro de metas"
+              >
+                <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+              </button>
+            )}
+          </div>
+
           {/* Popover de Ordenamiento */}
           <div className="relative">
             <button
@@ -593,6 +692,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                         key={act.id}
                         actividad={act}
                         subtareas={subtareasPorPadre.get(act.codigo_legado) || []}
+                        metaVinculada={metasPorHabitoId.get(act.id)}
                         onToggleCompletar={toggleCompletar}
                         onRegistrarAvance={registrarAvance}
                         onToggleSubtarea={toggleSubtarea}
@@ -614,6 +714,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                         key={act.id}
                         actividad={act}
                         subtareas={subtareasPorPadre.get(act.codigo_legado) || []}
+                        metaVinculada={metasPorHabitoId.get(act.id)}
                         onToggleCompletar={toggleCompletar}
                         onRegistrarAvance={registrarAvance}
                         onToggleSubtarea={toggleSubtarea}

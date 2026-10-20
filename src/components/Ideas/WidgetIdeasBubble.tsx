@@ -4,6 +4,7 @@ import {
   Lightbulb,
   X,
   Mic,
+  MicOff,
   Paperclip,
   Check,
   Sparkles,
@@ -20,6 +21,7 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { IdeaRecord } from '../../types';
+import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import Swal from 'sweetalert2';
 
 interface WidgetIdeasBubbleProps {
@@ -44,8 +46,66 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   // Popover de micro-captura
   const [popoverAbierto, setPopoverAbierto] = useState(false);
   const [enunciado, setEnunciado] = useState('');
-  const [grabando, setGrabando] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [fueGrabadoConVoz, setFueGrabadoConVoz] = useState(false);
+  const baseTextoVozRef = useRef<string>('');
+
+  // Hook de Reconocimiento de Voz Nativo (REQ-IDEAS-VOICE-RECOGNITION-19)
+  const {
+    isListening,
+    isSupported,
+    startListening,
+    stopListening
+  } = useSpeechRecognition({
+    onTranscript: (texto) => {
+      const base = baseTextoVozRef.current;
+      const resultado = base ? `${base} ${texto}` : texto;
+      setEnunciado(resultado);
+      setFueGrabadoConVoz(true);
+    },
+    onError: (errorMsg) => {
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'warning',
+        title: errorMsg,
+        showConfirmButton: false,
+        timer: 3000,
+        background: '#0D1526',
+        color: '#f8fafc'
+      });
+    }
+  });
+
+  // Al cerrar el popover, detener cualquier escucha activa
+  useEffect(() => {
+    if (!popoverAbierto && isListening) {
+      stopListening();
+    }
+  }, [popoverAbierto, isListening, stopListening]);
+
+  const handleToggleVoz = () => {
+    if (!isSupported) {
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'info',
+        title: 'Tu navegador no soporta reconocimiento de voz nativo. Usa Chrome o Edge.',
+        showConfirmButton: false,
+        timer: 3500,
+        background: '#0D1526',
+        color: '#f8fafc'
+      });
+      return;
+    }
+
+    if (!isListening) {
+      baseTextoVozRef.current = enunciado.trim();
+      startListening();
+    } else {
+      stopListening();
+    }
+  };
 
   // Ventana Flotante Canvas/PiP
   const [ventanaAbierta, setVentanaAbierta] = useState(false);
@@ -135,6 +195,10 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const handleGuardarIdea = async () => {
     if (!enunciado.trim()) return;
 
+    if (isListening) {
+      stopListening();
+    }
+
     setGuardando(true);
     try {
       const nowIso = new Date().toISOString();
@@ -152,7 +216,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
         codigo_legado: codigoLegado,
         enunciado_idea: enunFinal,
         detalle_contexto: detFinal,
-        tipo_captura: 'TEXTO',
+        tipo_captura: fueGrabadoConVoz ? 'VOZ' : 'TEXTO',
         estado: 'CAPTURA',
         fecha_captura: nowIso,
         updated_at: nowIso,
@@ -160,6 +224,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       });
 
       setEnunciado('');
+      setFueGrabadoConVoz(false);
       setPopoverAbierto(false);
 
       Swal.fire({
@@ -495,18 +560,19 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
             />
 
             {/* Audio Banner */}
-            {grabando && (
-              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-rose-950/70 border border-rose-800/60 text-rose-300">
+            {isListening && (
+              <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-rose-950/70 border border-rose-800/60 text-rose-300 animate-in fade-in duration-200">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                  <span className="text-xs font-bold">Grabando nota de voz...</span>
+                  <span className="text-xs font-bold">Grabando nota de voz... (habla ahora)</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setGrabando(false)}
+                  onClick={stopListening}
                   className="text-[11px] font-semibold text-rose-300 hover:text-white underline cursor-pointer"
+                  title="Detener captura de audio"
                 >
-                  Cancelar
+                  Detener
                 </button>
               </div>
             )}
@@ -516,12 +582,21 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setGrabando(!grabando)}
-                  className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 transition flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-                  title="Grabar Nota de Voz"
+                  id="btn-quick-voice-record"
+                  onClick={handleToggleVoz}
+                  className={`px-2.5 py-1.5 rounded-xl border transition flex items-center gap-1.5 text-xs font-medium cursor-pointer ${
+                    isListening
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border-white/5'
+                  }`}
+                  title={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
                 >
-                  <Mic className="w-3.5 h-3.5 text-indigo-400" />
-                  <span className="font-mono text-[11px]">Voz</span>
+                  {isListening ? (
+                    <MicOff className="w-3.5 h-3.5 text-rose-400" />
+                  ) : (
+                    <Mic className="w-3.5 h-3.5 text-indigo-400" />
+                  )}
+                  <span className="font-mono text-[11px]">{isListening ? 'Detener' : 'Voz'}</span>
                 </button>
                 <button
                   type="button"

@@ -28,6 +28,105 @@
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.43 — Implementación de Transcriptor de Voz Nativo Web Speech API en Ideas (REQ-IDEAS-VOICE-RECOGNITION-19)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/hooks/useSpeechRecognition.ts` (Nuevo), `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/hooks/__tests__/useSpeechRecognition.test.ts` (Nuevo), `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Hook Reutilizable y Controlador (`useSpeechRecognition.ts`):**
+   - Detección universal de Web Speech API (`window.SpeechRecognition || window.webkitSpeechRecognition`).
+   - Configuración nativa con `continuous = true`, `interimResults = true`, e idioma `lang = 'es-PE'` con fallback inteligente.
+   - Manejo de `onresult` procesando resultados finales e interinos para streaming en tiempo real hacia `onTranscript(texto, esFinal)`.
+   - Manejo de `onerror` tipificado con mensajes de usuario en español para denegación de micrófono (`not-allowed`), ausencia de voz (`no-speech`), hardware no encontrado (`audio-capture`) o errores de red (`network`).
+   - Aborto defensivo y liberación de recursos en el ciclo de vida `useEffect` al desmontar.
+2. **Integración en `WidgetIdeasBubble.tsx` (Cobalt Aerodynamic):**
+   - Erradicación del estado mock `grabando`.
+   - Concatenación inteligente con preservación del texto preexistente en el textarea sin sobreescrituras ni duplicaciones.
+   - Botón de Voz reactivo: alterna a estado activo con animación pulsante (`bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse`), renderizando el icono `MicOff` y etiqueta "Detener".
+   - Banner interactivo de grabación con botón de parada inmediata.
+   - Persistencia contextual: asignación automática de `tipo_captura: 'VOZ'` al guardar ideas capturadas por dictado.
+3. **Aseguramiento de Calidad:**
+   - 110/110 pruebas unitarias aprobadas en Vitest (`useSpeechRecognition.test.ts` con 10 pruebas cubriendo inicio, parada, eventos de resultado y errores).
+   - Comprobación estática con `npx tsc --noEmit` limpia con 0 errores.
+   - Compilación de producción con Vite exitosa.
+
+---
+
+### FASE 4.42 — Motor de Velocidad Real y Badges de Proyección en ViewMetasPlanes (REQ-METAS-FORECASTING-BADGES-17)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/services/metasService.ts`, `src/components/Habitos/Metas/ViewMetasPlanes.tsx`, `src/services/__tests__/metasService.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Motor Matemático de Forecasting (`calcularProyeccionMeta` en `metasService.ts`):**
+   - Función pura que procesa los logs de cumplimiento de hábitos en la ventana móvil de los últimos 30 días respecto a `fechaHoyStr` con aritmética UTC determinista.
+   - Cálculo de velocidad real diaria: $V_{real} = \frac{\sum ValorRegistrado}{30}$.
+   - Remanente pendiente: $VolumenPendiente = \max(0, meta.meta\_objetivo\_total - meta.valor\_acumulado\_actual)$.
+   - Días restantes: $D_{rest} = \lceil \frac{VolumenPendiente}{V_{real}} \rceil$ y fecha proyectada $F_{proj} = fechaHoy + D_{rest}$.
+   - Desviación temporal respecto a `meta.fecha_fin`: $\Delta t = \text{días}(F_{proj}) - \text{días}(meta.fecha\_fin)$.
+   - Clasificación semántica de salud:
+     - $\Delta t \le -3$: `ADELANTADO` ("Adelantado Xd").
+     - $-3 < \Delta t \le 0$: `A_TIEMPO` ("En cronograma").
+     - $0 < \Delta t \le 7$: `RIESGO` ("⚠️ Riesgo (+Xd)").
+     - $\Delta t > 7$: `CRITICO` ("🚨 Desviación (+Xd)").
+     - $V_{real} == 0$: `SIN_DATOS` ("Sin inercia / 0 avance").
+   - Detección de hitos atrasados no completados (`fecha_objetivo < fechaHoyStr`), adjuntando alerta descriptiva en `mensajeBadge`.
+2. **Visualización Reactiva en `ViewMetasPlanes.tsx` (Cobalt Aerodynamic):**
+   - Consulta reactiva `useLiveQuery` sobre `db.habito_cumplimiento_logs` con mapeo en memoria $O(1)$ por hábito.
+   - Renderizado en cabecera de tarjeta de píldora estilizada según `estadoSalud` con tokens Cobalt:
+     - `ADELANTADO`: `bg-emerald-500/10 text-emerald-400 border border-emerald-500/20`
+     - `A_TIEMPO`: `bg-teal-500/10 text-teal-400 border border-teal-500/20`
+     - `RIESGO`: `bg-amber-500/10 text-amber-400 border border-amber-500/20`
+     - `CRITICO`: `bg-rose-500/10 text-rose-400 border border-rose-500/20`
+     - `SIN_DATOS`: `bg-slate-800/40 text-slate-400 border border-slate-700/40`
+   - Renderizado discreto al pie de la barra bimodal con `font-mono tabular-nums`:
+     `Ritmo: {velocidadDiaria.toFixed(1)} {meta.unidad_medida}/día · Proyectado: {fechaProyectada || 'Indeterminado'}`.
+3. **Aseguramiento de Calidad:**
+   - 100/100 pruebas unitarias aprobadas en Vitest (`metasService.test.ts` con cobertura de todos los umbrales de $\Delta t$, metas sin datos y alertas de hitos).
+   - Comprobación estática `npx tsc --noEmit` limpia con 0 errores.
+   - Compilación de producción con Vite exitosa.
+
+---
+
+### FASE 4.41 — Selector de Filtro por Meta en Barra de Herramientas de TableroHabitos (REQ-HABITS-FILTER-BY-META-16)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/utils/entityNormalizer.ts`, `src/components/Habitos/TableroHabitos.tsx`, `src/utils/__tests__/entityNormalizer.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Función Canónica de Evaluación de Filtro por Meta (`evaluarFiltroMeta`):**
+   - En `src/utils/entityNormalizer.ts`, implementación pura de `evaluarFiltroMeta(act, filtroMetaId, metasPorHabitoId, metasPlanes)`:
+     - `'TODAS'`: Pase libre sin exclusión.
+     - `'__SIN_META__'`: Inclusión exclusiva de actividades sin vínculo en `db.habitos_metas_vinculos` y sin `meta_macro_nombre`.
+     - UUID de meta: Inclusión por ID de vínculo en `metasPorHabitoId` o por coincidencia normalizada de texto libre en `act.meta_macro_nombre`.
+2. **Selector Estilizado Cobalt Aerodynamic en Toolbar (`TableroHabitos.tsx`):**
+   - Integración de `<select id="filtro-meta-select">` con icono Lucide `Target` (`text-cyan-400 stroke-[1.75]`), opciones estructuradas (`🎯 Todas las Metas`, `⚡ Hábitos de Rutina Base (Sin meta)` y optgroup `"Metas y Planes Activos"` ordenado alfabéticamente).
+   - Botón de restablecimiento rápido (`X`) con microborde y tooltip cuando el filtro está activo (`filtroMetaId !== 'TODAS'`).
+3. **KPIs Bento y Cabeceras de Columna Contextuales:**
+   - Cálculo reactivo de `kpisTablero` en `TableroHabitos.tsx`, reflejando dinámicamente el universo de hábitos según la meta activa en las 5 Bento Cards y en los contadores del Kanban, sin alterar los gráficos globales del Dashboard.
+4. **Aseguramiento de Calidad:**
+   - 93/93 pruebas unitarias aprobadas en Vitest (`entityNormalizer.test.ts` con cobertura completa del filtro).
+   - Comprobación estática con `npx tsc --noEmit` y build de producción validado con `vite build` (0 errores).
+
+---
+
+### FASE 4.40 — Creación In-Situ de Metas desde Actividades y Promoción a Metas & Planes (REQ-HABITS-CREATE-METAS-INLINE-15)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/services/metasService.ts`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Habitos/Metas/ViewMetasPlanes.tsx`, `src/services/__tests__/metasService.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Creación In-Situ de Metas en `metasService.ts` (`crearMetaRapidaDesdeActividadLocal`):**
+   - Implementación de la función `crearMetaRapidaDesdeActividadLocal(params)` con correlativo canónico determinista `MET-XXX` generado mediante `generarSiguienteCodigoMetaLocal()`.
+   - Inicialización con `peso_hitos_pct: 0` y `peso_habitos_pct: 100` (100% dependiente de hábitos hasta incorporar hitos posteriormente), `estado: '02_En_Progreso'`, `tipo_meta: 'CUANTITATIVA'`, y persistencia atómica en `db.metas_planes`.
+   - Si se provee `habitoId`, genera atómicamente el vínculo en `db.habitos_metas_vinculos` con `modo_computo: 'VOLUMEN_DIRECTO'` y recalcula el progreso bimodal con `recalcularProgresoMetaLocal`.
+2. **Selector de Metas Canónico con Opción de Creación Inline (`ModalActividadFlow.tsx`):**
+   - Estructuración canónica del `<select>` con opciones: `"Sin vincular a meta"`, `"+ Crear nueva meta para este hábito..."` (`__CREAR_NUEVA__`), `"Personalizada (Solo texto libre / Legacy)"` (`__TEXTO_LIBRE__`), y optgroup `"Metas y Planes Activos"`.
+   - Despliegue de subpanel interactivo Cobalt Aerodynamic al seleccionar `__CREAR_NUEVA__` para ingresar el nombre de la meta, unidad de medida, meta objetivo total y nivel de rescate mínimo con tipografía `font-mono tabular-nums`.
+   - En `commitGuardado()`, invocación atómica de `crearMetaRapidaDesdeActividadLocal()`, asignación de `payload.meta_macro_nombre` y persistencia con limpieza de vínculos preexistentes si aplica.
+3. **Promoción Automática de Metas Internas Preexistentes (`sincronizarMetasInternasHaciaPlanesLocal`):**
+   - Recorrido de actividades en `db.actividades_personales` con `meta_macro_nombre` no vacío o `tipo_compromiso === 'META'` que no tengan un vínculo registrado en `db.habitos_metas_vinculos`.
+   - Creación de la meta en `db.metas_planes` si no existe o vinculación a la meta existente si ya fue registrada previamente, garantizando idempotencia.
+   - Invocación reactiva en el montaje (`useEffect`) de `src/components/Habitos/Metas/ViewMetasPlanes.tsx`, asegurando que todas las metas definidas en tarjetas de actividades figuren inmediatamente en la pestaña de Metas & Planes.
+4. **Validación y Aseguramiento de Calidad:**
+   - 92/92 pruebas unitarias aprobadas en Vitest (`metasService.test.ts` con cobertura completa).
+   - Verificación estática con `npx tsc --noEmit` y compilación de producción validada con `vite build` (0 errores).
+
+---
+
 ### FASE 4.38 — Retención Visual de Hábitos Completados Hoy y Sincronización Robusta con Calendar (REQ-HAB-05 & REQ-CAL-02)
 **Fecha:** Octubre 2026 | **Archivos modificados:** `src/types/index.ts`, `src/services/calendarSyncService.ts`, `src/services/habitosService.ts`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/hooks/useHabitos.ts`, `legacy_gas/CalendarService.js`, `src/services/__tests__/habitosService.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
 
@@ -6583,6 +6682,45 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - `npx tsc --noEmit`: 0 errores de tipado TypeScript estricto.
 - `npm test`: 8/8 suites en verde (86/86 pruebas unitarias pasadas al 100%).
 - `npm run build`: Generación limpia de `dist/` en 5.70s con todos los assets PWA presentes (`icon-192.png`, `icon-512.png`, `sw.js`, `_redirects`).
+
+---
+
+### REQ-HABITS-METAS-INTEGRATION-14: Integración Reactiva Bidireccional y Preservación Visual Hábitos-Metas
+- **Estado:** IMPLEMENTADO Y CERTIFICADO (Cero Regresiones, Preservación Visual 1:1).
+- **Fecha:** 2026-10-19
+- **Objetivo:** Resolver la desconexión entre hábitos (`actividades_personales`) y metas estratégicas (`metas_planes`), posibilitando la selección de metas existentes, preservación estética 1:1 en tarjetas y retroalimentación de progreso en caliente.
+
+#### 1. Diagnóstico y Resoluciones Quirúrgicas Aplicadas
+- **`useHabitos.ts` (Consultas Reactivas y Mapeo O(1)):**
+  - Incorporadas queries en vivo con `useLiveQuery` para `db.habitos_metas_vinculos` y `db.metas_planes`.
+  - Construcción memoizada de `metasPorHabitoId: Map<string, MetaPlanRecord>` que asocia de forma ultra-eficiente cada hábito con su meta macro vinculada.
+  - Exposición reactiva de `metasPorHabitoId` y `metasPlanes`.
+- **`TableroHabitos.tsx` (Inyección de Metas Vinculadas):**
+  - Desestructuración de `metasPorHabitoId` desde `useHabitos()`.
+  - Inyección de `metaVinculada={metasPorHabitoId.get(act.id)}` en ambas instancias de `<TarjetaHabito>` (hábitos pendientes y completados).
+- **`TarjetaHabito.tsx` (Unificación de Datos y Preservación Estética 1:1):**
+  - Prop `metaVinculada?: MetaPlanRecord` integrada en `TarjetaHabitoProps`.
+  - Construcción del objeto normalizado `metaEfectiva`:
+    - `titulo`: `metaVinculada?.nombre_meta || actividad.meta_macro_nombre || 'Meta Cuantificable'`
+    - `total`: `metaVinculada?.meta_objetivo_total || actividad.meta_objetivo_total || 0`
+    - `actual`: `actividad.valor_acumulado_actual || 0`
+    - `unidad`: `metaVinculada?.unidad_medida || actividad.unidad_medida || 'unidades'`
+    - `rescateMin`: `metaVinculada?.nivel_rescate_minimo || actividad.nivel_rescate_minimo || 0`
+  - Preservación íntegra de clases y layout (`bg-cyan-950/20`, `border-cyan-800/40`, barra degradada cyan-to-teal y badge de rescate mínimo).
+  - Píldora discreta identificadora: `<span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-mono">Plan Vinculado</span>`.
+  - En `handleAbrirAvanceCuantitativo`, despacho en caliente a `recalcularProgresoMetaLocal(metaVinculada.id)` para impactar atómicamente el progreso bimodal de la meta macro.
+- **`ModalActividadFlow.tsx` (Selector Interactivo Dual):**
+  - Consulta reactiva `metasDisponibles = useLiveQuery(() => db.metas_planes.toArray(), [])`.
+  - Selector dual interactivo:
+    1. Dropdown `<select>` con opciones de `metas_planes`, opción inicial *"Sin vincular a plan"* y opción *"Personalizada / Texto libre"*.
+    2. Al seleccionar una meta de `metas_planes`: autocompletado instantáneo de título, unidad de medida, meta objetivo y nivel de rescate.
+    3. Al seleccionar *"Personalizada / Texto libre"*: despliegue del campo de texto tradicional para retrocompatibilidad total.
+  - Al guardar: persistencia atómica en `habitos_metas_vinculos` vía `vincularHabitoAMetaLocal()` y recálculo de la meta padre vía `recalcularProgresoMetaLocal()`. Si se desvincula, eliminación segura del vínculo huérfano.
+
+#### 2. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado TypeScript estricto.
+- `npm test -- --run`: 9/9 suites en verde (90/90 pruebas unitarias aprobadas al 100%).
+- `npm run build`: Compilación limpia de producción en 5.73s con bundles generados en `dist/`.
 
 
 

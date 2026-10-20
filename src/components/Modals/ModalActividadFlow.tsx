@@ -20,6 +20,11 @@ import {
   eliminarActividadConAlcance
 } from '../../services/habitosService';
 import { sincronizarActividadCalendar } from '../../services/calendarSyncService';
+import {
+  vincularHabitoAMetaLocal,
+  recalcularProgresoMetaLocal,
+  crearMetaRapidaDesdeActividadLocal
+} from '../../services/metasService';
 import { ModalAlcanceRecurrencia } from './ModalAlcanceRecurrencia';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
 import type {
@@ -159,14 +164,21 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   const [gastoSearch, setGastoSearch] = useState('');
   const [gastoVinculadoId, setGastoVinculadoId] = useState<string | null>(null);
 
-  // Sección Metas OKR
+  // Sección Metas OKR / metas_planes (REQ-HABITS-METAS-INTEGRATION-14 / REQ-HABITS-CREATE-METAS-INLINE-15)
   const [mostrarMetas, setMostrarMetas] = useState(false);
   const [metaMacro, setMetaMacro] = useState('');
+  const [metaSeleccionadaId, setMetaSeleccionadaId] = useState<string>('');
+  const [metaIdInicial, setMetaIdInicial] = useState<string>('');
+  const [modoMetaManual, setModoMetaManual] = useState<boolean>(false);
+  const [nombreNuevaMeta, setNombreNuevaMeta] = useState<string>('');
   const [unidadMedida, setUnidadMedida] = useState('');
   const [metaTotal, setMetaTotal] = useState<string>('');
   const [valorAcumulado, setValorAcumulado] = useState<string>('0');
   const [metaDiaria, setMetaDiaria] = useState<string>('');
   const [rescateMinimo, setRescateMinimo] = useState<string>('');
+
+  // Metas & Planes existentes en Dexie
+  const metasDisponibles = useLiveQuery(() => db.metas_planes.toArray(), []) || [];
 
   // Sección Notas Vinculadas
   const [mostrarNotas, setMostrarNotas] = useState(false);
@@ -228,6 +240,29 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       if (actividadEditar.meta_macro_nombre || actividadEditar.meta_objetivo_total) {
         setMostrarMetas(true);
       }
+
+      // Consultar si tiene vínculo activo en habitos_metas_vinculos
+      db.habitos_metas_vinculos
+        .where('habito_id')
+        .equals(actividadEditar.id)
+        .first()
+        .then((vinc) => {
+          if (vinc) {
+            setMetaSeleccionadaId(vinc.meta_id);
+            setMetaIdInicial(vinc.meta_id);
+            setModoMetaManual(false);
+          } else if (actividadEditar.meta_macro_nombre) {
+            setMetaSeleccionadaId('');
+            setMetaIdInicial('');
+            setModoMetaManual(true);
+          } else {
+            setMetaSeleccionadaId('');
+            setMetaIdInicial('');
+            setModoMetaManual(false);
+          }
+          setNombreNuevaMeta('');
+        });
+
       if (actividadEditar.monto_gasto_asociado) {
         setGastoMonto(String(actividadEditar.monto_gasto_asociado));
         setMostrarGasto(true);
@@ -276,6 +311,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       setGastoVinculadoId(null);
       setMostrarMetas(false);
       setMetaMacro('');
+      setMetaSeleccionadaId('');
+      setMetaIdInicial('');
+      setModoMetaManual(false);
+      setNombreNuevaMeta('');
       setUnidadMedida('');
       setMetaTotal('');
       setValorAcumulado('0');
@@ -350,6 +389,44 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   const pasosCompletados = pasosLocales.filter((p) => p.completado).length;
   const progresoPasos = pasosLocales.length > 0 ? Math.round((pasosCompletados / pasosLocales.length) * 100) : 0;
 
+  // Manejador del selector de metas (REQ-HABITS-CREATE-METAS-INLINE-15)
+  const handleCambiarMetaSeleccionada = (valor: string) => {
+    if (valor === '__CREAR_NUEVA__') {
+      setModoMetaManual(false);
+      setMetaSeleccionadaId('__CREAR_NUEVA__');
+      if (!nombreNuevaMeta.trim()) {
+        setNombreNuevaMeta(titulo.trim());
+      }
+      return;
+    }
+
+    if (valor === '__TEXTO_LIBRE__' || valor === 'MANUAL') {
+      setModoMetaManual(true);
+      setMetaSeleccionadaId('__TEXTO_LIBRE__');
+      return;
+    }
+
+    if (!valor) {
+      setModoMetaManual(false);
+      setMetaSeleccionadaId('');
+      setMetaMacro('');
+      return;
+    }
+
+    // Se seleccionó una meta de metas_planes
+    setModoMetaManual(false);
+    setMetaSeleccionadaId(valor);
+    const metaElegida = metasDisponibles.find((m) => m.id === valor);
+    if (metaElegida) {
+      setMetaMacro(metaElegida.nombre_meta);
+      setUnidadMedida(metaElegida.unidad_medida || 'unidades');
+      setMetaTotal(metaElegida.meta_objetivo_total ? String(metaElegida.meta_objetivo_total) : '');
+      if (metaElegida.nivel_rescate_minimo) {
+        setRescateMinimo(String(metaElegida.nivel_rescate_minimo));
+      }
+    }
+  };
+
   // Detección de Dirty State (comparación con el snapshot inicial)
   const verificarSiHayCambios = (payload: ActividadPersonal): boolean => {
     if (!actividadEditar) return true;
@@ -371,6 +448,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     const metaDiaCambio = (payload.meta_diaria_estandar || 0) !== (actividadEditar.meta_diaria_estandar || 0);
     const rescMinCambio = (payload.nivel_rescate_minimo || 0) !== (actividadEditar.nivel_rescate_minimo || 0);
     const pasosCambio = JSON.stringify(pasosLocales) !== pasosInicialesJson;
+    const vinculoCambio = metaSeleccionadaId !== metaIdInicial;
 
     return (
       nombreCambio ||
@@ -389,7 +467,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       metaTotCambio ||
       metaDiaCambio ||
       rescMinCambio ||
-      pasosCambio
+      pasosCambio ||
+      vinculoCambio
     );
   };
 
@@ -397,6 +476,23 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   const commitGuardado = async (payloadAguardar: ActividadPersonal, alcance: AlcanceRecurrencia) => {
     const nowIso = new Date().toISOString();
     let codigoLegado = actividadEditar?.codigo_legado || payloadAguardar.codigo_legado;
+
+    let idMetaFinal = metaSeleccionadaId;
+
+    // Si seleccionó __CREAR_NUEVA__, invocar crearMetaRapidaDesdeActividadLocal (REQ-HABITS-CREATE-METAS-INLINE-15)
+    if (metaSeleccionadaId === '__CREAR_NUEVA__') {
+      const nombreFinal = nombreNuevaMeta.trim() || titulo.trim() || payloadAguardar.nombre_actividad;
+      const metaCreada = await crearMetaRapidaDesdeActividadLocal({
+        nombre: nombreFinal,
+        categoria: payloadAguardar.categoria_vida,
+        metaTotal: parseFloat(metaTotal) || undefined,
+        unidad: unidadMedida.trim() || undefined,
+        nivelRescate: parseFloat(rescateMinimo) || undefined,
+        habitoId: payloadAguardar.id
+      });
+      payloadAguardar.meta_macro_nombre = metaCreada.nombre_meta;
+      idMetaFinal = metaCreada.id;
+    }
 
     if (actividadEditar) {
       await editarActividadConAlcance(
@@ -459,6 +555,41 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       });
     }
 
+    // Persistencia y vinculación a Meta & Plan Estratégico (REQ-HABITS-METAS-INTEGRATION-14 / REQ-HABITS-CREATE-METAS-INLINE-15)
+    if (idMetaFinal && idMetaFinal !== '__TEXTO_LIBRE__') {
+      await vincularHabitoAMetaLocal(
+        payloadAguardar.id,
+        idMetaFinal,
+        'VOLUMEN_DIRECTO',
+        1.0,
+        100,
+        parseFloat(metaTotal) || 0
+      );
+      await recalcularProgresoMetaLocal(idMetaFinal);
+
+      // Si cambió de meta respecto a la inicial, limpiar vínculo anterior
+      if (actividadEditar && metaIdInicial && metaIdInicial !== idMetaFinal) {
+        const vinculoPrevio = await db.habitos_metas_vinculos
+          .where('habito_id')
+          .equals(actividadEditar.id)
+          .and((v) => v.meta_id === metaIdInicial)
+          .first();
+        if (vinculoPrevio) {
+          await db.habitos_metas_vinculos.delete(vinculoPrevio.id);
+          await recalcularProgresoMetaLocal(metaIdInicial);
+        }
+      }
+    } else if (actividadEditar) {
+      const vinculoExistente = await db.habitos_metas_vinculos
+        .where('habito_id')
+        .equals(actividadEditar.id)
+        .first();
+      if (vinculoExistente) {
+        await db.habitos_metas_vinculos.delete(vinculoExistente.id);
+        await recalcularProgresoMetaLocal(vinculoExistente.meta_id);
+      }
+    }
+
     Swal.fire({
       toast: true,
       position: 'top-end',
@@ -504,6 +635,13 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
     const montoGastoFinal = parseFloat(gastoMonto) || undefined;
 
+    let metaMacroNombre = metaMacro.trim();
+    if (metaSeleccionadaId === '__CREAR_NUEVA__') {
+      metaMacroNombre = nombreNuevaMeta.trim() || titulo.trim() || 'Nueva Meta';
+    } else if (metaSeleccionadaId && metaSeleccionadaId !== '__TEXTO_LIBRE__') {
+      metaMacroNombre = metasDisponibles.find((m) => m.id === metaSeleccionadaId)?.nombre_meta || metaMacro.trim();
+    }
+
     const payload: ActividadPersonal = {
       id: idActividad!,
       user_id: '00000000-0000-0000-0000-000000000001',
@@ -511,7 +649,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       nombre_actividad: titulo.trim(),
       tipo_compromiso: esPuntual ? 'PUNTUAL' : metaTotal ? 'META' : tipoCompromiso,
       categoria_vida: categoria,
-      meta_macro_nombre: metaMacro.trim() || undefined,
+      meta_macro_nombre: metaMacroNombre || undefined,
       unidad_medida: unidadMedida.trim() || undefined,
       meta_objetivo_total: parseFloat(metaTotal) || undefined,
       valor_acumulado_actual: parseFloat(valorAcumulado) || 0,
@@ -1199,15 +1337,33 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
                 <div className="sm:col-span-8">
                   <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                    Meta Macro / OKR
+                    Meta & Plan Estratégico
                   </label>
-                  <input
-                    type="text"
-                    value={metaMacro}
-                    onChange={(e) => setMetaMacro(e.target.value)}
-                    placeholder="Ej: Leer 12 libros, Ahorro $10k, Maratón 42k..."
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/20"
-                  />
+                  <select
+                    id="act-flow-meta-select"
+                    value={
+                      modoMetaManual
+                        ? '__TEXTO_LIBRE__'
+                        : metaSeleccionadaId === '__CREAR_NUEVA__'
+                        ? '__CREAR_NUEVA__'
+                        : metaSeleccionadaId
+                    }
+                    onChange={(e) => handleCambiarMetaSeleccionada(e.target.value)}
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
+                  >
+                    <option value="">Sin vincular a meta</option>
+                    <option value="__CREAR_NUEVA__">+ Crear nueva meta para este hábito...</option>
+                    <option value="__TEXTO_LIBRE__">Personalizada (Solo texto libre / Legacy)</option>
+                    {metasDisponibles.length > 0 && (
+                      <optgroup label="Metas y Planes Activos">
+                        {metasDisponibles.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.codigo_legado ? `[${m.codigo_legado}] ` : ''}{m.nombre_meta} ({m.meta_objetivo_total || 0} {m.unidad_medida || 'u'})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
                 </div>
                 <div className="sm:col-span-4">
                   <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
@@ -1217,11 +1373,53 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     type="text"
                     value={unidadMedida}
                     onChange={(e) => setUnidadMedida(e.target.value)}
-                    placeholder="páginas, km, mins, soles..."
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/20"
+                    placeholder="km, horas, libros, sesiones..."
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
                   />
                 </div>
               </div>
+
+              {/* Si se seleccionó Crear Nueva Meta inline (REQ-HABITS-CREATE-METAS-INLINE-15) */}
+              {metaSeleccionadaId === '__CREAR_NUEVA__' && (
+                <div className="p-3 rounded-xl bg-cyan-100/50 dark:bg-cyan-950/40 border border-cyan-300/70 dark:border-cyan-800/60 space-y-2 animate-fadeIn">
+                  <div className="flex items-center gap-1.5 text-cyan-800 dark:text-cyan-300 font-semibold text-[11px]">
+                    <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    <span>Crear Nueva Meta en Metas & Planes</span>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
+                      Nombre de la nueva meta
+                    </label>
+                    <input
+                      id="act-flow-new-meta-name"
+                      type="text"
+                      value={nombreNuevaMeta}
+                      onChange={(e) => setNombreNuevaMeta(e.target.value)}
+                      placeholder={titulo.trim() || 'Ej: Correr 500 km, Leer 12 libros...'}
+                      className="w-full border border-cyan-300/80 dark:border-cyan-700/60 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/30 text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
+                    />
+                    <p className="text-[10px] text-cyan-700/90 dark:text-cyan-400/90 mt-1">
+                      Esta meta se registrará automáticamente en metas_planes y quedará vinculada al 100% con este hábito.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Si es personalizada / manual, mostrar campo de texto libre */}
+              {modoMetaManual && (
+                <div>
+                  <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
+                    Meta Macro / OKR (Texto Libre)
+                  </label>
+                  <input
+                    type="text"
+                    value={metaMacro}
+                    onChange={(e) => setMetaMacro(e.target.value)}
+                    placeholder="Ej: Leer 12 libros, Ahorro $10k, Maratón 42k..."
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
@@ -1234,8 +1432,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     min="0"
                     value={metaTotal}
                     onChange={(e) => setMetaTotal(e.target.value)}
-                    placeholder="0"
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono font-bold text-xs bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-cyan-500/20"
+                    placeholder="100"
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono tabular-nums font-bold text-xs bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -1249,7 +1447,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     value={valorAcumulado}
                     onChange={(e) => setValorAcumulado(e.target.value)}
                     placeholder="0"
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono font-bold text-xs bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-cyan-500/20"
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono tabular-nums font-bold text-xs bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
                   />
                 </div>
                 <div>
@@ -1263,12 +1461,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     value={metaDiaria}
                     onChange={(e) => setMetaDiaria(e.target.value)}
                     placeholder="0"
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono font-bold text-xs bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-cyan-500/20"
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono tabular-nums font-bold text-xs bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
                   />
                 </div>
                 <div>
                   <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                    Rescate Mínimo
+                    Nivel de Rescate Mínimo
                   </label>
                   <input
                     type="number"
@@ -1277,7 +1475,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     value={rescateMinimo}
                     onChange={(e) => setRescateMinimo(e.target.value)}
                     placeholder="0"
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono font-bold text-xs bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 outline-none focus:ring-2 focus:ring-cyan-500/20"
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono tabular-nums font-bold text-xs bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 outline-none focus:ring-2 focus:ring-cyan-500/20"
                   />
                 </div>
               </div>

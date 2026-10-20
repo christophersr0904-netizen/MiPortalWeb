@@ -558,6 +558,40 @@ export function evaluarFiltroTemporal(
 }
 
 /**
+ * REQ-HABITS-FILTER-BY-META-16: Evaluación de filtro por meta estratégica en actividades
+ */
+export function evaluarFiltroMeta(
+  actividad: { id: string; meta_macro_nombre?: string | null },
+  filtroMetaId: string,
+  metasPorHabitoId: Map<string, { id: string; nombre_meta?: string }>,
+  metasPlanes: Array<{ id: string; nombre_meta?: string }> = []
+): boolean {
+  if (filtroMetaId === 'TODAS' || !filtroMetaId) return true;
+
+  if (filtroMetaId === '__SIN_META__') {
+    return !metasPorHabitoId.has(actividad.id) && (!actividad.meta_macro_nombre || actividad.meta_macro_nombre.trim() === '');
+  }
+
+  const metaAsociada = metasPorHabitoId.get(actividad.id);
+  if (metaAsociada?.id === filtroMetaId) {
+    return true;
+  }
+
+  if (actividad.meta_macro_nombre && actividad.meta_macro_nombre.trim() !== '') {
+    const metaElegida = metasPlanes.find((m) => m.id === filtroMetaId);
+    if (
+      metaElegida &&
+      metaElegida.nombre_meta &&
+      actividad.meta_macro_nombre.trim().toLowerCase() === metaElegida.nombre_meta.trim().toLowerCase()
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * REQ-1TO1-003: Evaluación de filtro de plazo y vencimiento
  */
 export function evaluarFiltroPlazo(

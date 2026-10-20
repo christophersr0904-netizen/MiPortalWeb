@@ -9,7 +9,8 @@ import {
   esElementoArchivado,
   validarDoDSubtareas,
   evaluarFiltroTemporal,
-  evaluarFiltroPlazo
+  evaluarFiltroPlazo,
+  evaluarFiltroMeta
 } from '../entityNormalizer';
 import initialSeed from '../../db/initialSeed.json';
 
@@ -284,6 +285,41 @@ describe('REQ-1TO1-001: EntityNormalizer and Seed Integrity', () => {
       // 7 días: hoy hasta hoy+7
       expect(evaluarFiltroPlazo('2026-10-20', '7dias', '01_Backlog', ref)).toBe(true);
       expect(evaluarFiltroPlazo('2026-10-28', '7dias', '01_Backlog', ref)).toBe(false);
+    });
+
+    it('evaluarFiltroMeta handles TODAS, __SIN_META__, direct link, and macro name match (REQ-HABITS-FILTER-BY-META-16)', () => {
+      const metaMaraton = { id: 'meta-uuid-1', nombre_meta: 'Maratón 42K' };
+      const metaLectura = { id: 'meta-uuid-2', nombre_meta: 'Leer 12 Libros' };
+      const metasPlanes = [metaMaraton, metaLectura];
+
+      const metasPorHabitoId = new Map<string, any>([
+        ['act-running', metaMaraton]
+      ]);
+
+      const actVinculada = { id: 'act-running', meta_macro_nombre: undefined };
+      const actPorNombre = { id: 'act-lectura', meta_macro_nombre: 'Leer 12 Libros' };
+      const actSinMeta = { id: 'act-meditacion', meta_macro_nombre: '' };
+
+      // 1. TODAS permite cualquier actividad
+      expect(evaluarFiltroMeta(actVinculada, 'TODAS', metasPorHabitoId, metasPlanes)).toBe(true);
+      expect(evaluarFiltroMeta(actPorNombre, 'TODAS', metasPorHabitoId, metasPlanes)).toBe(true);
+      expect(evaluarFiltroMeta(actSinMeta, 'TODAS', metasPorHabitoId, metasPlanes)).toBe(true);
+
+      // 2. __SIN_META__ filtra solo las no vinculadas y sin meta_macro_nombre
+      expect(evaluarFiltroMeta(actSinMeta, '__SIN_META__', metasPorHabitoId, metasPlanes)).toBe(true);
+      expect(evaluarFiltroMeta(actVinculada, '__SIN_META__', metasPorHabitoId, metasPlanes)).toBe(false);
+      expect(evaluarFiltroMeta(actPorNombre, '__SIN_META__', metasPorHabitoId, metasPlanes)).toBe(false);
+
+      // 3. Filtro por UUID específico con vínculo directo en metasPorHabitoId
+      expect(evaluarFiltroMeta(actVinculada, 'meta-uuid-1', metasPorHabitoId, metasPlanes)).toBe(true);
+      expect(evaluarFiltroMeta(actVinculada, 'meta-uuid-2', metasPorHabitoId, metasPlanes)).toBe(false);
+
+      // 4. Filtro por UUID específico por coincidencia de nombre en meta_macro_nombre
+      expect(evaluarFiltroMeta(actPorNombre, 'meta-uuid-2', metasPorHabitoId, metasPlanes)).toBe(true);
+      expect(evaluarFiltroMeta(actPorNombre, 'meta-uuid-1', metasPorHabitoId, metasPlanes)).toBe(false);
+
+      // 5. Actividad sin meta frente a un UUID específico
+      expect(evaluarFiltroMeta(actSinMeta, 'meta-uuid-1', metasPorHabitoId, metasPlanes)).toBe(false);
     });
   });
 });

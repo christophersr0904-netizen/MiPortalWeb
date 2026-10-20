@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { TableroHabitos } from '../Habitos/TableroHabitos';
 import { DashboardHabitos } from '../Habitos/Dashboard/DashboardHabitos';
+import { ViewMetasPlanes } from '../Habitos/Metas/ViewMetasPlanes';
 import { ModalActividadFlow } from '../Modals/ModalActividadFlow';
-import { Activity, LayoutGrid, Plus } from 'lucide-react';
+import { Activity, LayoutGrid, Plus, Target } from 'lucide-react';
 
-type SubtabHabitos = 'tablero' | 'dashboard';
+type SubtabHabitos = 'tablero' | 'dashboard' | 'metas';
 
 export const ViewHabitos: React.FC = () => {
   const [tabActiva, setTabActiva] = useState<SubtabHabitos>('tablero');
@@ -67,6 +68,20 @@ export const ViewHabitos: React.FC = () => {
               <Activity className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
               <span>Dashboard</span>
             </button>
+
+            <button
+              type="button"
+              id="subtab-habitos-metas"
+              onClick={() => setTabActiva('metas')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                tabActiva === 'metas'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Target className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+              <span>Metas & Planes</span>
+            </button>
           </div>
 
           {/* Botón Primario: Registrar Nuevo Hábito */}
@@ -89,8 +104,10 @@ export const ViewHabitos: React.FC = () => {
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {tabActiva === 'tablero' ? (
           <TableroHabitos ocultarHeader={true} />
-        ) : (
+        ) : tabActiva === 'dashboard' ? (
           <DashboardHabitos onCrearActividad={() => setModalActividadAbierto(true)} />
+        ) : (
+          <ViewMetasPlanes onCrearMeta={() => setModalActividadAbierto(true)} />
         )}
       </div>
 

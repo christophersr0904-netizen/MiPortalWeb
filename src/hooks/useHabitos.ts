@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import type { ActividadPersonal, SubtareaPaso, CategoriaVida } from '../types';
+import type { ActividadPersonal, SubtareaPaso, CategoriaVida, MetaPlanRecord, HabitoMetaVinculo } from '../types';
 import {
   completarActividadPersonalLocal,
   registrarAvanceCuantitativoLocal,
@@ -32,6 +32,34 @@ export function useHabitos() {
     [],
     [] as SubtareaPaso[]
   );
+
+  const vinculos = useLiveQuery(
+    () => db.habitos_metas_vinculos.toArray(),
+    [],
+    [] as HabitoMetaVinculo[]
+  );
+
+  const metasPlanes = useLiveQuery(
+    () => db.metas_planes.toArray(),
+    [],
+    [] as MetaPlanRecord[]
+  );
+
+  // Mapeo O(1) de MetaPlanRecord por habito_id
+  const metasPorHabitoId = useMemo(() => {
+    const mapaMetas = new Map<string, MetaPlanRecord>();
+    for (const m of metasPlanes) {
+      mapaMetas.set(m.id, m);
+    }
+    const mapa = new Map<string, MetaPlanRecord>();
+    for (const v of vinculos) {
+      const meta = mapaMetas.get(v.meta_id);
+      if (meta) {
+        mapa.set(v.habito_id, meta);
+      }
+    }
+    return mapa;
+  }, [vinculos, metasPlanes]);
 
   // Mapeo O(1) de subtareas agrupadas por ID_Padre_Vinculado
   const subtareasPorPadre = useMemo(() => {
@@ -150,6 +178,8 @@ export function useHabitos() {
     actividades: actividadesFiltradas,
     todasLasActividades,
     subtareasPorPadre,
+    metasPorHabitoId,
+    metasPlanes,
     kpis,
     syncState,
     filtroCategoria,
