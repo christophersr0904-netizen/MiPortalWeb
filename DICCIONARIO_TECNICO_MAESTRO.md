@@ -28,6 +28,35 @@
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.46 — Cápsula Flotante Always-on-Top vía Document PiP, Forzado de Caché Móvil y Glifo Gauge (REQ-DAILY-HUD-DESKTOP-PIP-MOBILE-POLISH-39)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `public/sw.js`, `src/main.tsx`, `index.html`, `app.html`, `vite.config.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Cápsula Flotante Always-on-Top en PC vía Document Picture-in-Picture (`DailyCockpit.tsx`):**
+   - Implementación enriquecida de `desacoplarAEscritorio` utilizando la API nativa de Chrome/Edge `documentPictureInPicture.requestWindow({ width: 420, height: 680 })`.
+   - Clonación integral e iterativa de todas las hojas de estilo del documento principal (incluyendo reglas CSS en memoria y hojas enlazadas `<link rel="stylesheet">`) hacia el `<head>` de la ventana emergente, manteniendo la paridad estética 1:1 de Tailwind CSS y tokens Cobalt Aerodynamic.
+   - Montaje del componente `cockpitContent` dentro de `pipWindow.document.body` mediante `createPortal`, permitiendo que el Cockpit se mantenga en primer plano persistente (*always-on-top*) mientras el usuario interactúa con otras aplicaciones o el IDE.
+   - Mantenimiento simbiótico de la cápsula en reposo en la ventana principal con badge indicador `PiP` pulsante, permitiendo reenfocar la ventana desacoplada al hacer clic y recuperando el modo integrado automáticamente en el evento `pagehide`.
+2. **Sustitución de Icono Repetido por Glifo Técnico Distintivo:**
+   - Erradicación de iconos genéricos (`Activity`) en la cabecera y en la píldora en reposo.
+   - Adopción canónica de `<Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />` como glifo maestro del Cockpit de Ejecución Diaria, complementado con un micro-punto radar de actividad (`span.relative.flex.h-2.w-2`) con pulso ping cian.
+3. **Garantía de Visibilidad Móvil y Erradicación de Falsos Positivos de Caché:**
+   - Ajuste de elevación `z-50 pointer-events-auto` y posicionamiento reactivo para móvil en `bottom-20 right-4 sm:bottom-6 sm:right-6 md:bottom-6 md:right-6`, asegurando visibilidad inmediata por encima de la barra fija inferior (`BottomNavMobile`).
+   - Forzado de actualización e invalidación de caché:
+     - Incremento de versión del Service Worker a `pmo-cache-v2.3-hud-pip` en `public/sw.js`, purga reactiva de cachés obsoletas en el evento `activate` e integración de `self.skipWaiting()` inmediato.
+     - Registro de Service Worker en `src/main.tsx` reforzado con `reg.update()` en cada carga de página y postMessage `SKIP_WAITING` para clientes en espera.
+     - Inyección de metadatos de compilación `build-version="2.3.0-hud-pip"` en `index.html` y `app.html` y `define.__BUILD_TIMESTAMP__` en `vite.config.ts` para invalidar cachés intermedias en Cloudflare Pages.
+4. **Pulido de Fluidez, Micro-animación y Ergonomía Visual:**
+   - Cápsula en reposo estandarizada con `px-3.5 py-1.5 rounded-full bg-[#0D1526]/90 border border-sky-500/30 backdrop-blur-xl shadow-[0_4px_25px_rgba(2,6,23,0.8),0_0_15px_rgba(56,189,248,0.12)] flex items-center gap-2.5 transition-all duration-200 hover:border-sky-400 hover:scale-[1.02] active:scale-[0.97] cursor-pointer group`.
+   - Transición fluida elástica al desplegar el Cockpit: `transition-transform duration-200 ease-out origin-bottom-right`.
+   - Atenuación y tachado suave de tarjetas al completarse: `transition-all duration-200 opacity-35 line-through`.
+5. **Aseguramiento de Calidad (QA):**
+   - 115/115 pruebas unitarias aprobadas en Vitest (`npm test -- --run`) sin regresiones.
+   - Verificación estática con `npx tsc --noEmit` exitosa (0 errores de tipado).
+   - Compilación completa de producción validada con `npm run build` en 8.01s.
+
+---
+
 ### FASE 4.45 — Remoción de Selector Redundante y Reset Total con Botón X en Kanban (REQ-KANBAN-CLEAN-PROJECT-SELECTOR-26)
 **Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 

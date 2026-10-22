@@ -21,6 +21,15 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
       .register('./sw.js')
       .then((reg) => {
         console.log('[PWA] Service Worker registrado exitosamente:', reg.scope);
+        // Forzar chequeo de actualización inmediata en cada recarga
+        reg.update().catch((err) => {
+          console.warn('[PWA] Error en reg.update():', err);
+        });
+
+        // Si hay una nueva versión en espera, forzar su activación
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
       })
       .catch((err) => {
         console.warn('[PWA] Error al registrar Service Worker:', err);

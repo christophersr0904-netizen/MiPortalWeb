@@ -15,7 +15,7 @@ import {
   ListTodo,
   ExternalLink,
   ChevronDown,
-  Activity,
+  Gauge,
   CheckCircle2,
   Circle,
   Zap
@@ -76,57 +76,45 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
   };
 
-  // Motor de desacople a escritorio Always-on-Top (Document Picture-in-Picture con fallback)
-  const handleDesacoplarEscritorio = async () => {
+  // Motor de desacople a escritorio Always-on-Top (Document Picture-in-Picture enriquecido con fallback)
+  const desacoplarAEscritorio = async () => {
     if ('documentPictureInPicture' in window) {
       try {
-        const win = await (window as any).documentPictureInPicture.requestWindow({
+        const pipWin = await (window as any).documentPictureInPicture.requestWindow({
           width: 420,
-          height: 680
+          height: 680,
         });
 
-        // Clonar estilos Tailwind y CSS de la ventana principal
-        [...document.styleSheets].forEach((styleSheet) => {
+        // Clonar todas las hojas de estilo de la ventana principal para mantener Tailwind 1:1
+        [...document.styleSheets].forEach((sheet) => {
           try {
-            const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
+            const css = [...sheet.cssRules].map((r) => r.cssText).join('');
             const style = document.createElement('style');
-            style.textContent = cssRules;
-            win.document.head.appendChild(style);
+            style.textContent = css;
+            pipWin.document.head.appendChild(style);
           } catch {
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.type = styleSheet.type;
-            link.href = (styleSheet as CSSStyleSheet).href || '';
-            win.document.head.appendChild(link);
+            if (sheet.href) {
+              const link = document.createElement('link');
+              link.rel = 'stylesheet';
+              link.href = sheet.href;
+              pipWin.document.head.appendChild(link);
+            }
           }
         });
 
-        // Configuración de body oscuro Cobalt Aerodynamic
-        win.document.documentElement.className = document.documentElement.className;
-        win.document.documentElement.setAttribute(
-          'data-theme',
-          document.documentElement.getAttribute('data-theme') || 'slate'
-        );
-        win.document.body.className = 'bg-[#040711] text-slate-100 overflow-hidden m-0 p-0 select-none antialiased font-sans';
+        pipWin.document.documentElement.className = document.documentElement.className;
+        pipWin.document.body.className = 'bg-[#040711] text-slate-100 overflow-hidden m-0 p-3 select-none';
 
-        setPipWindow(win);
+        // Montar el contenedor con React Portal o renderizado directo
+        setPipWindow(pipWin);
         setCockpitAbierto(false);
-
-        win.addEventListener('pagehide', () => {
-          setPipWindow(null);
-        });
+        pipWin.addEventListener('pagehide', () => setPipWindow(null));
         return;
       } catch (err) {
-        console.warn('[DailyCockpit] Error al abrir Document Picture-in-Picture, usando fallback:', err);
+        console.warn('PiP declinado o no disponible, usando fallback window.open', err);
       }
     }
-
-    // Fallback universal multi-ventana
-    window.open(
-      '/?mode=hud',
-      'PMO_Daily_HUD',
-      'width=420,height=680,resizable=yes,scrollbars=no,status=no,location=no,toolbar=no,menubar=no'
-    );
+    window.open('/?mode=hud', 'CockpitHUD', 'width=420,height=680,resizable=yes,status=no,toolbar=no,menubar=no');
   };
 
   // Horas del Riel Horario (06:00 a 23:00)
@@ -158,8 +146,12 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       {/* 1. Cabecera Táctica Canónica */}
       <div className="px-4 py-3 border-b border-slate-800/80 bg-slate-950/70 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
-            <Activity className="w-4 h-4" strokeWidth={1.75} />
+          <div className="relative w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+            <Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
+            <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+            </span>
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -190,7 +182,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           {!modoForzadoDesacoplado && !pipWindow && (
             <button
               type="button"
-              onClick={handleDesacoplarEscritorio}
+              onClick={desacoplarAEscritorio}
               className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
               title="Desacoplar Cockpit a ventana flotante Always-on-Top en PC"
             >
@@ -350,7 +342,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                 <div
                   key={`${item.tipo}-${item.id}`}
                   onClick={(e) => handleToggle(item, e)}
-                  className={`group flex items-start gap-3 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                  className={`group flex items-start gap-3 p-2.5 rounded-xl border transition-all duration-200 cursor-pointer ${
                     estaCompletado
                       ? 'bg-slate-900/30 border-slate-800/40 opacity-35'
                       : esFocus
@@ -373,7 +365,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span
-                        className={`text-xs font-medium leading-snug break-words ${
+                        className={`text-xs font-medium leading-snug break-words transition-all duration-200 ${
                           estaCompletado
                             ? 'line-through text-slate-500'
                             : esFocus
@@ -488,7 +480,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                           <div
                             key={`${item.tipo}-${item.id}`}
                             onClick={(e) => handleToggle(item, e)}
-                            className={`p-2 rounded-xl border text-xs cursor-pointer transition-all flex items-start justify-between gap-2 ${
+                            className={`p-2 rounded-xl border text-xs cursor-pointer transition-all duration-200 flex items-start justify-between gap-2 ${
                               estaCompletado
                                 ? 'bg-slate-900/30 border-slate-800/40 opacity-35'
                                 : 'bg-slate-900/70 hover:bg-slate-900 border-slate-800'
@@ -496,7 +488,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                           >
                             <div className="min-w-0 flex-1">
                               <span
-                                className={`font-medium block leading-snug truncate ${
+                                className={`font-medium block leading-snug truncate transition-all duration-200 ${
                                   estaCompletado ? 'line-through text-slate-500' : 'text-slate-200'
                                 }`}
                               >
@@ -546,24 +538,32 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     );
   }
 
-  // MODO PICTURE-IN-PICTURE NATIVO (Portal a la ventana emergente Always-on-Top)
-  if (pipWindow) {
-    return createPortal(cockpitContent, pipWindow.document.body);
-  }
-
-  // MODO NORMAL DE LA APLICACIÓN PRINCIPAL
+  // MODO NORMAL DE LA APLICACIÓN PRINCIPAL (con soporte Portal PiP si pipWindow está activo)
   return (
     <>
+      {/* Montaje del Cockpit en ventana PiP Always-on-Top vía Portal */}
+      {pipWindow && createPortal(cockpitContent, pipWindow.document.body)}
+
       {/* A. CÁPSULA EN REPOSO (FLOATING PILL) */}
-      {!cockpitAbierto && (
+      {(!cockpitAbierto || pipWindow) && (
         <div
-          onClick={() => setCockpitAbierto(true)}
-          className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 bg-[#0D1526]/95 hover:bg-[#111c33] border border-slate-800/80 hover:border-sky-500/40 rounded-full px-3.5 py-2 shadow-cobalt-3 backdrop-blur-xl flex items-center gap-2.5 cursor-pointer select-none transition-all duration-150 active:scale-95 group"
-          title="Abrir Cockpit de Ejecución Diaria"
+          onClick={() => {
+            if (pipWindow) {
+              pipWindow.focus();
+            } else {
+              setCockpitAbierto(true);
+            }
+          }}
+          className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 md:bottom-6 md:right-6 z-50 pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0D1526]/90 border border-sky-500/30 backdrop-blur-xl shadow-[0_4px_25px_rgba(2,6,23,0.8),0_0_15px_rgba(56,189,248,0.12)] flex items-center gap-2.5 transition-all duration-200 hover:border-sky-400 hover:scale-[1.02] active:scale-[0.97] cursor-pointer group select-none"
+          title={pipWindow ? "Cockpit activo Always-on-Top (clic para enfocar)" : "Abrir Cockpit de Ejecución Diaria"}
         >
-          {/* Micro-indicador de Pulso */}
-          <div className="w-6 h-6 rounded-full bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
-            <Activity className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" strokeWidth={1.75} />
+          {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}
+          <div className="relative flex items-center justify-center shrink-0">
+            <Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
+            <span className="absolute -top-1 -right-1 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+            </span>
           </div>
 
           {/* Reloj Actual */}
@@ -584,18 +584,27 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
               <span className="truncate">{metricas.siguienteItem.titulo}</span>
             </div>
           )}
+
+          {/* Indicador Always-on-Top PiP si está desacoplado */}
+          {pipWindow && (
+            <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-sky-400 bg-sky-950/60 border border-sky-500/30 px-1.5 py-0.2 rounded-full animate-pulse">
+              PiP
+            </span>
+          )}
         </div>
       )}
 
       {/* B. COCKPIT DESPLEGADO */}
-      {cockpitAbierto && (
-        <div className="fixed inset-0 md:inset-auto md:bottom-6 md:right-6 z-50 flex items-end md:items-start justify-center md:justify-end bg-black/40 md:bg-transparent backdrop-blur-xs md:backdrop-blur-none animate-in fade-in duration-150">
+      {cockpitAbierto && !pipWindow && (
+        <div className="fixed inset-0 md:inset-auto md:bottom-6 md:right-6 z-50 flex items-end md:items-start justify-center md:justify-end bg-black/40 md:bg-transparent backdrop-blur-xs md:backdrop-blur-none animate-in fade-in duration-200">
           {/* Backdrop móvil para cerrar */}
           <div
             className="md:hidden absolute inset-0 -z-10"
             onClick={() => setCockpitAbierto(false)}
           />
-          {cockpitContent}
+          <div className="w-full md:w-auto transition-transform duration-200 ease-out origin-bottom-right">
+            {cockpitContent}
+          </div>
         </div>
       )}
     </>
