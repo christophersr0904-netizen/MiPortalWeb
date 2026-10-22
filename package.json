@@ -13,9 +13,8 @@
     "cap:sync": "npm run build && cap sync android",
     "cap:open": "cap open android",
     "build:mobile": "npm run build && cap sync android",
-    "widget": "npm --prefix desktop start",
-    "widget:dev": "npm --prefix desktop run dev",
-    "widget:install": "npm --prefix desktop install"
+    "widget": "electron ./desktop/main.js",
+    "widget:dev": "set WIDGET_URL=http://localhost:5173/?mode=hud&widget=desktop&& electron ./desktop/main.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
@@ -48,6 +47,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
     "vite": "^6.2.0",
-    "vitest": "^3.0.7"
+    "vitest": "^3.0.7",
+    "electron": "^33.0.0"
   }
 }

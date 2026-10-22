@@ -6914,6 +6914,37 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - `npm test -- --run`: 11/11 suites en verde (115/115 pruebas unitarias e integración aprobadas al 100%).
 - `npm run build`: Compilación exitosa en 6.41s sin regresiones de bundle.
 
+---
+
+### REQ-DAILY-HUD-UNIFIED-DESKTOP-WEB-WIDGET-45: Widget Único (Escritorio al Encender PC sin Bordes + Arrastrable en Web)
+- **Estado:** IMPLEMENTADO Y CERTIFICADO (Cero Regresiones, Preservación Local-First, Ventana Frameless 360x64 en Reposo, Arrastre Libre por Puntero con Memoria en Web).
+- **Fecha:** 2026-10-22
+- **Objetivo:** 
+  1. Calibrar las dimensiones de reposo de la ventana nativa de Electron en `desktop/main.js` a `width: 360, height: 64` (calce 1:1 con la píldora Cobalt), expandida a `420 x 700`.
+  2. Implementar cierre limpio en `widget-close` vía `app.quit()`.
+  3. Corregir y optimizar los scripts de arranque en `package.json` raíz (`"widget": "electron ./desktop/main.js"`, `"widget:dev"`), `desktop/iniciar-widget.bat` (`npx electron "%~dp0main.js"`) y `desktop/lanzar-widget.vbs` (ejecución 100% silenciosa en modo oculto `0, False` sin consola negra).
+  4. Habilitar arrastre libre por puntero (`Pointer Events`) en la píldora en reposo dentro del portal web con memoria persistida en `localStorage` (`pmo_cockpit_pos_x`, `pmo_cockpit_pos_y`).
+  5. Mantener soporte de arrastre nativo en Windows 11 con `DRAG_REGION_STYLE` (`WebkitAppRegion: 'drag'`) y regiones interactivas `NO_DRAG_REGION_STYLE` (`WebkitAppRegion: 'no-drag'`).
+
+#### 1. Arquitectura Técnica y Mutaciones
+- **Launcher Nativo (`desktop/main.js`):**
+  - Dimensiones iniciales reducidas de `380x100` a `360x64` para eliminar cualquier área transparente fantasma que intercepte clics de fondo.
+  - Evento `widget-close` conectado directamente a `app.quit()`.
+- **Scripts de Automatización y Arranque:**
+  - `package.json` raíz: Dependencia `"electron": "^33.0.0"` en `devDependencies`, scripts `"widget": "electron ./desktop/main.js"` y `"widget:dev"`.
+  - `desktop/iniciar-widget.bat`: Invocación directa con `npx electron "%~dp0main.js"`.
+  - `desktop/lanzar-widget.vbs`: Ejecución en segundo plano sin ventana cmd para acceso directo en `shell:startup`.
+- **Componente (`src/components/Cockpit/DailyCockpit.tsx`):**
+  - Estado `posicionWeb` con lectura y validación de límites de viewport en `localStorage`.
+  - Manejadores de puntero `handlePointerDown`, `handlePointerMove`, `handlePointerUp` con discriminación de umbral de 4px para distinguir arrastre de clic normal.
+  - Cursor reactivo `cursor-grab active:cursor-grabbing` y `touch-action: none`.
+
+#### 2. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado estricto.
+- `npm test -- --run`: 11/11 suites en verde (115/115 pruebas aprobadas al 100%).
+- `npm run build`: Compilación exitosa en 6.42s.
+
+
 
 
 

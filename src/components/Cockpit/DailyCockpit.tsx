@@ -8,7 +8,7 @@
  * ============================================================================
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Clock,
@@ -77,6 +77,108 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       window.desktopWidget.collapse();
     }
     setCockpitAbierto(false);
+  };
+
+  // Posición libre de la cápsula en modo web persistida en localStorage
+  const [posicionWeb, setPosicionWeb] = useState<{ x: number; y: number } | null>(() => {
+    if (typeof window !== 'undefined') {
+      const x = localStorage.getItem('pmo_cockpit_pos_x');
+      const y = localStorage.getItem('pmo_cockpit_pos_y');
+      if (x !== null && y !== null) {
+        const parsedX = parseFloat(x);
+        const parsedY = parseFloat(y);
+        if (!isNaN(parsedX) && !isNaN(parsedY)) {
+          const maxX = Math.max(10, window.innerWidth - 180);
+          const maxY = Math.max(10, window.innerHeight - 60);
+          return {
+            x: Math.min(Math.max(10, parsedX), maxX),
+            y: Math.min(Math.max(10, parsedY), maxY)
+          };
+        }
+      }
+    }
+    return null;
+  });
+
+  const arrastreRef = useRef<{
+    iniciado: boolean;
+    startX: number;
+    startY: number;
+    elemStartX: number;
+    elemStartY: number;
+    haMovido: boolean;
+  }>({
+    iniciado: false,
+    startX: 0,
+    startY: 0,
+    elemStartX: 0,
+    elemStartY: 0,
+    haMovido: false
+  });
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, [data-no-drag]')) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    arrastreRef.current = {
+      iniciado: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      elemStartX: rect.left,
+      elemStartY: rect.top,
+      haMovido: false
+    };
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!arrastreRef.current.iniciado) return;
+    const dx = e.clientX - arrastreRef.current.startX;
+    const dy = e.clientY - arrastreRef.current.startY;
+
+    if (!arrastreRef.current.haMovido && Math.sqrt(dx * dx + dy * dy) > 4) {
+      arrastreRef.current.haMovido = true;
+    }
+
+    if (arrastreRef.current.haMovido) {
+      const nuevoX = Math.min(
+        Math.max(10, arrastreRef.current.elemStartX + dx),
+        window.innerWidth - 180
+      );
+      const nuevoY = Math.min(
+        Math.max(10, arrastreRef.current.elemStartY + dy),
+        window.innerHeight - 60
+      );
+      setPosicionWeb({ x: nuevoX, y: nuevoY });
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!arrastreRef.current.iniciado) return;
+    const { haMovido } = arrastreRef.current;
+    arrastreRef.current.iniciado = false;
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignorar si ya fue liberado
+    }
+
+    if (haMovido) {
+      if (posicionWeb) {
+        localStorage.setItem('pmo_cockpit_pos_x', String(posicionWeb.x));
+        localStorage.setItem('pmo_cockpit_pos_y', String(posicionWeb.y));
+      }
+    } else {
+      if (pipWindow) {
+        pipWindow.focus();
+      } else {
+        handleAbrirCockpit();
+      }
+    }
   };
 
   const [horizonte, setHorizonte] = useState<HorizonteAgenda>('HOY');
@@ -731,15 +833,17 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       {/* A. CÁPSULA EN REPOSO (FLOATING PILL) */}
       {(!cockpitAbierto || pipWindow) && (
         <div
-          onClick={() => {
-            if (pipWindow) {
-              pipWindow.focus();
-            } else {
-              handleAbrirCockpit();
-            }
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          style={{
+            touchAction: 'none',
+            ...(posicionWeb
+              ? { left: `${posicionWeb.x}px`, top: `${posicionWeb.y}px`, bottom: 'auto', right: 'auto' }
+              : {})
           }}
-          className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 md:bottom-6 md:right-6 z-50 pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0D1526]/90 border border-sky-500/30 backdrop-blur-xl shadow-[0_4px_25px_rgba(2,6,23,0.8),0_0_15px_rgba(56,189,248,0.12)] flex items-center gap-2.5 transition-all duration-200 hover:border-sky-400 hover:scale-[1.02] active:scale-[0.97] cursor-pointer group select-none"
-          title={pipWindow ? "Cockpit activo Always-on-Top (clic para enfocar)" : "Abrir Cockpit de Ejecución Diaria"}
+          className={`fixed ${!posicionWeb ? 'bottom-20 right-4 sm:bottom-6 sm:right-6 md:bottom-6 md:right-6' : ''} z-50 pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0D1526]/90 border border-sky-500/30 backdrop-blur-xl shadow-[0_4px_25px_rgba(2,6,23,0.8),0_0_15px_rgba(56,189,248,0.12)] flex items-center gap-2.5 transition-shadow duration-200 hover:border-sky-400 hover:scale-[1.02] cursor-grab active:cursor-grabbing group select-none`}
+          title={pipWindow ? "Cockpit activo Always-on-Top (clic para enfocar)" : "Arrastrar para mover libremente / Clic para abrir Cockpit"}
         >
           {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}
           <div className="relative flex items-center justify-center shrink-0">
