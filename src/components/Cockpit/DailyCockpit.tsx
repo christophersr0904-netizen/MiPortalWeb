@@ -82,7 +82,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       try {
         const pipWin = await (window as any).documentPictureInPicture.requestWindow({
           width: 420,
-          height: 680,
+          height: 700,
         });
 
         // Clonar todas las hojas de estilo de la ventana principal para mantener Tailwind 1:1
@@ -114,7 +114,17 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
         console.warn('PiP declinado o no disponible, usando fallback window.open', err);
       }
     }
-    window.open('/?mode=hud', 'CockpitHUD', 'width=420,height=680,resizable=yes,status=no,toolbar=no,menubar=no');
+
+    // Fallback inmediato: cálculo de pantalla derecha
+    const w = 420;
+    const h = 720;
+    const left = typeof window !== 'undefined' ? window.screen.availWidth - w - 20 : 1000;
+    const top = 40;
+    window.open(
+      '/?mode=hud',
+      'PMO_HUD_Widget',
+      `width=${w},height=${h},left=${left},top=${top},status=no,menubar=no,toolbar=no`
+    );
   };
 
   // Horas del Riel Horario (06:00 a 23:00)
@@ -139,7 +149,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     <div
       className={`flex flex-col bg-[#0D1526] border border-slate-800/80 text-slate-100 shadow-2xl backdrop-blur-2xl select-none ${
         modoForzadoDesacoplado || pipWindow
-          ? 'w-full h-screen rounded-none'
+          ? 'w-full h-full rounded-2xl md:rounded-3xl border'
           : 'w-full md:w-[440px] h-[85vh] md:h-[680px] max-h-[85vh] rounded-t-3xl md:rounded-3xl border-t md:border'
       }`}
     >
@@ -178,8 +188,8 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             {metricas.porcentajeRitmo}%
           </div>
 
-          {/* Botón Desacople Always-on-Top (oculto si ya está desacoplado) */}
-          {!modoForzadoDesacoplado && !pipWindow && (
+          {/* Botón Desacople Always-on-Top (disponible si no está desacoplado en PiP) */}
+          {!pipWindow && (
             <button
               type="button"
               onClick={desacoplarAEscritorio}
@@ -532,8 +542,28 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   // MODO DESACOPLADO DIRECTO (cuando se renderiza en la ventana principal o como página completa)
   if (modoForzadoDesacoplado) {
     return (
-      <div className="h-screen w-full bg-[#040711] flex items-center justify-center p-2 font-sans select-none">
-        {cockpitContent}
+      <div className="h-full w-full bg-[#040711] flex items-center justify-center p-2 font-sans select-none">
+        {pipWindow && createPortal(cockpitContent, pipWindow.document.body)}
+        {pipWindow ? (
+          <div className="flex flex-col items-center justify-center text-center p-6 space-y-3 bg-[#0D1526] border border-slate-800/80 rounded-2xl max-w-sm">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 animate-pulse">
+              <Gauge className="w-6 h-6" strokeWidth={1.75} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white uppercase font-mono">Cockpit Desacoplado</h3>
+              <p className="text-xs text-slate-400 mt-1">El Cockpit se está ejecutando en la ventana flotante Always-on-Top.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => pipWindow.focus()}
+              className="px-3 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs font-semibold hover:bg-sky-500/30 transition cursor-pointer"
+            >
+              Enfocar Ventana PiP
+            </button>
+          </div>
+        ) : (
+          cockpitContent
+        )}
       </div>
     );
   }

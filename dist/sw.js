@@ -3,7 +3,7 @@
  * Estrategia: Stale-While-Revalidate para recursos estáticos y Cache-First con fallback offline
  */
 
-const CACHE_NAME = 'pmo-cache-v2.3-hud-pip';
+const CACHE_NAME = 'pmo-cache-v2.4-hud-standalone';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -15,12 +15,12 @@ const STATIC_ASSETS = [
 
 // Escuchar mensaje para forzar activación inmediata
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+  if (event.data && (event.data.type === 'SKIP_WAITING' || event.data.type === 'FORCE_REFRESH')) {
     self.skipWaiting();
   }
 });
 
-// 1. Instalación: Precargar shell de la aplicación y omitir espera de inmediato
+// 1. Instalación: Precargar shell de la aplicación y omitir espera de inmediato (auto-invalidación)
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
@@ -32,7 +32,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// 2. Activación: Purgar versiones antiguas y reclamar clientes
+// 2. Activación: Purgar versiones antiguas y reclamar clientes de inmediato
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {

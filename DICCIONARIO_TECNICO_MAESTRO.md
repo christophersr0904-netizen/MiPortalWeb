@@ -28,6 +28,35 @@
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.47 — Vista Dedicada HUD Standalone, PiP Nativo Chrome y Soporte PWA Launcher (REQ-DAILY-HUD-WIN11-STANDALONE-MOBILE-41)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/App.tsx`, `src/components/Cockpit/DailyCockpit.tsx`, `public/sw.js`, `src/main.tsx`, `index.html`, `app.html`, `docs/WINDOWS_11_HUD_SHORTCUT.md`, `public/WINDOWS_HUD_GUIDE.md`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Ruta Dedicada Standalone `?mode=hud` (`src/App.tsx`):**
+   - Detección sincrónica del parámetro `mode === 'hud'` en el estado de inicialización para erradicar cualquier parpadeo de carga del layout general.
+   - Renderizado exclusivo a pantalla completa sin scroll global, sin sidebar, sin header maestro ni barras inferiores: `h-screen w-screen bg-[#040711] overflow-hidden flex flex-col p-2 font-sans select-none`.
+   - Montaje del Cockpit desplegado por defecto con alternancia entre Riel Horario y Checklist directo.
+2. **Robustecimiento del Desacople PiP y Fallback Ergonómico (`DailyCockpit.tsx`):**
+   - Dimensiones nativas de solicitud calibradas a `width: 420, height: 700` para `documentPictureInPicture.requestWindow`.
+   - Botón de desacople a PiP Always-on-Top habilitado de forma universal en la cabecera superior, permitiendo desacoplar tanto desde la app principal como desde la vista standalone `mode=hud`.
+   - Fallback de ventana emergente con cálculo automático de posicionamiento a la derecha de la pantalla:
+     `left = window.screen.availWidth - 420 - 20`, `top = 40`, `width = 420`, `height = 720`.
+   - Cuando se activa PiP desde la ventana standalone, se despliega una tarjeta de control minimalista que permite re-enfocar la ventana PiP con un solo clic.
+3. **Bypass de Caché y Service Worker Auto-Invalidante (`public/sw.js` y `src/main.tsx`):**
+   - Actualización de `CACHE_NAME` a `pmo-cache-v2.4-hud-standalone`.
+   - Forzado de activación inmediata con `self.skipWaiting()` en `install` y `self.clients.claim()` en `activate` para purgar versiones anteriores de inmediato.
+   - Registro en `src/main.tsx` forzando `reg.update()` en cada recarga e invalidación inmediata para dispositivos móviles y Cloudflare Pages.
+4. **Guía y Comando Maestro para Acceso Directo en Windows 11:**
+   - Creación de documentación canónica `docs/WINDOWS_11_HUD_SHORTCUT.md` y `public/WINDOWS_HUD_GUIDE.md` con el comando maestro:
+     `"C:\Program Files\Google\Chrome\Application\chrome.exe" --app="https://tu-dominio.pages.dev/?mode=hud" --window-size=420,720 --window-position=1480,50`
+   - Instrucciones para integración en `shell:startup` para arranque automático con Windows 11.
+5. **Aseguramiento de Calidad (QA):**
+   - 115/115 pruebas unitarias aprobadas en Vitest (`npm test -- --run`) sin regresiones.
+   - Verificación estática con `npx tsc --noEmit` exitosa (0 errores).
+   - Compilación completa de producción validada con `npm run build`.
+
+---
+
 ### FASE 4.46 — Cápsula Flotante Always-on-Top vía Document PiP, Forzado de Caché Móvil y Glifo Gauge (REQ-DAILY-HUD-DESKTOP-PIP-MOBILE-POLISH-39)
 **Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `public/sw.js`, `src/main.tsx`, `index.html`, `app.html`, `vite.config.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
 

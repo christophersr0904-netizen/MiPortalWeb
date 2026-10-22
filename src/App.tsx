@@ -39,7 +39,12 @@ export const App: React.FC = () => {
   const [modalAtajosAbierto, setModalAtajosAbierto] = useState(false);
   const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
   const [drawerArchivadosAbierto, setDrawerArchivadosAbierto] = useState(false);
-  const [esModoHud, setEsModoHud] = useState(false);
+  const [esModoHud, setEsModoHud] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search).get('mode') === 'hud';
+    }
+    return false;
+  });
   const [modoColor, setModoColor] = useState<ModoColor>('dark');
   const [saborTema, setSaborTema] = useState<SaborTema>('slate');
   const [modalHabitoGlobalAbierto, setModalHabitoGlobalAbierto] = useState(false);
@@ -161,10 +166,10 @@ export const App: React.FC = () => {
     document.documentElement.setAttribute('data-theme', sabor);
   };
 
-  // Si está en modo HUD flotante compacto (Windows Widget / Desktop Window)
+  // Si está en modo HUD flotante compacto (Windows Widget / Desktop Window / Standalone HUD)
   if (esModoHud) {
     return (
-      <div className="h-screen w-full bg-[#040711] flex items-center justify-center p-2 font-sans select-none">
+      <div className="h-screen w-screen bg-[#040711] overflow-hidden flex flex-col p-2 font-sans select-none">
         <DailyCockpit
           modoForzadoDesacoplado={true}
           onCerrarDesacoplado={() => setEsModoHud(false)}
