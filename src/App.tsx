@@ -22,7 +22,7 @@ const VistaCargandoFallback: React.FC = () => (
   </div>
 );
 import { AsistenteIaModal } from './components/IA/AsistenteIaModal';
-import { DesktopHudWidget } from './components/HUD/DesktopHudWidget';
+import { DailyCockpit } from './components/Cockpit/DailyCockpit';
 import { ModalAtajosTeclado } from './components/Modals/ModalAtajosTeclado';
 import { ModalExportarPdf } from './components/Modals/ModalExportarPdf';
 import { ModalTareaFlow } from './components/Modals/ModalTareaFlow';
@@ -164,10 +164,10 @@ export const App: React.FC = () => {
   // Si está en modo HUD flotante compacto (Windows Widget / Desktop Window)
   if (esModoHud) {
     return (
-      <div className="h-screen w-full bg-transparent flex items-center justify-center p-2 font-sans select-none">
-        <DesktopHudWidget
-          onCambiarModoCompleto={() => setEsModoHud(false)}
-          onAbrirAsistenteIA={() => setAsistenteAbierto(true)}
+      <div className="h-screen w-full bg-[#040711] flex items-center justify-center p-2 font-sans select-none">
+        <DailyCockpit
+          modoForzadoDesacoplado={true}
+          onCerrarDesacoplado={() => setEsModoHud(false)}
         />
         <AsistenteIaModal
           isOpen={asistenteAbierto}
@@ -326,6 +326,9 @@ export const App: React.FC = () => {
         onClose={() => setModalPdfAbierto(false)}
         proyectoIdSeleccionado={proyectoSeleccionadoId}
       />
+
+      {/* 8. Cápsula Flotante y Cockpit Diario Global */}
+      <DailyCockpit />
     </div>
   );
 };

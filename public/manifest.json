@@ -1,0 +1,33 @@
+{
+  "name": "MiPortalWeb PMO",
+  "short_name": "MiPortal",
+  "description": "Sistema PMO Personal Modular & Gestión Integral de Vida (Local-First)",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#040711",
+  "theme_color": "#040711",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ejecución Diaria (Hoy)",
+      "short_name": "Hoy",
+      "description": "Ver tareas, hábitos y finanzas de hoy",
+      "url": "/?mode=hud",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

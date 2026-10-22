@@ -20,5 +20,14 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ejecución Diaria (Hoy)",
+      "short_name": "Hoy",
+      "description": "Ver tareas, hábitos y finanzas de hoy",
+      "url": "/?mode=hud",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

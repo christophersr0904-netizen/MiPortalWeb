@@ -406,6 +406,7 @@ export interface TareaRecord {
   horas_estimadas?: number;
   horas_reales?: number;
   fecha_programada?: string;
+  hora_inicio?: string; // HH:mm
   agendado_calendar?: 'Sí' | 'No';
   id_dependencia?: string;
   responsable_ejecutor?: string;
