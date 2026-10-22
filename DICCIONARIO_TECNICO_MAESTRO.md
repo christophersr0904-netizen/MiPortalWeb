@@ -28,6 +28,56 @@
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.45 — Remoción de Selector Redundante y Reset Total con Botón X en Kanban (REQ-KANBAN-CLEAN-PROJECT-SELECTOR-26)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Erradicación del Dropdown Redundante de Selección de Proyecto:**
+   - Remoción del elemento `<select id="kanban-selector-proyecto">` y su contenedor de la Fila 1 en `src/components/Views/ViewKanban.tsx`.
+   - La selección de proyectos se canaliza limpiamente a través del sidebar lateral canónico y la navegación contextual (o links desde Detalle 360° / Hitos).
+2. **Píldora Directa de Estado y Reseteo Atómico con Botón X:**
+   - Si no hay proyecto activo (`!proyectoSeleccionadoCodigo`): Se renderiza permanentemente la píldora sobria de **`Vista Global`** con icono `FolderKanban`, mostrando de forma consolidada el gasto global y presupuesto acumulado.
+   - Si hay proyecto activo (`proyectoSeleccionadoCodigo`): Se renderiza la píldora contextual del proyecto (`[PRJ-XXX]`, nombre truncado, CPI y botón 360° `Sparkles`).
+   - El botón rápido de deselección `X` de la píldora contextual ejecuta:
+     ```typescript
+     setProyectoSeleccionadoCodigo('');
+     setFiltroHito('');
+     ```
+     retornando el tablero inmediatamente a la `Vista Global` y recalculando las métricas de gasto en tiempo real.
+3. **Reset Total Integrado en Botón "Limpiar (X)":**
+   - Actualización de `limpiarTodosLosFiltros` para incluir la limpieza de `setProyectoSeleccionadoCodigo('')` y `setFiltroHito('')`, garantizando que un solo clic en "Limpiar (X)" restablezca tanto los filtros operativos como el filtro de proyecto activo.
+   - Inclusión de `proyectoSeleccionadoCodigo` en `hayFiltrosActivos` para que el botón de limpieza y el badge resumen de filtros se activen automáticamente al seleccionar un proyecto.
+4. **Armonización de Espacio y Balance Visual:**
+   - La cabecera superior (Fila 1) queda distribuida de forma limpia:
+     `[Título Kanban] [Píldora: Vista Global / PRJ-XXX] ... [Cápsula Temporal / Cronograma] [Horizonte: TODO/HOY/SEM/MES] [Gasto/Presupuesto Global/Proyecto]`.
+5. **Aseguramiento de Calidad:**
+   - 110/110 pruebas unitarias aprobadas en Vitest sin fallos ni regresiones.
+   - Verificación estática con `npx tsc --noEmit` exitosa (0 errores).
+   - Compilación completa de producción validada con `npm run build` en 5.87s.
+
+---
+
+### FASE 4.44 — Restauración Quirúrgica de Cabecera Kanban: Fila de Proyecto, Selector y Gasto Global (REQ-KANBAN-RESTORE-PROJECT-BAR-25)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Restauración de la Fila 1 de Proyecto y Contexto Financiero (`ViewKanban.tsx`):**
+   - **Selector Desplegable de Proyecto (`#kanban-selector-proyecto`):** Menú `<select>` para alternar entre "Vista Global (Todos los proyectos)" y proyectos individuales (`PRJ-XXX · Nombre`). Reseteo automático de `filtroHito` al conmutar para evitar paquetes de trabajo huérfanos.
+   - **Píldora de Estado del Proyecto (`#label-proyecto-activo`):** Badge interactivo con código de proyecto `[PRJ-XXX]`, nombre truncado, CPI, botón de acceso directo a Detalle 360° (`Sparkles`) y botón de deselección rápida (`X`), o badge neutral de "Vista Global".
+   - **Cápsula Temporal / Cronograma (`#kanban-cronograma-proyecto`):** Fechas de inicio y fin (`DD/MM/YYYY`) del proyecto activo con indicador porcentual de avance de tiempo transcurrido (`% t`).
+   - **Cápsula de Filtro de Horizonte Temporal (`#container-time-filter`):** Selector de rango de tiempo (`TODO`, `HOY`, `SEMANA`, `MES`) con icono Lucide y popover flotante Cobalt.
+   - **Bloque de Gasto Acumulado / Presupuesto Global (`#kanban-gasto-presupuesto-box`):** Muestra el gasto del proyecto seleccionado o gasto global acumulado en `PEN`, presupuesto contractual tope y badge tabular de consumo porcentual (`%`).
+   - **Exclusión Estricta:** Se prescinde del selector segmented "Todos / Proyectos / Personal" para maximizar la amplitud y legibilidad visual.
+2. **Preservación y Armonización de la Fila 2 de Filtros Operativos Kanban:**
+   - Mantenimiento intacto del buscador compacto (`#filter-buscar-tarea`), micro-riel de ordenamiento (Prioridad, Fecha, Energía, Horas, Alpha), selector de "Paquetes de Trabajo" (antiguo Hitos), filtros por Prioridad Eisenhower (P1-P4), Energía (DeepWork, Operativa, Mecánica), Plazo y Dependencias/Bloqueos.
+   - Indicador reactivo de tareas filtradas `{tF}/{total}` y botón de restablecimiento rápido `Limpiar (X)`.
+3. **Aseguramiento de Calidad:**
+   - 110/110 pruebas unitarias aprobadas en Vitest sin fallos ni regresiones.
+   - Verificación estática con `npx tsc --noEmit` exitosa (0 errores).
+   - Compilación completa de producción validada con `npm run build` en 6.04s.
+
+---
+
 ### FASE 4.43 — Implementación de Transcriptor de Voz Nativo Web Speech API en Ideas (REQ-IDEAS-VOICE-RECOGNITION-19)
 **Fecha:** Octubre 2026 | **Archivos modificados:** `src/hooks/useSpeechRecognition.ts` (Nuevo), `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/hooks/__tests__/useSpeechRecognition.test.ts` (Nuevo), `DICCIONARIO_TECNICO_MAESTRO.md`
 
@@ -6721,6 +6771,37 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - `npx tsc --noEmit`: 0 errores de tipado TypeScript estricto.
 - `npm test -- --run`: 9/9 suites en verde (90/90 pruebas unitarias aprobadas al 100%).
 - `npm run build`: Compilación limpia de producción en 5.73s con bundles generados en `dist/`.
+
+---
+
+### REQ-KANBAN-REFINEMENT-24: Nomenclatura Paquete de Trabajo, Remoción de Fila 1 y Rediseño de Chips
+- **Estado:** IMPLEMENTADO Y CERTIFICADO (Cero Regresiones, Preservación de Datos Local-First y Tokens Cobalt Aerodynamic 1:1).
+- **Fecha:** 2026-10-21
+- **Objetivo:** 
+  1. Reemplazar la nomenclatura de UI de "Hito" en el selector WBS por "Paquete de Trabajo" / "Paquetes".
+  2. Erradicar la Fila 1 del header Kanban (`contextoFiltro`: `TODOS`, `PROYECTOS`, `PERSONAL`), unificando el header en una única barra horizontal armónica.
+  3. Rediseñar la píldora de proyecto activo en una superficie unificada sin iconos ni puntos contradictorios, con acento de salud coherente (esmeralda, ámbar o carmesí), código `[PRJ-XXX]`, nombre truncado y botón `X` de limpieza.
+  4. Elevar estéticamente todos los chips y botones de filtro reemplazando `rounded-full` por `rounded-lg` sobrios (`bg-slate-900/70`, `border-slate-800/60`, texto `[11px] font-medium tracking-wide text-slate-300`, activo `bg-sky-950/40 text-sky-300 border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)]`).
+
+#### 1. Mutaciones Quirúrgicas Aplicadas (en `src/components/Views/ViewKanban.tsx`)
+- **Paso 1 - Nomenclatura Paquete de Trabajo:**
+  - Selector WBS: Tooltip `Selecciona un proyecto para filtrar por Paquete de Trabajo`, botón `Paquetes` o `Paquete: [Código]`, popover con cabecera `Filtrar por Paquete de Trabajo` y primera opción `Todos los Paquetes`.
+  - Esquema subyacente y contratos Dexie (`hitos_wbs`, `HitoRecord`) preservados al 100%.
+- **Paso 2 - Erradicación de Fila 1:**
+  - Estado `contextoFiltro` y tipo `ContextFilter` eliminados. Segmented control removido del DOM.
+  - Pipeline `tareasFiltradas` desprovisto de condición de contexto, asumiendo contextualmente que todas las tareas pertenecen al flujo de proyectos/entregables.
+  - Header compactado de dos filas a una sola fila horizontal armónica.
+- **Paso 3 - Píldora de Proyecto Unificada:**
+  - Erradicado el doble punto verde/rojo simultáneo.
+  - Superficie unificada integrada según `estado_salud`/CPI (`bg-emerald-950/30`, `bg-amber-950/30`, `bg-rose-950/30`), con un solo icono temático `FolderKanban`, código `[PRJ-XXX]`, nombre truncado, microbotón 360° y botón de limpieza `X` con `hover:bg-white/10`. Si no hay proyecto seleccionado, renderiza `Vista Global`.
+- **Paso 4 - Elevación Estética de Chips y Botones:**
+  - Todos los filtros (Paquetes, Prioridad, Energía, Plazo, Bloqueos, Filtro Temporal, Gasto Contextual, Badge Resumen y Limpiar) migrados de `rounded-full` a `rounded-lg` aerodinámicos.
+  - Microbordes `border-slate-800/60`, fondos `bg-slate-900/70`, tipografía `text-[11px] font-medium tracking-wide text-slate-300`, acento cian perimetral contenido en estado activo.
+
+#### 2. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado estricto.
+- `npm test -- --run`: 10/10 suites en verde (110/110 pruebas aprobadas al 100%).
+- `npm run build`: Compilación Vite de producción completada sin errores en 5.93s.
 
 
 

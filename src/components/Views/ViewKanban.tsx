@@ -8,8 +8,6 @@ import {
   Zap,
   Clock,
   Layers,
-  User,
-  Briefcase,
   Calendar,
   CheckCircle2,
   RotateCcw,
@@ -19,7 +17,6 @@ import {
   Flame,
   ArrowUpDown,
   HeartPulse,
-  AlertOctagon,
   GraduationCap,
   Activity,
   Coffee,
@@ -34,7 +31,10 @@ import {
   ArrowDownCircle,
   CheckSquare,
   Check,
-  X
+  X,
+  Archive,
+  Trash2,
+  CornerDownRight
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -56,16 +56,17 @@ interface ViewKanbanProps {
   onSeleccionarProyecto?: (proyectoId: string) => void;
   onVerDetalle360?: (proyectoId: string) => void;
   onNuevoProyecto?: () => void;
+  onEliminarTarea?: (tareaId: string, nombreTarea: string) => void;
 }
 
-type ContextFilter = 'TODOS' | 'PROYECTOS' | 'PERSONAL';
 type TimeFilter = 'TODO' | 'HOY' | 'SEMANA' | 'MES';
 type SortFilter = 'PRIORITY' | 'DATE' | 'ENERGY' | 'HOURS' | 'ALPHA';
 
 export const ViewKanban: React.FC<ViewKanbanProps> = ({
   onSeleccionarProyecto,
   onVerDetalle360,
-  onNuevoProyecto
+  onNuevoProyecto,
+  onEliminarTarea
 }) => {
   // Sidebar State
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
@@ -73,16 +74,13 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   const [filtroTipoProyecto, setFiltroTipoProyecto] = useState<string>('');
   const [proyectoSeleccionadoCodigo, setProyectoSeleccionadoCodigo] = useState<string | null>(null);
 
-  // Fila 1 State: Contexto & Temporal
-  const [contextoFiltro, setContextoFiltro] = useState<ContextFilter>('TODOS');
+  // Filtro Temporal
   const [filtroTemporal, setFiltroTemporal] = useState<TimeFilter>('TODO');
   const [dropdownTiempoAbierto, setDropdownTiempoAbierto] = useState(false);
 
   // Fila 2 State: Filtros Multidimensionales y Ordenamiento
   const [criterioOrden, setCriterioOrden] = useState<SortFilter>('PRIORITY');
-  const [popoverOrdenAbierto, setPopoverOrdenAbierto] = useState(false);
   const [busquedaTarea, setBusquedaTarea] = useState('');
-  const [filtroTipo, setFiltroTipo] = useState<string>('TODOS');
   const [filtroHito, setFiltroHito] = useState('');
   const [filtroPrioridad, setFiltroPrioridad] = useState('');
   const [filtroEnergia, setFiltroEnergia] = useState('');
@@ -90,7 +88,6 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   const [filtroDependencia, setFiltroDependencia] = useState('');
 
   // Dropdowns UI de la barra de filtros
-  const [popoverTipoAbierto, setPopoverTipoAbierto] = useState(false);
   const [popoverHitoAbierto, setPopoverHitoAbierto] = useState(false);
   const [popoverPrioAbierto, setPopoverPrioAbierto] = useState(false);
   const [popoverEnergiaAbierto, setPopoverEnergiaAbierto] = useState(false);
@@ -120,10 +117,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
   const closeAllPopovers = () => {
     setDropdownTiempoAbierto(false);
-    setPopoverOrdenAbierto(false);
     setPopoverHitoAbierto(false);
     setPopoverPrioAbierto(false);
-    setPopoverTipoAbierto(false);
     setPopoverEnergiaAbierto(false);
     setPopoverPlazoAbierto(false);
     setPopoverDepAbierto(false);
@@ -308,9 +303,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   }, []);
 
   const limpiarTodosLosFiltros = () => {
-    setBusquedaTarea('');
-    setFiltroTipo('TODOS');
+    setProyectoSeleccionadoCodigo('');
     setFiltroHito('');
+    setBusquedaTarea('');
     setFiltroPrioridad('');
     setFiltroEnergia('');
     setFiltroPlazo('');
@@ -318,51 +313,11 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     setFiltroTemporal('TODO');
   };
 
-  // Evaluar filtro de Tipo de Tarea canónico de forma determinista
-  const evaluarFiltroTipoTarea = (t: CanonicalTarea, tipo: string): boolean => {
-    if (!tipo || tipo === 'TODOS') return true;
-
-    const rawTipo = String(
-      (t.raw && (t.raw.Tipo_Tarea || t.raw.tipo_tarea || t.raw.Tipo || t.raw.tipo || t.raw.Tipo_Actividad)) || ''
-    ).toUpperCase();
-    const nombreNorm = t.nombre.toLowerCase();
-    const proy = proyectosMap.get(t.proyecto_codigo);
-    const tipoIniciativa = (proy?.tipo_iniciativa || '').toLowerCase();
-    const esActividadPersonal = t.codigo_legado.startsWith('ACT-') || t.proyecto_codigo.startsWith('PRO-PER') || tipoIniciativa === 'personal';
-
-    if (tipo === 'TRABAJO_PROFESIONAL') {
-      if (rawTipo.includes('TRABAJO') || rawTipo.includes('PROFESIONAL') || rawTipo.includes('PROYECTO')) return true;
-      if (tipoIniciativa === 'profesional' || tipoIniciativa === 'laboral' || tipoIniciativa === 'inversiones') return true;
-      return Boolean(t.proyecto_codigo && !esActividadPersonal);
-    }
-
-    if (tipo === 'PERSONAL_HABITO') {
-      if (rawTipo.includes('PERSONAL') || rawTipo.includes('HABITO') || rawTipo.includes('RUTINA')) return true;
-      return esActividadPersonal;
-    }
-
-    if (tipo === 'URGENTE_CRITICO') {
-      if (rawTipo.includes('URGENTE') || rawTipo.includes('CRITICO')) return true;
-      const prio = (t.prioridad || '').toLowerCase();
-      return prio.includes('01_p1') || prio.includes('alta') || prio.includes('urgente') || Boolean(t.es_mav);
-    }
-
-    if (tipo === 'APRENDIZAJE_ESTUDIO') {
-      if (rawTipo.includes('ESTUDIO') || rawTipo.includes('APRENDIZAJE') || rawTipo.includes('EDUCACION')) return true;
-      const keywords = ['estudio', 'pmp', 'certificación', 'certificacion', 'curso', 'libro', 'lectura', 'aprender', 'examen', 'tesis'];
-      if (keywords.some((k) => nombreNorm.includes(k))) return true;
-      if (proy && keywords.some((k) => proy.nombre.toLowerCase().includes(k))) return true;
-      return false;
-    }
-
-    return true;
-  };
-
-  // Verificar si hay algún filtro activo de la barra Fila 2
+  // Verificar si hay algún filtro activo de la barra Fila 2 o proyecto seleccionado
   const hayFiltrosActivos = useMemo(() => {
     return Boolean(
+      proyectoSeleccionadoCodigo ||
       busquedaTarea.trim() ||
-      (filtroTipo && filtroTipo !== 'TODOS') ||
       filtroHito ||
       filtroPrioridad ||
       filtroEnergia ||
@@ -370,7 +325,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
       filtroDependencia ||
       filtroTemporal !== 'TODO'
     );
-  }, [busquedaTarea, filtroTipo, filtroHito, filtroPrioridad, filtroEnergia, filtroPlazo, filtroDependencia, filtroTemporal]);
+  }, [proyectoSeleccionadoCodigo, busquedaTarea, filtroHito, filtroPrioridad, filtroEnergia, filtroPlazo, filtroDependencia, filtroTemporal]);
 
   // Proyectos filtrados en el sidebar
   const proyectosFiltrados = useMemo(() => {
@@ -407,6 +362,33 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     return gastosAptos.reduce((acc, curr) => acc + (curr.monto_pen || 0), 0);
   }, [rawGastos, proyectoSeleccionadoCodigo]);
 
+  // Presupuesto total del proyecto o suma global si no hay proyecto filtrado
+  const presupuestoContextualPen = useMemo(() => {
+    if (proyectoActivo) {
+      return proyectoActivo.presupuesto || 0;
+    }
+    return proyectos.reduce((acc, p) => acc + (p.presupuesto || 0), 0);
+  }, [proyectoActivo, proyectos]);
+
+  // Formato simple de fecha DD/MM/YYYY
+  const formatearFechaSimple = (fechaIso?: string) => {
+    if (!fechaIso) return null;
+    const clean = fechaIso.split('T')[0];
+    const partes = clean.split('-');
+    if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    return clean;
+  };
+
+  // Progreso temporal del proyecto seleccionado (% transcurrido entre inicio y fin)
+  const progresoTemporalProyecto = useMemo(() => {
+    if (!proyectoActivo?.fecha_inicio || !proyectoActivo?.fecha_fin) return null;
+    const inicio = new Date(proyectoActivo.fecha_inicio).getTime();
+    const fin = new Date(proyectoActivo.fecha_fin).getTime();
+    const hoy = Date.now();
+    if (isNaN(inicio) || isNaN(fin) || fin <= inicio) return null;
+    return Math.min(100, Math.max(0, Math.round(((hoy - inicio) / (fin - inicio)) * 100)));
+  }, [proyectoActivo]);
+
   // Filtrado multidimensional de tareas
   const tareasFiltradas = useMemo(() => {
     return tareas.filter((t) => {
@@ -415,22 +397,12 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         if (t.proyecto_codigo !== proyectoSeleccionadoCodigo) return false;
       }
 
-      // 2. Filtro de Contexto (Todos, Proyectos, Personal)
-      if (contextoFiltro === 'PROYECTOS') {
-        if (!t.proyecto_codigo) return false;
-      } else if (contextoFiltro === 'PERSONAL') {
-        if (t.proyecto_codigo && !t.proyecto_codigo.startsWith('PRO-PER') && !t.proyecto_codigo.startsWith('ACT')) {
-          const p = proyectos.find((proj) => proj.codigo_legado === t.proyecto_codigo);
-          if (p && p.tipo_iniciativa !== 'Personal') return false;
-        }
-      }
-
-      // 3. Filtro Temporal (TODO, HOY, SEMANA, MES)
+      // 2. Filtro Temporal (TODO, HOY, SEMANA, MES)
       if (filtroTemporal !== 'TODO') {
         if (!evaluarFiltroTemporal(t.fecha_programada, filtroTemporal)) return false;
       }
 
-      // 4. Buscador libre
+      // 3. Buscador libre
       if (busquedaTarea.trim()) {
         const query = busquedaTarea.toLowerCase();
         const coincideNombre = t.nombre.toLowerCase().includes(query);
@@ -439,17 +411,12 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         if (!coincideNombre && !coincideCodigo && !coincideResp) return false;
       }
 
-      // 5. Filtro por Tipo de Tarea Canónico
-      if (filtroTipo && filtroTipo !== 'TODOS') {
-        if (!evaluarFiltroTipoTarea(t, filtroTipo)) return false;
-      }
-
-      // 6. Filtro por Hito
+      // 4. Filtro por Paquete de Trabajo / Hito
       if (filtroHito) {
         if (t.hito_codigo !== filtroHito) return false;
       }
 
-      // 7. Filtro por Prioridad Eisenhower (Matching inclusivo resiliente idéntico a legacy_gas/JS_Kanban.html L2714-L2727)
+      // 5. Filtro por Prioridad Eisenhower (Matching inclusivo resiliente idéntico a legacy_gas/JS_Kanban.html L2714-L2727)
       if (filtroPrioridad) {
         const pNorm = String(t.prioridad || t.raw?.Prioridad_Eisenhower || '').toLowerCase();
         const fNorm = filtroPrioridad.toLowerCase();
@@ -466,7 +433,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         }
       }
 
-      // 8. Filtro por Nivel de Energía
+      // 6. Filtro por Nivel de Energía
       if (filtroEnergia) {
         const eStr = String(t.nivel_energia || t.raw?.Nivel_Energia_Requerido || '').toLowerCase();
         if (filtroEnergia === 'Alta_DeepWork') {
@@ -480,12 +447,12 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         }
       }
 
-      // 9. Filtro por Plazo / Vencimiento
+      // 7. Filtro por Plazo / Vencimiento
       if (filtroPlazo) {
         if (!evaluarFiltroPlazo(t.fecha_programada, filtroPlazo, t.estado)) return false;
       }
 
-      // 10. Filtro por Dependencias
+      // 8. Filtro por Dependencias
       if (filtroDependencia) {
         const tieneDep = Boolean(t.raw?.id_dependencia || t.raw?.ID_Dependencia);
         if (filtroDependencia === 'con_dep' && !tieneDep) return false;
@@ -497,10 +464,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   }, [
     tareas,
     proyectoSeleccionadoCodigo,
-    contextoFiltro,
     filtroTemporal,
     busquedaTarea,
-    filtroTipo,
     filtroHito,
     filtroPrioridad,
     filtroEnergia,
@@ -705,7 +670,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
       >
         {/* Cabecera del Sidebar */}
         <div className="p-3 border-b border-slate-800 bg-slate-950/70 shrink-0">
-          <div className="flex items-center justify-between gap-2">
+          <div className={`flex items-center ${sidebarColapsado ? 'justify-center' : 'justify-between'} gap-2`}>
             {!sidebarColapsado && (
               <div className="flex items-center gap-2 min-w-0">
                 <FolderKanban className="w-4 h-4 text-indigo-400 shrink-0" />
@@ -818,61 +783,58 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     setProyectoSeleccionadoCodigo(proy.codigo_legado);
                   }
                 }}
-                className={`group relative p-2.5 rounded-xl border transition-all duration-200 cursor-pointer ${
+                title={sidebarColapsado ? `${proy.codigo_legado} · ${proy.nombre} (${healthLabel} - ${pct}%)` : undefined}
+                className={`group relative ${
+                  sidebarColapsado ? 'p-2 flex flex-col items-center justify-center gap-1.5' : 'p-2.5'
+                } rounded-xl border transition-all duration-200 cursor-pointer ${
                   isActivo
                     ? 'bg-indigo-950/70 border-indigo-500/80 border-l-4 border-l-indigo-400 shadow-md ring-1 ring-indigo-500/40 text-white'
                     : 'bg-slate-800/40 hover:bg-slate-800/60 border-slate-800/80 hover:border-slate-700 text-slate-300 hover:translate-x-0.5'
                 }`}
               >
-                {/* 1. Cabecera con código PRO-XXX, píldora de categoría y botón rápido 360° */}
-                <div className="flex items-center justify-between gap-1 mb-1.5 text-[10px]">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-mono font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">
-                      {proy.codigo_legado}
-                    </span>
-                    {!sidebarColapsado && (
-                      <span className="px-2 py-0.5 rounded-full bg-slate-700/80 text-slate-300 font-semibold text-[9px] truncate">
-                        {proy.tipo_iniciativa || 'General'}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {!sidebarColapsado && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const targetId = proy.codigo_legado || proy.id;
-                          if (onVerDetalle360) {
-                            onVerDetalle360(targetId);
-                          } else if (onSeleccionarProyecto) {
-                            onSeleccionarProyecto(targetId);
-                          }
-                        }}
-                        title="Ver Detalle 360°"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-1.5 py-0.5 text-[10px] font-bold rounded bg-indigo-600/90 hover:bg-indigo-500 text-white shadow-xs border border-indigo-400/40 flex items-center gap-1 active:scale-95 cursor-pointer"
-                      >
-                        <Sparkles className="w-3 h-3 text-indigo-200" />
-                        <span>360°</span>
-                      </button>
-                    )}
-                    {!sidebarColapsado && (
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${healthBadgeClass}`}>
-                        <span className="relative flex h-2 w-2 shrink-0">
-                          {healthLabel === 'Bloqueado' && (
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                          )}
-                          <span className={`relative inline-flex rounded-full h-2 w-2 ${healthDot}`} />
-                        </span>
-                        <span>{healthLabel}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-
                 {!sidebarColapsado ? (
                   <>
+                    {/* 1. Cabecera con código PRO-XXX, píldora de categoría y botón rápido 360° */}
+                    <div className="flex items-center justify-between gap-1 mb-1.5 text-[10px]">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-mono font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">
+                          {proy.codigo_legado}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-slate-700/80 text-slate-300 font-semibold text-[9px] truncate">
+                          {proy.tipo_iniciativa || 'General'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const targetId = proy.codigo_legado || proy.id;
+                            if (onVerDetalle360) {
+                              onVerDetalle360(targetId);
+                            } else if (onSeleccionarProyecto) {
+                              onSeleccionarProyecto(targetId);
+                            }
+                          }}
+                          title="Ver Detalle 360°"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-1.5 py-0.5 text-[10px] font-bold rounded bg-indigo-600/90 hover:bg-indigo-500 text-white shadow-xs border border-indigo-400/40 flex items-center gap-1 active:scale-95 cursor-pointer"
+                        >
+                          <Sparkles className="w-3 h-3 text-indigo-200" />
+                          <span>360°</span>
+                        </button>
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${healthBadgeClass}`}>
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            {healthLabel === 'Bloqueado' && (
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                            )}
+                            <span className={`relative inline-flex rounded-full h-2 w-2 ${healthDot}`} />
+                          </span>
+                          <span>{healthLabel}</span>
+                        </span>
+                      </div>
+                    </div>
+
                     {/* 2. Título del proyecto */}
                     <div className="text-sm font-medium text-slate-200 truncate mb-1.5" title={proy.nombre}>
                       {proy.nombre}
@@ -899,12 +861,13 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     </div>
                   </>
                 ) : (
-                  <div className="flex justify-center mt-1">
+                  <div className="flex flex-col items-center justify-center gap-1.5 py-1">
+                    <FolderKanban className="w-5 h-5 mx-auto text-slate-400 group-hover:text-sky-300 transition-colors duration-150" />
                     <span className="relative flex h-2.5 w-2.5">
                       {healthLabel === 'Bloqueado' && (
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                       )}
-                      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${healthDot}`} title={`${healthLabel} (${pct}%)`} />
+                      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${healthDot}`} />
                     </span>
                   </div>
                 )}
@@ -940,142 +903,107 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         {/* ================================================================= */}
         {/* HEADER MULTI-FILA CANÓNICO (L81-546 de View_Kanban.html)          */}
         {/* ================================================================= */}
-        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-2 shrink-0 flex flex-col gap-2 shadow-2xs transition-colors overflow-visible relative">
-          {/* FILA 1: CONTEXTO, CHIP DE PROYECTO, TEMPORAL & GASTO */}
-          <div className="flex items-center justify-between gap-3 min-h-[36px] overflow-visible relative w-full flex-wrap">
-            {/* Extremo Izquierdo: Título y Segmented Control */}
-            <div className="flex items-center gap-3 shrink-0">
+        <header className="bg-white dark:bg-[#080E1C] border-b border-slate-200 dark:border-slate-800/60 px-4 py-2 shrink-0 flex flex-col gap-2 shadow-2xs transition-colors overflow-visible relative">
+          {/* =============================================================== */}
+          {/* FILA 1: CONTEXTO DE PROYECTO, CRONOGRAMA & GASTO GLOBAL          */}
+          {/* =============================================================== */}
+          <div className="flex items-center justify-between gap-3 min-h-[38px] overflow-visible relative w-full flex-wrap pb-1 border-b border-slate-200/60 dark:border-slate-800/40">
+            {/* Lado Izquierdo: Título y Píldora de Estado (Vista Global o Proyecto Activo) */}
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
               <h2 className="font-bold text-slate-800 dark:text-slate-100 text-sm md:text-base flex items-center gap-2 shrink-0">
                 <span>Tablero Kanban</span>
               </h2>
 
-              <div className="hidden sm:inline-flex p-0.5 bg-slate-100 dark:bg-slate-950/70 rounded-lg border border-slate-200 dark:border-slate-800 shadow-2xs shrink-0">
-                <button
-                  type="button"
-                  id="btn-context-todos"
-                  onClick={() => setContextoFiltro('TODOS')}
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    contextoFiltro === 'TODOS'
-                      ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-slate-700'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                  }`}
-                  title="Ver todas las tareas"
-                >
-                  <Layers className="w-3.5 h-3.5 shrink-0" />
-                  <span>Todo</span>
-                  <span
-                    id="badge-context-todos"
-                    className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-extrabold"
-                  >
-                    {tareas.length}
-                  </span>
-                </button>
+              {/* Píldora de Estado: Proyecto Seleccionado o Vista Global */}
+              {proyectoActivo ? (
+                (() => {
+                  const healthStatus = (proyectoActivo.health_status || (proyectoActivo as any).estado_salud || 'Saludable').toLowerCase();
+                  const esCritico = healthStatus.includes('crit') || healthStatus.includes('rojo') || (proyectoActivo.cpi !== undefined && proyectoActivo.cpi < 0.85);
+                  const esRiesgo = healthStatus.includes('riesgo') || healthStatus.includes('amarillo') || healthStatus.includes('warn') || (proyectoActivo.cpi !== undefined && proyectoActivo.cpi < 1.0);
+                  const estiloSalud = esCritico
+                    ? 'bg-rose-950/30 border-rose-500/30 text-rose-300'
+                    : esRiesgo
+                    ? 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+                    : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300';
 
-                <button
-                  type="button"
-                  id="btn-context-proyectos"
-                  onClick={() => setContextoFiltro('PROYECTOS')}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    contextoFiltro === 'PROYECTOS'
-                      ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-slate-700'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                  }`}
-                  title="Tareas asociadas a proyectos"
-                >
-                  <Briefcase className="w-3.5 h-3.5 shrink-0" />
-                  <span>Proyectos</span>
-                  <span
-                    id="badge-context-proyectos"
-                    className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400 font-extrabold"
-                  >
-                    {tareas.filter((t) => t.proyecto_codigo).length}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  id="btn-context-personal"
-                  onClick={() => setContextoFiltro('PERSONAL')}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    contextoFiltro === 'PERSONAL'
-                      ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs border border-indigo-100 dark:border-slate-700'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                  }`}
-                  title="Tareas y compromisos personales"
-                >
-                  <User className="w-3.5 h-3.5 shrink-0" />
-                  <span>Personal</span>
-                  <span
-                    id="badge-context-personal"
-                    className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400 font-extrabold"
-                  >
-                    {tareas.filter((t) => !t.proyecto_codigo || t.proyecto_codigo.startsWith('PRO-PER')).length}
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            {/* Centro: Chip y Metadatos del Proyecto Activo */}
-            <div id="label-proyecto-activo-container" className="flex items-center gap-2 min-w-0">
-              <span
-                id="label-proyecto-activo"
-                className="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700 inline-flex items-center gap-1.5"
-              >
-                <FolderKanban className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                <span className="truncate max-w-[200px]">
-                  {proyectoActivo ? `${proyectoActivo.codigo_legado} · ${proyectoActivo.nombre}` : 'Vista Global'}
-                </span>
-                {proyectoActivo && (
-                  <button
-                    type="button"
-                    onClick={() => setProyectoSeleccionadoCodigo(null)}
-                    className="hover:text-rose-500 font-bold ml-1 cursor-pointer"
-                    title="Quitar filtro de proyecto"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </span>
-
-              {proyectoActivo && (
-                <div id="kanban-proy-meta-bar" className="flex items-center gap-1.5 shrink-0 text-xs">
-                  {/* Health Badge */}
-                  <div
-                    id="kanban-proy-health-badge"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 inline-block" />
-                    <span>{proyectoActivo.health_status || 'Saludable'}</span>
-                  </div>
-
-                  {/* CPI Badge */}
-                  <div
-                    id="kanban-proy-cpi-badge"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border font-mono bg-slate-50 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
-                  >
-                    <span className="text-[9px] text-slate-400 font-sans">CPI</span>
-                    <span>{proyectoActivo.cpi?.toFixed(2) || '1.00'}</span>
-                  </div>
-
-                  {/* Acceso 360 */}
-                  {onSeleccionarProyecto && (
-                    <button
-                      type="button"
-                      onClick={() => onSeleccionarProyecto(proyectoActivo.id)}
-                      className="px-2 py-0.5 rounded-full bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold transition inline-flex items-center gap-1 cursor-pointer"
-                      title="Abrir Vista 360°"
+                  return (
+                    <div
+                      id="label-proyecto-activo"
+                      className={`text-[11px] font-medium px-2.5 py-1.5 rounded-lg border inline-flex items-center gap-1.5 shrink-0 shadow-xs transition-all ${estiloSalud}`}
                     >
-                      <Sparkles className="w-3 h-3 text-indigo-500" />
-                      <span>Vista 360°</span>
-                    </button>
-                  )}
+                      <FolderKanban className="w-3.5 h-3.5 shrink-0 opacity-90" strokeWidth={1.75} />
+                      <span className="font-mono font-bold tracking-tight">[{proyectoActivo.codigo_legado}]</span>
+                      <span className="truncate max-w-[140px] md:max-w-[220px]" title={proyectoActivo.nombre}>
+                        {proyectoActivo.nombre}
+                      </span>
+                      {proyectoActivo.cpi !== undefined && (
+                        <span className="font-mono tabular-nums text-[10px] px-1 py-0.2 rounded bg-black/30 border border-white/10" title="CPI">
+                          CPI {proyectoActivo.cpi.toFixed(2)}
+                        </span>
+                      )}
+                      {(onVerDetalle360 || onSeleccionarProyecto) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onVerDetalle360) onVerDetalle360(proyectoActivo.id);
+                            else if (onSeleccionarProyecto) onSeleccionarProyecto(proyectoActivo.id);
+                          }}
+                          className="hover:bg-white/10 rounded-md p-0.5 transition cursor-pointer text-current opacity-80 hover:opacity-100 ml-0.5"
+                          title="Abrir Vista 360°"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProyectoSeleccionadoCodigo('');
+                          setFiltroHito('');
+                        }}
+                        className="hover:bg-white/10 rounded-md p-0.5 transition cursor-pointer text-current opacity-70 hover:opacity-100 hover:text-rose-400"
+                        title="Deseleccionar proyecto (volver a Vista Global)"
+                      >
+                        <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      </button>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div
+                  id="label-proyecto-activo"
+                  className="inline-flex text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800/60 bg-slate-100 dark:bg-slate-900/70 text-slate-600 dark:text-slate-300 items-center gap-1.5 shrink-0 select-none shadow-xs"
+                >
+                  <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">Vista Global</span>
                 </div>
               )}
             </div>
 
-            {/* Extremo Derecho: Cápsula Temporal & Gasto Contextual */}
-            <div className="ml-auto flex items-center gap-2 shrink-0">
-              {/* Cápsula Compacta Filtro Temporal con Micro-Popover Flotante Glassmorphism */}
+            {/* Lado Derecho: Cronograma, Filtro Temporal y Bloque de Gasto / Presupuesto */}
+            <div className="flex items-center gap-2 shrink-0 ml-auto flex-wrap">
+              {/* Cronograma / Fechas del proyecto activo con progreso temporal */}
+              {proyectoActivo && (proyectoActivo.fecha_inicio || proyectoActivo.fecha_fin) && (
+                <div
+                  id="kanban-cronograma-proyecto"
+                  className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/60 text-[11px] font-medium text-slate-600 dark:text-slate-300 shrink-0"
+                  title="Cronograma del proyecto"
+                >
+                  <CalendarRange className="w-3.5 h-3.5 text-indigo-400 shrink-0" strokeWidth={1.75} />
+                  <span className="font-mono tabular-nums text-[10px]">
+                    {formatearFechaSimple(proyectoActivo.fecha_inicio) || 'Inicio s/f'} → {formatearFechaSimple(proyectoActivo.fecha_fin) || 'Fin s/f'}
+                  </span>
+                  {progresoTemporalProyecto !== null && (
+                    <span
+                      className="font-mono tabular-nums text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30"
+                      title="Progreso temporal transcurrido"
+                    >
+                      {progresoTemporalProyecto}% t
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Cápsula Compacta Filtro Temporal */}
               <div
                 className="relative kanban-popover-container group/timefilter shrink-0"
                 id="container-time-filter"
@@ -1086,20 +1014,24 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   type="button"
                   id="btn-time-capsule"
                   onClick={() => setDropdownTiempoAbierto(!dropdownTiempoAbierto)}
-                  className="border border-slate-700/80 bg-slate-900/90 hover:border-indigo-500/60 rounded-full px-3 py-1 text-xs text-slate-300 font-medium flex items-center gap-1.5 transition cursor-pointer select-none shadow-xs"
-                  title="Filtro de horizonte temporal (Pasa el cursor o presiona para cambiar)"
+                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all flex items-center gap-1.5 cursor-pointer select-none active:scale-[0.98] ${
+                    filtroTemporal !== 'TODO'
+                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)]'
+                      : 'bg-slate-100 dark:bg-slate-900/70 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
+                  }`}
+                  title="Filtro de horizonte temporal"
                 >
-                  {filtroTemporal === 'TODO' && <CalendarRange className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
-                  {filtroTemporal === 'HOY' && <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
-                  {filtroTemporal === 'SEMANA' && <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
-                  {filtroTemporal === 'MES' && <CalendarCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" />}
-                  <span className="text-xs font-semibold">
+                  {filtroTemporal === 'TODO' && <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />}
+                  {filtroTemporal === 'HOY' && <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} />}
+                  {filtroTemporal === 'SEMANA' && <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />}
+                  {filtroTemporal === 'MES' && <CalendarCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} />}
+                  <span>
                     {filtroTemporal === 'TODO' && 'Todo'}
                     {filtroTemporal === 'HOY' && 'Hoy'}
                     {filtroTemporal === 'SEMANA' && 'Semana'}
                     {filtroTemporal === 'MES' && 'Mes'}
                   </span>
-                  <ChevronDown className="w-3 h-3 text-slate-400 group-hover/timefilter:rotate-180 transition-transform duration-200" />
+                  <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
                 </button>
 
                 {dropdownTiempoAbierto && (
@@ -1108,10 +1040,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     className="absolute right-0 top-full mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[160px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
                   >
                     {[
-                      { id: 'TODO', label: 'Todo', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" /> },
-                      { id: 'HOY', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" /> },
-                      { id: 'SEMANA', label: 'Esta Semana', icon: <CalendarDays className="w-3.5 h-3.5 text-indigo-400 shrink-0" /> },
-                      { id: 'MES', label: 'Este Mes', icon: <CalendarCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" /> }
+                      { id: 'TODO', label: 'Todo', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                      { id: 'HOY', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                      { id: 'SEMANA', label: 'Esta Semana', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                      { id: 'MES', label: 'Este Mes', icon: <CalendarCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} /> }
                     ].map((opt) => (
                       <button
                         key={opt.id}
@@ -1122,7 +1054,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         }}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
                           filtroTemporal === opt.id
-                            ? 'bg-indigo-950/70 text-indigo-300 font-bold'
+                            ? 'bg-sky-950/50 text-sky-300 font-bold'
                             : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                         }`}
                       >
@@ -1130,111 +1062,146 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                           {opt.icon}
                           <span>{opt.label}</span>
                         </span>
-                        {filtroTemporal === opt.id && <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />}
+                        {filtroTemporal === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Gasto Contextual en PEN */}
-              <div className="hidden md:flex items-center text-xs bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-medium shrink-0">
-                <span className="text-slate-500 dark:text-slate-400 text-xs flex items-center">
-                  <span>{proyectoSeleccionadoCodigo ? 'Gasto Proyecto:' : 'Gasto Global:'}</span>
-                  <b className="text-slate-900 dark:text-slate-100 font-bold font-mono ml-1">
-                    PEN {gastoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </b>
+              {/* Bloque de Gasto Acumulado / Presupuesto Global */}
+              <div
+                id="kanban-gasto-presupuesto-box"
+                className="flex items-center gap-1.5 text-[11px] bg-slate-50 dark:bg-slate-900/70 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800/60 font-medium shrink-0"
+              >
+                <span className="text-slate-500 dark:text-slate-400">
+                  {proyectoActivo ? 'Gasto Proyecto:' : 'Gasto Global:'}
                 </span>
+                <b className="text-slate-900 dark:text-slate-100 font-bold font-mono tabular-nums">
+                  PEN {gastoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </b>
+                {presupuestoContextualPen > 0 && (
+                  <>
+                    <span className="text-slate-400 dark:text-slate-600">/</span>
+                    <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400" title="Presupuesto Tope">
+                      PEN {presupuestoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span
+                      className={`font-mono tabular-nums text-[10px] px-1.5 py-0.2 rounded border ${
+                        gastoContextualPen > presupuestoContextualPen
+                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                      }`}
+                      title="Consumo presupuestal"
+                    >
+                      {Math.round((gastoContextualPen / presupuestoContextualPen) * 100)}%
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
-          {/* FILA 2: BARRA DE FILTROS POP-OVERS CANÓNICOS */}
-          <div className="portal-surface p-2.5 my-1 rounded-xl flex items-center gap-2 text-xs overflow-visible relative flex-wrap bg-slate-50/70 dark:bg-slate-950/40 border border-slate-200/80 dark:border-slate-800/70">
-            {/* Buscador de Tareas */}
-            <div className="relative min-w-[150px] max-w-[180px] shrink-0">
-              <Search className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 w-3.5 h-3.5 top-2" />
+          {/* =============================================================== */}
+          {/* FILA 2: BARRA DE FILTROS OPERATIVOS KANBAN                       */}
+          {/* =============================================================== */}
+          <div className="portal-surface p-2 rounded-xl flex items-center gap-2 text-xs overflow-visible relative flex-wrap bg-slate-50/70 dark:bg-slate-950/40 border border-slate-200/80 dark:border-slate-800/70">
+            {/* Buscador de Tareas Compacto */}
+            <div className="relative w-36 md:w-44 shrink-0">
+              <Search className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 w-3.5 h-3.5 top-2" strokeWidth={1.75} />
               <input
                 type="text"
                 id="filter-buscar-tarea"
                 value={busquedaTarea}
                 onChange={(e) => setBusquedaTarea(e.target.value)}
                 placeholder="Buscar tarea..."
-                className="w-full bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 placeholder-slate-400 text-xs rounded-xl border border-slate-200/80 dark:border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 pl-7 pr-6 py-1 outline-none transition"
+                className="w-full bg-white dark:bg-slate-900/70 hover:dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-[11px] rounded-lg border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 pl-7 pr-6 py-1.5 outline-none transition font-medium"
               />
               {busquedaTarea && (
                 <button
                   type="button"
                   onClick={() => setBusquedaTarea('')}
                   className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-200 text-xs font-bold cursor-pointer"
+                  title="Limpiar búsqueda"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3.5 h-3.5" strokeWidth={1.75} />
                 </button>
               )}
             </div>
 
-            {/* Botón y Popover de Ordenamiento Kanban */}
+            {/* Micro-Riel Compacto de Ordenamiento Kanban */}
             <div
-              className="relative shrink-0 kanban-popover-container group/sort-kanban"
-              onMouseEnter={() => handlePopoverMouseEnter('orden', setPopoverOrdenAbierto)}
-              onMouseLeave={() => handlePopoverMouseLeave('orden', setPopoverOrdenAbierto)}
+              className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/70 border border-slate-800/60 gap-0.5 shrink-0 shadow-xs"
+              role="group"
+              aria-label="Criterio de Ordenamiento"
             >
               <button
                 type="button"
-                id="btn-sort-kanban"
-                onClick={() => setPopoverOrdenAbierto(!popoverOrdenAbierto)}
-                className="h-8 px-2.5 rounded-full flex items-center justify-center transition-all cursor-pointer select-none text-slate-300 hover:text-white hover:border-indigo-500/60 bg-slate-900/90 border border-slate-700/80 gap-1.5 shadow-xs"
-                title="Opciones de Ordenamiento"
+                onClick={() => setCriterioOrden('PRIORITY')}
+                className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                  criterioOrden === 'PRIORITY'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Ordenar por Prioridad (Eisenhower)"
               >
-                {criterioOrden === 'PRIORITY' && <Flame className="w-3.5 h-3.5 text-rose-500" />}
-                {criterioOrden === 'DATE' && <Calendar className="w-3.5 h-3.5 text-indigo-400" />}
-                {criterioOrden === 'ENERGY' && <Zap className="w-3.5 h-3.5 text-amber-400" />}
-                {criterioOrden === 'HOURS' && <Clock className="w-3.5 h-3.5 text-teal-400" />}
-                {criterioOrden === 'ALPHA' && <ArrowUpDown className="w-3.5 h-3.5 text-slate-300" />}
-                <span className="text-xs font-medium hidden lg:inline">
-                  {criterioOrden === 'PRIORITY' && 'Prioridad'}
-                  {criterioOrden === 'DATE' && 'Fecha'}
-                  {criterioOrden === 'ENERGY' && 'Energía'}
-                  {criterioOrden === 'HOURS' && 'Horas'}
-                  {criterioOrden === 'ALPHA' && 'A-Z'}
-                </span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
+                <Flame className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
 
-              {popoverOrdenAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[210px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
-                  {[
-                    { id: 'PRIORITY', label: 'Por Prioridad Eisenhower', icon: <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" /> },
-                    { id: 'DATE', label: 'Por Vencimiento / Fecha', icon: <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" /> },
-                    { id: 'ENERGY', label: 'Por Nivel de Energía', icon: <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" /> },
-                    { id: 'HOURS', label: 'Por Horas Estimadas', icon: <Clock className="w-3.5 h-3.5 text-teal-400 shrink-0" /> },
-                    { id: 'ALPHA', label: 'Alfabético A-Z', icon: <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 shrink-0" /> }
-                  ].map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        setCriterioOrden(opt.id as SortFilter);
-                        setPopoverOrdenAbierto(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
-                        criterioOrden === opt.id
-                          ? 'bg-indigo-950/70 text-indigo-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        {opt.icon}
-                        <span>{opt.label}</span>
-                      </span>
-                      {criterioOrden === opt.id && <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setCriterioOrden('DATE')}
+                className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                  criterioOrden === 'DATE'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Ordenar por Fecha / Vencimiento"
+              >
+                <Calendar className="w-3.5 h-3.5" strokeWidth={1.75} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCriterioOrden('ENERGY')}
+                className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                  criterioOrden === 'ENERGY'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Ordenar por Nivel de Energía"
+              >
+                <Zap className="w-3.5 h-3.5" strokeWidth={1.75} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCriterioOrden('HOURS')}
+                className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                  criterioOrden === 'HOURS'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Ordenar por Horas Estimadas"
+              >
+                <Clock className="w-3.5 h-3.5" strokeWidth={1.75} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCriterioOrden('ALPHA')}
+                className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                  criterioOrden === 'ALPHA'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Ordenar Alfabético (A-Z)"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" strokeWidth={1.75} />
+              </button>
             </div>
 
-            {/* 1. Popover Hito WBS (Deshabilitado sin proyecto seleccionado) */}
+            {/* Selector de Paquetes de Trabajo WBS */}
             <div
               className="relative shrink-0 kanban-popover-container group/filter-hito"
               onMouseEnter={() => proyectoSeleccionadoCodigo && handlePopoverMouseEnter('hito', setPopoverHitoAbierto)}
@@ -1245,32 +1212,52 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 id="btn-hito-capsule"
                 disabled={!proyectoSeleccionadoCodigo}
                 onClick={() => proyectoSeleccionadoCodigo && setPopoverHitoAbierto(!popoverHitoAbierto)}
-                className={`rounded-full px-3 py-1.5 text-xs transition-all inline-flex items-center gap-1.5 shrink-0 select-none ${
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   !proyectoSeleccionadoCodigo
-                    ? 'opacity-40 cursor-not-allowed pointer-events-none border border-slate-700/50 bg-slate-900/50 text-slate-500'
+                    ? 'opacity-40 cursor-not-allowed border border-slate-300 dark:border-slate-800/40 bg-slate-200/50 dark:bg-slate-900/40 text-slate-400 dark:text-slate-500'
                     : filtroHito
-                    ? 'border border-indigo-500/80 bg-indigo-950/60 text-indigo-300 font-bold cursor-pointer shadow-xs'
-                    : 'border border-slate-700/80 hover:border-indigo-500/60 bg-slate-900/90 text-slate-300 cursor-pointer shadow-xs'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium cursor-pointer'
+                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 cursor-pointer'
                 }`}
                 title={
                   !proyectoSeleccionadoCodigo
-                    ? 'Filtrar por hito (Requiere seleccionar un proyecto)'
-                    : 'Filtrar por hito WBS'
+                    ? 'Selecciona un proyecto para filtrar por Paquete de Trabajo'
+                    : 'Filtrar por Paquete de Trabajo'
                 }
               >
-                <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <Milestone className={`w-3.5 h-3.5 shrink-0 ${!proyectoSeleccionadoCodigo ? 'text-slate-400 dark:text-slate-600' : filtroHito ? 'text-sky-400' : 'text-purple-400'}`} strokeWidth={1.75} />
                 <span className="truncate max-w-[130px]">
                   {!proyectoSeleccionadoCodigo
-                    ? 'Hitos (Selecciona Proyecto)'
+                    ? 'Paquetes'
                     : filtroHito
-                    ? (hitosDisponibles.find((h) => h.codigo_legado === filtroHito)?.nombre_elemento || filtroHito)
-                    : 'Hitos'}
+                    ? `Paquete: ${hitosDisponibles.find((h) => h.codigo_legado === filtroHito)?.codigo_legado || filtroHito}`
+                    : hitosDisponibles.length > 0
+                    ? `Paquetes (${hitosDisponibles.length})`
+                    : 'Paquetes'}
                 </span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
+                {filtroHito ? (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFiltroHito('');
+                    }}
+                    className="hover:text-rose-400 p-0.5 rounded-md transition ml-0.5 cursor-pointer"
+                    title="Quitar filtro de paquete de trabajo"
+                  >
+                    <X className="w-3 h-3" strokeWidth={2} />
+                  </span>
+                ) : (
+                  <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
+                )}
               </button>
 
               {proyectoSeleccionadoCodigo && popoverHitoAbierto && (
                 <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[220px] max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
+                  <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase border-b border-slate-800/60 mb-1">
+                    Filtrar por Paquete de Trabajo
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
@@ -1278,14 +1265,14 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       setPopoverHitoAbierto(false);
                     }}
                     className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
-                      !filtroHito ? 'bg-indigo-950/70 text-indigo-300 font-bold' : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                      !filtroHito ? 'bg-sky-950/50 text-sky-300 font-bold' : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                     }`}
                   >
                     <span className="flex items-center gap-2">
-                      <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>Todos los hitos</span>
+                      <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
+                      <span>Todos los Paquetes</span>
                     </span>
-                    {!filtroHito && <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />}
+                    {!filtroHito && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
                   </button>
                   {hitosDisponibles.map((h) => (
                     <button
@@ -1297,22 +1284,22 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       }}
                       className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between truncate transition cursor-pointer text-xs font-medium ${
                         filtroHito === h.codigo_legado
-                          ? 'bg-indigo-950/70 text-indigo-300 font-bold'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
                           : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                       }`}
                     >
                       <span className="flex items-center gap-2 truncate">
-                        <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} />
                         <span className="truncate">{h.codigo_legado} · {h.nombre_elemento}</span>
                       </span>
-                      {filtroHito === h.codigo_legado && <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0 ml-1" />}
+                      {filtroHito === h.codigo_legado && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0 ml-1" strokeWidth={1.75} />}
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* 2. Popover Prioridad Eisenhower */}
+            {/* Prioridad Eisenhower */}
             <div
               className="relative shrink-0 kanban-popover-container group/filter-prio"
               onMouseEnter={() => handlePopoverMouseEnter('prio', setPopoverPrioAbierto)}
@@ -1321,29 +1308,33 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               <button
                 type="button"
                 onClick={() => setPopoverPrioAbierto(!popoverPrioAbierto)}
-                className={`bg-slate-900/90 border rounded-full px-3 py-1.5 text-xs transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none shadow-xs ${
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   filtroPrioridad
-                    ? 'border-rose-500/80 bg-rose-950/40 text-rose-300 font-bold'
-                    : 'border-slate-700/80 hover:border-indigo-500/60 text-slate-300'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
+                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
                 }`}
               >
-                <Flame className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                <Flame className={`w-3.5 h-3.5 shrink-0 ${filtroPrioridad ? 'text-sky-400' : 'text-rose-400'}`} strokeWidth={1.75} />
                 <span>
                   {filtroPrioridad
-                    ? filtroPrioridad.replace('01_P1_', 'P1: ').replace('02_P2_', 'P2: ').replace('03_P3_', 'P3: ')
+                    ? filtroPrioridad
+                        .replace('01_P1_Alta', 'P1: Alta')
+                        .replace('02_P2_Media', 'P2: Media')
+                        .replace('03_P3_Baja', 'P3: Baja')
+                        .replace('04_P4', 'P4')
                     : 'Prioridad'}
                 </span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
+                <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
               </button>
 
               {popoverPrioAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[210px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
+                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[190px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
                   {[
-                    { id: '', label: 'Todas las prioridades', icon: <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" /> },
-                    { id: '01_P1_Alta', label: 'P1 - Urgente / Alta', icon: <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" /> },
-                    { id: '02_P2_Media', label: 'P2 - Importante / Media', icon: <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" /> },
-                    { id: '03_P3_Baja', label: 'P3 - Delegable / Baja', icon: <ArrowDownCircle className="w-3.5 h-3.5 text-sky-400 shrink-0" /> },
-                    { id: '04_P4', label: 'P4 - Descarte', icon: <CheckSquare className="w-3.5 h-3.5 text-slate-400 shrink-0" /> }
+                    { id: '', label: 'Todas', icon: <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: '01_P1_Alta', label: 'P1: Alta', icon: <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
+                    { id: '02_P2_Media', label: 'P2: Media', icon: <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: '03_P3_Baja', label: 'P3: Baja', icon: <ArrowDownCircle className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: '04_P4', label: 'P4: Sin prioridad', icon: <CheckSquare className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
                   ].map((p) => (
                     <button
                       key={p.id}
@@ -1354,7 +1345,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       }}
                       className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
                         filtroPrioridad === p.id
-                          ? 'bg-indigo-950/70 text-indigo-300 font-bold'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
                           : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                       }`}
                     >
@@ -1362,81 +1353,14 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         {p.icon}
                         <span>{p.label}</span>
                       </span>
-                      {filtroPrioridad === p.id && <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />}
+                      {filtroPrioridad === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* 3. Popover Tipo de Tarea Canónico */}
-            <div
-              className="relative shrink-0 kanban-popover-container group/filter-tipo"
-              onMouseEnter={() => handlePopoverMouseEnter('tipo', setPopoverTipoAbierto)}
-              onMouseLeave={() => handlePopoverMouseLeave('tipo', setPopoverTipoAbierto)}
-            >
-              <button
-                type="button"
-                onClick={() => setPopoverTipoAbierto(!popoverTipoAbierto)}
-                className={`bg-slate-900/90 border rounded-full px-3 py-1.5 text-xs transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none shadow-xs ${
-                  filtroTipo && filtroTipo !== 'TODOS'
-                    ? 'border-indigo-500/80 bg-indigo-950/60 text-indigo-300 font-bold'
-                    : 'border-slate-700/80 hover:border-indigo-500/60 text-slate-300'
-                }`}
-              >
-                {filtroTipo === 'TRABAJO_PROFESIONAL' && <Briefcase className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
-                {filtroTipo === 'PERSONAL_HABITO' && <HeartPulse className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
-                {filtroTipo === 'URGENTE_CRITICO' && <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
-                {filtroTipo === 'APRENDIZAJE_ESTUDIO' && <GraduationCap className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
-                {(!filtroTipo || filtroTipo === 'TODOS') && <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
-                <span>
-                  {filtroTipo === 'TRABAJO_PROFESIONAL'
-                    ? 'Trabajo / Proy'
-                    : filtroTipo === 'PERSONAL_HABITO'
-                    ? 'Personal / Hábito'
-                    : filtroTipo === 'URGENTE_CRITICO'
-                    ? 'Urgente / Crítico'
-                    : filtroTipo === 'APRENDIZAJE_ESTUDIO'
-                    ? 'Estudio / PMP'
-                    : 'Tipo'}
-                </span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
-              </button>
-
-              {popoverTipoAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[215px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
-                  {[
-                    { id: 'TODOS', label: 'Todos los Tipos', icon: <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" /> },
-                    { id: 'TRABAJO_PROFESIONAL', label: 'Trabajo / Proyecto', icon: <Briefcase className="w-3.5 h-3.5 text-sky-400 shrink-0" /> },
-                    { id: 'PERSONAL_HABITO', label: 'Personal / Hábito', icon: <HeartPulse className="w-3.5 h-3.5 text-rose-400 shrink-0" /> },
-                    { id: 'URGENTE_CRITICO', label: 'Urgente / Crítico', icon: <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" /> },
-                    { id: 'APRENDIZAJE_ESTUDIO', label: 'Aprendizaje / Estudio', icon: <GraduationCap className="w-3.5 h-3.5 text-indigo-400 shrink-0" /> }
-                  ].map((tOpt) => (
-                    <button
-                      key={tOpt.id}
-                      type="button"
-                      onClick={() => {
-                        setFiltroTipo(tOpt.id);
-                        setPopoverTipoAbierto(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
-                        filtroTipo === tOpt.id
-                          ? 'bg-indigo-950/70 text-indigo-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        {tOpt.icon}
-                        <span>{tOpt.label}</span>
-                      </span>
-                      {filtroTipo === tOpt.id && <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* 4. Popover Nivel de Energía */}
+            {/* Nivel de Energía */}
             <div
               className="relative shrink-0 kanban-popover-container group/filter-energia"
               onMouseEnter={() => handlePopoverMouseEnter('energia', setPopoverEnergiaAbierto)}
@@ -1445,32 +1369,32 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               <button
                 type="button"
                 onClick={() => setPopoverEnergiaAbierto(!popoverEnergiaAbierto)}
-                className={`bg-slate-900/90 border rounded-full px-3 py-1.5 text-xs transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none shadow-xs ${
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   filtroEnergia
-                    ? 'border-amber-500/80 bg-amber-950/40 text-amber-300 font-bold'
-                    : 'border-slate-700/80 hover:border-indigo-500/60 text-slate-300'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
+                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
                 }`}
               >
-                <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <Zap className={`w-3.5 h-3.5 shrink-0 ${filtroEnergia ? 'text-sky-400' : 'text-amber-400'}`} strokeWidth={1.75} />
                 <span>
                   {filtroEnergia === 'Alta_DeepWork'
-                    ? 'Alta (DeepWork)'
+                    ? 'DeepWork'
                     : filtroEnergia === 'Media_Operativa'
-                    ? 'Media (Operativa)'
+                    ? 'Operativa'
                     : filtroEnergia === 'Baja_Automatica'
-                    ? 'Baja (Mecánica)'
+                    ? 'Mecánica'
                     : 'Energía'}
                 </span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
+                <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
               </button>
 
               {popoverEnergiaAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[210px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
+                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[180px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
                   {[
-                    { id: '', label: 'Todos los niveles', icon: <Zap className="w-3.5 h-3.5 text-slate-400 shrink-0" /> },
-                    { id: 'Alta_DeepWork', label: 'Alta Cognitiva (DeepWork)', icon: <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" /> },
-                    { id: 'Media_Operativa', label: 'Media Operativa', icon: <Activity className="w-3.5 h-3.5 text-sky-400 shrink-0" /> },
-                    { id: 'Baja_Automatica', label: 'Baja Mecánica', icon: <Coffee className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> }
+                    { id: '', label: 'Todos', icon: <Zap className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'Alta_DeepWork', label: 'DeepWork', icon: <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'Media_Operativa', label: 'Operativa', icon: <Activity className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'Baja_Automatica', label: 'Mecánica', icon: <Coffee className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
                   ].map((e) => (
                     <button
                       key={e.id}
@@ -1481,7 +1405,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       }}
                       className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
                         filtroEnergia === e.id
-                          ? 'bg-indigo-950/70 text-indigo-300 font-bold'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
                           : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                       }`}
                     >
@@ -1489,14 +1413,14 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         {e.icon}
                         <span>{e.label}</span>
                       </span>
-                      {filtroEnergia === e.id && <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />}
+                      {filtroEnergia === e.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* 5. Popover Plazo / Vencimiento */}
+            {/* Plazo / Vencimiento */}
             <div
               className="relative shrink-0 kanban-popover-container group/filter-plazo"
               onMouseEnter={() => handlePopoverMouseEnter('plazo', setPopoverPlazoAbierto)}
@@ -1505,35 +1429,35 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               <button
                 type="button"
                 onClick={() => setPopoverPlazoAbierto(!popoverPlazoAbierto)}
-                className={`bg-slate-900/90 border rounded-full px-3 py-1.5 text-xs transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none shadow-xs ${
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   filtroPlazo
-                    ? 'border-indigo-500/80 bg-indigo-950/60 text-indigo-300 font-bold'
-                    : 'border-slate-700/80 hover:border-indigo-500/60 text-slate-300'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
+                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
                 }`}
               >
-                <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <Calendar className={`w-3.5 h-3.5 shrink-0 ${filtroPlazo ? 'text-sky-400' : 'text-indigo-400'}`} strokeWidth={1.75} />
                 <span>
                   {filtroPlazo === 'vencidas'
                     ? 'Vencidas'
                     : filtroPlazo === 'hoy'
-                    ? 'Vencen Hoy'
+                    ? 'Hoy'
                     : filtroPlazo === '7dias'
                     ? 'Próximos 7d'
                     : filtroPlazo === 'sin_fecha'
-                    ? 'Sin Fecha'
-                    : 'Vencimiento'}
+                    ? 'Sin fecha'
+                    : 'Plazo'}
                 </span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
+                <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
               </button>
 
               {popoverPlazoAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[200px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
+                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[180px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
                   {[
-                    { id: '', label: 'Cualquier fecha', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" /> },
-                    { id: 'vencidas', label: 'Vencidas', icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" /> },
-                    { id: 'hoy', label: 'Vencen Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" /> },
-                    { id: '7dias', label: 'Próximos 7 días', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" /> },
-                    { id: 'sin_fecha', label: 'Sin Fecha', icon: <CalendarOff className="w-3.5 h-3.5 text-slate-400 shrink-0" /> }
+                    { id: '', label: 'Cualquier fecha', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'vencidas', label: 'Vencidas', icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'hoy', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: '7dias', label: 'Próximos 7d', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'sin_fecha', label: 'Sin fecha', icon: <CalendarOff className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
                   ].map((p) => (
                     <button
                       key={p.id}
@@ -1544,7 +1468,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       }}
                       className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
                         filtroPlazo === p.id
-                          ? 'bg-indigo-950/70 text-indigo-300 font-bold'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
                           : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                       }`}
                     >
@@ -1552,14 +1476,14 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         {p.icon}
                         <span>{p.label}</span>
                       </span>
-                      {filtroPlazo === p.id && <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />}
+                      {filtroPlazo === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* 6. Popover Dependencias / Bloqueos */}
+            {/* Dependencias / Bloqueos */}
             <div
               className="relative shrink-0 kanban-popover-container group/filter-dep"
               onMouseEnter={() => handlePopoverMouseEnter('dep', setPopoverDepAbierto)}
@@ -1568,29 +1492,29 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               <button
                 type="button"
                 onClick={() => setPopoverDepAbierto(!popoverDepAbierto)}
-                className={`bg-slate-900/90 border rounded-full px-3 py-1.5 text-xs transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none shadow-xs ${
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   filtroDependencia
-                    ? 'border-purple-500/80 bg-purple-950/40 text-purple-300 font-bold'
-                    : 'border-slate-700/80 hover:border-indigo-500/60 text-slate-300'
+                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
+                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
                 }`}
               >
-                <Link2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <Link2 className={`w-3.5 h-3.5 shrink-0 ${filtroDependencia ? 'text-sky-400' : 'text-purple-400'}`} strokeWidth={1.75} />
                 <span>
                   {filtroDependencia === 'con_dep'
                     ? 'Bloqueadas'
                     : filtroDependencia === 'sin_dep'
-                    ? 'Sin Bloqueo'
+                    ? 'Libres'
                     : 'Bloqueos'}
                 </span>
-                <ChevronDown className="w-3 h-3 opacity-60" />
+                <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
               </button>
 
               {popoverDepAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[220px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
+                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[190px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
                   {[
-                    { id: '', label: 'Todos los estados', icon: <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" /> },
-                    { id: 'con_dep', label: 'Bloqueadas por Predecesora', icon: <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" /> },
-                    { id: 'sin_dep', label: 'Listas para Iniciar / Sin Bloqueo', icon: <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> }
+                    { id: '', label: 'Todos', icon: <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'con_dep', label: 'Bloqueadas', icon: <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'sin_dep', label: 'Libres', icon: <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
                   ].map((d) => (
                     <button
                       key={d.id}
@@ -1601,7 +1525,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       }}
                       className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
                         filtroDependencia === d.id
-                          ? 'bg-indigo-950/70 text-indigo-300 font-bold'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
                           : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                       }`}
                     >
@@ -1609,7 +1533,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         {d.icon}
                         <span>{d.label}</span>
                       </span>
-                      {filtroDependencia === d.id && <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />}
+                      {filtroDependencia === d.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
                     </button>
                   ))}
                 </div>
@@ -1618,23 +1542,23 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
             {/* Indicador reactivo y botón Limpiar Filtros */}
             {hayFiltrosActivos && (
-              <div className="ml-auto flex items-center gap-2">
+              <div className="ml-auto flex items-center gap-2 shrink-0">
                 <span
                   id="badge-filtro-activo-resumen"
-                  className="bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-semibold px-2 py-0.5 rounded-lg text-[10px] items-center gap-1.5 shadow-2xs whitespace-nowrap"
+                  className="bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono tabular-nums text-[11px] px-2 py-1 rounded-lg flex items-center gap-1 shadow-2xs whitespace-nowrap"
                 >
-                  Filtro activo: {tareasFiltradas.length} de {tareas.length} tareas
+                  <span>{tareasFiltradas.length}/{tareas.length} tareas</span>
                 </span>
 
                 <button
                   type="button"
                   id="btn-limpiar-filtros-kanban"
                   onClick={limpiarTodosLosFiltros}
-                  className="filter-ghost-btn text-xs font-bold flex items-center gap-1 px-2.5 py-1 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition cursor-pointer"
+                  className="filter-ghost-btn text-[11px] font-medium flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800/60 hover:border-rose-500/30 transition cursor-pointer active:scale-[0.98]"
                   title="Restablecer filtros (X)"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Limpiar Filtros (X)</span>
+                  <RotateCcw className="w-3 h-3" strokeWidth={1.75} />
+                  <span>Limpiar (X)</span>
                 </button>
               </div>
             )}
@@ -1832,8 +1756,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                               setColumnaNuevaTarea(tar.estado);
                               setModalTareaFlowAbierto(true);
                             }}
-                            className={`kanban-card group relative p-3.5 pl-4 rounded-xl border border-slate-800/60 hover:border-slate-700/80 portal-surface bg-white dark:bg-[#0D1526] select-none cursor-grab active:cursor-grabbing text-xs space-y-2.5 duration-150 ease-out overflow-hidden ${
-                              atenuar ? 'kanban-card-atenuada opacity-60 transition-opacity duration-200' : 'transition-all duration-150 ease-out hover:-translate-y-0.5 hover:shadow-md'
+                            className={`kanban-card group relative p-3.5 pl-4 rounded-xl border border-slate-800/80 bg-[#0D1526]/90 hover:bg-[#0D1526] hover:border-slate-700 hover:shadow-[0_8px_25px_rgba(2,6,23,0.7),0_0_15px_rgba(56,189,248,0.08)] hover:-translate-y-0.5 active:scale-[0.985] transition-[transform,box-shadow,border-color,background-color] duration-150 ease-out cursor-grab active:cursor-grabbing select-none text-xs space-y-2.5 overflow-hidden ${
+                              draggedTaskId === tar.id ? 'opacity-30 scale-95 border-dashed border-sky-400/80 ring-1 ring-sky-500/50' : ''
+                            } ${
+                              atenuar ? 'kanban-card-atenuada opacity-60' : ''
                             } ${
                               isPredecesora ? 'kanban-card-predecesora' : ''
                             } ${
@@ -1842,7 +1768,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                           >
                             {/* Franja lateral izquierda continua de prioridad (Canónico 1:1 legacy_gas/JS_Kanban.html L780-L782) */}
                             <div 
-                              className={`absolute left-0 top-0 bottom-0 w-1.5 ${colorBarraPrioridad} rounded-l-xl transition-all duration-150 group-hover:w-2 pointer-events-none`} 
+                              className={`absolute left-0 top-0 bottom-0 w-1.5 ${colorBarraPrioridad} rounded-l-xl transition-transform duration-150 ease-out origin-left group-hover:scale-x-125 pointer-events-none`} 
                             />
 
                             {/* Renderizado de Badges canónicos extraídos literalmente de legacy_gas/JS_Kanban.html */}
@@ -1858,10 +1784,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                             {isSucesora && (
                               <div className="kanban-etiqueta-relacion flex items-center justify-between text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 bg-emerald-600 text-white shadow-xs pointer-events-none transition-all duration-200">
                                 <span className="inline-flex items-center gap-1">
-                                  <svg className="w-2.5 h-2.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                                    <polyline points="15 10 20 15 15 20" />
-                                    <path d="M4 4v7a4 4 0 0 0 4 4h12" />
-                                  </svg>
+                                  <CornerDownRight className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
                                   <span>Sucesora</span>
                                 </span>
                                 <span className="text-[9px] opacity-90 uppercase tracking-wider font-mono tabular-nums">{tar.codigo_legado}</span>
@@ -1938,6 +1861,44 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                                   tituloEntidad={tar.nombre}
                                 />
                               </div>
+
+                              {/* Acciones Fantasma con Transición Fluida */}
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-out shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`¿Deseas archivar la tarea ${tar.codigo_legado}?`)) {
+                                      db.tareas.update(tar.id, {
+                                        estado_tarea: '05_Archivado',
+                                        archivado: true,
+                                        updated_at: new Date().toISOString()
+                                      });
+                                    }
+                                  }}
+                                  className="p-1 rounded-md text-slate-400 hover:text-sky-300 hover:bg-slate-800/80 transition-colors duration-100 cursor-pointer"
+                                  title="Archivar tarea"
+                                >
+                                  <Archive className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (onEliminarTarea) {
+                                      onEliminarTarea(tar.id, tar.nombre);
+                                    } else {
+                                      if (window.confirm(`¿Deseas eliminar definitivamente la tarea "${tar.nombre}"?`)) {
+                                        await db.tareas.delete(tar.id);
+                                      }
+                                    }
+                                  }}
+                                  className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors duration-100 cursor-pointer"
+                                  title="Eliminar tarea"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                </button>
+                              </div>
                             </div>
 
                             {/* 3. Título de la tarea en text-sm font-semibold text-slate-100 line-clamp-2 mt-1 */}
@@ -1955,15 +1916,15 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                               <div className="flex items-center flex-wrap gap-1.5 pt-0.5">
                                 {tieneDep && (
                                   <span
-                                    className="px-2 py-0.5 text-xs font-mono tabular-nums font-medium rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/50 flex items-center gap-1 shadow-2xs truncate max-w-[180px]"
+                                    className="px-2 py-0.5 text-[11px] font-mono tabular-nums font-medium rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 shadow-2xs truncate max-w-[150px]"
                                     title={`Requiere: ${rawDep}`}
                                   >
-                                    <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                                    <span>Req: {rawDep}</span>
+                                    <Lock className="w-3 h-3 text-amber-400 shrink-0" strokeWidth={1.75} />
+                                    <span className="truncate">{rawDep}</span>
                                   </span>
                                 )}
                                 {costoTotalPen > 0 && (
-                                  <span className="text-xs font-mono tabular-nums font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                  <span className="px-2 py-0.5 text-[11px] font-mono tabular-nums font-medium text-emerald-400 bg-emerald-500/10 rounded-md border border-emerald-500/25">
                                     S/ {costoTotalPen.toFixed(2)}
                                   </span>
                                 )}
@@ -1974,9 +1935,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                             <div className="space-y-1.5 pt-1">
                               {totalSubs > 0 && (
                                 <div className="space-y-1">
-                                  <div className="flex items-center justify-between text-xs font-mono tabular-nums text-slate-400">
+                                  <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-400">
                                     <span className="flex items-center gap-1">
-                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" strokeWidth={1.75} />
                                       <span>{completadasSubs}/{totalSubs} pasos ({pctSubs}%)</span>
                                     </span>
                                   </div>
@@ -1989,16 +1950,16 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                                 </div>
                               )}
 
-                              <div className="flex items-center justify-between gap-1 text-xs font-mono tabular-nums pt-0.5 flex-wrap">
+                              <div className="flex items-center justify-between gap-1 text-[11px] font-mono tabular-nums pt-0.5 flex-wrap">
                                 <span
-                                  className={`px-2 py-0.5 rounded-md flex items-center gap-1 border ${
+                                  className={`px-2 py-0.5 text-[11px] font-mono tabular-nums rounded-md flex items-center gap-1 border ${
                                     estaVencida
-                                      ? 'bg-rose-500/10 text-rose-300 border-rose-500/30 font-semibold'
-                                      : 'bg-slate-800/60 text-slate-300 border-slate-700/50'
+                                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-semibold'
+                                      : 'bg-slate-800/70 text-slate-300 border-slate-700/50'
                                   }`}
                                   title={estaVencida ? 'Tarea vencida' : 'Fecha límite programada'}
                                 >
-                                  <Calendar className={`w-3 h-3 ${estaVencida ? 'text-rose-400' : 'text-slate-400'}`} />
+                                  <Calendar className={`w-3 h-3 ${estaVencida ? 'text-rose-400' : 'text-slate-400'}`} strokeWidth={1.75} />
                                   <span>{formatFechaDDMMYYYY(tar.fecha_programada)}</span>
                                 </span>
 
@@ -2006,7 +1967,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                                   className="bg-slate-800/80 text-slate-300 border border-slate-700/60 px-2 py-0.5 rounded-md flex items-center gap-1 font-mono tabular-nums"
                                   title={`Horas Reales: ${tar.horas_reales ?? 0}h / Horas Estimadas: ${tar.horas_estimadas ?? 0}h`}
                                 >
-                                  <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <Clock className="w-3 h-3 text-slate-400 shrink-0" strokeWidth={1.75} />
                                   <span>{tar.horas_reales ?? 0}h / {tar.horas_estimadas ?? 0}h</span>
                                 </span>
                               </div>

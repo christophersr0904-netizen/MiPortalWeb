@@ -412,6 +412,7 @@ export interface TareaRecord {
   notas_impedimentos?: string;
   es_mav?: boolean;
   costo_real_pen?: number;
+  archivado?: boolean;
   updated_at: string;
   sync_status: SyncStatus;
 }
