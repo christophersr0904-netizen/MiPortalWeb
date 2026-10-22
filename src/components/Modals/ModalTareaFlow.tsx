@@ -6,20 +6,71 @@ import {
   Calendar,
   Zap,
   CheckCircle2,
-  Folder,
+  FolderKanban,
   Milestone,
   Plus,
   Trash2,
   Archive,
   DollarSign,
-  Share2,
-  Check
+  Check,
+  Lock,
+  Flame,
+  AlertCircle,
+  ArrowDown,
+  Minus,
+  Cpu,
+  Coffee,
+  ChevronDown,
+  Link2,
+  Search
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { TareaRecord, SubtareaPaso } from '../../types';
 import { getProp } from '../../utils/entityNormalizer';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
+
+/**
+ * Convierte una cadena de texto en formato 'H:MM', 'H', 'MMm' o decimal a número de horas decimal.
+ * Ej: '1:30' -> 1.5, '0:45' -> 0.75, '2' -> 2.0, '90m' -> 1.5
+ */
+export function convertirStringToHorasDecimal(str: string): number {
+  if (!str || typeof str !== 'string') return 0;
+  const s = str.trim().toLowerCase();
+  if (!s) return 0;
+
+  // Formato minutos puro: '90m' o '45min'
+  if (s.endsWith('m') || s.endsWith('min')) {
+    const minVal = parseFloat(s.replace(/[^0-9.]/g, ''));
+    return isNaN(minVal) ? 0 : Number((minVal / 60).toFixed(2));
+  }
+
+  // Formato H:MM o HH:MM
+  if (s.includes(':')) {
+    const parts = s.split(':');
+    const horas = parseInt(parts[0], 10) || 0;
+    const minutos = parseInt(parts[1], 10) || 0;
+    return Number((horas + minutos / 60).toFixed(2));
+  }
+
+  // Formato decimal directo '1.5' o '2'
+  const parsed = parseFloat(s.replace(',', '.'));
+  return isNaN(parsed) ? 0 : Number(parsed.toFixed(2));
+}
+
+/**
+ * Convierte un valor numérico decimal de horas a cadena canónica 'H:MM'.
+ * Ej: 1.5 -> '1:30', 0.75 -> '0:45', 2 -> '2:00', 0 -> '0:00'
+ */
+export function convertirHorasDecimalAString(num: number | undefined | null): string {
+  if (num === undefined || num === null || isNaN(num) || num <= 0) return '0:00';
+  const horas = Math.floor(num);
+  const minutos = Math.round((num - horas) * 60);
+  if (minutos >= 60) {
+    return `${horas + 1}:00`;
+  }
+  return `${horas}:${String(minutos).padStart(2, '0')}`;
+}
 
 interface ModalTareaFlowProps {
   isOpen: boolean;
@@ -71,6 +122,12 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     [tareaExistente?.codigo_legado, tareaId]
   ) ?? [];
 
+  // Lista de gastos de Finanzas para vinculación reactiva
+  const listaGastos = useLiveQuery(
+    () => db.gastos.orderBy('fecha_gasto').reverse().limit(50).toArray(),
+    []
+  ) ?? [];
+
   // Form states
   const [codigoLegado, setCodigoLegado] = useState('');
   const [nombre, setNombre] = useState('');
@@ -82,20 +139,29 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
   const [nivelEnergia, setNivelEnergia] = useState('Media_Operativa');
   const [horasEstimadas, setHorasEstimadas] = useState(1);
   const [horasReales, setHorasReales] = useState(0);
+  const [horasEstimadasStr, setHorasEstimadasStr] = useState('1:00');
+  const [horasRealesStr, setHorasRealesStr] = useState('0:00');
   const [fechaProgramada, setFechaProgramada] = useState('');
   const [horaInicio, setHoraInicio] = useState('09:00');
-  const [agendadoCalendar, setAgendadoCalendar] = useState<'Sí' | 'No'>('No');
+  const [agendadoCalendar, setAgendadoCalendar] = useState<'Sí' | 'No'>('Sí');
   const [esMav, setEsMav] = useState(false);
   const [costoRealPen, setCostoRealPen] = useState(0);
   const [responsable, setResponsable] = useState('');
   const [notas, setNotas] = useState('');
 
+  // Sección Gasto Asociado Embebido (Dual: Nuevo / Vincular)
+  const [mostrarGasto, setMostrarGasto] = useState(false);
+  const [modoGasto, setModoGasto] = useState<'NUEVO' | 'VINCULAR'>('NUEVO');
+  const [gastoMoneda, setGastoMoneda] = useState<'PEN' | 'USD' | 'EUR'>('PEN');
+  const [gastoMonto, setGastoMonto] = useState<string>('');
+  const [gastoCategoria, setGastoCategoria] = useState('Operativo_Proyecto');
+  const [gastoConcepto, setGastoConcepto] = useState('');
+  const [gastoVinculadoCodigo, setGastoVinculadoCodigo] = useState('');
+  const [gastoSearch, setGastoSearch] = useState('');
+
   // Subtareas en memoria (para modo creación o staging)
   const [subtareasLocal, setSubtareasLocal] = useState<Array<{ id: string; descripcion_paso: string; completado: boolean }>>([]);
   const [nuevoPasoTexto, setNuevoPasoTexto] = useState('');
-
-  // Dropdowns UI
-  const [dropdownEstadoAbierto, setDropdownEstadoAbierto] = useState(false);
 
   // Sincronizar datos al abrir o cambiar tareaId
   useEffect(() => {
@@ -115,16 +181,81 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       setIdDependencia(tareaExistente.id_dependencia || '');
       setPrioridad(tareaExistente.prioridad_eisenhower || '02_P2_Media');
       setNivelEnergia(tareaExistente.nivel_energia_requerido || 'Media_Operativa');
-      setHorasEstimadas(tareaExistente.horas_estimadas ?? 1);
-      setHorasReales(tareaExistente.horas_reales ?? 0);
+      const hEst = tareaExistente.horas_estimadas ?? 1;
+      const hReal = tareaExistente.horas_reales ?? 0;
+      setHorasEstimadas(hEst);
+      setHorasReales(hReal);
+      setHorasEstimadasStr(convertirHorasDecimalAString(hEst));
+      setHorasRealesStr(convertirHorasDecimalAString(hReal));
       setFechaProgramada(tareaExistente.fecha_programada ? tareaExistente.fecha_programada.split('T')[0] : '');
       setHoraInicio(getProp(tareaExistente, 'hora_inicio', 'Hora_Inicio') || '09:00');
-      setAgendadoCalendar(tareaExistente.agendado_calendar === 'Sí' ? 'Sí' : 'No');
+      setAgendadoCalendar(tareaExistente.agendado_calendar === 'No' ? 'No' : 'Sí');
       setEsMav(Boolean(tareaExistente.es_mav));
-      setCostoRealPen(tareaExistente.costo_real_pen ?? 0);
+      const cPen = tareaExistente.costo_real_pen ?? 0;
+      setCostoRealPen(cPen);
       setResponsable(tareaExistente.responsable_ejecutor || '');
       setNotas(tareaExistente.notas_impedimentos || '');
       setSubtareasLocal([]);
+
+      // Cargar gasto asociado vinculado si existe
+      if (tareaExistente.codigo_legado) {
+        db.gastos
+          .where('id_origen_vinculado')
+          .equals(tareaExistente.codigo_legado)
+          .first()
+          .then((gastoExistente) => {
+            if (gastoExistente) {
+              setGastoMoneda((gastoExistente.moneda_original as 'PEN' | 'USD' | 'EUR') || 'PEN');
+              setGastoMonto(String(gastoExistente.monto_original || gastoExistente.monto_pen || ''));
+              setGastoCategoria(gastoExistente.categoria_gasto || 'Operativo_Proyecto');
+              setGastoConcepto(gastoExistente.descripcion_gasto || '');
+              setGastoVinculadoCodigo(gastoExistente.codigo_legado || '');
+              setGastoSearch('');
+              setModoGasto('NUEVO');
+              setMostrarGasto(true);
+            } else if (cPen > 0) {
+              setGastoMoneda('PEN');
+              setGastoMonto(String(cPen));
+              setGastoCategoria('Operativo_Proyecto');
+              setGastoConcepto('');
+              setGastoVinculadoCodigo('');
+              setGastoSearch('');
+              setModoGasto('NUEVO');
+              setMostrarGasto(true);
+            } else {
+              setGastoMoneda('PEN');
+              setGastoMonto('');
+              setGastoCategoria('Operativo_Proyecto');
+              setGastoConcepto('');
+              setGastoVinculadoCodigo('');
+              setGastoSearch('');
+              setModoGasto('NUEVO');
+              setMostrarGasto(false);
+            }
+          })
+          .catch(() => {
+            if (cPen > 0) {
+              setGastoMoneda('PEN');
+              setGastoMonto(String(cPen));
+              setGastoVinculadoCodigo('');
+              setGastoSearch('');
+              setModoGasto('NUEVO');
+              setMostrarGasto(true);
+            }
+          });
+      } else if (cPen > 0) {
+        setGastoMoneda('PEN');
+        setGastoMonto(String(cPen));
+        setGastoVinculadoCodigo('');
+        setGastoSearch('');
+        setModoGasto('NUEVO');
+        setMostrarGasto(true);
+      } else {
+        setGastoVinculadoCodigo('');
+        setGastoSearch('');
+        setModoGasto('NUEVO');
+        setMostrarGasto(false);
+      }
     } else if (tareaId === null) {
       // Modo Creación explícito
       const now = new Date();
@@ -138,14 +269,24 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       setNivelEnergia('Media_Operativa');
       setHorasEstimadas(1);
       setHorasReales(0);
+      setHorasEstimadasStr('1:00');
+      setHorasRealesStr('0:00');
       setFechaProgramada(now.toISOString().split('T')[0]);
       setHoraInicio('09:00');
-      setAgendadoCalendar('No');
+      setAgendadoCalendar('Sí');
       setEsMav(false);
       setCostoRealPen(0);
       setResponsable('');
       setNotas(initialNotas || '');
       setSubtareasLocal([]);
+      setGastoMoneda('PEN');
+      setGastoMonto('');
+      setGastoCategoria('Operativo_Proyecto');
+      setGastoConcepto('');
+      setGastoVinculadoCodigo('');
+      setGastoSearch('');
+      setModoGasto('NUEVO');
+      setMostrarGasto(false);
     }
   }, [isOpen, tareaId, tareaExistente, initialColumna, initialProyectoCodigo, initialTitulo, initialNotas, proyectos]);
 
@@ -160,13 +301,6 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
-
-  // Hitos filtrados por proyecto seleccionado
-  const hitosDelProyecto = hitos.filter((h) => {
-    if (!proyectoCodigo) return true;
-    const pCode = getProp(h, 'proyecto_codigo', 'proyecto_id', 'Proyecto_ID', 'ID_Proyecto');
-    return pCode === proyectoCodigo || (proyectos.find(p => p.id === pCode)?.codigo_legado === proyectoCodigo);
-  });
 
   // Lista de subtareas activa (existentes de Dexie si estamos editando, o locales si creando)
   const listaSubtareasActiva = tareaId ? subtareasExistentes : subtareasLocal;
@@ -212,7 +346,27 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     }
   };
 
-  const toggleSubtareaCompletado = async (sub: any) => {
+  const toggleSubtareaCompletado = async (sub: any, idx: number) => {
+    const estaBloqueado = idx > 0 && !listaSubtareasActiva[idx - 1].completado;
+
+    // Si no está completado y está bloqueado por el paso anterior: IMPEDIR
+    if (!sub.completado && estaBloqueado) {
+      alert(`Debes completar primero el paso #${idx} antes de avanzar.`);
+      return;
+    }
+
+    // Si está completado y se quiere desmarcar, verificar si hay pasos posteriores completados (LIFO)
+    if (sub.completado) {
+      const hayPosterioresCompletados = listaSubtareasActiva
+        .slice(idx + 1)
+        .some((p) => p.completado);
+
+      if (hayPosterioresCompletados) {
+        alert('Para desmarcar este paso, debes desmarcar primero los pasos posteriores completados.');
+        return;
+      }
+    }
+
     if (tareaId && sub.id) {
       await db.subtareas_pasos.update(sub.id, {
         completado: !sub.completado,
@@ -239,8 +393,17 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     if (!nombre.trim()) return;
 
     const nowIso = new Date().toISOString();
+    const hEstFinal = horasEstimadas || convertirStringToHorasDecimal(horasEstimadasStr) || 1;
+    const hRealFinal = horasReales || convertirStringToHorasDecimal(horasRealesStr) || 0;
+
+    const montoGastoFinal = parseFloat(gastoMonto) || 0;
+    const tc = gastoMoneda === 'USD' ? 3.75 : gastoMoneda === 'EUR' ? 4.10 : 1.0;
+    const costoPenCalculado = montoGastoFinal > 0 ? Number((montoGastoFinal * tc).toFixed(2)) : (Number(costoRealPen) || 0);
+
+    let codTarFinal = '';
 
     if (tareaId && tareaExistente) {
+      codTarFinal = tareaExistente.codigo_legado || tareaId;
       // Actualizar tarea existente
       await db.tareas.update(tareaId, {
         nombre_tarea_actividad: nombre.trim(),
@@ -250,12 +413,12 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         id_dependencia: idDependencia || undefined,
         prioridad_eisenhower: prioridad,
         nivel_energia_requerido: nivelEnergia,
-        horas_estimadas: Number(horasEstimadas) || 1,
-        horas_reales: Number(horasReales) || 0,
+        horas_estimadas: hEstFinal,
+        horas_reales: hRealFinal,
         fecha_programada: fechaProgramada || undefined,
         agendado_calendar: agendadoCalendar,
         es_mav: esMav,
-        costo_real_pen: Number(costoRealPen) || 0,
+        costo_real_pen: costoPenCalculado,
         responsable_ejecutor: responsable || undefined,
         notas_impedimentos: notas || undefined,
         updated_at: nowIso
@@ -264,6 +427,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       // Crear nueva tarea
       const totalTareas = await db.tareas.count();
       const nuevoCodigoTar = `TAR-${String(totalTareas + 1).padStart(3, '0')}`;
+      codTarFinal = nuevoCodigoTar;
       const nuevaTareaId = crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}`;
 
       await db.tareas.add({
@@ -277,12 +441,12 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         id_dependencia: idDependencia || undefined,
         prioridad_eisenhower: prioridad,
         nivel_energia_requerido: nivelEnergia,
-        horas_estimadas: Number(horasEstimadas) || 1,
-        horas_reales: Number(horasReales) || 0,
+        horas_estimadas: hEstFinal,
+        horas_reales: hRealFinal,
         fecha_programada: fechaProgramada || undefined,
         agendado_calendar: agendadoCalendar,
         es_mav: esMav,
-        costo_real_pen: Number(costoRealPen) || 0,
+        costo_real_pen: costoPenCalculado,
         responsable_ejecutor: responsable || undefined,
         notas_impedimentos: notas || undefined,
         updated_at: nowIso,
@@ -307,6 +471,66 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             version: 1,
             updated_at: nowIso,
             sync_status: 'synced'
+          });
+        }
+      }
+    }
+
+    // Persistir / Vincular egreso en db.gastos
+    if (codTarFinal) {
+      if (modoGasto === 'VINCULAR') {
+        if (gastoVinculadoCodigo) {
+          const gastoAEnlazar = await db.gastos
+            .where('codigo_legado')
+            .equals(gastoVinculadoCodigo)
+            .first();
+
+          if (gastoAEnlazar) {
+            await db.gastos.update(gastoAEnlazar.id, {
+              id_origen_vinculado: codTarFinal,
+              tipo_origen: 'TAREA',
+              updated_at: nowIso,
+              sync_status: 'pending'
+            });
+          }
+        }
+      } else if (montoGastoFinal > 0) {
+        const gastoExistente = await db.gastos
+          .where('id_origen_vinculado')
+          .equals(codTarFinal)
+          .first();
+
+        if (gastoExistente) {
+          await db.gastos.update(gastoExistente.id, {
+            moneda_original: gastoMoneda,
+            monto_original: montoGastoFinal,
+            tipo_cambio: tc,
+            monto_pen: costoPenCalculado,
+            categoria_gasto: gastoCategoria,
+            descripcion_gasto: gastoConcepto.trim() || `Gasto en ${nombre.trim()}`,
+            fecha_gasto: fechaProgramada || nowIso.split('T')[0],
+            updated_at: nowIso,
+            sync_status: 'pending'
+          });
+        } else {
+          const countGastos = await db.gastos.count();
+          const codGasto = `GAS-${String(countGastos + 1).padStart(3, '0')}`;
+          await db.gastos.add({
+            id: crypto.randomUUID ? crypto.randomUUID() : `gas-${Date.now()}`,
+            user_id: '00000000-0000-0000-0000-000000000001',
+            codigo_legado: codGasto,
+            tipo_origen: 'TAREA',
+            id_origen_vinculado: codTarFinal,
+            categoria_gasto: gastoCategoria,
+            fecha_gasto: fechaProgramada || nowIso.split('T')[0],
+            descripcion_gasto: gastoConcepto.trim() || `Gasto en ${nombre.trim()}`,
+            moneda_original: gastoMoneda,
+            monto_original: montoGastoFinal,
+            tipo_cambio: tc,
+            monto_pen: costoPenCalculado,
+            estado_pago: 'PAGADO',
+            updated_at: nowIso,
+            sync_status: 'pending'
           });
         }
       }
@@ -362,148 +586,125 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
 
         {/* 1. CABECERA INTEGRADA */}
-        <div className="px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 space-y-2.5 bg-slate-50/50 dark:bg-slate-950/40">
-          {/* Fila 1: ID, selector de estado y botón cerrar */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="px-5 sm:px-6 py-3 border-b border-slate-200/80 dark:border-slate-800 shrink-0 space-y-2 bg-slate-50/50 dark:bg-slate-950/40">
+          {/* Fila 1: ID, Contexto WBS Unificado en 1 Sola Línea con Ticker Marquee, y botón cerrar */}
+          <div className="flex items-center justify-between gap-2.5 w-full">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 min-w-0 flex-1">
+              {/* ID de Tarea */}
               <span
                 id="task-flow-badge-id"
-                className="text-[11px] font-mono tabular-nums font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 border border-slate-700/60 shadow-2xs shrink-0"
+                className="text-[11px] font-mono tabular-nums font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 border border-slate-700/60 shadow-2xs shrink-0 select-none"
               >
                 {codigoLegado || (tareaId ? (tareaId.startsWith('TAR-') ? tareaId : 'CARGANDO...') : 'NUEVA TAREA')}
               </span>
 
-              {/* Selector de Estado Dropdown */}
-              <div className="relative">
-                <button
-                  type="button"
-                  id="task-flow-estado-btn"
-                  onClick={() => setDropdownEstadoAbierto(!dropdownEstadoAbierto)}
-                  className="filter-ghost-btn inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:border-indigo-500 transition shadow-2xs cursor-pointer"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>
-                    {estado === '01_Backlog' && '01. Backlog'}
-                    {estado === '02_Por_Hacer' && '02. Por Hacer'}
-                    {estado === '03_En_Proceso' && '03. En Proceso'}
-                    {estado === '04_Completado' && '04. Completado'}
-                    {estado === '05_Archivado' && '05. Archivado'}
-                  </span>
-                </button>
+              {/* 1. Badge de Estatus: Chip estático compacto con micro-punto semántico */}
+              <span
+                id="task-flow-estado-badge"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold rounded-lg border border-slate-800/80 bg-slate-900/60 text-slate-300 select-none shrink-0"
+              >
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    estado === '01_Backlog'
+                      ? 'bg-slate-400'
+                      : estado === '02_Por_Hacer'
+                      ? 'bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.6)]'
+                      : estado === '03_En_Proceso'
+                      ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]'
+                      : estado === '04_Completado'
+                      ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
+                      : 'bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.6)]'
+                  }`}
+                />
+                <span>
+                  {estado === '01_Backlog' && 'Backlog'}
+                  {estado === '02_Por_Hacer' && 'Por Hacer'}
+                  {estado === '03_En_Proceso' && 'En Proceso'}
+                  {estado === '04_Completado' && 'Completado'}
+                  {estado === '05_Archivado' && 'Archivado'}
+                  {!['01_Backlog', '02_Por_Hacer', '03_En_Proceso', '04_Completado', '05_Archivado'].includes(estado) && estado}
+                </span>
+              </span>
 
-                {dropdownEstadoAbierto && (
-                  <div className="absolute left-0 top-full mt-1.5 w-44 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-1.5 z-50 space-y-1 text-xs">
-                    {[
-                      { id: '01_Backlog', label: '01. Backlog', color: 'text-slate-400' },
-                      { id: '02_Por_Hacer', label: '02. Por Hacer', color: 'text-blue-400' },
-                      { id: '03_En_Proceso', label: '03. En Proceso', color: 'text-amber-400' },
-                      { id: '04_Completado', label: '04. Completado', color: 'text-emerald-400' },
-                      { id: '05_Archivado', label: '05. Archivado', color: 'text-purple-400' }
-                    ].map((st) => (
-                      <button
-                        key={st.id}
-                        type="button"
-                        onClick={() => {
-                          setEstado(st.id);
-                          setDropdownEstadoAbierto(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer ${
-                          estado === st.id ? `${st.color} font-bold bg-slate-100 dark:bg-slate-800/80` : 'text-slate-600 dark:text-slate-300'
-                        }`}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
+              <span className="text-slate-600 select-none shrink-0">|</span>
+
+              {/* 2. Píldora de Proyecto con Ticker Marquee en Hover */}
+              {(() => {
+                const p = proyectos.find((item) => item.codigo_legado === proyectoCodigo || item.id === proyectoCodigo);
+                const pNombre = p ? `${p.codigo_legado} · ${p.nombre_proyecto}` : (proyectoCodigo || 'Sin Proyecto');
+                return (
+                  <div
+                    className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 px-2.5 py-0.5 text-xs text-slate-300 select-none max-w-[190px] sm:max-w-[220px] overflow-hidden whitespace-nowrap group/ticker shrink-0 cursor-default"
+                    title={pNombre}
+                  >
+                    <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <div className="overflow-hidden relative max-w-full">
+                      <span className="inline-block transition-transform duration-300 ease-out group-hover/ticker:animate-marquee">
+                        {pNombre}
+                      </span>
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })()}
+
+              <span className="text-slate-600 select-none shrink-0">›</span>
+
+              {/* 3. Píldora de Paquete WBS con Ticker Marquee en Hover */}
+              {(() => {
+                const h = hitos.find((item) => item.codigo_legado === hitoCodigo || item.id === hitoCodigo);
+                const hNombre = h ? `${h.codigo_legado} · ${h.nombre_elemento}` : (hitoCodigo || 'Sin Paquete WBS');
+                return (
+                  <div
+                    className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 px-2.5 py-0.5 text-xs text-slate-300 select-none max-w-[160px] sm:max-w-[200px] overflow-hidden whitespace-nowrap group/ticker shrink-0 cursor-default"
+                    title={hNombre}
+                  >
+                    <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <div className="overflow-hidden relative max-w-full">
+                      <span className="inline-block transition-transform duration-300 ease-out group-hover/ticker:animate-marquee">
+                        {hNombre}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <span className="text-slate-600 select-none shrink-0">›</span>
+
+              {/* 4. Píldora de Predecesora */}
+              {(() => {
+                const t = todasLasTareas.find((item) => item.codigo_legado === idDependencia || item.id === idDependencia);
+                const depTexto = t ? `${t.codigo_legado} · ${t.nombre_tarea_actividad}` : (idDependencia || 'Sin dependencias');
+                return (
+                  <div
+                    className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 px-2.5 py-0.5 text-xs text-slate-300 select-none max-w-[140px] sm:max-w-[180px] overflow-hidden whitespace-nowrap shrink-0 cursor-default"
+                    title={depTexto}
+                  >
+                    <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span className="truncate">{t ? t.codigo_legado : depTexto}</span>
+                  </div>
+                );
+              })()}
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shrink-0 ml-1"
               title="Cerrar ventana (Esc)"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Fila 2: Contexto WBS Canónico (Selectores de Proyecto e Hito) */}
-          <div className="flex items-center gap-2 flex-wrap text-xs">
-            {/* Selector de Proyecto */}
-            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded-lg">
-              <Folder className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <select
-                value={proyectoCodigo}
-                onChange={(e) => {
-                  setProyectoCodigo(e.target.value);
-                  setHitoCodigo('');
-                }}
-                className="bg-transparent text-slate-800 dark:text-slate-200 text-xs font-semibold outline-none cursor-pointer max-w-[160px] truncate"
-              >
-                {proyectos.map((p) => (
-                  <option key={p.id} value={p.codigo_legado} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                    {p.codigo_legado} · {p.nombre_proyecto}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <span className="text-slate-400 select-none">›</span>
-
-            {/* Selector de Hito */}
-            <div className="flex items-center gap-1.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 px-2 py-1 rounded-lg">
-              <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-              <select
-                value={hitoCodigo}
-                onChange={(e) => setHitoCodigo(e.target.value)}
-                className="bg-transparent text-purple-700 dark:text-purple-300 text-xs font-semibold outline-none cursor-pointer max-w-[160px] truncate"
-              >
-                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                  Sin Paquete / Hito
-                </option>
-                {hitosDelProyecto.map((h) => (
-                  <option key={h.id} value={h.codigo_legado} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                    {h.codigo_legado} · {h.nombre_elemento}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <span className="text-slate-400 select-none">›</span>
-
-            {/* Selector de Predecesora */}
-            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded-lg">
-              <Share2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <select
-                value={idDependencia}
-                onChange={(e) => setIdDependencia(e.target.value)}
-                className="bg-transparent text-slate-700 dark:text-slate-300 text-xs font-semibold outline-none cursor-pointer max-w-[140px] truncate"
-              >
-                <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                  Sin Predecesora
-                </option>
-                {todasLasTareas
-                  .filter((t) => t.codigo_legado !== codigoLegado)
-                  .map((t) => (
-                    <option key={t.id} value={t.codigo_legado} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                      {t.codigo_legado} · {t.nombre_tarea_actividad}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Fila 3: Título Editable Prominente */}
-          <div className="pt-1">
+          {/* Fila 2: Título Editable Prominente */}
+          <div className="pt-0.5">
             <input
               type="text"
               id="task-flow-titulo"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Título de la tarea o entregable..."
-              className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 bg-transparent outline-none w-full border-b border-transparent focus:border-indigo-500 transition-colors py-0.5"
+              className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 placeholder:text-slate-500 bg-transparent outline-none w-full border-b border-transparent focus:border-indigo-500 transition-colors py-0.5"
               autoFocus
             />
           </div>
@@ -518,179 +719,445 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             </div>
           ) : (
             <>
-              {/* BENTO GRID DE 3 TARJETAS */}
-              <div className="bg-slate-100/60 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-3.5">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {/* CARD 1: TIEMPO & ESFUERZO */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 flex flex-col justify-between shadow-2xs space-y-2">
-                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Tiempo & Esfuerzo</span>
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 text-xs">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Fecha Programada</label>
-                      <input
-                        type="date"
-                        value={fechaProgramada}
-                        onChange={(e) => setFechaProgramada(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-mono outline-none text-slate-800 dark:text-slate-200"
-                      />
+              {/* BENTO GRID DE 2 TARJETAS */}
+              <div className="bg-[#040711] border border-slate-800/80 rounded-xl p-3 sm:p-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* CARD 1: TIEMPO & ESFUERZO */}
+                  <div className="bg-[#0D1526] border border-slate-800/80 rounded-xl p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Tiempo & Esfuerzo</span>
+                      </span>
                     </div>
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Hora Inicio</label>
-                      <input
-                        type="time"
-                        value={horaInicio}
-                        onChange={(e) => setHoraInicio(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-mono outline-none text-slate-800 dark:text-slate-200"
-                      />
+
+                    <div className="space-y-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Fecha Programada</label>
+                          <input
+                            type="date"
+                            value={fechaProgramada}
+                            onChange={(e) => setFechaProgramada(e.target.value)}
+                            className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono outline-none text-slate-200 focus:border-sky-500/50"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Hora Inicio</label>
+                          <input
+                            type="time"
+                            value={horaInicio}
+                            onChange={(e) => setHoraInicio(e.target.value)}
+                            className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono outline-none text-slate-200 focus:border-sky-500/50"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Horas Est. (H:MM)</label>
+                          <input
+                            type="text"
+                            placeholder="1:30"
+                            value={horasEstimadasStr}
+                            onChange={(e) => setHorasEstimadasStr(e.target.value)}
+                            onBlur={() => {
+                              const dec = convertirStringToHorasDecimal(horasEstimadasStr);
+                              setHorasEstimadas(dec);
+                              setHorasEstimadasStr(convertirHorasDecimalAString(dec));
+                            }}
+                            className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-center outline-none text-slate-200 focus:border-sky-500/50"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Horas Reales (H:MM)</label>
+                          <input
+                            type="text"
+                            placeholder="0:45"
+                            value={horasRealesStr}
+                            onChange={(e) => setHorasRealesStr(e.target.value)}
+                            onBlur={() => {
+                              const dec = convertirStringToHorasDecimal(horasRealesStr);
+                              setHorasReales(dec);
+                              setHorasRealesStr(convertirHorasDecimalAString(dec));
+                            }}
+                            className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-center outline-none text-slate-200 focus:border-sky-500/50"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-1.5 flex items-center justify-between text-[11px] border-t border-slate-800/60">
+                        <span className="text-slate-400">Agendar en Calendar</span>
+                        <button
+                          type="button"
+                          onClick={() => setAgendadoCalendar(agendadoCalendar === 'Sí' ? 'No' : 'Sí')}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                            agendadoCalendar === 'Sí'
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                              : 'bg-[#040711] border border-slate-800 text-slate-500 hover:text-slate-300'
+                          }`}
+                        >
+                          {agendadoCalendar === 'Sí' && <Check className="w-3 h-3" />}
+                          <span>{agendadoCalendar === 'Sí' ? 'Sí' : 'No'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Horas Est.</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        value={horasEstimadas}
-                        onChange={(e) => setHorasEstimadas(parseFloat(e.target.value) || 0)}
-                        className="w-full bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-mono outline-none text-slate-800 dark:text-slate-200"
-                      />
+                  {/* CARD 2: OPERATIVO & MATRIZ */}
+                  <div className="bg-[#0D1526] border border-slate-800/80 rounded-xl p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Operativo & Matriz</span>
+                      </span>
                     </div>
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Horas Reales</label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        value={horasReales}
-                        onChange={(e) => setHorasReales(parseFloat(e.target.value) || 0)}
-                        className="w-full bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-mono outline-none text-slate-800 dark:text-slate-200"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="pt-1 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500">Agendar en Calendar</span>
-                    <button
-                      type="button"
-                      onClick={() => setAgendadoCalendar(agendadoCalendar === 'Sí' ? 'No' : 'Sí')}
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
-                        agendadoCalendar === 'Sí'
-                          ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40'
-                          : 'bg-slate-200 dark:bg-slate-800 text-slate-400'
-                      }`}
-                    >
-                      {agendadoCalendar === 'Sí' && <Check className="w-3 h-3" />}
-                      <span>{agendadoCalendar === 'Sí' ? 'Sí' : 'No'}</span>
-                    </button>
+                    <div className="space-y-2 text-xs">
+                      {/* Micro-riel Prioridad Eisenhower */}
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Prioridad Eisenhower</label>
+                        <div className="grid grid-cols-4 gap-1 p-0.5 bg-[#040711] border border-slate-800 rounded-lg">
+                          {[
+                            { id: '01_P1_Alta', label: 'P1', icon: Flame, title: 'Prioridad P1: Urgente / Importante', activeClass: 'bg-rose-500/20 border-rose-500/40 text-rose-300' },
+                            { id: '02_P2_Media', label: 'P2', icon: AlertCircle, title: 'Prioridad P2: Media / Estratégico', activeClass: 'bg-amber-500/20 border-amber-500/40 text-amber-300' },
+                            { id: '03_P3_Baja', label: 'P3', icon: ArrowDown, title: 'Prioridad P3: Baja / Delegable', activeClass: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' },
+                            { id: '04_P4', label: 'P4', icon: Minus, title: 'Prioridad P4: Descarte', activeClass: 'bg-slate-500/20 border-slate-500/40 text-slate-300' },
+                          ].map((p) => {
+                            const IconComp = p.icon;
+                            const isSelected = prioridad === p.id;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                title={p.title}
+                                onClick={() => setPrioridad(p.id)}
+                                className={`flex items-center justify-center gap-1 py-1 rounded text-xs font-mono font-bold transition-all cursor-pointer border ${
+                                  isSelected
+                                    ? p.activeClass
+                                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                                }`}
+                              >
+                                <IconComp className="w-3.5 h-3.5 shrink-0" />
+                                <span>{p.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Micro-riel Nivel de Energía */}
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Nivel de Energía</label>
+                        <div className="grid grid-cols-3 gap-1 p-0.5 bg-[#040711] border border-slate-800 rounded-lg">
+                          {[
+                            { id: 'Alta_DeepWork', label: 'DeepWork', icon: Zap, title: 'Energía Alta: Deep Work', activeClass: 'bg-sky-500/20 border-sky-500/40 text-sky-300' },
+                            { id: 'Media_Operativa', label: 'Operativa', icon: Cpu, title: 'Energía Media: Operativa', activeClass: 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' },
+                            { id: 'Baja_Automatica', label: 'Mecánica', icon: Coffee, title: 'Energía Baja: Mecánica', activeClass: 'bg-amber-500/20 border-amber-500/40 text-amber-300' },
+                          ].map((e) => {
+                            const IconComp = e.icon;
+                            const isSelected = nivelEnergia === e.id;
+                            return (
+                              <button
+                                key={e.id}
+                                type="button"
+                                title={e.title}
+                                onClick={() => setNivelEnergia(e.id)}
+                                className={`flex items-center justify-center gap-1 py-1 rounded text-[11px] font-medium transition-all cursor-pointer border ${
+                                  isSelected
+                                    ? e.activeClass
+                                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                                }`}
+                              >
+                                <IconComp className="w-3.5 h-3.5 shrink-0" />
+                                <span>{e.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Responsable & MAV */}
+                      <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/60 items-center">
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Responsable</label>
+                          <input
+                            type="text"
+                            value={responsable}
+                            onChange={(e) => setResponsable(e.target.value)}
+                            placeholder="Ej. Christopher"
+                            className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs outline-none text-slate-200 placeholder:text-slate-500 focus:border-sky-500/50"
+                          />
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-[10px] text-slate-400 block mb-0.5">Mínimo Avance Viable</span>
+                          <button
+                            type="button"
+                            onClick={() => setEsMav(!esMav)}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer flex items-center gap-1 border ${
+                              esMav
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                : 'bg-[#040711] border-slate-800 text-slate-500 hover:text-slate-300'
+                            }`}
+                          >
+                            <Zap className={`w-3 h-3 ${esMav ? 'text-amber-400 fill-amber-400' : 'text-slate-500'}`} />
+                            <span>{esMav ? 'MAV Activo' : 'Inactivo'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* CARD 2: OPERATIVO & MATRIZ */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 flex flex-col justify-between shadow-2xs space-y-2">
-                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Operativo & Matriz</span>
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 text-xs">
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Prioridad Eisenhower</label>
-                    <select
-                      value={prioridad}
-                      onChange={(e) => setPrioridad(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold outline-none text-slate-800 dark:text-slate-200 cursor-pointer"
-                    >
-                      <option value="01_P1_Alta">P1 - Alta / Urgente</option>
-                      <option value="02_P2_Media">P2 - Media / Estratégico</option>
-                      <option value="03_P3_Baja">P3 - Baja / Delegable</option>
-                      <option value="04_P4">P4 - Descarte</option>
-                    </select>
+              {/* ACORDEÓN DE FILA COMPLETA: GASTO ASOCIADO & COSTOS */}
+              <div className="rounded-xl overflow-hidden border border-emerald-500/30 bg-[#0D1526]/80 transition-all duration-150">
+                <button
+                  type="button"
+                  onClick={() => setMostrarGasto(!mostrarGasto)}
+                  className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold text-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/30 transition-all duration-150 cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                    <span>Gasto Asociado & Costos</span>
+                    {modoGasto === 'VINCULAR' && gastoVinculadoCodigo ? (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-1">
+                        <Link2 className="w-3 h-3 text-emerald-400" />
+                        <span>{gastoVinculadoCodigo} • S/ {Number(gastoMonto || costoRealPen || 0).toFixed(2)}</span>
+                      </span>
+                    ) : parseFloat(gastoMonto) > 0 ? (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
+                        {gastoMoneda === 'PEN' ? 'S/' : gastoMoneda === 'USD' ? '$' : '€'} {Number(gastoMonto).toFixed(2)} • {gastoCategoria.replace(/_/g, ' ')}
+                      </span>
+                    ) : null}
                   </div>
-
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Nivel de Energía</label>
-                    <select
-                      value={nivelEnergia}
-                      onChange={(e) => setNivelEnergia(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold outline-none text-slate-800 dark:text-slate-200 cursor-pointer"
-                    >
-                      <option value="Alta_DeepWork">DeepWork (Foco Total)</option>
-                      <option value="Media_Operativa">Operativa (Gestión)</option>
-                      <option value="Baja_Automatica">Automática (Mecánica)</option>
-                    </select>
-                  </div>
-
-                  <div className="pt-1 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500 font-medium">Mínimo Avance Viable (MAV)</span>
-                    <button
-                      type="button"
-                      onClick={() => setEsMav(!esMav)}
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
-                        esMav
-                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40'
-                          : 'bg-slate-200 dark:bg-slate-800 text-slate-400'
+                  <div className="flex items-center gap-2">
+                    {!mostrarGasto && (!gastoMonto || parseFloat(gastoMonto) === 0) && !gastoVinculadoCodigo && (
+                      <span className="text-[11px] text-slate-400 font-normal">Sin gastos vinculados</span>
+                    )}
+                    <ChevronDown
+                      className={`w-4 h-4 text-emerald-400 transition-transform duration-200 ${
+                        mostrarGasto ? 'rotate-180' : ''
                       }`}
-                    >
-                      {esMav && <Zap className="w-3 h-3" />}
-                      <span>{esMav ? 'MAV Activo' : 'Inactivo'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* CARD 3: FINANCIERO & ENTORNO */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 flex flex-col justify-between shadow-2xs space-y-2">
-                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                    <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Financiero & Entorno</span>
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 text-xs">
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Costo Real (PEN)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      value={costoRealPen}
-                      onChange={(e) => setCostoRealPen(parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
-                      className="w-full bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-mono outline-none text-slate-800 dark:text-slate-200"
                     />
                   </div>
+                </button>
 
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Responsable Ejecutor</label>
-                    <input
-                      type="text"
-                      value={responsable}
-                      onChange={(e) => setResponsable(e.target.value)}
-                      placeholder="Ej. Christopher"
-                      className="w-full bg-slate-50 dark:bg-slate-950 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs outline-none text-slate-800 dark:text-slate-200"
-                    />
+                {mostrarGasto && (
+                  <div className="p-3.5 border-t border-emerald-500/20 bg-[#0D1526] space-y-3">
+                    {/* Selector de Pestaña Superior: Modo Dual */}
+                    <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Modo de Imputación
+                      </span>
+                      <div className="inline-flex p-0.5 bg-[#040711] rounded-lg border border-slate-800 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setModoGasto('NUEVO')}
+                          className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                            modoGasto === 'NUEVO'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Nuevo Gasto</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModoGasto('VINCULAR')}
+                          className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                            modoGasto === 'VINCULAR'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <Link2 className="w-3 h-3" />
+                          <span>Vincular Existente</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {modoGasto === 'NUEVO' ? (
+                      /* Modo REGISTRAR NUEVO GASTO */
+                      <div className="space-y-3">
+                        {/* Moneda y Monto Incurrido */}
+                        <div className="grid grid-cols-12 gap-3 items-end">
+                          {/* Selector Moneda */}
+                          <div className="col-span-12 sm:col-span-4">
+                            <label className="text-[10px] text-slate-400 block mb-1">Moneda de Registro</label>
+                            <div className="inline-flex p-0.5 bg-[#040711] rounded-lg border border-slate-800 w-full justify-between">
+                              {(['PEN', 'USD', 'EUR'] as const).map((m) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => {
+                                    setGastoMoneda(m);
+                                    const val = parseFloat(gastoMonto) || 0;
+                                    const tc = m === 'USD' ? 3.75 : m === 'EUR' ? 4.10 : 1.0;
+                                    setCostoRealPen(Number((val * tc).toFixed(2)));
+                                  }}
+                                  className={`flex-1 py-1.5 rounded-md text-xs font-mono font-bold transition-all cursor-pointer ${
+                                    gastoMoneda === m ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                                  }`}
+                                >
+                                  {m}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Input Monto Limpio Sin Spinners */}
+                          <div className="col-span-12 sm:col-span-8">
+                            <label className="text-[10px] text-slate-400 block mb-1">Monto Incurrido</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base font-mono font-bold text-emerald-400 select-none">
+                                {gastoMoneda === 'PEN' ? 'S/' : gastoMoneda === 'USD' ? '$' : '€'}
+                              </span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={gastoMonto}
+                                onChange={(e) => {
+                                  setGastoMonto(e.target.value);
+                                  const val = parseFloat(e.target.value) || 0;
+                                  const tc = gastoMoneda === 'USD' ? 3.75 : gastoMoneda === 'EUR' ? 4.10 : 1.0;
+                                  setCostoRealPen(Number((val * tc).toFixed(2)));
+                                }}
+                                placeholder="0.00"
+                                className="w-full pl-9 pr-3 py-1.5 border border-slate-800 rounded-lg bg-[#040711] font-mono font-bold text-lg text-emerald-300 outline-none focus:border-emerald-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Selector de Categoría y Glosa */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-slate-400 block mb-1">Categoría Contable</label>
+                            <select
+                              value={gastoCategoria}
+                              onChange={(e) => setGastoCategoria(e.target.value)}
+                              className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 cursor-pointer"
+                            >
+                              <option value="Operativo_Proyecto">Operativo del Proyecto</option>
+                              <option value="Equipamiento_Herramientas">Equipamiento & Herramientas</option>
+                              <option value="Servicios_Honorarios">Servicios & Honorarios</option>
+                              <option value="Suscripciones_Software">Suscripciones & Software</option>
+                              <option value="Materiales_Insumos">Materiales & Insumos</option>
+                              <option value="Otros">Otros</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-400 block mb-1">Concepto / Glosa Detallada</label>
+                            <input
+                              type="text"
+                              value={gastoConcepto}
+                              onChange={(e) => setGastoConcepto(e.target.value)}
+                              placeholder="Ej. Servidor cloud, licencia, insumos..."
+                              className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Modo VINCULAR EGRESO EXISTENTE */
+                      <div className="space-y-2.5">
+                        {/* Buscador Rápido */}
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={gastoSearch}
+                            onChange={(e) => setGastoSearch(e.target.value)}
+                            placeholder="Buscar egreso por código (GAS-XXX), descripción o monto..."
+                            className="w-full pl-8 pr-3 py-1.5 border border-slate-800 rounded-lg bg-[#040711] text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50"
+                          />
+                          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                        </div>
+
+                        {/* Lista Bento de Gastos Disponibles */}
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                          {listaGastos
+                            .filter((g) => {
+                              const q = gastoSearch.toLowerCase().trim();
+                              if (!q) return true;
+                              return (
+                                (g.codigo_legado || '').toLowerCase().includes(q) ||
+                                (g.descripcion_gasto || '').toLowerCase().includes(q) ||
+                                String(g.monto_pen || g.monto_original || '').includes(q) ||
+                                (g.categoria_gasto || '').toLowerCase().includes(q)
+                              );
+                            })
+                            .slice(0, 30)
+                            .map((g) => {
+                              const isSelected = gastoVinculadoCodigo === g.codigo_legado;
+                              const montoMostrar = Number(g.monto_pen || g.monto_original || 0).toFixed(2);
+                              return (
+                                <div
+                                  key={g.id}
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setGastoVinculadoCodigo('');
+                                      setGastoMonto('');
+                                      setCostoRealPen(0);
+                                    } else {
+                                      setGastoVinculadoCodigo(g.codigo_legado || '');
+                                      const mVal = String(g.monto_original || g.monto_pen || '');
+                                      setGastoMonto(mVal);
+                                      setGastoMoneda((g.moneda_original as 'PEN' | 'USD' | 'EUR') || 'PEN');
+                                      setGastoCategoria(g.categoria_gasto || 'Operativo_Proyecto');
+                                      setGastoConcepto(g.descripcion_gasto || '');
+                                      const tc = g.moneda_original === 'USD' ? 3.75 : g.moneda_original === 'EUR' ? 4.10 : 1.0;
+                                      const valNum = parseFloat(mVal) || 0;
+                                      setCostoRealPen(g.monto_pen || Number((valNum * tc).toFixed(2)));
+                                    }
+                                  }}
+                                  className={`p-2.5 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition-all ${
+                                    isSelected
+                                      ? 'bg-emerald-950/40 border-emerald-500/80 shadow-xs'
+                                      : 'bg-[#040711] border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/40'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-mono font-bold text-[10px] text-sky-400 bg-sky-950/50 px-1.5 py-0.2 rounded border border-sky-800/40 shrink-0">
+                                          {g.codigo_legado}
+                                        </span>
+                                        <span className="font-medium text-slate-200 truncate">
+                                          {g.descripcion_gasto || 'Sin descripción'}
+                                        </span>
+                                      </div>
+                                      <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                                        {g.fecha_gasto || 'Sin fecha'} • {(g.categoria_gasto || 'General').replace(/_/g, ' ')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0 ml-2">
+                                    <span className="font-mono font-bold text-xs text-emerald-300">
+                                      S/ {montoMostrar}
+                                    </span>
+                                    {g.moneda_original && g.moneda_original !== 'PEN' && (
+                                      <p className="text-[10px] font-mono text-slate-400">
+                                        {g.moneda_original} {Number(g.monto_original).toFixed(2)}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
-            </div>
-          </div>
 
           {/* 3. DESCRIPCIÓN Y NOTAS DE IMPEDIMENTOS */}
           <div className="space-y-1.5">
-            <label className="block font-bold text-xs text-slate-500 dark:text-slate-400">
+            <label className="block font-bold text-xs text-slate-400">
               Descripción y Especificaciones Técnicas
             </label>
             <textarea
@@ -698,33 +1165,33 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
               placeholder="Especificaciones técnicas, entregables, o impedimentos..."
-              className="w-full bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 outline-none focus:border-indigo-500 transition resize-y custom-scrollbar"
+              className="w-full bg-[#0D1526] border border-slate-800 rounded-xl p-3 text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50 transition resize-y custom-scrollbar"
             />
           </div>
 
           {/* 4. BLOQUE PROCEDURAL DE SUBTAREAS / PASOS */}
-          <div className="p-3.5 bg-slate-50/70 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+          <div className="p-3.5 bg-[#0D1526] border border-slate-800/80 rounded-xl space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="p-1.5 bg-indigo-500/10 text-indigo-500 rounded-lg text-xs font-black">
+                <span className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-black">
                   <CheckCircle2 className="w-4 h-4" />
                 </span>
                 <div>
-                  <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs">Pasos / Subtareas</h4>
+                  <h4 className="font-bold text-slate-200 text-xs">Pasos / Subtareas</h4>
                   <p className="text-[10px] text-slate-400">Procedimiento guiado secuencial (Definition of Done)</p>
                 </div>
               </div>
 
               <div
                 id="task-flow-pasos-progreso-badge"
-                className="font-mono tabular-nums text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700"
+                className="font-mono tabular-nums text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#040711] text-slate-300 border border-slate-800"
               >
                 {completadasSubtareas}/{totalSubtareas} pasos ({progresoPct}%)
               </div>
             </div>
 
             {/* Barra de progreso con gradiente */}
-            <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div className="w-full bg-[#040711] h-1.5 rounded-full overflow-hidden border border-slate-800/40">
               <div
                 className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300"
                 style={{ width: `${progresoPct}%` }}
@@ -736,38 +1203,57 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
               {listaSubtareasActiva.length === 0 ? (
                 <p className="text-center py-3 text-[11px] text-slate-400 italic">No hay pasos procedurales agregados.</p>
               ) : (
-                listaSubtareasActiva.map((sub, idx) => (
-                  <div
-                    key={sub.id}
-                    className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs group"
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <input
-                        type="checkbox"
-                        checked={sub.completado}
-                        onChange={() => toggleSubtareaCompletado(sub)}
-                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                      />
-                      <span className="text-[10px] font-mono font-bold text-slate-400 shrink-0">#{idx + 1}</span>
-                      <span
-                        className={`truncate ${
-                          sub.completado ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200'
-                        }`}
-                      >
-                        {sub.descripcion_paso}
-                      </span>
-                    </div>
+                listaSubtareasActiva.map((sub, idx) => {
+                  const estaBloqueado = idx > 0 && !listaSubtareasActiva[idx - 1].completado;
 
-                    <button
-                      type="button"
-                      onClick={() => eliminarSubtarea(sub.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
-                      title="Eliminar paso"
+                  return (
+                    <div
+                      key={sub.id}
+                      title={estaBloqueado ? 'Completa primero el paso anterior' : undefined}
+                      className={`flex items-center justify-between gap-2 p-2 rounded-lg border text-xs group transition-colors ${
+                        estaBloqueado
+                          ? 'opacity-50 cursor-not-allowed select-none bg-slate-900/40 border-slate-800/40'
+                          : 'bg-[#040711] border-slate-800/80 hover:border-slate-700'
+                      }`}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {estaBloqueado ? (
+                          <div className="p-0.5 text-slate-500 shrink-0" title="Completa primero el paso anterior">
+                            <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          </div>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={sub.completado}
+                            onChange={() => toggleSubtareaCompletado(sub, idx)}
+                            className="rounded border-slate-700 bg-slate-900 text-indigo-500 focus:ring-indigo-500/20 cursor-pointer"
+                          />
+                        )}
+                        <span className="text-[10px] font-mono font-bold text-slate-400 shrink-0">#{idx + 1}</span>
+                        <span
+                          className={`truncate ${
+                            sub.completado
+                              ? 'line-through text-slate-500'
+                              : estaBloqueado
+                              ? 'text-slate-500'
+                              : 'text-slate-200'
+                          }`}
+                        >
+                          {sub.descripcion_paso}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => eliminarSubtarea(sub.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                        title="Eliminar paso"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
 
@@ -778,7 +1264,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                 value={nuevoPasoTexto}
                 onChange={(e) => setNuevoPasoTexto(e.target.value)}
                 placeholder="Escribe el siguiente paso procedural y pulsa Enter..."
-                className="flex-1 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-indigo-500"
+                className="flex-1 border border-slate-800 rounded-lg px-3 py-1.5 text-xs bg-[#040711] text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -808,7 +1294,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         </div>
 
         {/* 4. PIE DE DIÁLOGO / FOOTER */}
-        <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 flex items-center justify-between gap-3">
+        <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-800 bg-[#0D1526] flex items-center justify-between gap-3">
           {/* Izquierda: Eliminar / Archivar */}
           <div className="flex items-center gap-2">
             {tareaId && (
@@ -816,7 +1302,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                 <button
                   type="button"
                   onClick={handleEliminar}
-                  className="px-2.5 py-1.5 rounded-lg border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                   title="Eliminar tarea permanentemente"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -826,7 +1312,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                 <button
                   type="button"
                   onClick={handleArchivar}
-                  className="px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                   title="Mover a bóveda de archivados"
                 >
                   <Archive className="w-3.5 h-3.5" />
@@ -841,7 +1327,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition cursor-pointer"
             >
               Cancelar
             </button>

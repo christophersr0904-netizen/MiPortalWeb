@@ -102,11 +102,11 @@ export const SeccionNotasVinculadasModal: React.FC<SeccionNotasVinculadasModalPr
         <button
           type="button"
           onClick={() => setModalVincularAbierto(true)}
-          className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+          className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
           title="Vincular nota existente o redactar nueva"
         >
-          <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
-          <span>+ Nota</span>
+          <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+          <span className="text-xs font-medium">Nota</span>
         </button>
       </div>
 

@@ -225,3 +225,23 @@ html, body {
   transition: opacity 0.25s ease !important;
 }
 
+/* ============================================================================
+ * ANIMACIONES UI - TICKER MARQUEE WBS (REQ-TASK-DETAIL-ADVANCED-UI-35)
+ * ============================================================================ */
+@keyframes marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  50% {
+    transform: translateX(-40%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 6s linear infinite;
+}
+
+
