@@ -7,3 +7,13 @@ contextBridge.exposeInMainWorld('desktopWidget', {
   close: () => ipcRenderer.send('widget-close'),
   isNative: true
 });
+
+// Heartbeat de coexistencia exclusiva para notificar al bus que el widget nativo está activo
+try {
+  const channel = new BroadcastChannel('pmo_hud_bus');
+  setInterval(() => {
+    channel.postMessage({ type: 'DESKTOP_WIDGET_ALIVE', timestamp: Date.now() });
+  }, 1000);
+} catch (e) {
+  // Ignorar si BroadcastChannel no está instanciado en este contexto
+}

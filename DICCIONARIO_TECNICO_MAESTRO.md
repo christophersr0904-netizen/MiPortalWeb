@@ -6944,6 +6944,52 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - `npm test -- --run`: 11/11 suites en verde (115/115 pruebas aprobadas al 100%).
 - `npm run build`: Compilación exitosa en 6.42s.
 
+---
+
+### REQ-DESKTOP-WIDGET-SKIP-TASKBAR-CLEAN-46: Ocultamiento Total de Barra de Tareas y Respaldo de Proceso Único
+- **Estado:** IMPLEMENTADO Y CERTIFICADO (Cero Regresiones, Oculto de Taskbar Windows 11, Single Instance Lock, Taskkill Automático en Scripts).
+- **Fecha:** 2026-10-22
+- **Objetivo:** 
+  1. Habilitar `skipTaskbar: true` en `desktop/main.js` para que el widget permanezca como elemento flotante del escritorio sin consumir un slot en la barra de tareas de Windows.
+  2. Configurar `focusable: true` y `type: 'toolbar'` para comportamiento de herramienta nativa de escritorio en Windows 11.
+  3. Implementar cerrojo de proceso único con `app.requestSingleInstanceLock()` y manejador `app.on('second-instance')` para evitar procesos fantasma o apertura de múltiples instancias superpuestas.
+  4. Blindar el script `package.json` (`"widget": "electron desktop/main.js"` y `"widget:clean": "taskkill /F /IM electron.exe 2>nul || exit 0 && electron desktop/main.js"`).
+  5. Asegurar limpieza de instancias previas colgadas en `desktop/iniciar-widget.bat` con `taskkill /F /IM electron.exe >nul 2>&1` antes del arranque.
+
+#### 1. Archivos Mutados
+- `desktop/main.js`: `skipTaskbar: true`, `type: 'toolbar'`, `focusable: true`, `app.requestSingleInstanceLock()`.
+- `package.json`: Scripts `"widget"` y `"widget:clean"`.
+- `desktop/iniciar-widget.bat`: `taskkill /F /IM electron.exe >nul 2>&1` previo a `npx electron "%~dp0main.js"`.
+
+#### 2. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado estricto.
+- `npm test -- --run`: 11/11 suites en verde (115/115 pruebas aprobadas al 100%).
+- `npm run build`: Compilación exitosa en 6.67s.
+
+---
+
+### REQ-DESKTOP-HUD-TRAY-COEXISTENCE-MOTION-48: System Tray en Windows 11, Sincronización Exclusiva Web/Desktop y Sombra Degradada Suave
+- **Estado:** IMPLEMENTADO Y CERTIFICADO (Cero Regresiones, System Tray con Minimizado Silencioso, Heartbeat de Coexistencia Exclusiva Web/Desktop, Sombras Orgánicas Multicapa y Transiciones Cinemáticas).
+- **Fecha:** 2026-10-22
+- **Objetivo:** 
+  1. Integrar bandeja del sistema (`Tray`) en Windows 11 en `desktop/main.js` con opciones de *Mostrar / Ocultar Cockpit*, *Reiniciar Posición* y *Salir por completo*.
+  2. Sustituir el cierre destructivo en `widget-close` por minimizado silencioso (`widgetWin.hide()`) para que el widget siga disponible desde los iconos ocultos.
+  3. Establecer canal de coexistencia exclusiva (`BroadcastChannel('pmo_hud_bus')` y `storage`) que envía un heartbeat cada 1s desde el widget nativo. Si la pestaña web detecta que el widget desktop está activo, oculta la cápsula web flotante (`return null`), erradicando duplicidad visual. Si el widget se cierra por más de 3s, la cápsula web reaparece de forma transparente.
+  4. Rediseñar las sombras hacia degradados multicapa orgánicos (`shadow-[0_8px_30px_-4px_rgba(2,6,23,0.55),0_0_35px_-4px_rgba(56,189,248,0.18)]`, hover perimetral y Cockpit abierto) con curvas de bezier cinemáticas `ease-[cubic-bezier(0.16,1,0.3,1)]`.
+  5. Calibrar retraso de 80ms en `widget-collapse` para esperar la animación CSS antes de redimensionar la ventana nativa de Electron.
+
+#### 1. Archivos Mutados
+- `desktop/main.js`: Integración de `Tray`, `Menu`, `nativeImage`, `toggleWidgetVisibility()`, `resetWidgetPosition()`, `widget-close` con `widgetWin.hide()`, y retardo en `widget-collapse`.
+- `desktop/preload.js`: Emisión periódica de `DESKTOP_WIDGET_ALIVE` en `BroadcastChannel('pmo_hud_bus')`.
+- `src/components/Cockpit/DailyCockpit.tsx`: Heartbeat bidireccional y watchdog de presencia `hayWidgetDeEscritorioActivo`, supresión condicional de la píldora web, sombras multicapa Cobalt y curvas cinemáticas.
+
+#### 2. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado estricto.
+- `npm test -- --run`: 11/11 suites en verde (115/115 pruebas aprobadas al 100%).
+- `npm run build`: Compilación exitosa en 6.52s.
+
+
+
 
 
 

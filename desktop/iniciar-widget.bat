@@ -1,4 +1,4 @@
 @echo off
-title PMO Personal - Widget Nativo Windows 11
+taskkill /F /IM electron.exe >nul 2>&1
 cd /d "%~dp0"
 npx electron "%~dp0main.js"

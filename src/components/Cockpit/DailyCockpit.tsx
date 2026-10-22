@@ -8,7 +8,7 @@
  * ============================================================================
  */
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Clock,
@@ -181,6 +181,72 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
   };
 
+  // Heartbeat de emisión de presencia si esta ventana es el widget nativo de escritorio
+  useEffect(() => {
+    if (esWidgetNativo) {
+      let channel: BroadcastChannel | null = null;
+      try {
+        channel = new BroadcastChannel('pmo_hud_bus');
+      } catch {}
+
+      const interval = setInterval(() => {
+        if (channel) {
+          try {
+            channel.postMessage({ type: 'DESKTOP_WIDGET_ALIVE', timestamp: Date.now() });
+          } catch {}
+        }
+        try {
+          localStorage.setItem('pmo_desktop_widget_heartbeat', String(Date.now()));
+        } catch {}
+      }, 1000);
+
+      return () => {
+        clearInterval(interval);
+        if (channel) channel.close();
+      };
+    }
+  }, [esWidgetNativo]);
+
+  // Detección de coexistencia exclusiva: oculta la cápsula web si el widget desktop está activo
+  const [hayWidgetDeEscritorioActivo, setHayWidgetDeEscritorioActivo] = useState(false);
+  const ultimoPingDesktopRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (esWidgetNativo || modoForzadoDesacoplado) return;
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('pmo_hud_bus');
+      channel.onmessage = (event) => {
+        if (event.data?.type === 'DESKTOP_WIDGET_ALIVE') {
+          ultimoPingDesktopRef.current = Date.now();
+          setHayWidgetDeEscritorioActivo(true);
+        }
+      };
+    } catch {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'pmo_desktop_widget_heartbeat' && e.newValue) {
+        ultimoPingDesktopRef.current = Date.now();
+        setHayWidgetDeEscritorioActivo(true);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // Watchdog de 1s: si pasan más de 3 segundos sin heartbeat, la cápsula web vuelve a emerger
+    const timer = setInterval(() => {
+      if (ultimoPingDesktopRef.current > 0 && Date.now() - ultimoPingDesktopRef.current > 3000) {
+        setHayWidgetDeEscritorioActivo(false);
+      }
+    }, 1000);
+
+    return () => {
+      if (channel) channel.close();
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(timer);
+    };
+  }, [esWidgetNativo, modoForzadoDesacoplado]);
+
   const [horizonte, setHorizonte] = useState<HorizonteAgenda>('HOY');
   const [modoVista, setModoVista] = useState<'RIEL' | 'CHECKLIST'>('CHECKLIST');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'TAREAS' | 'HABITOS' | 'VENCIDAS' | 'FINANZAS'>('TODOS');
@@ -303,7 +369,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   // Contenido interno del Cockpit
   const cockpitContent = (
     <div
-      className={`flex flex-col bg-[#0D1526] border border-slate-800/80 text-slate-100 shadow-2xl backdrop-blur-2xl select-none ${
+      className={`flex flex-col bg-[#0D1526] border border-slate-800/80 text-slate-100 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.85),0_0_40px_-5px_rgba(56,189,248,0.12)] backdrop-blur-2xl select-none transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         modoForzadoDesacoplado || pipWindow
           ? 'w-full h-full flex-1 rounded-2xl border'
           : 'w-full md:w-[440px] h-[85vh] md:h-[680px] max-h-[85vh] rounded-t-3xl md:rounded-3xl border-t md:border'
@@ -726,7 +792,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           <div
             onClick={handleAbrirCockpit}
             style={esWidgetNativo ? DRAG_REGION_STYLE : undefined}
-            className="px-4 py-2 rounded-full bg-[#0D1526]/95 border border-sky-500/30 backdrop-blur-xl shadow-[0_4px_25px_rgba(2,6,23,0.8),0_0_15px_rgba(56,189,248,0.12)] flex items-center gap-3 transition-all duration-200 hover:border-sky-400 hover:scale-[1.02] active:scale-[0.97] cursor-pointer group select-none animate-in fade-in zoom-in-95"
+            className="px-4 py-2 rounded-full bg-[#0a101f]/95 border border-sky-500/25 backdrop-blur-2xl shadow-[0_8px_30px_-4px_rgba(2,6,23,0.55),0_0_35px_-4px_rgba(56,189,248,0.18)] hover:shadow-[0_12px_40px_-4px_rgba(2,6,23,0.7),0_0_45px_0px_rgba(56,189,248,0.28)] hover:border-sky-400/40 flex items-center gap-3 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] active:scale-[0.97] cursor-pointer group select-none animate-in fade-in zoom-in-95"
             title="Expandir Cockpit de Ejecución Diaria"
           >
             {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}
@@ -818,6 +884,12 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     );
   }
 
+  // Si hay un widget nativo de escritorio activo en Windows y el Cockpit web no está abierto ni en PiP,
+  // se oculta la cápsula web para evitar duplicidad visual en pantalla
+  if (!modoForzadoDesacoplado && hayWidgetDeEscritorioActivo && !cockpitAbierto && !pipWindow) {
+    return null;
+  }
+
   // MODO NORMAL DE LA APLICACIÓN PRINCIPAL (con soporte Portal PiP si pipWindow está activo)
   return (
     <>
@@ -842,7 +914,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
               ? { left: `${posicionWeb.x}px`, top: `${posicionWeb.y}px`, bottom: 'auto', right: 'auto' }
               : {})
           }}
-          className={`fixed ${!posicionWeb ? 'bottom-20 right-4 sm:bottom-6 sm:right-6 md:bottom-6 md:right-6' : ''} z-50 pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0D1526]/90 border border-sky-500/30 backdrop-blur-xl shadow-[0_4px_25px_rgba(2,6,23,0.8),0_0_15px_rgba(56,189,248,0.12)] flex items-center gap-2.5 transition-shadow duration-200 hover:border-sky-400 hover:scale-[1.02] cursor-grab active:cursor-grabbing group select-none`}
+          className={`fixed ${!posicionWeb ? 'bottom-20 right-4 sm:bottom-6 sm:right-6 md:bottom-6 md:right-6' : ''} z-50 pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0a101f]/95 border border-sky-500/25 backdrop-blur-2xl shadow-[0_8px_30px_-4px_rgba(2,6,23,0.55),0_0_35px_-4px_rgba(56,189,248,0.18)] hover:shadow-[0_12px_40px_-4px_rgba(2,6,23,0.7),0_0_45px_0px_rgba(56,189,248,0.28)] hover:border-sky-400/40 flex items-center gap-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] cursor-grab active:cursor-grabbing group select-none`}
           title={pipWindow ? "Cockpit activo Always-on-Top (clic para enfocar)" : "Arrastrar para mover libremente / Clic para abrir Cockpit"}
         >
           {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}
