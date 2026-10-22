@@ -15,6 +15,7 @@ import {
   ListTodo,
   ExternalLink,
   ChevronDown,
+  X,
   Gauge,
   CheckCircle2,
   Circle,
@@ -36,8 +37,18 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   modoForzadoDesacoplado = false,
   onCerrarDesacoplado
 }) => {
-  // Estado de visibilidad y visualización
-  const [cockpitAbierto, setCockpitAbierto] = useState(modoForzadoDesacoplado);
+  // Estado de visibilidad y visualización (adaptativo en standalone HUD según altura o parámetro)
+  const [cockpitAbierto, setCockpitAbierto] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('state') === 'open') return true;
+      if (params.get('state') === 'rest') return false;
+      if (params.get('mode') === 'hud') {
+        return window.innerHeight > 400;
+      }
+    }
+    return modoForzadoDesacoplado;
+  });
   const [horizonte, setHorizonte] = useState<HorizonteAgenda>('HOY');
   const [modoVista, setModoVista] = useState<'RIEL' | 'CHECKLIST'>('CHECKLIST');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'TAREAS' | 'HABITOS' | 'VENCIDAS' | 'FINANZAS'>('TODOS');
@@ -76,7 +87,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
   };
 
-  // Motor de desacople a escritorio Always-on-Top (Document Picture-in-Picture enriquecido con fallback)
+  // Motor de desacople a escritorio Always-on-Top (Document Picture-in-Picture con calce 100% y fallback)
   const desacoplarAEscritorio = async () => {
     if ('documentPictureInPicture' in window) {
       try {
@@ -102,8 +113,21 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           }
         });
 
-        pipWin.document.documentElement.className = document.documentElement.className;
-        pipWin.document.body.className = 'bg-[#040711] text-slate-100 overflow-hidden m-0 p-3 select-none';
+        // Reset exhaustivo de html y body en Document PiP para calce exacto sin descalce azul
+        pipWin.document.documentElement.style.margin = '0';
+        pipWin.document.documentElement.style.padding = '0';
+        pipWin.document.documentElement.style.width = '100%';
+        pipWin.document.documentElement.style.height = '100%';
+        pipWin.document.documentElement.style.overflow = 'hidden';
+        pipWin.document.documentElement.className = 'dark';
+
+        pipWin.document.body.style.margin = '0';
+        pipWin.document.body.style.padding = '0';
+        pipWin.document.body.style.width = '100vw';
+        pipWin.document.body.style.height = '100vh';
+        pipWin.document.body.style.backgroundColor = '#040711';
+        pipWin.document.body.style.overflow = 'hidden';
+        pipWin.document.body.className = 'bg-[#040711] text-slate-100 m-0 p-0 overflow-hidden w-full h-full select-none';
 
         // Montar el contenedor con React Portal o renderizado directo
         setPipWindow(pipWin);
@@ -149,7 +173,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     <div
       className={`flex flex-col bg-[#0D1526] border border-slate-800/80 text-slate-100 shadow-2xl backdrop-blur-2xl select-none ${
         modoForzadoDesacoplado || pipWindow
-          ? 'w-full h-full rounded-2xl md:rounded-3xl border'
+          ? 'w-full h-full flex-1 rounded-2xl border'
           : 'w-full md:w-[440px] h-[85vh] md:h-[680px] max-h-[85vh] rounded-t-3xl md:rounded-3xl border-t md:border'
       }`}
     >
@@ -200,23 +224,33 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             </button>
           )}
 
-          {/* Botón Cerrar */}
+          {/* Botón Contraer a Píldora de Reposo / Minimizar */}
           <button
             type="button"
             onClick={() => {
-              if (modoForzadoDesacoplado && onCerrarDesacoplado) {
-                onCerrarDesacoplado();
-              } else if (pipWindow) {
+              if (pipWindow) {
                 pipWindow.close();
               } else {
                 setCockpitAbierto(false);
               }
             }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
-            title="Cerrar Cockpit"
+            title={modoForzadoDesacoplado ? "Contraer a widget en reposo" : "Cerrar Cockpit"}
           >
             <ChevronDown className="w-4 h-4" strokeWidth={1.75} />
           </button>
+
+          {/* Botón Salir de Modo Standalone y volver al Portal completo */}
+          {modoForzadoDesacoplado && onCerrarDesacoplado && (
+            <button
+              type="button"
+              onClick={onCerrarDesacoplado}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors cursor-pointer"
+              title="Volver a la vista completa del Portal"
+            >
+              <X className="w-4 h-4" strokeWidth={1.75} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -539,11 +573,58 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     </div>
   );
 
-  // MODO DESACOPLADO DIRECTO (cuando se renderiza en la ventana principal o como página completa)
+  // MODO DESACOPLADO DIRECTO (cuando se renderiza en modo standalone / widget de escritorio ?mode=hud)
   if (modoForzadoDesacoplado) {
+    // Si no está abierto y no hay PiP activo, renderizar la Cápsula Flotante en Reposo (Widget Pill)
+    if (!cockpitAbierto && !pipWindow) {
+      return (
+        <div className="h-screen w-screen bg-[#040711] flex items-center justify-center p-4 select-none overflow-hidden font-sans">
+          <div
+            onClick={() => setCockpitAbierto(true)}
+            className="px-4 py-2 rounded-full bg-[#0D1526]/95 border border-sky-500/30 backdrop-blur-xl shadow-[0_4px_25px_rgba(2,6,23,0.8),0_0_15px_rgba(56,189,248,0.12)] flex items-center gap-3 transition-all duration-200 hover:border-sky-400 hover:scale-[1.02] active:scale-[0.97] cursor-pointer group select-none animate-in fade-in zoom-in-95"
+            title="Expandir Cockpit de Ejecución Diaria"
+          >
+            {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}
+            <div className="relative flex items-center justify-center shrink-0">
+              <Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
+              <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+              </span>
+            </div>
+
+            {/* Reloj Actual */}
+            <span className="text-xs font-bold font-mono tabular-nums text-slate-100">
+              {horaActual}
+            </span>
+
+            {/* Semáforo de Ritmo */}
+            <div
+              className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums font-bold border ${colorRitmo}`}
+            >
+              {metricas.porcentajeRitmo}%
+            </div>
+
+            {/* Siguiente en turno */}
+            {metricas.siguienteItem && (
+              <div className="flex items-center gap-1 max-w-[160px] truncate text-[11px] text-slate-300 font-sans border-l border-slate-800 pl-2">
+                <span className="truncate">{metricas.siguienteItem.titulo}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="h-full w-full bg-[#040711] flex items-center justify-center p-2 font-sans select-none">
-        {pipWindow && createPortal(cockpitContent, pipWindow.document.body)}
+      <div className="h-screen w-screen bg-[#040711] flex items-center justify-center p-2 font-sans select-none overflow-hidden">
+        {pipWindow &&
+          createPortal(
+            <div className="w-screen h-screen max-w-full max-h-full flex flex-col bg-[#040711] p-2 box-border overflow-hidden">
+              {cockpitContent}
+            </div>,
+            pipWindow.document.body
+          )}
         {pipWindow ? (
           <div className="flex flex-col items-center justify-center text-center p-6 space-y-3 bg-[#0D1526] border border-slate-800/80 rounded-2xl max-w-sm">
             <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 animate-pulse">
@@ -571,8 +652,14 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   // MODO NORMAL DE LA APLICACIÓN PRINCIPAL (con soporte Portal PiP si pipWindow está activo)
   return (
     <>
-      {/* Montaje del Cockpit en ventana PiP Always-on-Top vía Portal */}
-      {pipWindow && createPortal(cockpitContent, pipWindow.document.body)}
+      {/* Montaje del Cockpit en ventana PiP Always-on-Top vía Portal con estiramiento 100% y fondo sin descalces */}
+      {pipWindow &&
+        createPortal(
+          <div className="w-screen h-screen max-w-full max-h-full flex flex-col bg-[#040711] p-2 box-border overflow-hidden">
+            {cockpitContent}
+          </div>,
+          pipWindow.document.body
+        )}
 
       {/* A. CÁPSULA EN REPOSO (FLOATING PILL) */}
       {(!cockpitAbierto || pipWindow) && (

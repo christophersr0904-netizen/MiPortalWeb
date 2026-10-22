@@ -28,6 +28,29 @@
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.48 — Estado en Reposo para Widget de Escritorio y Calce 100% en Document PiP (REQ-DAILY-HUD-WIDGET-REST-STATE-PIP-FIT-42)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `docs/WINDOWS_11_HUD_SHORTCUT.md`, `public/WINDOWS_HUD_GUIDE.md`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Estado en Reposo Adaptativo (Widget Pill) en Modo Standalone (`DailyCockpit.tsx`):**
+   - Inicialización inteligente de `cockpitAbierto`: si se abre en modo HUD y la altura de ventana es menor a 400px (ej: acceso directo `--window-size=360,180`), la aplicación inicia automáticamente en estado de reposo como la cápsula flotante compacta.
+   - En reposo standalone (`modoForzadoDesacoplado && !cockpitAbierto`), se renderiza la cápsula centrada en la pantalla con reloj activo, semáforo de ritmo (`%`), glifo `Gauge` con radar pulsante y título de la siguiente entidad programada.
+   - Al hacer clic en la cápsula, conmuta a `cockpitAbierto = true` expandiéndose al Cockpit completo con animación fluida.
+   - En la cabecera del Cockpit abierto, el botón `ChevronDown` permite contraer el widget nuevamente a la cápsula de reposo sin cerrar la ventana.
+2. **Erradicación del Descalce en Document Picture-in-Picture:**
+   - En `desacoplarAEscritorio`, reseteo exhaustivo de estilos de `html` y `body` en `pipWin`: `margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background-color: #040711;`.
+   - Contenedor del portal envuelto en `w-screen h-screen max-w-full max-h-full flex flex-col bg-[#040711] p-2 box-border overflow-hidden`.
+   - `cockpitContent` estilizado con `w-full h-full flex-1 rounded-2xl border bg-[#0D1526]`, eliminando cualquier margen residual o descalce cromático dentro de la ventana PiP Always-on-Top.
+3. **Calibración de Acceso Directo de Windows 11 para Modo Píldora de Arranque:**
+   - Documentación actualizada con el comando canónico recomendado de 360x180:
+     `"C:\Program Files\Google\Chrome\Application\chrome.exe" --app="https://miportalweb-aft.pages.dev/?mode=hud" --window-size=360,180 --window-position=1540,50`
+4. **Aseguramiento de Calidad (QA):**
+   - Verificación de tipos `npx tsc --noEmit` limpia (0 errores).
+   - 115/115 pruebas unitarias aprobadas en Vitest (`npm test -- --run`).
+   - Compilación de producción exitosa (`npm run build`).
+
+---
+
 ### FASE 4.47 — Vista Dedicada HUD Standalone, PiP Nativo Chrome y Soporte PWA Launcher (REQ-DAILY-HUD-WIN11-STANDALONE-MOBILE-41)
 **Fecha:** Octubre 2026 | **Archivos modificados:** `src/App.tsx`, `src/components/Cockpit/DailyCockpit.tsx`, `public/sw.js`, `src/main.tsx`, `index.html`, `app.html`, `docs/WINDOWS_11_HUD_SHORTCUT.md`, `public/WINDOWS_HUD_GUIDE.md`, `DICCIONARIO_TECNICO_MAESTRO.md`
 

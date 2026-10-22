@@ -1,46 +1,45 @@
 # GUÍA DE ACCESO DIRECTO WINDOWS 11: PMO DAILY HUD WIDGET
-**Requisito:** REQ-DAILY-HUD-WIN11-STANDALONE-MOBILE-41  
+**Requisito:** REQ-DAILY-HUD-WIDGET-REST-STATE-PIP-FIT-42  
 **Sistema:** PMO Personal Modular & Life OS
 
-Esta guía permite ejecutar el **Cockpit de Ejecución Diaria** como una aplicación de escritorio nativa compacta, sin barras de navegación, menús ni bordes toscos de navegador, optimizada para colocarse a la derecha de la pantalla y arrancar automáticamente con Windows 11.
+Esta guía permite ejecutar el **Cockpit de Ejecución Diaria** como un widget nativo ultra-compacto en Windows 11, sin bordes de navegador, pestañas ni barras de direcciones, ubicándose discretamente en la esquina de la pantalla.
 
 ---
 
-## 1. Comando Maestro para Acceso Directo
+## 1. Modo Píldora de Arranque Ultra-Compacto (Recomendado)
+
+Inicia como una cápsula flotante compacta en reposo con reloj, radar de ritmo, glifo `Gauge` y siguiente entidad. Al hacer clic, se expande a la vista completa del Cockpit.
 
 ### Google Chrome
 ```cmd
-"C:\Program Files\Google\Chrome\Application\chrome.exe" --app="https://tu-dominio.pages.dev/?mode=hud" --window-size=420,720 --window-position=1480,50
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --app="https://miportalweb-aft.pages.dev/?mode=hud" --window-size=360,180 --window-position=1540,50
 ```
-> Si usas Chrome de 32 bits o instalado en `%LocalAppData%`:
-> `"%LocalAppData%\Google\Chrome\Application\chrome.exe" --app="https://tu-dominio.pages.dev/?mode=hud" --window-size=420,720 --window-position=1480,50`
 
 ### Microsoft Edge
 ```cmd
-"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --app="https://tu-dominio.pages.dev/?mode=hud" --window-size=420,720 --window-position=1480,50
+"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --app="https://miportalweb-aft.pages.dev/?mode=hud" --window-size=360,180 --window-position=1540,50
 ```
 
 ---
 
-## 2. Parámetros del Comando Explicados
+## 2. Modo Cockpit Desplegado Completo (Alternativa)
 
-| Parámetro | Propósito |
-| :--- | :--- |
-| `--app="https://.../?mode=hud"` | Ejecuta la app en modo ventana de aplicación pura (sin pestañas, barra de direcciones ni extensiones). La URL con `?mode=hud` activa la vista standalone a pantalla completa del Cockpit. |
-| `--window-size=420,720` | Fija el ancho exacto (420px) y alto (720px) ergonómico para el Cockpit táctico (Riel Horario + Checklist). |
-| `--window-position=1480,50` | Posiciona la ventana automáticamente en la esquina superior derecha en monitores Full HD (1920x1080) o secundarios. |
+Inicia directamente con el Cockpit expandido (Riel Horario + Checklist directo):
+
+### Google Chrome
+```cmd
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --app="https://miportalweb-aft.pages.dev/?mode=hud" --window-size=420,720 --window-position=1480,50
+```
 
 ---
 
-## 3. Pasos para Crear el Acceso Directo Manualmente en Windows 11
+## 3. Parámetros del Comando Explicados
 
-1. Haz clic derecho en el **Escritorio** $\rightarrow$ **Nuevo** $\rightarrow$ **Acceso directo**.
-2. En la casilla de ubicación, pega el comando maestro:
-   `"C:\Program Files\Google\Chrome\Application\chrome.exe" --app="https://tu-dominio.pages.dev/?mode=hud" --window-size=420,720 --window-position=1480,50`
-   *(Sustituye `https://tu-dominio.pages.dev` por la URL de tu despliegue o `http://localhost:3000` si estás en desarrollo local).*
-3. Haz clic en **Siguiente** y nómbralo: `PMO Daily HUD`.
-4. Haz clic en **Finalizar**.
-5. *(Opcional)* Haz clic derecho en el nuevo icono $\rightarrow$ **Propiedades** $\rightarrow$ **Cambiar icono** y selecciona el icono `favicon.ico` del proyecto.
+| Parámetro | Propósito |
+| :--- | :--- |
+| `--app="https://miportalweb-aft.pages.dev/?mode=hud"` | Ejecuta la app como ventana de aplicación pura (sin chrome de navegación). La URL `?mode=hud` activa la vista standalone. |
+| `--window-size=360,180` | Fija el tamaño ergonómico exacto para el **Widget en Reposo (Píldora)**. Al detectar altura menor a 400px, arranca automáticamente como píldora centrada. |
+| `--window-position=1540,50` | Posiciona el widget en la esquina superior derecha en monitores Full HD (1920x1080). |
 
 ---
 
@@ -49,13 +48,13 @@ Esta guía permite ejecutar el **Cockpit de Ejecución Diaria** como una aplicac
 1. Presiona `Win + R` en tu teclado.
 2. Escribe `shell:startup` y presiona `Enter`. Se abrirá la carpeta de inicio de Windows:
    `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`
-3. Copia o mueve el acceso directo `PMO Daily HUD` dentro de esa carpeta.
-4. ¡Listo! A partir de ahora, cada vez que inicies sesión en Windows 11, tu Cockpit Diario se abrirá automáticamente en la esquina derecha de la pantalla.
+3. Crea un acceso directo con el comando maestro dentro de esa carpeta.
+4. Cada vez que inicies Windows 11, tu Widget PMO estará esperándote en la esquina de la pantalla listo para tu jornada diaria.
 
 ---
 
 ## 5. Modo Always-on-Top Nativo (Document Picture-in-Picture)
 
 Una vez abierta la ventana del HUD:
-- En la cabecera superior, haz clic en el botón de **Desacoplar a PiP** (icono `ExternalLink`).
-- Esto activará la API nativa de Chrome `documentPictureInPicture`, convirtiendo el Cockpit en una ventana flotante real **Always-on-Top** que flotará por encima de Antigravity IDE, editores de código o cualquier otra aplicación mientras trabajas.
+- En la cabecera del Cockpit abierto, haz clic en el botón de **Desacoplar a PiP** (icono `ExternalLink`).
+- Esto activará la API nativa de Chrome `documentPictureInPicture`, convirtiendo el Cockpit en una ventana flotante real **Always-on-Top** que flotará por encima de Antigravity IDE o cualquier otra aplicación mientras trabajas, con calce exacto al 100% de la ventana sin descalces visuales.
