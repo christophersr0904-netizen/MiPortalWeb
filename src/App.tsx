@@ -166,13 +166,36 @@ export const App: React.FC = () => {
     document.documentElement.setAttribute('data-theme', sabor);
   };
 
+  const esWidgetNativo = typeof window !== 'undefined' && (
+    Boolean(window.desktopWidget) ||
+    new URLSearchParams(window.location.search).get('widget') === 'desktop'
+  );
+
+  // Garantizar fondo 100% transparente en Electron para widget frameless
+  useEffect(() => {
+    if (esModoHud && esWidgetNativo) {
+      document.documentElement.classList.remove('bg-[#020617]');
+      document.documentElement.style.backgroundColor = 'transparent';
+      document.body.classList.remove('bg-[#020617]');
+      document.body.style.backgroundColor = 'transparent';
+      const root = document.getElementById('root');
+      if (root) root.style.backgroundColor = 'transparent';
+    }
+  }, [esModoHud, esWidgetNativo]);
+
   // Si está en modo HUD flotante compacto (Windows Widget / Desktop Window / Standalone HUD)
   if (esModoHud) {
     return (
-      <div className="h-screen w-screen bg-[#040711] overflow-hidden flex flex-col p-2 font-sans select-none">
+      <div className={`h-screen w-screen ${esWidgetNativo ? 'bg-transparent p-0' : 'bg-[#040711] p-2'} overflow-hidden flex flex-col font-sans select-none`}>
         <DailyCockpit
           modoForzadoDesacoplado={true}
-          onCerrarDesacoplado={() => setEsModoHud(false)}
+          onCerrarDesacoplado={() => {
+            if (esWidgetNativo && window.desktopWidget?.close) {
+              window.desktopWidget.close();
+            } else {
+              setEsModoHud(false);
+            }
+          }}
         />
         <AsistenteIaModal
           isOpen={asistenteAbierto}

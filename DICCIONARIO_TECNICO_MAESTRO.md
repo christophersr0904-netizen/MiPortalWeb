@@ -6884,6 +6884,37 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - `npm test -- --run`: 10/10 suites en verde (110/110 pruebas aprobadas al 100%).
 - `npm run build`: Compilación Vite de producción completada sin errores en 5.93s.
 
+---
+
+### REQ-DESKTOP-WIDGET-NATIVE-FRAMELESS-43: Micro-Wrapper Nativo Windows 11 para Cápsula Flotante Sin Bordes
+- **Estado:** IMPLEMENTADO Y CERTIFICADO (Cero Regresiones, Preservación Local-First, Ventana Frameless 100% Transparente con Always-on-Top).
+- **Fecha:** 2026-10-22
+- **Objetivo:** 
+  1. Construir un micro-launcher de escritorio nativo para Windows 11 utilizando Electron en la carpeta `desktop/`.
+  2. Implementar ventana nativa `frame: false`, `transparent: true`, `backgroundColor: '#00000000'`, `alwaysOnTop: true`, `hasShadow: false`, `resizable: false` (inicial: 380x100 para cápsula de reposo, expandida: 420x720 para Cockpit Diario).
+  3. Establecer puente IPC seguro con `preload.js` exponiendo `window.desktopWidget`: `expand()`, `collapse()`, `close()`.
+  4. Habilitar soporte de arrastre nativo en Windows 11 mediante `DRAG_REGION_STYLE` (`WebkitAppRegion: 'drag'`) y regiones interactivas `NO_DRAG_REGION_STYLE` (`WebkitAppRegion: 'no-drag'`) en `DailyCockpit.tsx`.
+  5. Asegurar canal alfa de transparencia total en `App.tsx` y `index.html` erradicando fondos opacos en modo widget.
+  6. Proveer script de lanzamiento silencioso `desktop/lanzar-widget.vbs` y script `.bat` para inicio en `shell:startup`.
+
+#### 1. Arquitectura Técnica Implementada
+- **Directorio `desktop/`:**
+  - `desktop/package.json`: Definición mínima con `"electron": "^33.0.0"`, scripts `"start"`, `"widget"` y `"dev"`.
+  - `desktop/preload.js`: `contextBridge.exposeInMainWorld('desktopWidget', { expand, collapse, close, isNative: true })`.
+  - `desktop/main.js`: Configuración de ventana frameless, cálculo de posición en la pantalla principal derecha (`workAreaSize`), listeners IPC para `widget-expand` (420x720), `widget-collapse` (380x100) y `widget-close`. Carga URL `process.env.WIDGET_URL || 'https://miportalweb-aft.pages.dev/?mode=hud&widget=desktop'`.
+  - `desktop/lanzar-widget.vbs`: Script VBScript que invoca `npm start` de forma 100% silenciosa en segundo plano (sin ventana negra cmd).
+  - `desktop/iniciar-widget.bat`: Acceso directo para consola o doble clic.
+- **Frontend Web (`src/`):**
+  - `src/types/index.ts`: Definición de interfaz `DesktopWidgetBridge` y tipado global en `Window.desktopWidget`.
+  - `src/App.tsx`: Detección de `esWidgetNativo` (vía `window.desktopWidget` o query param `?widget=desktop`). Limpieza reactiva de fondos en `html`, `body` y `#root` (`bg-transparent`) para permitir la proyección flotante sin marco sobre el escritorio de Windows 11.
+  - `src/components/Cockpit/DailyCockpit.tsx`: Integración de constantes `DRAG_REGION_STYLE` y `NO_DRAG_REGION_STYLE`. Conexión de `handleAbrirCockpit()` (`expand()`) y `handleContraerCockpit()` (`collapse()`), botón de expansión rápida `ChevronUp` y cierre nativo en `X`.
+
+#### 2. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado estricto TypeScript.
+- `npm test -- --run`: 11/11 suites en verde (115/115 pruebas unitarias e integración aprobadas al 100%).
+- `npm run build`: Compilación exitosa en 6.41s sin regresiones de bundle.
+
+
 
 
 

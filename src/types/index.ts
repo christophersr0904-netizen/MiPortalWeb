@@ -491,3 +491,19 @@ export interface CuotaRecord {
   updated_at: string;
   sync_status: SyncStatus;
 }
+
+export interface DesktopWidgetBridge {
+  expand: () => void;
+  collapse: () => void;
+  close: () => void;
+  isNative?: boolean;
+}
+
+declare global {
+  interface Window {
+    desktopWidget?: DesktopWidgetBridge;
+  }
+}
+
+
+

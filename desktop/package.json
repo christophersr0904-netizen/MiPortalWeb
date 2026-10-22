@@ -1,0 +1,23 @@
+{
+  "name": "pmo-desktop-widget",
+  "version": "1.0.0",
+  "description": "Micro-Wrapper Nativo Windows 11 para Cápsula Flotante Sin Bordes - PMO Personal & Life OS",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron main.js",
+    "widget": "electron main.js",
+    "dev": "set WIDGET_URL=http://localhost:5173/?mode=hud&widget=desktop&& electron main.js"
+  },
+  "keywords": [
+    "pmo",
+    "widget",
+    "electron",
+    "frameless",
+    "windows11"
+  ],
+  "author": "PMO Personal",
+  "license": "MIT",
+  "dependencies": {
+    "electron": "^33.0.0"
+  }
+}

@@ -12,7 +12,10 @@
     "cap:init": "cap init",
     "cap:sync": "npm run build && cap sync android",
     "cap:open": "cap open android",
-    "build:mobile": "npm run build && cap sync android"
+    "build:mobile": "npm run build && cap sync android",
+    "widget": "npm --prefix desktop start",
+    "widget:dev": "npm --prefix desktop run dev",
+    "widget:install": "npm --prefix desktop install"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

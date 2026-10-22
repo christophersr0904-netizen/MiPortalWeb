@@ -15,6 +15,7 @@ import {
   ListTodo,
   ExternalLink,
   ChevronDown,
+  ChevronUp,
   X,
   Gauge,
   CheckCircle2,
@@ -28,6 +29,9 @@ import {
   type DailyScheduleItem
 } from '../../hooks/useDailySchedule';
 
+const DRAG_REGION_STYLE: React.CSSProperties = { WebkitAppRegion: 'drag' } as unknown as React.CSSProperties;
+const NO_DRAG_REGION_STYLE: React.CSSProperties = { WebkitAppRegion: 'no-drag' } as unknown as React.CSSProperties;
+
 export interface DailyCockpitProps {
   modoForzadoDesacoplado?: boolean;
   onCerrarDesacoplado?: () => void;
@@ -37,18 +41,44 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   modoForzadoDesacoplado = false,
   onCerrarDesacoplado
 }) => {
+  // Detección de wrapper nativo de escritorio (Electron o ?widget=desktop)
+  const esWidgetNativo = typeof window !== 'undefined' && (
+    Boolean(window.desktopWidget) ||
+    new URLSearchParams(window.location.search).get('widget') === 'desktop'
+  );
+
   // Estado de visibilidad y visualización (adaptativo en standalone HUD según altura o parámetro)
   const [cockpitAbierto, setCockpitAbierto] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('state') === 'open') return true;
       if (params.get('state') === 'rest') return false;
+      if (params.get('widget') === 'desktop' || Boolean(window.desktopWidget)) {
+        return false; // El widget nativo arranca en reposo (380x100)
+      }
       if (params.get('mode') === 'hud') {
         return window.innerHeight > 400;
       }
     }
     return modoForzadoDesacoplado;
   });
+
+  // Expansión con sincronización de ventana nativa de Electron si aplica
+  const handleAbrirCockpit = () => {
+    if (typeof window !== 'undefined' && window.desktopWidget) {
+      window.desktopWidget.expand();
+    }
+    setCockpitAbierto(true);
+  };
+
+  // Contracción con sincronización de ventana nativa de Electron si aplica
+  const handleContraerCockpit = () => {
+    if (typeof window !== 'undefined' && window.desktopWidget) {
+      window.desktopWidget.collapse();
+    }
+    setCockpitAbierto(false);
+  };
+
   const [horizonte, setHorizonte] = useState<HorizonteAgenda>('HOY');
   const [modoVista, setModoVista] = useState<'RIEL' | 'CHECKLIST'>('CHECKLIST');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'TAREAS' | 'HABITOS' | 'VENCIDAS' | 'FINANZAS'>('TODOS');
@@ -178,7 +208,10 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       }`}
     >
       {/* 1. Cabecera Táctica Canónica */}
-      <div className="px-4 py-3 border-b border-slate-800/80 bg-slate-950/70 flex items-center justify-between shrink-0">
+      <div
+        style={esWidgetNativo ? DRAG_REGION_STYLE : undefined}
+        className="px-4 py-3 border-b border-slate-800/80 bg-slate-950/70 flex items-center justify-between shrink-0 cursor-default"
+      >
         <div className="flex items-center gap-2">
           <div className="relative w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
             <Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
@@ -212,10 +245,11 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             {metricas.porcentajeRitmo}%
           </div>
 
-          {/* Botón Desacople Always-on-Top (disponible si no está desacoplado en PiP) */}
-          {!pipWindow && (
+          {/* Botón Desacople Always-on-Top (disponible si no está desacoplado en PiP ni widget nativo) */}
+          {!pipWindow && !esWidgetNativo && (
             <button
               type="button"
+              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
               onClick={desacoplarAEscritorio}
               className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
               title="Desacoplar Cockpit a ventana flotante Always-on-Top en PC"
@@ -227,11 +261,12 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           {/* Botón Contraer a Píldora de Reposo / Minimizar */}
           <button
             type="button"
+            style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
             onClick={() => {
               if (pipWindow) {
                 pipWindow.close();
               } else {
-                setCockpitAbierto(false);
+                handleContraerCockpit();
               }
             }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
@@ -240,13 +275,20 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             <ChevronDown className="w-4 h-4" strokeWidth={1.75} />
           </button>
 
-          {/* Botón Salir de Modo Standalone y volver al Portal completo */}
-          {modoForzadoDesacoplado && onCerrarDesacoplado && (
+          {/* Botón Salir de Modo Standalone / Cerrar Widget */}
+          {modoForzadoDesacoplado && (onCerrarDesacoplado || esWidgetNativo) && (
             <button
               type="button"
-              onClick={onCerrarDesacoplado}
+              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
+              onClick={() => {
+                if (esWidgetNativo && window.desktopWidget?.close) {
+                  window.desktopWidget.close();
+                } else if (onCerrarDesacoplado) {
+                  onCerrarDesacoplado();
+                }
+              }}
               className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors cursor-pointer"
-              title="Volver a la vista completa del Portal"
+              title={esWidgetNativo ? "Cerrar Widget de Escritorio" : "Volver a la vista completa del Portal"}
             >
               <X className="w-4 h-4" strokeWidth={1.75} />
             </button>
@@ -578,14 +620,18 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     // Si no está abierto y no hay PiP activo, renderizar la Cápsula Flotante en Reposo (Widget Pill)
     if (!cockpitAbierto && !pipWindow) {
       return (
-        <div className="h-screen w-screen bg-[#040711] flex items-center justify-center p-4 select-none overflow-hidden font-sans">
+        <div className={`h-screen w-screen ${esWidgetNativo ? 'bg-transparent p-0' : 'bg-[#040711] p-4'} flex items-center justify-center select-none overflow-hidden font-sans`}>
           <div
-            onClick={() => setCockpitAbierto(true)}
+            onClick={handleAbrirCockpit}
+            style={esWidgetNativo ? DRAG_REGION_STYLE : undefined}
             className="px-4 py-2 rounded-full bg-[#0D1526]/95 border border-sky-500/30 backdrop-blur-xl shadow-[0_4px_25px_rgba(2,6,23,0.8),0_0_15px_rgba(56,189,248,0.12)] flex items-center gap-3 transition-all duration-200 hover:border-sky-400 hover:scale-[1.02] active:scale-[0.97] cursor-pointer group select-none animate-in fade-in zoom-in-95"
             title="Expandir Cockpit de Ejecución Diaria"
           >
             {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}
-            <div className="relative flex items-center justify-center shrink-0">
+            <div
+              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
+              className="relative flex items-center justify-center shrink-0"
+            >
               <Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
               <span className="absolute -top-1 -right-1 flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
@@ -594,12 +640,16 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             </div>
 
             {/* Reloj Actual */}
-            <span className="text-xs font-bold font-mono tabular-nums text-slate-100">
+            <span
+              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
+              className="text-xs font-bold font-mono tabular-nums text-slate-100"
+            >
               {horaActual}
             </span>
 
             {/* Semáforo de Ritmo */}
             <div
+              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
               className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums font-bold border ${colorRitmo}`}
             >
               {metricas.porcentajeRitmo}%
@@ -607,17 +657,34 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
             {/* Siguiente en turno */}
             {metricas.siguienteItem && (
-              <div className="flex items-center gap-1 max-w-[160px] truncate text-[11px] text-slate-300 font-sans border-l border-slate-800 pl-2">
+              <div
+                style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
+                className="flex items-center gap-1 max-w-[150px] truncate text-[11px] text-slate-300 font-sans border-l border-slate-800 pl-2"
+              >
                 <span className="truncate">{metricas.siguienteItem.titulo}</span>
               </div>
             )}
+
+            {/* Micro-botón de apertura para garantizar activación rápida */}
+            <button
+              type="button"
+              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAbrirCockpit();
+              }}
+              className="p-1 rounded-full text-slate-400 hover:text-sky-300 hover:bg-slate-800/80 transition-colors"
+              title="Abrir Cockpit"
+            >
+              <ChevronUp className="w-3.5 h-3.5" strokeWidth={1.75} />
+            </button>
           </div>
         </div>
       );
     }
 
     return (
-      <div className="h-screen w-screen bg-[#040711] flex items-center justify-center p-2 font-sans select-none overflow-hidden">
+      <div className={`h-screen w-screen ${esWidgetNativo ? 'bg-transparent p-0' : 'bg-[#040711] p-2'} flex items-center justify-center font-sans select-none overflow-hidden`}>
         {pipWindow &&
           createPortal(
             <div className="w-screen h-screen max-w-full max-h-full flex flex-col bg-[#040711] p-2 box-border overflow-hidden">
@@ -668,7 +735,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             if (pipWindow) {
               pipWindow.focus();
             } else {
-              setCockpitAbierto(true);
+              handleAbrirCockpit();
             }
           }}
           className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 md:bottom-6 md:right-6 z-50 pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0D1526]/90 border border-sky-500/30 backdrop-blur-xl shadow-[0_4px_25px_rgba(2,6,23,0.8),0_0_15px_rgba(56,189,248,0.12)] flex items-center gap-2.5 transition-all duration-200 hover:border-sky-400 hover:scale-[1.02] active:scale-[0.97] cursor-pointer group select-none"
