@@ -10,12 +10,7 @@ let tray = null;
 let widgetWin = null;
 let statusServer = null;
 
-// Bloqueo de instancia única estricto
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
-  process.exit(0);
-}
+// Arranque directo limpio (sin bloqueo de instancia única abortivo)
 
 // Micro-servidor HTTP loopback en 127.0.0.1:48123 para handshake, exclusión mutua y sync local
 try {
@@ -83,7 +78,11 @@ try {
 
   statusServer.listen(48123, '127.0.0.1');
   statusServer.on('error', (err) => {
-    console.warn('[Desktop Widget] Servidor loopback ocupado o reintento:', err.message);
+    if (err.code === 'EADDRINUSE') {
+      console.warn('[Loopback] Puerto 48123 ya en uso, reutilizando instancia previa.');
+    } else {
+      console.error('[Loopback Error]:', err);
+    }
   });
 } catch (err) {
   console.warn('[Desktop Widget] Error al iniciar servidor de status local:', err);
@@ -143,8 +142,24 @@ function createWidget() {
     }
   });
 
-  const targetUrl = process.env.WIDGET_URL || 'https://miportalweb-aft.pages.dev/?mode=hud&widget=desktop';
-  widgetWin.loadURL(targetUrl);
+  // Prioridad de carga:
+  // 1. Si existe dist/index.html local, cargarlo con loadFile (100% offline, rápido y seguro)
+  // 2. Si se pasa WIDGET_DEV en entorno, usar loadURL (desarrollo vite)
+  // 3. Si se pasa WIDGET_URL explícita, usar loadURL
+  // 4. Fallback a http://localhost:5173/?mode=hud&widget=desktop
+  const distPath = path.join(__dirname, '../dist/index.html');
+
+  if (process.env.WIDGET_DEV) {
+    widgetWin.loadURL('http://localhost:5173/?mode=hud&widget=desktop');
+  } else if (process.env.WIDGET_URL) {
+    widgetWin.loadURL(process.env.WIDGET_URL);
+  } else if (fs.existsSync(distPath)) {
+    widgetWin.loadFile(distPath, {
+      query: { mode: 'hud', widget: 'desktop' }
+    });
+  } else {
+    widgetWin.loadURL('http://localhost:5173/?mode=hud&widget=desktop');
+  }
 
   // Inicialización de la Bandeja del Sistema (System Tray / Iconos Ocultos)
   if (!tray) {

@@ -13,9 +13,9 @@
     "cap:sync": "npm run build && cap sync android",
     "cap:open": "cap open android",
     "build:mobile": "npm run build && cap sync android",
-    "widget": "electron desktop/main.js",
-    "widget:clean": "taskkill /F /IM electron.exe 2>nul || exit 0 && electron desktop/main.js",
-    "widget:dev": "set WIDGET_URL=http://localhost:5173/?mode=hud&widget=desktop&& electron desktop/main.js"
+    "widget": "npm run build && electron desktop/main.js",
+    "widget:clean": "taskkill /F /IM electron.exe 2>nul || exit 0 && npm run build && electron desktop/main.js",
+    "widget:dev": "cross-env WIDGET_DEV=true electron desktop/main.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
@@ -44,6 +44,7 @@
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "cross-env": "^10.1.0",
     "electron": "^33.4.11",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",

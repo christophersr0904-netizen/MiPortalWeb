@@ -14,7 +14,6 @@ import {
   Send,
   Clock
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 
 interface DesktopHudWidgetProps {
   onCambiarModoCompleto: () => void;
@@ -49,15 +48,6 @@ export const DesktopHudWidget: React.FC<DesktopHudWidgetProps> = ({
     e.stopPropagation();
     const marcarCompletado = act.estado !== '04_Completado';
     await completarActividadPersonalLocal(act, marcarCompletado);
-
-    if (marcarCompletado) {
-      confetti({
-        particleCount: 25,
-        spread: 45,
-        origin: { y: 0.8 },
-        colors: ['#38bdf8', '#10b981', '#6366f1']
-      });
-    }
   };
 
   // Captura ultra-rápida de nota en Dexie (0 ms)

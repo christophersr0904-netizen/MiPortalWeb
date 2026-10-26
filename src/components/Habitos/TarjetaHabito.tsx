@@ -427,7 +427,7 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
           )}
         </div>
 
-        {actividad.monto_gasto_asociado && actividad.monto_gasto_asociado > 0 && (
+        {typeof actividad.monto_gasto_asociado === 'number' && actividad.monto_gasto_asociado > 0 && (
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/50 font-mono tabular-nums font-bold">
             <DollarSign className="w-3 h-3" />
             <span>S/ {actividad.monto_gasto_asociado.toFixed(2)}</span>

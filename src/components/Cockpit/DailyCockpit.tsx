@@ -22,7 +22,6 @@ import {
   Circle,
   Zap
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import {
   useDailySchedule,
   type HorizonteAgenda,
@@ -302,24 +301,14 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     });
   }, [items, filtroTipo]);
 
-  // Completar rápido con micro-feedback de confetti
+  // Completar rápido
   const handleToggle = async (item: DailyScheduleItem, e: React.MouseEvent) => {
     e.stopPropagation();
-    const marcar = !item.completado;
     await toggleCompletar(item);
 
     // Enviar snapshot al puente local si estamos en navegador web para actualizar Electron
     if (!esWidgetNativo) {
       syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
-    }
-
-    if (marcar) {
-      confetti({
-        particleCount: 22,
-        spread: 40,
-        origin: { y: 0.8 },
-        colors: ['#38bdf8', '#34d399', '#818cf8']
-      });
     }
   };
 
