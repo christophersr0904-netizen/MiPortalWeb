@@ -530,6 +530,83 @@ class SyncManager {
       this.isSyncing = false;
     }
   }
+
+  /**
+   * Descarga registros desde Supabase hacia Dexie (Inbound Pull)
+   * preservando y sin sobreescribir datos locales con sync_status === 'pending'.
+   */
+  public async descargarDatosDescendientes(): Promise<{ descargados: number; fallidos: number }> {
+    const summary = { descargados: 0, fallidos: 0 };
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      return summary;
+    }
+
+    const configuraciones = [
+      { tabla: 'proyectos', refDexie: db.proyectos },
+      { tabla: 'hitos_wbs', refDexie: db.hitos_wbs },
+      { tabla: 'tareas', refDexie: db.tareas },
+      { tabla: 'actividades_personales', refDexie: db.actividades_personales },
+      { tabla: 'subtareas_pasos', refDexie: db.subtareas_pasos },
+      { tabla: 'gastos', refDexie: db.gastos },
+      { tabla: 'ingresos', refDexie: db.ingresos },
+      { tabla: 'cuotas', refDexie: db.cuotas }
+    ] as const;
+
+    for (const { tabla, refDexie } of configuraciones) {
+      try {
+        const { data, error } = await this.supabase
+          .from(tabla)
+          .select('*');
+
+        if (error) {
+          console.warn(`[SyncManager] Aviso al descargar tabla remota ${tabla}:`, error.message);
+          summary.fallidos++;
+          continue;
+        }
+
+        if (!data || data.length === 0) continue;
+
+        // Recuperar IDs pendientes en local para proteger cambios sin sincronizar
+        const idsPendientesLocales = new Set(
+          await (refDexie as any).where('sync_status').equals('pending').primaryKeys()
+        );
+
+        const registrosParaActualizar = data
+          .filter((item: any) => item && item.id && !idsPendientesLocales.has(item.id))
+          .map((item: any) => ({
+            ...item,
+            sync_status: 'synced' as const
+          }));
+
+        if (registrosParaActualizar.length > 0) {
+          await (refDexie as any).bulkPut(registrosParaActualizar);
+          summary.descargados += registrosParaActualizar.length;
+        }
+      } catch (err) {
+        console.warn(`[SyncManager] Error al sincronizar tabla descendente ${tabla}:`, err);
+        summary.fallidos++;
+      }
+    }
+
+    return summary;
+  }
+
+  /**
+   * Procesa la cola de cambios locales pendientes hacia Supabase (Push Outbox)
+   */
+  public async procesarColaPendiente(): Promise<void> {
+    await this.syncPendingRecords();
+  }
+
+  /**
+   * Sincronización bidireccional completa:
+   * 1. Push local -> nube (procesarColaPendiente)
+   * 2. Pull nube -> local (descargarDatosDescendientes)
+   */
+  public async sincronizarTodo(): Promise<void> {
+    await this.procesarColaPendiente();
+    await this.descargarDatosDescendientes();
+  }
 }
 
 export const syncManager = new SyncManager();

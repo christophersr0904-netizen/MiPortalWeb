@@ -207,42 +207,49 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
   }, [esWidgetNativo]);
 
-  // Detección de coexistencia exclusiva: oculta la cápsula web si el widget desktop está activo
+  // Detección de coexistencia exclusiva: verifica si el servidor loopback de Electron (127.0.0.1:48123) está activo
   const [hayWidgetDeEscritorioActivo, setHayWidgetDeEscritorioActivo] = useState(false);
-  const ultimoPingDesktopRef = useRef<number>(0);
 
   useEffect(() => {
     if (esWidgetNativo || modoForzadoDesacoplado) return;
 
-    let channel: BroadcastChannel | null = null;
-    try {
-      channel = new BroadcastChannel('pmo_hud_bus');
-      channel.onmessage = (event) => {
-        if (event.data?.type === 'DESKTOP_WIDGET_ALIVE') {
-          ultimoPingDesktopRef.current = Date.now();
-          setHayWidgetDeEscritorioActivo(true);
-        }
-      };
-    } catch {}
+    let cancelado = false;
 
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'pmo_desktop_widget_heartbeat' && e.newValue) {
-        ultimoPingDesktopRef.current = Date.now();
-        setHayWidgetDeEscritorioActivo(true);
+    const pingLoopbackDesktop = async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 400);
+
+      try {
+        const res = await fetch('http://127.0.0.1:48123/status', {
+          mode: 'cors',
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!cancelado) {
+          if (res.ok) {
+            const data = await res.json();
+            if (data.desktopWidgetAlive) {
+              setHayWidgetDeEscritorioActivo(true);
+              return;
+            }
+          }
+          setHayWidgetDeEscritorioActivo(false);
+        }
+      } catch {
+        clearTimeout(timeoutId);
+        if (!cancelado) {
+          setHayWidgetDeEscritorioActivo(false);
+        }
       }
     };
-    window.addEventListener('storage', handleStorage);
 
-    // Watchdog de 1s: si pasan más de 3 segundos sin heartbeat, la cápsula web vuelve a emerger
-    const timer = setInterval(() => {
-      if (ultimoPingDesktopRef.current > 0 && Date.now() - ultimoPingDesktopRef.current > 3000) {
-        setHayWidgetDeEscritorioActivo(false);
-      }
-    }, 1000);
+    // Ping inmediato al montar y recurrente cada 1500ms
+    pingLoopbackDesktop();
+    const timer = setInterval(pingLoopbackDesktop, 1500);
 
     return () => {
-      if (channel) channel.close();
-      window.removeEventListener('storage', handleStorage);
+      cancelado = true;
       clearInterval(timer);
     };
   }, [esWidgetNativo, modoForzadoDesacoplado]);
@@ -250,6 +257,19 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   const [horizonte, setHorizonte] = useState<HorizonteAgenda>('HOY');
   const [modoVista, setModoVista] = useState<'RIEL' | 'CHECKLIST'>('CHECKLIST');
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'TAREAS' | 'HABITOS' | 'VENCIDAS' | 'FINANZAS'>('TODOS');
+
+  // Referencia para anclaje y auto-scroll centrado en el slot horario en curso
+  const slotActualRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll centrado en el slot actual cuando se visualiza el Riel Horario
+  useEffect(() => {
+    if (cockpitAbierto && modoVista === 'RIEL') {
+      const timer = setTimeout(() => {
+        slotActualRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [cockpitAbierto, modoVista, horizonte]);
 
   // Estado de ventana Picture-in-Picture nativa
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
@@ -681,30 +701,8 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
              VISTA B: RIEL HORARIO (TIMELINE CONTINUO 06:00 - 23:00)
              ======================================================== */
           <div className="relative border-l border-slate-800 ml-12 my-2 space-y-6">
-            {/* Marcador en tiempo real de hora actual */}
-            {horizonte === 'HOY' && (
-              <div
-                className="absolute left-[-48px] right-0 flex items-center z-10 pointer-events-none"
-                style={{
-                  top: `${Math.min(
-                    95,
-                    Math.max(
-                      2,
-                      ((parseInt(horaActual.split(':')[0], 10) - 6) * 60 +
-                        parseInt(horaActual.split(':')[1], 10)) *
-                        (100 / (18 * 60))
-                    )
-                  )}%`
-                }}
-              >
-                <span className="text-[9px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-rose-500 text-white shadow-sm shrink-0">
-                  {horaActual}
-                </span>
-                <div className="h-[2px] bg-rose-500/80 flex-1 ml-1" />
-              </div>
-            )}
-
             {slotsHorarios.map((slot) => {
+              const esSlotActual = horizonte === 'HOY' && slot.startsWith(horaActual.split(':')[0]);
               const itemsEnSlot = itemsFiltrados.filter((i) => {
                 const hItem = i.horaInicio.split(':')[0];
                 const hSlot = slot.split(':')[0];
@@ -712,14 +710,43 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
               });
 
               return (
-                <div key={slot} className="relative pl-4 min-h-[44px]">
+                <div
+                  key={slot}
+                  ref={esSlotActual ? slotActualRef : undefined}
+                  className={`relative pl-4 min-h-[44px] transition-all duration-200 ${
+                    esSlotActual
+                      ? 'bg-sky-950/30 border-l-2 border-sky-400 shadow-[0_0_15px_-3px_rgba(56,189,248,0.25)] rounded-r-xl p-2 -ml-2'
+                      : ''
+                  }`}
+                >
                   {/* Etiqueta horaria */}
-                  <span className="absolute -left-12 top-0 text-[10px] font-mono tabular-nums text-slate-400 w-10 text-right">
+                  <span
+                    className={`absolute -left-12 top-0 text-[10px] font-mono tabular-nums w-10 text-right ${
+                      esSlotActual ? 'text-sky-300 font-bold' : 'text-slate-400'
+                    }`}
+                  >
                     {slot}
                   </span>
 
                   {/* Nodo de punto en la línea */}
-                  <div className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-slate-700 border border-slate-900" />
+                  <div
+                    className={`absolute top-1.5 w-2 h-2 rounded-full transition-all ${
+                      esSlotActual
+                        ? '-left-[5px] bg-sky-400 ring-4 ring-sky-500/20'
+                        : '-left-[5px] bg-slate-700 border border-slate-900'
+                    }`}
+                  />
+
+                  {/* Cabecera Iluminada de Hora Actual */}
+                  {esSlotActual && (
+                    <div className="mb-2 flex items-center gap-1.5">
+                      <span className="bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded inline-flex items-center gap-1 shadow-sm animate-pulse">
+                        <Clock className="w-2.5 h-2.5" strokeWidth={1.75} />
+                        AHORA · {horaActual}
+                      </span>
+                      <div className="h-[1px] bg-sky-500/30 flex-1" />
+                    </div>
+                  )}
 
                   {/* Contenedor de entidades en esta hora */}
                   <div className="space-y-1.5">

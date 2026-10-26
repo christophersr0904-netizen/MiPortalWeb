@@ -26,8 +26,8 @@ describe('Geometría y Cotas Canónicas del Grafo WBS (REQ-F2-P2.1p)', () => {
   });
 
   it('garantiza los espaciados horizontales canónicos GAP_X y GAP_FASE', () => {
-    expect(GAP_X).toBe(36);
-    expect(GAP_FASE).toBe(60);
+    expect(GAP_X).toBe(52);
+    expect(GAP_FASE).toBe(72);
   });
 
   it('sanitiza coordenadas no finitas o anómalas con safeCoord impidiendo colapso a (0,0)', () => {

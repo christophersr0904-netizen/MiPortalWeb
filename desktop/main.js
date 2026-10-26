@@ -1,12 +1,44 @@
 const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
+const http = require('http');
 
 let tray = null;
 let widgetWin = null;
+let statusServer = null;
+
+// Micro-servidor HTTP loopback en 127.0.0.1:48123 para handshake y exclusión mutua Web/Desktop
+try {
+  statusServer = http.createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.url === '/status') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ desktopWidgetAlive: true, timestamp: Date.now() }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  statusServer.listen(48123, '127.0.0.1');
+  statusServer.on('error', (err) => {
+    console.warn('[Desktop Widget] Servidor loopback ocupado o inaccesible:', err.message);
+  });
+} catch (err) {
+  console.warn('[Desktop Widget] Error al iniciar servidor de status local:', err);
+}
 
 // Bloqueo de instancia única para evitar múltiples widgets o caídas en ventana predeterminada
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
+  if (statusServer) {
+    try { statusServer.close(); } catch {}
+  }
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -104,7 +136,7 @@ function createWidget() {
     widgetWin.setPosition(curWidth - 440, 40);
   });
 
-  // Ajuste cinemático de redimensionamiento: timeout de 80ms para esperar animación CSS
+  // Ajuste cinemático de redimensionamiento: timeout calibrado a 200ms para empatar con CSS Tailwind
   ipcMain.on('widget-collapse', () => {
     if (!widgetWin || widgetWin.isDestroyed()) return;
     setTimeout(() => {
@@ -114,7 +146,7 @@ function createWidget() {
       widgetWin.setSize(360, 64);
       widgetWin.setPosition(curWidth - 390, 40);
       widgetWin.setResizable(false);
-    }, 80);
+    }, 200);
   });
 
   // Interceptar widget-close: en lugar de quit(), ocultar a la bandeja del sistema
@@ -129,6 +161,11 @@ app.whenReady().then(createWidget);
 
 app.on('before-quit', () => {
   app.isQuitting = true;
+  if (statusServer) {
+    try {
+      statusServer.close();
+    } catch {}
+  }
 });
 
 app.on('window-all-closed', () => {

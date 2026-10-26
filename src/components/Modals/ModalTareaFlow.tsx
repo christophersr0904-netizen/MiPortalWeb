@@ -29,6 +29,7 @@ import { db } from '../../db/db';
 import type { TareaRecord, SubtareaPaso } from '../../types';
 import { getProp } from '../../utils/entityNormalizer';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 
 /**
  * Convierte una cadena de texto en formato 'H:MM', 'H', 'MMm' o decimal a número de horas decimal.
@@ -95,6 +96,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
 }) => {
   // Bloquear scroll de fondo incondicionalmente según isOpen
   useBodyScrollLock(isOpen);
+  const { programarEliminacion } = useUndoDelete();
 
   // Proyectos e Hitos disponibles en Dexie
   const proyectos = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
@@ -552,22 +554,31 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     onClose();
   };
 
-  const handleEliminar = async () => {
+  const handleEliminar = () => {
     if (!tareaId) return;
-    if (window.confirm('¿Confirmas la eliminación permanente de esta tarea y sus subtareas?')) {
-      if (tareaExistente?.codigo_legado) {
-        const subs = await db.subtareas_pasos
-          .where('id_padre_vinculado')
-          .equals(tareaExistente.codigo_legado)
-          .toArray();
-        for (const s of subs) {
-          await db.subtareas_pasos.delete(s.id);
+    const targetId = tareaId;
+    const targetCodigoLegado = tareaExistente?.codigo_legado;
+    const etiqueta = nombre || tareaExistente?.nombre_tarea_actividad || 'Tarea';
+    programarEliminacion({
+      tabla: 'tareas',
+      id: targetId,
+      etiqueta,
+      tipo: 'TAREA',
+      commit: async () => {
+        if (targetCodigoLegado) {
+          const subs = await db.subtareas_pasos
+            .where('id_padre_vinculado')
+            .equals(targetCodigoLegado)
+            .toArray();
+          for (const s of subs) {
+            await db.subtareas_pasos.delete(s.id);
+          }
         }
+        await db.tareas.delete(targetId);
       }
-      await db.tareas.delete(tareaId);
-      if (onGuardado) onGuardado();
-      onClose();
-    }
+    });
+    if (onGuardado) onGuardado();
+    onClose();
   };
 
   if (!isOpen) return null;

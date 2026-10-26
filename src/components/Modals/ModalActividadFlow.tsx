@@ -38,11 +38,7 @@ import type {
 import {
   X,
   Calendar,
-  Clock,
   Zap,
-  Receipt,
-  CalendarCheck,
-  FileText,
   Target,
   Plus,
   Trash2,
@@ -56,7 +52,9 @@ import {
   Wallet,
   Users,
   Coffee,
-  ListOrdered
+  ListOrdered,
+  Link2,
+  Flame
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -142,17 +140,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   const [notas, setNotas] = useState('');
 
   // Fecha, Hora y Recurrencia
-  const [mostrarDatePicker, setMostrarDatePicker] = useState(false);
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('08:00');
   const [duracionHoras, setDuracionHoras] = useState(1.0);
   const [esPuntual, setEsPuntual] = useState(false);
   const [frecuencia, setFrecuencia] = useState<FrecuenciaCiclo>('DIARIA');
   const [diasSemana, setDiasSemana] = useState<string[]>(['LU', 'MA', 'MI', 'JU', 'VI']);
-  const [repeatInterval, setRepeatInterval] = useState(1);
-  const [repeatUnit, setRepeatUnit] = useState<'DIA' | 'SEMANA' | 'MES'>('SEMANA');
-  const [repeatEnd, setRepeatEnd] = useState<'NUNCA' | 'CONTEO'>('NUNCA');
-  const [repeatCount, setRepeatCount] = useState(10);
 
   // Sección Gasto Asociado
   const [mostrarGasto, setMostrarGasto] = useState(false);
@@ -165,7 +158,6 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   const [gastoVinculadoId, setGastoVinculadoId] = useState<string | null>(null);
 
   // Sección Metas OKR / metas_planes (REQ-HABITS-METAS-INTEGRATION-14 / REQ-HABITS-CREATE-METAS-INLINE-15)
-  const [mostrarMetas, setMostrarMetas] = useState(false);
   const [metaMacro, setMetaMacro] = useState('');
   const [metaSeleccionadaId, setMetaSeleccionadaId] = useState<string>('');
   const [metaIdInicial, setMetaIdInicial] = useState<string>('');
@@ -180,13 +172,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   // Metas & Planes existentes en Dexie
   const metasDisponibles = useLiveQuery(() => db.metas_planes.toArray(), []) || [];
 
-  // Sección Notas Vinculadas
-  const [mostrarNotas, setMostrarNotas] = useState(false);
-  const [notasSearch, setNotasSearch] = useState('');
-  const [notaVinculadaId, setNotaVinculadaId] = useState<string | null>(null);
-
   // Pasos / Subtareas Procedurales
-  const [mostrarPasos, setMostrarPasos] = useState(false);
   const [nuevoPasoTexto, setNuevoPasoTexto] = useState('');
   const [pasosLocales, setPasosLocales] = useState<{ id: string; numero: number; descripcion: string; completado: boolean }[]>([]);
   const [pasosInicialesJson, setPasosInicialesJson] = useState('[]');
@@ -237,9 +223,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       setValorAcumulado(actividadEditar.valor_acumulado_actual !== undefined ? String(actividadEditar.valor_acumulado_actual) : '0');
       setMetaDiaria(actividadEditar.meta_diaria_estandar !== undefined ? String(actividadEditar.meta_diaria_estandar) : '');
       setRescateMinimo(actividadEditar.nivel_rescate_minimo !== undefined ? String(actividadEditar.nivel_rescate_minimo) : '');
-      if (actividadEditar.meta_macro_nombre || actividadEditar.meta_objetivo_total) {
-        setMostrarMetas(true);
-      }
+
 
       // Consultar si tiene vínculo activo en habitos_metas_vinculos
       db.habitos_metas_vinculos
@@ -283,7 +267,6 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
             }));
             setPasosLocales(mapped);
             setPasosInicialesJson(JSON.stringify(mapped));
-            setMostrarPasos(true);
           } else {
             setPasosLocales([]);
             setPasosInicialesJson('[]');
@@ -304,12 +287,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       setEsPuntual(false);
       setFrecuencia('DIARIA');
       setDiasSemana(['LU', 'MA', 'MI', 'JU', 'VI']);
-      setMostrarDatePicker(false);
       setMostrarGasto(false);
       setGastoMonto('');
       setGastoConcepto('');
       setGastoVinculadoId(null);
-      setMostrarMetas(false);
       setMetaMacro('');
       setMetaSeleccionadaId('');
       setMetaIdInicial('');
@@ -320,9 +301,6 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       setValorAcumulado('0');
       setMetaDiaria('');
       setRescateMinimo('');
-      setMostrarNotas(false);
-      setNotaVinculadaId(null);
-      setMostrarPasos(false);
       setPasosLocales([]);
       setPasosInicialesJson('[]');
       setNuevoPasoTexto('');
@@ -345,19 +323,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   }, [isOpen, onClose, mostrarModalAlcance]);
 
   // Consultas reactivas en Dexie para vinculaciones
-  const listaGastos = useLiveQuery(() => db.gastos.orderBy('fecha_gasto').reverse().limit(15).toArray()) || [];
-  const listaNotas = useLiveQuery(() => db.notas.orderBy('updated_at').reverse().limit(15).toArray()) || [];
+  const listaGastos = useLiveQuery(() => db.gastos.orderBy('fecha_gasto').reverse().limit(50).toArray()) || [];
 
   if (!isOpen) return null;
 
   const categoriaActual = CATEGORIAS_FLOW.find((c) => c.clave === categoria) || CATEGORIAS_FLOW[0];
-
-  // Alternar prioridad cíclica
-  const ciclarPrioridad = () => {
-    if (prioridad === '01_P1_Alta') setPrioridad('02_P2_Media');
-    else if (prioridad === '02_P2_Media') setPrioridad('03_P3_Baja');
-    else setPrioridad('01_P1_Alta');
-  };
 
   // Gestión de pasos
   const agregarPaso = () => {
@@ -553,6 +523,16 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
         updated_at: nowIso,
         sync_status: 'pending'
       });
+    } else if (mostrarGasto && tabGasto === 'VINCULAR' && gastoVinculadoId && codigoLegado) {
+      const gastoExistente = await db.gastos.where('codigo_legado').equals(gastoVinculadoId).first();
+      if (gastoExistente) {
+        await db.gastos.update(gastoExistente.id, {
+          tipo_origen: 'ACTIVIDAD_PERSONAL',
+          id_origen_vinculado: codigoLegado,
+          updated_at: nowIso,
+          sync_status: 'pending'
+        });
+      }
     }
 
     // Persistencia y vinculación a Meta & Plan Estratégico (REQ-HABITS-METAS-INTEGRATION-14 / REQ-HABITS-CREATE-METAS-INLINE-15)
@@ -759,883 +739,803 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   return createPortal(
     <div
       id="modal-actividad-flow"
-      className="fixed inset-0 z-[10000] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
+      className="fixed inset-0 z-[10000] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all"
     >
       <div
         id="modal-actividad-flow-card"
-        className="portal-surface elevation-3 w-full max-w-xl max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative bg-white dark:bg-[#0D1526] text-slate-800 dark:text-slate-100"
+        className="portal-surface elevation-3 w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D1526] shadow-2xl relative transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
       >
         {/* Drag handle móvil */}
         <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
 
-        {/* CABECERA: CATEGORÍA HEREDADA + MODO + CERRAR */}
-        <div className="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 bg-white/50 dark:bg-slate-900/50">
-          {/* Chip de Categoría con Dropdown */}
-          <div className="relative">
-            <button
-              type="button"
-              id="flow-cat-badge-btn"
-              onClick={() => setMenuCategoriaAbierto(!menuCategoriaAbierto)}
-              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border transition shadow-2xs hover:scale-[1.02] active:scale-95 cursor-pointer ${categoriaActual.badgeClase}`}
-              title="Cambiar Categoría de Vida"
-            >
-              <span className={`w-2 h-2 rounded-full ${categoriaActual.dotColor} inline-block`} />
-              <span>{categoriaActual.nombre}</span>
-              <ChevronDown className="w-3 h-3 opacity-60" />
-            </button>
-
-            {menuCategoriaAbierto && (
-              <div
-                id="flow-cat-dropdown"
-                className="absolute left-0 top-full mt-2 w-64 bg-white dark:bg-[#0D1526] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-2 z-50 space-y-1 animate-fadeIn"
+        {/* 1. CABECERA INTEGRADA EN 2 FILAS (1:1 con ModalTareaFlow) */}
+        <div className="px-5 sm:px-6 py-3 border-b border-slate-200/80 dark:border-slate-800 shrink-0 space-y-2 bg-slate-50/50 dark:bg-slate-950/40">
+          {/* Fila 1: ID, Selector Categoría de Vida con micro-punto semántico, Badge Recurrencia/Racha y botón cerrar */}
+          <div className="flex items-center justify-between gap-2.5 w-full">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 min-w-0 flex-1">
+              {/* ID de Actividad */}
+              <span
+                id="act-flow-badge-id"
+                className="text-[11px] font-mono tabular-nums font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 border border-slate-700/60 shadow-2xs shrink-0 select-none"
               >
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 py-1 uppercase tracking-wider">
-                  Vincular a Categoría de Vida:
-                </p>
-                {CATEGORIAS_FLOW.map((cat) => (
-                  <button
-                    key={cat.clave}
-                    type="button"
-                    onClick={() => {
-                      setCategoria(cat.clave);
-                      setMenuCategoriaAbierto(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2.5 transition cursor-pointer ${
-                      categoria === cat.clave
-                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${cat.dotColor}`} />
-                    <span>{cat.nombre}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+                {actividadEditar?.codigo_legado || 'NUEVA ACTIVIDAD'}
+              </span>
 
-          <div className="flex items-center gap-2">
-            <span
-              id="flow-badge-modo"
-              className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-mono"
-            >
-              {actividadEditar ? `Editar (${actividadEditar.codigo_legado})` : 'Nuevo Hábito'}
-            </span>
+              {/* Selector compacto de Categoría de Vida con micro-punto semántico */}
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  id="flow-cat-badge-btn"
+                  onClick={() => setMenuCategoriaAbierto(!menuCategoriaAbierto)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-bold border transition cursor-pointer ${categoriaActual.badgeClase}`}
+                  title="Cambiar Categoría de Vida"
+                >
+                  <span className={`w-2 h-2 rounded-full ${categoriaActual.dotColor} shrink-0`} />
+                  <span>{categoriaActual.nombre}</span>
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+
+                {menuCategoriaAbierto && (
+                  <div
+                    id="flow-cat-dropdown"
+                    className="absolute left-0 top-full mt-2 w-64 bg-white dark:bg-[#0D1526] rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-2 z-50 space-y-1 animate-in fade-in zoom-in-95"
+                  >
+                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 py-1 uppercase tracking-wider">
+                      Categoría de Vida:
+                    </p>
+                    {CATEGORIAS_FLOW.map((cat) => (
+                      <button
+                        key={cat.clave}
+                        type="button"
+                        onClick={() => {
+                          setCategoria(cat.clave);
+                          setMenuCategoriaAbierto(false);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2.5 transition cursor-pointer ${
+                          categoria === cat.clave
+                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${cat.dotColor}`} />
+                        <span>{cat.nombre}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <span className="text-slate-600 select-none shrink-0">|</span>
+
+              {/* Badge de Frecuencia / Recurrencia */}
+              <span
+                id="act-flow-frecuencia-badge"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-bold rounded-lg border border-slate-800/80 bg-slate-900/60 text-slate-300 select-none shrink-0"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
+                <span>
+                  {esPuntual
+                    ? 'Puntual'
+                    : frecuencia === 'DIARIA'
+                    ? 'Diario'
+                    : frecuencia === 'SEMANAL'
+                    ? 'Semanal'
+                    : frecuencia === 'MENSUAL'
+                    ? 'Mensual'
+                    : 'Personalizado'}
+                </span>
+              </span>
+
+              {/* Racha Badge si existe racha > 0 */}
+              {(actividadEditar?.racha_actual || 0) > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold font-mono tabular-nums rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 select-none shrink-0">
+                  <Flame className="w-3 h-3 text-amber-400" />
+                  <span>{actividadEditar?.racha_actual} días</span>
+                </span>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white transition cursor-pointer"
-              title="Cerrar (Esc)"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shrink-0 ml-1"
+              title="Cerrar ventana (Esc)"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
-        </div>
 
-        {/* CUERPO DE CONTENIDO CON SCROLL EXCLUSIVO VERTICAL */}
-        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar text-xs">
-          {/* INPUT DE TÍTULO PRINCIPAL (GOOGLE TASKS STYLE) */}
-          <div>
+          {/* Fila 2: Título Editable Prominente */}
+          <div className="pt-0.5">
             <input
               type="text"
               id="act-flow-titulo"
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
-              className="w-full text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 bg-transparent outline-none border-b border-transparent focus:border-indigo-500/40 pb-1.5 transition-colors"
-              placeholder="Añadir título (ej. Salir a correr 5k, Meditación matutina...)"
-              autoComplete="off"
+              placeholder="Nombre del hábito o actividad personal..."
+              className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 placeholder:text-slate-500 bg-transparent outline-none w-full border-b border-transparent focus:border-indigo-500 transition-colors py-0.5"
               autoFocus
             />
           </div>
+        </div>
 
-          {/* BARRA DE CHIPS DE CONFIGURACIÓN RÁPIDA */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Chip Fecha y Hora */}
-            <button
-              type="button"
-              id="flow-chip-datetime"
-              onClick={() => setMostrarDatePicker(!mostrarDatePicker)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200/80 dark:border-slate-700/60 transition shadow-2xs group cursor-pointer"
-            >
-              <Calendar className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-500" />
-              <span>{fecha ? `${fecha} ${hora}` : 'Fecha y hora'}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-indigo-500" />
-            </button>
+        {/* 2. CUERPO DE CONTENIDO CON SCROLL */}
+        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar text-xs">
 
-            {/* Chip Prioridad Eisenhower */}
-            <button
-              type="button"
-              id="flow-chip-prioridad"
-              onClick={ciclarPrioridad}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 transition shadow-2xs cursor-pointer"
-              title="Clic para cambiar prioridad"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-500" />
-              <span>
-                {prioridad === '01_P1_Alta' ? 'P1 Alta' : prioridad === '02_P2_Media' ? 'P2 Media' : 'P3 Baja'}
-              </span>
-            </button>
-
-            {/* Chip Gasto Asociado */}
-            <button
-              type="button"
-              id="flow-chip-gasto"
-              onClick={() => setMostrarGasto(!mostrarGasto)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition shadow-2xs cursor-pointer ${
-                gastoMonto
-                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                  : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200/80 dark:border-slate-700/60 hover:border-emerald-300'
-              }`}
-              title="Imputar gasto a este hábito"
-            >
-              <Receipt className="w-3.5 h-3.5" />
-              <span>{gastoMonto ? `S/ ${gastoMonto}` : 'Gasto'}</span>
-            </button>
-
-            {/* Chip Google Calendar */}
-            <button
-              type="button"
-              id="flow-chip-calendar"
-              onClick={() => setCalendarSync(calendarSync === 'Sí' ? 'No' : 'Sí')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition shadow-2xs cursor-pointer ${
-                calendarSync === 'Sí'
-                  ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800/70'
-                  : 'bg-slate-50 dark:bg-slate-800/60 text-slate-400 border-slate-200/80 dark:border-slate-700/60'
-              }`}
-              title="Alternar sincronización con Calendar"
-            >
-              <CalendarCheck className={`w-3.5 h-3.5 ${calendarSync === 'Sí' ? 'text-blue-500' : 'text-slate-400'}`} />
-              <span>Calendar: {calendarSync}</span>
-            </button>
-
-            {/* Chip Meta Cuantitativa / OKR */}
-            <button
-              type="button"
-              id="flow-chip-meta"
-              onClick={() => setMostrarMetas(!mostrarMetas)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition shadow-2xs cursor-pointer ${
-                mostrarMetas || metaTotal
-                  ? 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-300 dark:border-cyan-800'
-                  : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200/80 dark:border-slate-700/60 hover:border-cyan-400'
-              }`}
-              title="Configurar Meta Cuantificable y Rescate de Racha"
-            >
-              <Target className="w-3.5 h-3.5 text-cyan-500" />
-              <span>{metaTotal ? `Meta: ${metaTotal} ${unidadMedida}` : 'Meta Cuantitativa'}</span>
-            </button>
-
-            {/* Chip Notas */}
-            <button
-              type="button"
-              id="act-flow-chip-notas"
-              onClick={() => setMostrarNotas(!mostrarNotas)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border border-slate-200/80 dark:border-slate-700/60 hover:border-purple-400 transition shadow-2xs cursor-pointer"
-            >
-              <FileText className="w-3.5 h-3.5 text-purple-500" />
-              <span>+ Notas</span>
-            </button>
-          </div>
-
-          {/* POPOVER / SECCIÓN DE FECHA, HORA Y RECURRENCIA */}
-          {mostrarDatePicker && (
-            <div className="p-4 bg-slate-50/80 dark:bg-slate-850/60 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl space-y-3.5 animate-fadeIn">
-              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-750 pb-2">
-                <div className="flex items-center gap-2 font-bold text-xs text-slate-800 dark:text-slate-200">
-                  <Clock className="w-4 h-4 text-indigo-500" />
-                  <span>Programación Temporal & Recurrencia</span>
+          {/* BENTO GRID DE 2 TARJETAS */}
+          <div className="bg-[#040711] border border-slate-800/80 rounded-xl p-3 sm:p-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* TARJETA BENTO 1: TIEMPO & PROGRAMACIÓN */}
+              <div className="bg-[#0D1526] border border-slate-800/80 rounded-xl p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Tiempo & Programación</span>
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setMostrarDatePicker(false)}
-                  className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-white"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
 
-              {/* Selector de Fecha y Hora */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-[10px] text-slate-500 dark:text-slate-400 mb-1">
-                    Fecha de Ejecución
-                  </label>
-                  <input
-                    type="date"
-                    value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 font-mono text-xs outline-none focus:ring-2 focus:ring-indigo-500/30"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-[10px] text-slate-500 dark:text-slate-400 mb-1">
-                    Hora de Inicio
-                  </label>
-                  <input
-                    type="time"
-                    value={hora}
-                    onChange={(e) => setHora(e.target.value)}
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 font-mono text-xs outline-none focus:ring-2 focus:ring-indigo-500/30"
-                  />
-                </div>
-              </div>
-
-              {/* Presets de Hora */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                {[
-                  { label: '07:00 AM Mañana', val: '07:00' },
-                  { label: '10:00 AM Media m.', val: '10:00' },
-                  { label: '02:00 PM Tarde', val: '14:00' },
-                  { label: '08:30 PM Noche', val: '20:30' }
-                ].map((preset) => (
-                  <button
-                    key={preset.val}
-                    type="button"
-                    onClick={() => setHora(preset.val)}
-                    className="py-1 px-2 text-[10.5px] rounded-lg border border-slate-200 dark:border-slate-700 hover:border-indigo-400 text-slate-600 dark:text-slate-300 text-center transition cursor-pointer"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Toggle Puntual vs Duración */}
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/60">
-                <div>
-                  <p className="font-bold text-slate-800 dark:text-slate-200 leading-tight">⚡ Micro-Acción (Check instantáneo · 0 min)</p>
-                  <p className="text-[10px] text-slate-400">Sin bloqueo de tiempo en agenda</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={esPuntual}
-                  onChange={(e) => setEsPuntual(e.target.checked)}
-                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-                />
-              </div>
-
-              {!esPuntual && (
-                <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700/60">
-                  <span className="font-semibold text-slate-600 dark:text-slate-300">Duración estimada:</span>
-                  <div className="flex items-center gap-1.5">
-                    {[0.25, 0.5, 1.0, 1.5, 2.0].map((h) => (
-                      <button
-                        key={h}
-                        type="button"
-                        onClick={() => setDuracionHoras(h)}
-                        className={`px-2 py-0.5 rounded-lg font-mono font-bold text-[10px] transition cursor-pointer ${
-                          duracionHoras === h
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-400'
-                        }`}
-                      >
-                        {h}h
-                      </button>
-                    ))}
+                <div className="space-y-2 text-xs">
+                  {/* Fecha y Hora */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Fecha Programada</label>
+                      <input
+                        type="date"
+                        value={fecha}
+                        onChange={(e) => setFecha(e.target.value)}
+                        className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums outline-none text-slate-200 focus:border-sky-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Hora Inicio</label>
+                      <input
+                        type="time"
+                        value={hora}
+                        onChange={(e) => setHora(e.target.value)}
+                        className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums outline-none text-slate-200 focus:border-sky-500/50"
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
 
-              {/* Recurrencia */}
-              <div>
-                <label className="block font-semibold text-[10px] text-slate-500 dark:text-slate-400 mb-1">
-                  Frecuencia de Repetición
-                </label>
-                <select
-                  value={frecuencia}
-                  onChange={(e) => setFrecuencia(e.target.value as FrecuenciaCiclo)}
-                  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 font-medium text-xs outline-none"
-                >
-                  <option value="NINGUNA">🎯 Instancia Única (Sin repetición)</option>
-                  <option value="DIARIA">🔄 Recurrencia Diaria</option>
-                  <option value="DIARIA_LABORAL">🔄 Días Laborales (Lun-Vie)</option>
-                  <option value="FIN_SEMANA">🔄 Fines de Semana (Sáb-Dom)</option>
-                  <option value="SEMANAL">🔄 Recurrencia Semanal</option>
-                  <option value="MENSUAL">🔄 Recurrencia Mensual</option>
-                </select>
-              </div>
-
-              {frecuencia === 'SEMANAL' && (
-                <div className="space-y-2 pt-1 border-t border-slate-200 dark:border-slate-700/60">
-                  <label className="block font-semibold text-[10px] text-slate-500 dark:text-slate-400">
-                    Días de la semana
-                  </label>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'].map((dia) => {
-                      const activo = diasSemana.includes(dia);
-                      return (
-                        <button
-                          key={dia}
-                          type="button"
-                          onClick={() => {
-                            if (activo) {
-                              setDiasSemana(diasSemana.filter((d) => d !== dia));
-                            } else {
-                              setDiasSemana([...diasSemana, dia]);
-                            }
-                          }}
-                          className={`w-8 h-8 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                            activo
-                              ? 'bg-indigo-600 text-white shadow-xs'
-                              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-500 hover:border-indigo-400'
-                          }`}
-                        >
-                          {dia}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-                    <span>Repetir cada:</span>
-                    <input
-                      type="number"
-                      min={1}
-                      value={repeatInterval}
-                      onChange={(e) => setRepeatInterval(parseInt(e.target.value) || 1)}
-                      className="w-14 p-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-center font-mono"
-                    />
-                    <select
-                      value={repeatUnit}
-                      onChange={(e) => setRepeatUnit(e.target.value as 'DIA' | 'SEMANA' | 'MES')}
-                      className="p-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                    >
-                      <option value="DIA">Día(s)</option>
-                      <option value="SEMANA">Semana(s)</option>
-                      <option value="MES">Mes(es)</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
-                    <span>Finaliza:</span>
-                    <select
-                      value={repeatEnd}
-                      onChange={(e) => setRepeatEnd(e.target.value as 'NUNCA' | 'CONTEO')}
-                      className="p-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                    >
-                      <option value="NUNCA">Nunca</option>
-                      <option value="CONTEO">Después de</option>
-                    </select>
-                    {repeatEnd === 'CONTEO' && (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={1}
-                          value={repeatCount}
-                          onChange={(e) => setRepeatCount(parseInt(e.target.value) || 1)}
-                          className="w-14 p-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-center font-mono"
-                        />
-                        <span>veces</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* SECCIÓN GASTO ASOCIADO DESPLEGABLE */}
-          {mostrarGasto && (
-            <div
-              id="flow-gasto-container"
-              className="bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl p-3.5 space-y-3 animate-fadeIn"
-            >
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  {/* Frecuencia de Repetición */}
                   <div>
-                    <p className="font-bold text-emerald-900 dark:text-emerald-200 leading-tight">Gasto Asociado</p>
-                    <p className="text-[10px] text-emerald-700 dark:text-emerald-400">Imputación financiera en Life OS</p>
-                  </div>
-                </div>
-
-                <div className="inline-flex p-0.5 bg-emerald-100/80 dark:bg-emerald-900/60 rounded-xl border border-emerald-200 dark:border-emerald-800/80 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => setTabGasto('NUEVO')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
-                      tabGasto === 'NUEVO'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-emerald-800 dark:text-emerald-300'
-                    }`}
-                  >
-                    Registrar Nuevo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTabGasto('VINCULAR')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
-                      tabGasto === 'VINCULAR'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'text-emerald-800 dark:text-emerald-300'
-                    }`}
-                  >
-                    Vincular Existente
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setMostrarGasto(false)}
-                  className="p-1 rounded-md text-emerald-700 dark:text-emerald-400 hover:text-emerald-900"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {tabGasto === 'NUEVO' ? (
-                <div className="space-y-2.5">
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
-                    {/* Divisa */}
-                    <div className="sm:col-span-4">
-                      <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                        Moneda
-                      </label>
-                      <div className="inline-flex p-0.5 bg-slate-200/70 dark:bg-slate-800 rounded-xl border border-slate-300/60 dark:border-slate-700 w-full justify-between">
-                        {(['PEN', 'USD', 'EUR'] as const).map((m) => (
+                    <label className="text-[10px] text-slate-400 block mb-0.5">Frecuencia de Ciclo</label>
+                    <div className="grid grid-cols-4 gap-1 p-0.5 bg-[#040711] rounded-lg border border-slate-800">
+                      {(
+                        [
+                          { id: 'PUNTUAL', label: 'Puntual' },
+                          { id: 'DIARIA', label: 'Diario' },
+                          { id: 'SEMANAL', label: 'Semanal' },
+                          { id: 'MENSUAL', label: 'Mensual' }
+                        ] as const
+                      ).map((f) => {
+                        const activo = (f.id === 'PUNTUAL' && esPuntual) || (!esPuntual && frecuencia === f.id);
+                        return (
                           <button
-                            key={m}
+                            key={f.id}
                             type="button"
-                            onClick={() => setGastoMoneda(m)}
-                            className={`flex-1 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                              gastoMoneda === m ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300'
+                            onClick={() => {
+                              if (f.id === 'PUNTUAL') {
+                                setEsPuntual(true);
+                                setTipoCompromiso('PUNTUAL');
+                                setDuracionHoras(0);
+                              } else {
+                                setEsPuntual(false);
+                                setTipoCompromiso('HABITUAL');
+                                setFrecuencia(f.id as FrecuenciaCiclo);
+                                if (duracionHoras === 0) setDuracionHoras(0.5);
+                              }
+                            }}
+                            className={`py-1 rounded-md text-[10px] font-semibold transition cursor-pointer text-center ${
+                              activo
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'text-slate-400 hover:text-slate-200'
                             }`}
                           >
-                            {m}
+                            {f.label}
                           </button>
-                        ))}
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Selector de días (LU..DO) cuando aplica */}
+                  {!esPuntual && (frecuencia === 'SEMANAL' || frecuencia === 'DIARIA') && (
+                    <div className="pt-1">
+                      <label className="text-[10px] text-slate-400 block mb-1">Días de Ejecución</label>
+                      <div className="grid grid-cols-7 gap-1">
+                        {['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'].map((dia) => {
+                          const sel = diasSemana.includes(dia);
+                          return (
+                            <button
+                              key={dia}
+                              type="button"
+                              onClick={() => {
+                                if (sel) {
+                                  if (diasSemana.length > 1) {
+                                    setDiasSemana(diasSemana.filter((d) => d !== dia));
+                                  }
+                                } else {
+                                  setDiasSemana([...diasSemana, dia]);
+                                }
+                              }}
+                              className={`py-1 rounded-md text-[10px] font-mono font-bold transition cursor-pointer ${
+                                sel
+                                  ? 'bg-sky-600/30 text-sky-300 border border-sky-500/50'
+                                  : 'bg-[#040711] text-slate-500 border border-slate-800 hover:text-slate-300'
+                              }`}
+                            >
+                              {dia}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
+                  )}
 
-                    {/* Monto */}
-                    <div className="sm:col-span-3">
-                      <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                        Monto
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-slate-400">
-                          {gastoMoneda === 'PEN' ? 'S/' : gastoMoneda === 'USD' ? '$' : '€'}
-                        </span>
+                  {/* Estimación de Duración & Micro-Acción */}
+                  <div className="pt-1 space-y-1.5 border-t border-slate-800/60">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-slate-400">Duración Estimada</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nuevoEstado = !esPuntual;
+                          setEsPuntual(nuevoEstado);
+                          if (nuevoEstado) {
+                            setDuracionHoras(0);
+                          } else {
+                            setDuracionHoras(0.5);
+                          }
+                        }}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                          esPuntual
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : 'bg-[#040711] text-slate-400 border border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        <Zap className="w-3 h-3" />
+                        <span>Micro-Acción (0m)</span>
+                      </button>
+                    </div>
+
+                    {!esPuntual && (
+                      <div className="flex items-center gap-1.5">
+                        {[15, 30, 45, 60].map((min) => {
+                          const h = min / 60;
+                          const activo = Math.abs(duracionHoras - h) < 0.05;
+                          return (
+                            <button
+                              key={min}
+                              type="button"
+                              onClick={() => setDuracionHoras(h)}
+                              className={`flex-1 py-1 rounded-md text-[10px] font-mono tabular-nums font-bold transition cursor-pointer ${
+                                activo
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'bg-[#040711] text-slate-400 border border-slate-800 hover:text-slate-200'
+                              }`}
+                            >
+                              {min}m
+                            </button>
+                          );
+                        })}
                         <input
                           type="number"
-                          step="0.01"
+                          step="0.25"
                           min="0"
-                          value={gastoMonto}
-                          onChange={(e) => setGastoMonto(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-8 pr-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 font-mono font-bold text-emerald-700 dark:text-emerald-300 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                          value={duracionHoras}
+                          onChange={(e) => setDuracionHoras(parseFloat(e.target.value) || 0)}
+                          placeholder="Horas"
+                          className="w-16 bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-center text-slate-200 outline-none focus:border-sky-500/50"
+                          title="Duración en horas decimales (ej. 1.5)"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sincronización Google Calendar */}
+                  <div className="pt-1.5 flex items-center justify-between text-[11px] border-t border-slate-800/60">
+                    <span className="text-slate-400">Agendar en Calendar</span>
+                    <button
+                      type="button"
+                      onClick={() => setCalendarSync(calendarSync === 'Sí' ? 'No' : 'Sí')}
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                        calendarSync === 'Sí'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-[#040711] border border-slate-800 text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {calendarSync === 'Sí' && <Check className="w-3 h-3" />}
+                      <span>{calendarSync === 'Sí' ? 'Sí' : 'No'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* TARJETA BENTO 2: OPERATIVO & METAS ESTRATÉGICAS */}
+              <div className="bg-[#0D1526] border border-slate-800/80 rounded-xl p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Operativo & Metas Estratégicas</span>
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  {/* Micro-riel Prioridad Eisenhower */}
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-0.5">Prioridad Operativa</label>
+                    <div className="grid grid-cols-3 gap-1 p-0.5 bg-[#040711] rounded-lg border border-slate-800">
+                      {(
+                        [
+                          { id: '01_P1_Alta', label: 'P1 Urgente', dot: 'bg-rose-400' },
+                          { id: '02_P2_Media', label: 'P2 Media', dot: 'bg-amber-400' },
+                          { id: '03_P3_Baja', label: 'P3 Baja', dot: 'bg-emerald-400' }
+                        ] as const
+                      ).map((p) => {
+                        const activo = prioridad === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setPrioridad(p.id)}
+                            className={`py-1 rounded-md text-[10px] font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                              activo
+                                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />
+                            <span>{p.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Selector y Vinculación a Metas & Planes */}
+                  <div>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <label className="text-[10px] text-slate-400">Meta o Plan Estratégico</label>
+                      <button
+                        type="button"
+                        onClick={() => setModoMetaManual(!modoMetaManual)}
+                        className="text-[10px] text-sky-400 hover:text-sky-300 transition cursor-pointer"
+                      >
+                        {modoMetaManual ? 'Seleccionar existente' : '+ Nueva meta rápida'}
+                      </button>
+                    </div>
+
+                    {modoMetaManual ? (
+                      <input
+                        type="text"
+                        value={nombreNuevaMeta || metaMacro}
+                        onChange={(e) => {
+                          setNombreNuevaMeta(e.target.value);
+                          setMetaMacro(e.target.value);
+                        }}
+                        placeholder="Nombre del nuevo objetivo estratégico..."
+                        className="w-full bg-[#040711] px-2.5 py-1 rounded-lg border border-slate-800 text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50"
+                      />
+                    ) : (
+                      <select
+                        value={metaSeleccionadaId}
+                        onChange={(e) => handleCambiarMetaSeleccionada(e.target.value)}
+                        className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 cursor-pointer"
+                      >
+                        <option value="">Sin vinculación a metas</option>
+                        {metasDisponibles.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.codigo_legado ? `${m.codigo_legado} · ${m.nombre_meta}` : m.nombre_meta}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Métricas Cuantitativas: Unidad, Objetivo, Acumulado y Rescate */}
+                  <div className="pt-1 border-t border-slate-800/60 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Unidad de Medida</label>
+                        <input
+                          type="text"
+                          placeholder="km, págs, vasos..."
+                          value={unidadMedida}
+                          onChange={(e) => setUnidadMedida(e.target.value)}
+                          className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Meta Objetivo</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="100"
+                          value={metaTotal}
+                          onChange={(e) => setMetaTotal(e.target.value)}
+                          className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
                         />
                       </div>
                     </div>
 
-                    {/* Categoría */}
-                    <div className="sm:col-span-5">
-                      <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                        Categoría
-                      </label>
-                      <select
-                        value={gastoCategoria}
-                        onChange={(e) => setGastoCategoria(e.target.value)}
-                        className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 bg-white dark:bg-slate-900 text-xs outline-none"
-                      >
-                        <option value="Personal_Salud">Salud y Cuidado</option>
-                        <option value="Personal_Alimentacion">Alimentación y Comida</option>
-                        <option value="Personal_Transporte">Transporte y Movilidad</option>
-                        <option value="Personal_Educacion">Educación y Cursos</option>
-                        <option value="Personal_Ocio">Ocio y Entretenimiento</option>
-                        <option value="Otros">Otros</option>
-                      </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Valor Acumulado</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="0"
+                          value={valorAcumulado}
+                          onChange={(e) => setValorAcumulado(e.target.value)}
+                          className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Rescate Racha Mínimo</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Mínimo diario"
+                          value={rescateMinimo}
+                          onChange={(e) => setRescateMinimo(e.target.value)}
+                          className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
+                        />
+                      </div>
                     </div>
                   </div>
-
-                  <div>
-                    <input
-                      type="text"
-                      value={gastoConcepto}
-                      onChange={(e) => setGastoConcepto(e.target.value)}
-                      placeholder="Concepto o descripción breve del egreso..."
-                      className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none"
-                    />
-                  </div>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={gastoSearch}
-                      onChange={(e) => setGastoSearch(e.target.value)}
-                      placeholder="Buscar egreso en Finanzas..."
-                      className="w-full pl-8 pr-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-xs outline-none"
-                    />
-                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  </div>
-                  <div className="max-h-36 overflow-y-auto custom-scrollbar space-y-1">
-                    {listaGastos
-                      .filter((g) =>
-                        g.descripcion_gasto.toLowerCase().includes(gastoSearch.toLowerCase()) ||
-                        g.codigo_legado.toLowerCase().includes(gastoSearch.toLowerCase())
-                      )
-                      .map((g) => (
-                        <div
-                          key={g.id}
-                          onClick={() => {
-                            setGastoVinculadoId(g.codigo_legado);
-                            setGastoMonto(String(g.monto_original));
-                          }}
-                          className={`p-2 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition ${
-                            gastoVinculadoId === g.codigo_legado
-                              ? 'bg-emerald-100/60 dark:bg-emerald-900/40 border-emerald-500'
-                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300'
-                          }`}
-                        >
-                          <div>
-                            <span className="font-mono font-bold text-slate-500 text-[10px] mr-1.5">
-                              {g.codigo_legado}
-                            </span>
-                            <span className="font-medium text-slate-800 dark:text-slate-100">
-                              {g.descripcion_gasto}
-                            </span>
-                          </div>
-                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            S/ {g.monto_original}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
-          )}
+          </div>
 
-          {/* SECCIÓN METAS CUANTIFICABLES Y RESCATE DE RACHA */}
-          {mostrarMetas && (
-            <div
-              id="act-flow-meta-section"
-              className="bg-cyan-50/60 dark:bg-cyan-950/30 border border-cyan-200/80 dark:border-cyan-800/60 rounded-2xl p-3.5 space-y-3 animate-fadeIn"
+          {/* ACORDEÓN CANÓNICO DE GASTOS ASOCIADOS */}
+          <div className="border border-slate-800/80 rounded-xl overflow-hidden bg-[#0D1526]">
+            <button
+              type="button"
+              onClick={() => setMostrarGasto(!mostrarGasto)}
+              className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold text-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/30 transition-all duration-150 cursor-pointer"
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Target className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                  <div>
-                    <span className="font-bold text-xs text-cyan-900 dark:text-cyan-200">
-                      Meta Cuantificable & Rescate de Racha
-                    </span>
-                    <p className="text-[10px] text-cyan-700 dark:text-cyan-400">
-                      Seguimiento por acumulación numérica y preservación de streak
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMostrarMetas(false)}
-                  className="p-1 rounded-md text-cyan-700 dark:text-cyan-400 hover:text-cyan-900"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-emerald-400" />
+                <span>Gasto Asociado & Costos</span>
+                {tabGasto === 'VINCULAR' && gastoVinculadoId ? (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-1">
+                    <Link2 className="w-3 h-3 text-emerald-400" />
+                    <span>{gastoVinculadoId} • S/ {Number(gastoMonto || 0).toFixed(2)}</span>
+                  </span>
+                ) : parseFloat(gastoMonto) > 0 ? (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
+                    {gastoMoneda === 'PEN' ? 'S/' : gastoMoneda === 'USD' ? '$' : '€'} {Number(gastoMonto).toFixed(2)} • {gastoCategoria.replace(/_/g, ' ')}
+                  </span>
+                ) : null}
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                <div className="sm:col-span-8">
-                  <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                    Meta & Plan Estratégico
-                  </label>
-                  <select
-                    id="act-flow-meta-select"
-                    value={
-                      modoMetaManual
-                        ? '__TEXTO_LIBRE__'
-                        : metaSeleccionadaId === '__CREAR_NUEVA__'
-                        ? '__CREAR_NUEVA__'
-                        : metaSeleccionadaId
-                    }
-                    onChange={(e) => handleCambiarMetaSeleccionada(e.target.value)}
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
-                  >
-                    <option value="">Sin vincular a meta</option>
-                    <option value="__CREAR_NUEVA__">+ Crear nueva meta para este hábito...</option>
-                    <option value="__TEXTO_LIBRE__">Personalizada (Solo texto libre / Legacy)</option>
-                    {metasDisponibles.length > 0 && (
-                      <optgroup label="Metas y Planes Activos">
-                        {metasDisponibles.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.codigo_legado ? `[${m.codigo_legado}] ` : ''}{m.nombre_meta} ({m.meta_objetivo_total || 0} {m.unidad_medida || 'u'})
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                </div>
-                <div className="sm:col-span-4">
-                  <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                    Unidad de Medida
-                  </label>
-                  <input
-                    type="text"
-                    value={unidadMedida}
-                    onChange={(e) => setUnidadMedida(e.target.value)}
-                    placeholder="km, horas, libros, sesiones..."
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-              </div>
-
-              {/* Si se seleccionó Crear Nueva Meta inline (REQ-HABITS-CREATE-METAS-INLINE-15) */}
-              {metaSeleccionadaId === '__CREAR_NUEVA__' && (
-                <div className="p-3 rounded-xl bg-cyan-100/50 dark:bg-cyan-950/40 border border-cyan-300/70 dark:border-cyan-800/60 space-y-2 animate-fadeIn">
-                  <div className="flex items-center gap-1.5 text-cyan-800 dark:text-cyan-300 font-semibold text-[11px]">
-                    <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
-                    <span>Crear Nueva Meta en Metas & Planes</span>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                      Nombre de la nueva meta
-                    </label>
-                    <input
-                      id="act-flow-new-meta-name"
-                      type="text"
-                      value={nombreNuevaMeta}
-                      onChange={(e) => setNombreNuevaMeta(e.target.value)}
-                      placeholder={titulo.trim() || 'Ej: Correr 500 km, Leer 12 libros...'}
-                      className="w-full border border-cyan-300/80 dark:border-cyan-700/60 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/30 text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
-                    />
-                    <p className="text-[10px] text-cyan-700/90 dark:text-cyan-400/90 mt-1">
-                      Esta meta se registrará automáticamente en metas_planes y quedará vinculada al 100% con este hábito.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Si es personalizada / manual, mostrar campo de texto libre */}
-              {modoMetaManual && (
-                <div>
-                  <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                    Meta Macro / OKR (Texto Libre)
-                  </label>
-                  <input
-                    type="text"
-                    value={metaMacro}
-                    onChange={(e) => setMetaMacro(e.target.value)}
-                    placeholder="Ej: Leer 12 libros, Ahorro $10k, Maratón 42k..."
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-900 text-xs outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                <div>
-                  <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                    Meta Objetivo Total
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={metaTotal}
-                    onChange={(e) => setMetaTotal(e.target.value)}
-                    placeholder="100"
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono tabular-nums font-bold text-xs bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                    Acumulado Actual
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={valorAcumulado}
-                    onChange={(e) => setValorAcumulado(e.target.value)}
-                    placeholder="0"
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono tabular-nums font-bold text-xs bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                    Meta Diaria
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={metaDiaria}
-                    onChange={(e) => setMetaDiaria(e.target.value)}
-                    placeholder="0"
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono tabular-nums font-bold text-xs bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-cyan-500/20 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-[10px] text-slate-600 dark:text-slate-400 mb-1">
-                    Nivel de Rescate Mínimo
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={rescateMinimo}
-                    onChange={(e) => setRescateMinimo(e.target.value)}
-                    placeholder="0"
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-1.5 font-mono tabular-nums font-bold text-xs bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 outline-none focus:ring-2 focus:ring-cyan-500/20"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* SECCIÓN NOTAS VINCULADAS */}
-          {mostrarNotas && (
-            <div className="bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/60 rounded-2xl p-3.5 space-y-2.5 animate-fadeIn">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                  <span className="font-bold text-xs text-purple-900 dark:text-purple-200">Notas Inteligentes</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMostrarNotas(false)}
-                  className="p-1 rounded-md text-purple-700 dark:text-purple-400"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={notasSearch}
-                  onChange={(e) => setNotasSearch(e.target.value)}
-                  placeholder="Buscar nota o checklist..."
-                  className="w-full pl-8 pr-3 py-1.5 border border-purple-200 dark:border-purple-800 rounded-xl bg-white dark:bg-slate-900 text-xs outline-none"
+              <div className="flex items-center gap-2">
+                {!mostrarGasto && (!gastoMonto || parseFloat(gastoMonto) === 0) && !gastoVinculadoId && (
+                  <span className="text-[11px] text-slate-400 font-normal">Sin gastos vinculados</span>
+                )}
+                <ChevronDown
+                  className={`w-4 h-4 text-emerald-400 transition-transform duration-200 ${
+                    mostrarGasto ? 'rotate-180' : ''
+                  }`}
                 />
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-purple-400" />
               </div>
-              <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
-                {listaNotas
-                  .filter((n) => n.titulo.toLowerCase().includes(notasSearch.toLowerCase()))
-                  .map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => setNotaVinculadaId(n.codigo_legado)}
-                      className={`p-2 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition ${
-                        notaVinculadaId === n.codigo_legado
-                          ? 'bg-purple-100 dark:bg-purple-900/40 border-purple-500'
-                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-purple-300'
+            </button>
+
+            {mostrarGasto && (
+              <div className="p-3.5 border-t border-emerald-500/20 bg-[#0D1526] space-y-3">
+                {/* Selector de Pestaña Superior: Modo Dual */}
+                <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Modo de Imputación
+                  </span>
+                  <div className="inline-flex p-0.5 bg-[#040711] rounded-lg border border-slate-800 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setTabGasto('NUEVO')}
+                      className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                        tabGasto === 'NUEVO'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      <span className="font-medium text-slate-800 dark:text-slate-100">{n.titulo}</span>
-                      <span className="font-mono text-[10px] text-slate-400">{n.codigo_legado}</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
+                      <Plus className="w-3 h-3" />
+                      <span>Nuevo Gasto</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTabGasto('VINCULAR')}
+                      className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                        tabGasto === 'VINCULAR'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Link2 className="w-3 h-3" />
+                      <span>Vincular Existente</span>
+                    </button>
+                  </div>
+                </div>
 
-          {/* SECCIÓN DE PASOS / SUBTAREAS PROCEDURALES */}
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setMostrarPasos(!mostrarPasos)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition cursor-pointer"
-              >
-                <ListOrdered className="w-4 h-4" />
-                <span>{mostrarPasos ? 'Ocultar pasos procedurales' : '+ Añadir pasos secuenciales'}</span>
-              </button>
+                {tabGasto === 'NUEVO' ? (
+                  /* Modo NUEVO GASTO */
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-12 gap-3 items-end">
+                      {/* Selector Moneda */}
+                      <div className="col-span-12 sm:col-span-4">
+                        <label className="text-[10px] text-slate-400 block mb-1">Moneda de Registro</label>
+                        <div className="inline-flex p-0.5 bg-[#040711] rounded-lg border border-slate-800 w-full justify-between">
+                          {(['PEN', 'USD', 'EUR'] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setGastoMoneda(m)}
+                              className={`flex-1 py-1.5 rounded-md text-xs font-mono font-bold transition-all cursor-pointer ${
+                                gastoMoneda === m ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Input Monto */}
+                      <div className="col-span-12 sm:col-span-8">
+                        <label className="text-[10px] text-slate-400 block mb-1">Monto Incurrido</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base font-mono font-bold text-emerald-400 select-none">
+                            {gastoMoneda === 'PEN' ? 'S/' : gastoMoneda === 'USD' ? '$' : '€'}
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={gastoMonto}
+                            onChange={(e) => setGastoMonto(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full pl-9 pr-3 py-1.5 border border-slate-800 rounded-lg bg-[#040711] font-mono font-bold text-lg text-emerald-300 outline-none focus:border-emerald-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Categoría Contable</label>
+                        <select
+                          value={gastoCategoria}
+                          onChange={(e) => setGastoCategoria(e.target.value)}
+                          className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 cursor-pointer"
+                        >
+                          <option value="Personal_Salud">Salud & Bienestar</option>
+                          <option value="Educacion_Libros">Educación & Libros</option>
+                          <option value="Equipamiento_Herramientas">Equipamiento & Herramientas</option>
+                          <option value="Suscripciones_Software">Suscripciones & Apps</option>
+                          <option value="Alimentacion_Nutricion">Nutrición & Suplementos</option>
+                          <option value="Otros">Otros</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Concepto / Glosa Detallada</label>
+                        <input
+                          type="text"
+                          value={gastoConcepto}
+                          onChange={(e) => setGastoConcepto(e.target.value)}
+                          placeholder="Ej. Membresía gimnasio, suplementos, zapatillas..."
+                          className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Modo VINCULAR EXISTENTE */
+                  <div className="space-y-2.5">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={gastoSearch}
+                        onChange={(e) => setGastoSearch(e.target.value)}
+                        placeholder="Buscar egreso por código (GAS-XXX), descripción o monto..."
+                        className="w-full pl-8 pr-3 py-1.5 border border-slate-800 rounded-lg bg-[#040711] text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50"
+                      />
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                      {listaGastos
+                        .filter((g) => {
+                          const q = gastoSearch.toLowerCase().trim();
+                          if (!q) return true;
+                          return (
+                            (g.codigo_legado || '').toLowerCase().includes(q) ||
+                            (g.descripcion_gasto || '').toLowerCase().includes(q) ||
+                            String(g.monto_pen || g.monto_original || '').includes(q) ||
+                            (g.categoria_gasto || '').toLowerCase().includes(q)
+                          );
+                        })
+                        .slice(0, 30)
+                        .map((g) => {
+                          const isSelected = gastoVinculadoId === g.codigo_legado;
+                          const montoMostrar = Number(g.monto_pen || g.monto_original || 0).toFixed(2);
+                          return (
+                            <div
+                              key={g.id}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setGastoVinculadoId(null);
+                                  setGastoMonto('');
+                                } else {
+                                  setGastoVinculadoId(g.codigo_legado || null);
+                                  setGastoMonto(String(g.monto_original || g.monto_pen || ''));
+                                  setGastoMoneda((g.moneda_original as 'PEN' | 'USD' | 'EUR') || 'PEN');
+                                  setGastoCategoria(g.categoria_gasto || 'Personal_Salud');
+                                  setGastoConcepto(g.descripcion_gasto || '');
+                                }
+                              }}
+                              className={`p-2.5 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition-all ${
+                                isSelected
+                                  ? 'bg-emerald-950/40 border-emerald-500/80 shadow-xs'
+                                  : 'bg-[#040711] border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/40'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono font-bold text-[10px] text-sky-400 bg-sky-950/50 px-1.5 py-0.2 rounded border border-sky-800/40 shrink-0">
+                                      {g.codigo_legado}
+                                    </span>
+                                    <span className="font-medium text-slate-200 truncate">
+                                      {g.descripcion_gasto || 'Sin descripción'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                                    {g.fecha_gasto || 'Sin fecha'} • {(g.categoria_gasto || 'General').replace(/_/g, ' ')}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0 ml-2">
+                                <span className="font-mono font-bold text-xs text-emerald-300">
+                                  S/ {montoMostrar}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+
+
+
+
+          {/* 4. BLOQUE PROCEDURAL DE SUBTAREAS / PASOS */}
+          <div className="p-3.5 bg-[#040711] border border-slate-800/80 rounded-xl space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-black">
+                  <ListOrdered className="w-4 h-4" />
+                </span>
+                <div>
+                  <h4 className="font-bold text-slate-200 text-xs">Pasos / Subtareas Procedurales</h4>
+                  <p className="text-[10px] text-slate-400">Procedimiento guiado secuencial de ejecución</p>
+                </div>
+              </div>
+
               {pasosLocales.length > 0 && (
-                <div className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                <div
+                  id="act-flow-pasos-progreso-badge"
+                  className="font-mono tabular-nums text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#0D1526] text-slate-300 border border-slate-800"
+                >
                   {pasosCompletados}/{pasosLocales.length} pasos ({progresoPasos}%)
                 </div>
               )}
             </div>
 
-            {mostrarPasos && (
-              <div className="space-y-2 p-3 bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl animate-fadeIn">
-                {/* Barra de progreso */}
-                {pasosLocales.length > 0 && (
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300"
-                      style={{ width: `${progresoPasos}%` }}
-                    />
-                  </div>
-                )}
+            {/* Barra de progreso con gradiente */}
+            {pasosLocales.length > 0 && (
+              <div className="w-full bg-[#0D1526] h-1.5 rounded-full overflow-hidden border border-slate-800/40">
+                <div
+                  className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${progresoPasos}%` }}
+                />
+              </div>
+            )}
 
-                {/* Input agregar paso */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={nuevoPasoTexto}
-                    onChange={(e) => setNuevoPasoTexto(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        agregarPaso();
-                      }
-                    }}
-                    placeholder="Escribe el siguiente paso procedural y pulsa Enter..."
-                    className="flex-1 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                  <button
-                    type="button"
-                    onClick={agregarPaso}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-2xs transition flex items-center gap-1 shrink-0 cursor-pointer"
+            {/* Lista de pasos */}
+            <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 custom-scrollbar">
+              {pasosLocales.length === 0 ? (
+                <p className="text-center py-2.5 text-[11px] text-slate-500 italic">No hay pasos secuenciales agregados.</p>
+              ) : (
+                pasosLocales.map((paso) => (
+                  <div
+                    key={paso.id}
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg border text-xs group transition-colors bg-[#0D1526] border-slate-800/80 hover:border-slate-700"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Agregar</span>
-                  </button>
-                </div>
-
-                {/* Lista de pasos */}
-                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                  {pasosLocales.map((paso) => (
-                    <div
-                      key={paso.id}
-                      className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 text-xs gap-2"
-                    >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
                       <button
                         type="button"
                         onClick={() => togglePasoCompletado(paso.id)}
-                        className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition cursor-pointer ${
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition cursor-pointer ${
                           paso.completado
-                            ? 'bg-emerald-600 border-emerald-600 text-white'
-                            : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500'
+                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                            : 'border-slate-700 bg-slate-900/60 hover:border-slate-500'
                         }`}
                       >
-                        {paso.completado && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        {paso.completado && <Check className="w-3 h-3 stroke-[3]" />}
                       </button>
+                      <span className="text-[10px] font-mono font-bold text-slate-500 shrink-0">#{paso.numero}</span>
                       <span
-                        className={`flex-1 text-slate-800 dark:text-slate-200 ${
-                          paso.completado ? 'line-through text-slate-400 dark:text-slate-500' : ''
+                        className={`truncate ${
+                          paso.completado ? 'line-through text-slate-500' : 'text-slate-200'
                         }`}
                       >
-                        {paso.numero}. {paso.descripcion}
+                        {paso.descripcion}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => eliminarPaso(paso.id)}
-                        className="p-1 rounded-md text-slate-400 hover:text-rose-500 transition cursor-pointer"
-                        title="Eliminar paso"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+
+                    <button
+                      type="button"
+                      onClick={() => eliminarPaso(paso.id)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                      title="Eliminar paso"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Input para nuevo paso */}
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                value={nuevoPasoTexto}
+                onChange={(e) => setNuevoPasoTexto(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    agregarPaso();
+                  }
+                }}
+                placeholder="Escribe el siguiente paso procedural y pulsa Enter..."
+                className="flex-1 border border-slate-800 rounded-lg px-3 py-1.5 text-xs bg-[#0D1526] text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50"
+              />
+              <button
+                type="button"
+                onClick={agregarPaso}
+                className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition cursor-pointer"
+                title="Agregar paso"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          {/* ÁREA DE NOTAS LIBRES */}
-          <div>
+          {/* 5. APUNTES Y NOTAS RÁPIDAS DE EJECUCIÓN */}
+          <div className="space-y-1.5">
+            <label className="block font-bold text-xs text-slate-400">
+              Apuntes y Notas Rápidas de Ejecución
+            </label>
             <textarea
+              rows={2}
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
-              rows={2}
-              className="w-full text-xs bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 resize-none transition-colors"
-              placeholder="Añadir notas, enlaces o apuntes rápidos..."
+              placeholder="Añadir notas, observaciones o apuntes rápidos..."
+              className="w-full bg-[#040711] border border-slate-800/80 rounded-xl p-3 text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50 transition resize-y custom-scrollbar"
             />
           </div>
 
-          {/* SECCIÓN DINÁMICA DE NOTAS VINCULADAS (Fase 4.43) */}
+          {/* 6. SECCIÓN DINÁMICA DE NOTAS VINCULADAS */}
           <SeccionNotasVinculadasModal
             codigoEntidad={actividadEditar?.codigo_legado || ''}
             tipoEntidad="HABITO"
@@ -1643,33 +1543,33 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
           />
         </div>
 
-        {/* FOOTER DE ACCIONES */}
-        <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between gap-2.5">
+        {/* 7. FOOTER DE ACCIONES */}
+        <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-800 bg-[#0D1526] flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             {actividadEditar && (
               <button
                 type="button"
                 id="act-flow-btn-eliminar"
                 onClick={handleEliminar}
-                className="px-3 py-2 border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-xl font-bold flex items-center gap-1.5 transition text-xs active:scale-95 cursor-pointer"
+                className="px-2.5 py-1.5 rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                 title="Eliminar esta actividad permanentemente"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Eliminar</span>
+                <span className="hidden sm:inline">Eliminar</span>
               </button>
             )}
-            <p className="text-[10px] text-slate-400 hidden sm:flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[9px] border border-slate-200 dark:border-slate-700">
+            <p className="text-[10px] text-slate-500 hidden sm:flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 rounded bg-[#040711] font-mono text-[9px] border border-slate-800 text-slate-400">
                 Esc
               </kbd>
               <span>para cancelar</span>
             </p>
           </div>
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-3 ml-auto">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition cursor-pointer"
             >
               Cancelar
             </button>
@@ -1677,9 +1577,9 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               type="button"
               id="btn-submit-flow-actividad"
               onClick={() => handleGuardar()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md transition cursor-pointer"
             >
-              <span>{actividadEditar ? 'Actualizar Actividad' : 'Guardar Actividad'}</span>
+              {actividadEditar ? 'Actualizar Actividad' : 'Guardar Actividad'}
             </button>
           </div>
         </div>

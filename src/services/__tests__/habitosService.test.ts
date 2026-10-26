@@ -271,6 +271,9 @@ describe('Retención Visual de Hábitos Completados Hoy y Sincronización Calend
     const { db } = await import('../../db/db');
 
     const hoyStr = formatFechaIsoLocal(new Date());
+    const manana = new Date();
+    manana.setDate(manana.getDate() + 1);
+    const mananaStr = formatFechaIsoLocal(manana);
 
     const mockActCompletada = {
       id: 'test-act-retencion-2',
@@ -281,9 +284,9 @@ describe('Retención Visual de Hábitos Completados Hoy y Sincronización Calend
       categoria_vida: 'SALUD_DEPORTE' as const,
       estado: '02_Por_Hacer' as const,
       racha_actual: 4,
-      fecha_programada: '2026-10-25', // Fecha futura tras avance de ciclo
+      fecha_programada: mananaStr, // Fecha futura tras avance de ciclo
       ultima_fecha_completado: hoyStr,
-      proxima_fecha_programada: '2026-10-25',
+      proxima_fecha_programada: mananaStr,
       historial_fechas: ['2026-10-18', hoyStr],
       duracion_horas: 1,
       agendado_calendar: 'No' as const,

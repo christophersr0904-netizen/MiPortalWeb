@@ -76,7 +76,7 @@ export const NodoTarea: React.FC<NodoTareaProps> = memo(({ data }) => {
 
   return (
     <div
-      className={`relative w-[220px] h-[90px] rounded-xl p-2 select-none transition-all flex flex-col justify-between overflow-hidden ${
+      className={`relative w-[220px] h-[90px] rounded-xl p-2 select-none transition-all flex flex-col justify-between overflow-hidden cursor-pointer hover:ring-2 hover:ring-sky-400/50 active:scale-[0.98] ${
         isCriticalFocused
           ? '!opacity-100 !border-2 !border-sky-400 !shadow-[0_0_25px_rgba(56,189,248,0.7)] bg-[#0D1526] ring-1 ring-amber-400 z-50'
           : soloRutaCritica

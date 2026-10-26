@@ -19,7 +19,7 @@ export const NodoFase: React.FC<NodoFaseProps> = memo(({ data }) => {
   const esHorizontal = direccion === 'LR';
 
   return (
-    <div className="relative w-[220px] h-[80px] rounded-2xl bg-[#0D1526]/95 backdrop-blur-md border border-slate-700/60 shadow-md border-t-4 border-t-violet-500 p-2 select-none flex flex-col justify-between overflow-hidden">
+    <div className="relative w-[220px] h-[80px] rounded-2xl bg-[#0D1526]/95 backdrop-blur-md border border-slate-700/60 shadow-md border-t-4 border-t-violet-500 p-2 select-none flex flex-col justify-between overflow-hidden cursor-pointer hover:ring-2 hover:ring-sky-400/50 active:scale-[0.98] transition-all">
       {/* Target handle de entrada superior (N0 Proyecto -> N1 Fase en TB) */}
       <Handle
         type="target"

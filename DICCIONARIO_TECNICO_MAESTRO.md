@@ -28,6 +28,61 @@
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.57 — Refactorización Bento 1:1 de ModalActividadFlow con ModalTareaFlow, Unificación de Notas y Cinemática Cobalt (REQ-MODAL-ACTIVIDAD-BENTO-NOTAS-EXEC-63)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Modals/ModalActividadFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Solución Arquitectural
+1. **Saneamiento de Notas y Supresión del Chip Huérfano:**
+   - Erradicación de estados huérfanos desvinculados (`mostrarNotas`, `notasSearch`, `notaVinculadaId`).
+   - Eliminación del botón disparador `act-flow-chip-notas` y su contenedor desplegable ad-hoc redundante.
+   - Preservación de `notas_checklist` como "Apuntes y Notas Rápidas de Ejecución" e integración formal y permanente del bloque canónico `<SeccionNotasVinculadasModal codigoEntidad={actividad.codigo_legado} tipoEntidad="HABITO" ... />`.
+2. **Reestructuración de Cabecera y Título Bento en 2 Filas:**
+   - **Fila Superior:** Badge mono tabular `ACT-XXX`, Selector compacto de Categoría de Vida con micro-punto indicador semántico, Badge de Frecuencia/Recurrencia, Badge de Racha Flame y botón de escape `Esc`.
+   - **Fila Inferior:** Input prominente `text-lg sm:text-xl font-bold bg-transparent border-0 focus:ring-0 text-slate-100 placeholder:text-slate-600` con placeholder `"Nombre del hábito o actividad personal..."`.
+3. **Rejilla Bento de 2 Tarjetas Maestras en Paralelo:**
+   - **Tarjeta 1 (Tiempo & Programación):** Contenedor `#0D1526` con fecha, hora inicio, selector de frecuencia (Puntual, Diario, Semanal, Mensual), selector de días (`LU`..`DO`), botones rápidos de duración (5m, 15m, 30m, 1h, 2h) y Micro-Acción (0m) con icono Lucide `Zap` (sin emojis), y switch de Google Calendar sync.
+   - **Tarjeta 2 (Operativo & Metas Estratégicas):** Contenedor `#0D1526` con micro-riel Eisenhower (P1 Alta, P2 Media, P3 Baja), selector de Metas & Planes con creación in-situ (`metas_planes`), parámetros de meta cuantitativa (unidad, meta objetivo, acumulado y rescate racha) en `font-mono tabular-nums`.
+4. **Acordeón Canónico de Gastos Asociados & Subtareas Procedurales:**
+   - Acordeón colapsable con selección dual ("Nuevo Gasto" / "Vincular Gasto Existente"), selector de moneda PEN/USD/EUR y vinculación limpia a `db.gastos`.
+   - Bloque procedural permanente de pasos secuenciales con barra de progreso con gradiente y checklist interactivo.
+5. **Erradicación de Emojis, Textos Verbosos y Cinemática Cobalt:**
+   - Eliminación total de emojis crudos (`⚡`, `🎯`, `🔄`) del DOM y selects.
+   - Cinemática Cobalt Aerodynamic `transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]` sobre lienzo `#040711` y superficie `#0D1526`.
+6. **Aseguramiento de Calidad (QA):**
+   - `npx tsc --noEmit`: 0 errores de tipado estricto.
+   - Vitest: 12 suites de prueba y 121 pruebas unitarias aprobadas al 100% (`npm test -- --run`).
+   - Compilación de producción exitosa: `npm run build` en 7.52s.
+
+---
+
+### FASE 4.54 — Sistema Global de Eliminación Diferida con Deshacer 4s: Undo Buffer & Toast Apilable Cobalt (REQ-GLOBAL-SOFT-DELETE-UNDO-BUFFER-EXEC-57)
+**Fecha:** Octubre 2026 | **Archivos creados/modificados:** `src/context/UndoDeleteContext.tsx`, `src/hooks/useUndoDelete.ts`, `src/components/UI/UndoToastContainer.tsx`, `src/context/__tests__/UndoDeleteContext.test.ts`, `src/App.tsx`, `src/index.css`, `src/components/Views/ViewDetalle360.tsx`, `src/components/Views/ViewKanban.tsx`, `src/components/Views/ViewPortafolio.tsx`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalIngreso.tsx`, `src/components/Modals/ModalTareaFlow.tsx`
+
+#### Motivación & Solución Arquitectural
+1. **Gestor Desacoplado y Contexto Global (`UndoDeleteContext.tsx` & `useUndoDelete.ts`):**
+   - Implementación de `UndoDeleteManager` con `pendingMap`, `hiddenIdsSet` y listeners reactivos.
+   - Enfoque Local-First en memoria: al solicitar una eliminación, la entidad se oculta instantáneamente de la UI mediante `estaOculto(id)` sin mutar Dexie ni generar desincronización con `syncManager`.
+   - Si transcurren los 4000ms sin intervención del usuario, se despacha el `commit()` asíncrono en Dexie (`db[tabla].delete(id)` y sus cascadas).
+   - Si el usuario pulsa `[ Deshacer ]`, se aborta el `clearTimeout`, la entidad reaparece de inmediato en la UI sin costo alguno de escritura en base de datos.
+   - Manejador `beforeunload` para ejecutar `flushTodos()` síncrono si el usuario recarga o cierra la ventana durante la ventana de gracia.
+2. **Componente Visual Apilable Cobalt (`UndoToastContainer.tsx`):**
+   - Renderizado en portal flotante `fixed bottom-4 right-4 z-[9999] flex flex-col-reverse gap-2`.
+   - Tokens canónicos Cobalt Aerodynamic (`#0D1526`/95, `backdrop-blur-xl`, `border-slate-800/80`, `shadow-[0_10px_35px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.15)]`, Lucide con `strokeWidth={1.75}`).
+   - Barra regresiva CSS de 4s (`@keyframes shrinkWidth`, `.animate-shrink-width`) que escala `transform: scaleX(1)` a `scaleX(0)` con aceleración de hardware.
+3. **Puntos de Eliminación Migrados:**
+   - `ViewDetalle360.tsx`: Proyectos e hitos WBS migrados al búfer con filtrado reactivo de proyectos, hitos, tareas y gastos.
+   - `ViewKanban.tsx`: Tareas en tarjeta migradas con filtrado reactivo del tablero.
+   - `ViewPortafolio.tsx`: Proyectos en portafolio migrados con filtrado reactivo.
+   - `ModalGasto.tsx` y `ModalIngreso.tsx`: Cierre instantáneo del modal al eliminar con programación en el búfer de 4s.
+   - `ModalTareaFlow.tsx`: Eliminación de tarea y subtareas asociadas en cascada diferida.
+   - `ViewFinanzas.tsx`: Filtrado reactivo de transacciones pendientes en tiempo real.
+4. **Aseguramiento de Calidad (QA):**
+   - `npx tsc --noEmit`: 0 errores de tipado estricto.
+   - Vitest: 12 suites de prueba y 120 pruebas unitarias aprobadas al 100% (`npm test -- --run`).
+   - Compilación de producción exitosa: `npm run build`.
+
+---
+
 ### FASE 4.48 — Estado en Reposo para Widget de Escritorio y Calce 100% en Document PiP (REQ-DAILY-HUD-WIDGET-REST-STATE-PIP-FIT-42)
 **Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `docs/WINDOWS_11_HUD_SHORTCUT.md`, `public/WINDOWS_HUD_GUIDE.md`, `DICCIONARIO_TECNICO_MAESTRO.md`
 
@@ -6988,16 +7043,138 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - `npm test -- --run`: 11/11 suites en verde (115/115 pruebas aprobadas al 100%).
 - `npm run build`: Compilación exitosa en 6.52s.
 
+---
 
+### REQ-V360-EXPORT-TOAST-EDIT-EXEC-52: Modal Canónico de Edición de Proyecto, Conexión de Exportar PDF y Toasts con Temporizador
+- **Estado:** IMPLEMENTADO Y CERTIFICADO (Cero Regresiones, Persistencia Local-First Dexie, Tokens Cobalt Aerodynamic).
+- **Fecha:** 2026-10-22
+- **Objetivo:**
+  1. Centralizar la utilidad de feedback no intrusivo con temporizador y barra de progreso en `src/utils/toastCobalt.ts` (`mostrarToastCobalt`, `position: 'bottom-end'`, `timerProgressBar: true`, `#0D1526`).
+  2. Habilitar modo edición en `src/components/Modals/ModalNuevoProyecto.tsx` mediante la prop reactiva `proyectoAEditarId?: string | null`, cargando datos del proyecto/hitos desde Dexie y persistiendo con `db.proyectos.update`.
+  3. Conectar en `src/components/Views/ViewDetalle360.tsx` los disparadores de "Editar" (apertura de `ModalNuevoProyecto` con id del proyecto) y "Exportar Informe" (apertura de `ModalExportarPdf`).
+  4. Modernizar `src/components/Modals/ModalExportarPdf.tsx` bajo tokens canónicos Cobalt Aerodynamic (`#0D1526`, `border-slate-800/80`, acentos `sky-400`, preview reactivo 360 y bivalencia de props `isOpen`/`abierto`, `onClose`/`onCerrar`).
+  5. Conectar `mostrarToastCobalt` tras eliminar proyectos, actualizar registros y validar Checkpoints DoD.
 
+#### 1. Archivos Mutados
+- `src/utils/toastCobalt.ts`: Creación de la utilidad centralizada de toasts con barra de progreso y tokens Cobalt.
+- `src/components/Modals/ModalNuevoProyecto.tsx`: Extensión de props con `proyectoAEditarId`, carga reactiva de valores en `useEffect`, mutación vía `db.proyectos.update` y selector de `estado_proyecto`.
+- `src/components/Modals/ModalExportarPdf.tsx`: Refactorización Cobalt Aerodynamic, bivalencia de props y preselección reactiva con tarjeta ejecutiva.
+- `src/components/Views/ViewDetalle360.tsx`: Conexión de `modalEditarAbierto` y `modalPdfAbierto`, reemplazo de alerts improvisados por `mostrarToastCobalt`, y montaje de modales al pie.
 
+#### 2. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado estricto.
+- `npm test -- --run`: 11/11 suites en verde (115/115 pruebas aprobadas al 100%).
+- `npm run build`: Compilación exitosa en 6.26s.
 
+---
 
+### [2026-10-22] - REQ-V360-GRAFOS-ROUTING-MODAL-EXEC-54: Trazado Ortogonal 90° en Grafo WBS, Navegación Cruzada Grafo->WBS con Scroll/Highlight y Modal Bento para Nuevo Hito
 
+#### 0. Contexto y Objetivos
+- **Problema:** En el Grafo WBS de la Vista 360, las aristas jerárquicas presentaban trayectorias quebradas e inflexiones excesivas (`smoothstep`), los conectores de dependencias colisionaban en la misma cota $Y=700$ sin espaciado libre, los clics en nodos del grafo no tenían interacción ni navegación hacia la cascada jerárquica WBS, y la creación de hitos/entregables utilizaba un diálogo modal SweetAlert2 no canónico sin validación estructurada de Definition of Done (DoD) ni cálculo CPM.
+- **Solución Implementada:**
+  1. **Geometría y Canaletas Ortogonales Puras a 90°:**
+     - Creación de `src/components/WBS/OrtogonalTreeEdge.tsx`: trazado Manhattan estricto a 90° con radio de curvatura suave ($R=6$) descendiendo verticalmente a la cota media, corriendo horizontalmente al eje X del nodo destino y descendiendo verticalmente hacia el handle superior.
+     - Actualización de `src/components/WBS/CanaletaEdge.tsx`: escalonamiento de pista según `pistaIndex` ($Y = 700 + \text{pistaIndex} \times 16$) y pasillo vertical libre de 24px para evitar colisiones entre aristas operativas sin bucles invertidos.
+     - Ampliación de espaciado en `src/components/WBS/GrafoWBS.tsx`: `GAP_X = 52` (antes 36) y `GAP_FASE = 72` (antes 60). Sincronización de aserciones en `src/components/WBS/__tests__/layoutWBS.test.ts`.
+     - Adición de estilos interactivos `cursor-pointer hover:ring-2 hover:ring-sky-400/50 active:scale-[0.98]` en `NodoWBS.tsx`, `NodoTarea.tsx` y `NodoFase.tsx`.
+  2. **Navegación Cruzada Interactiva (Grafo -> Cascada WBS):**
+     - Emisión de `onNodoClick` en `GrafoWBS` al interactuar con cualquier tarjeta del lienzo ReactFlow.
+     - En `ViewDetalle360.tsx`: cableado de `handleNodoGrafoClick(tipo, id, hitoPadreId)`:
+       - Activa automáticamente `setSubTabActiva('wbs')`.
+       - Si el nodo pertenece a un hito padre colapsado, expande sincrónicamente el acordeón del paquete WP (`setHitosExpandidos`).
+       - Tras micro-tick de render, ubica el elemento mediante `wbs-nodo-${id}` o `wbs-tarea-${id}` y ejecuta un scroll suave centrado (`scrollIntoView({ behavior: 'smooth', block: 'center' })`).
+       - Aplica un halo visual luminoso temporal de 1800ms (`ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300`).
+  3. **Modal Canónico Bento para Nuevo Hito (`src/components/Modals/ModalNuevoHito.tsx`):**
+     - Creación del modal reactivo con diseño Cobalt Aerodynamic (`#0D1526`, `border-slate-800/80`, `backdrop-blur-xl`, elevación `z-[10000]`, bloqueo de scroll con `useBodyScrollLock` y soporte ESC).
+     - Selectores visuales interactivos para tipo de elemento (`PAQUETE_TRABAJO` vs `HITO_MARCADOR`).
+     - Selector de fase padre preseleccionando la fase del contexto o disponible en el proyecto.
+     - Campos numéricos canónicos (`font-mono tabular-nums`): peso ponderado %, duración estimada CPM (días) y presupuesto asignado PEN.
+     - Campo multilínea para Criterio de Aceptación / Definition of Done (DoD).
+     - Selector de dependencias directas para cálculo de red CPM.
+     - Generación automática de correlativos canónicos (`WP-XXX` / `HIT-XXX`) y persistencia directa en `db.hitos_wbs` con notificación `mostrarToastCobalt`.
 
+#### 1. Archivos Mutados y Creados
+- `src/components/WBS/OrtogonalTreeEdge.tsx`: Custom Edge ortogonal Manhattan canónico a 90°.
+- `src/components/WBS/CanaletaEdge.tsx`: Edge de dependencias operativas con pistas escalonadas y pasillo vertical libre.
+- `src/components/WBS/GrafoWBS.tsx`: Nuevas cotas `GAP_X=52`, `GAP_FASE=72`, edgeTypes ortogonales, propagación de `hitoPadreId` y `onNodoClick`.
+- `src/components/WBS/nodos/NodoWBS.tsx`: Feedback táctil, hover ring y cursor pointer.
+- `src/components/WBS/nodos/NodoTarea.tsx`: Feedback táctil, hover ring y cursor pointer.
+- `src/components/WBS/nodos/NodoFase.tsx`: Feedback táctil, hover ring y cursor pointer.
+- `src/components/WBS/__tests__/layoutWBS.test.ts`: Actualización canónica de tests de cotas `GAP_X` y `GAP_FASE`.
+- `src/components/Modals/ModalNuevoHito.tsx`: Modal Bento canónico para registro de hitos/entregables WBS.
+- `src/components/Views/ViewDetalle360.tsx`: Cableado de navegación cruzada, IDs DOM, halo temporal, reemplazo de SweetAlert2 por `ModalNuevoHito` y renderizado al pie del JSX.
 
+#### 2. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado estricto.
+- `npm test -- --run`: 11/11 suites en verde (115/115 pruebas aprobadas al 100%).
+- `npm run build`: Compilación exitosa en 6.63s.
 
+---
 
+### [2026-10-22] - REQ-V360-TASKS-EXPENSES-CARDS-AERODYNAMIC-55: Tarjetas Tácticas de Tareas (Franja Lateral Semántica, Desglose de Gastos y Micro-Pasos) y Tarjetas de Gastos Compactas en Vista 360
 
+#### 0. Contexto y Objetivos
+- **Problema:** En la cascada jerárquica WBS de la Vista 360, las tarjetas de tareas operativas se representaban como contenedores monocromáticos y planos sin diferenciación semántica por estado, los pasos/subtareas requerían abrir el modal completo TareaFlow para marcarse o consultarse, los gastos imputados a nivel tarea no eran visibles directamente en la tarjeta, y la sección de gastos de paquetes de trabajo carecía de cohesión visual, consistencia semántica y micro-tipografía financiera monoespaciada.
+- **Solución Implementada:**
+  1. **Tarjetas Bento de Tareas con Franja Lateral Semántica:**
+     - Elevación aerodinámica Cobalt (`bg-[#0B1120]/90`, `border-slate-800/80`, hover `border-sky-500/30`, hover `shadow-[0_4px_16px_rgba(56,189,248,0.08)]`, curvatura `rounded-xl` y transición cinemática `ease-[cubic-bezier(0.16,1,0.3,1)]`).
+     - Franja lateral indicadora de 3.5px (`absolute left-0 top-0 bottom-0 w-[3.5px] rounded-l-xl`):
+       - `COMPLETADA` -> `bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]`
+       - `EN_PROCESO` -> `bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]`
+       - `BLOQUEADA` / `VENCIDA` -> `bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]`
+       - `PENDIENTE` / `BACKLOG` -> `bg-slate-600`
+     - Micro-pills compactas con iconografía Lucide (`Flame`, `Clock` con `strokeWidth={1.75}`) y tipografía de fecha y duración en `font-mono tabular-nums text-[11px] text-slate-400`.
+     - Título interactivo con `hover:text-sky-300` y cursor pointer para invocar el modal `ModalTareaFlow`.
+  2. **Micro-Checklist Reactivo de Pasos/Subtareas In-Situ:**
+     - Consulta reactiva en vivo vía `useLiveQuery(() => db.subtareas_pasos.toArray(), [])`.
+     - Agrupamiento memoizado de alto rendimiento $O(1)$ (`subtareasPorTareaMap`).
+     - Micro-indicador de progreso `[X/Y pasos] (Z%)` acompañado de una barra segmentada de micro-progreso de 1.5px de altura (`bg-emerald-400`).
+     - Acordeón colapsable con rotación cinemática de `ChevronRight` (`transition-transform duration-200 rotate-90`).
+     - Checkboxes interactivos funcionales que actualizan inmediatamente el registro en Dexie (`db.subtareas_pasos.update(paso.id, { completado: !paso.completado, updated_at: ... })`), recalculando reactivamente el progreso sin recargar la página.
+  3. **Desglose de Presupuesto y Gastos Imputados por Tarea:**
+     - Indexación memoizada $O(1)$ de gastos por tarea (`gastosPorTareaMap`).
+     - Renderizado de micro-badge esmeralda con iconografía `DollarSign` y monto en `font-mono tabular-nums` (`PEN S/ XXX.XX`).
+     - Popover / cápsula emergente táctica en hover desplegando el desglose detallado de conceptos, fechas y montos imputados directamente a la tarea.
+  4. **Tarjetas de Gastos Compactas y Refinadas:**
+     - Rediseño de las tarjetas en la columna de gastos de cada paquete WP y en el bloque de gastos generales.
+     - Franja lateral semántica de 3.5px:
+       - `Pagado / Ejecutado` -> `bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]`
+       - `Pendiente / Comprometido` -> `bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.4)]`
+       - `Desvío / Sobrecosto` -> `bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]`
+     - Grilla compacta de dos cotas con concepto elástico, micro-badge de categoría (`Tag`), vínculo a tarea/hito, fecha pactada (`Calendar`) y monto destacado en `font-mono tabular-nums text-slate-100`.
 
+#### 1. Archivos Mutados
+- `src/components/Views/ViewDetalle360.tsx`:
+  - Importación de `SubtareaPaso`, `Tag` e iconografía Lucide.
+  - Implementación de estado `pasosExpandidosMap` y helper `togglePasosTarea`.
+  - Agregación de consultas reactivas `db.subtareas_pasos` y memoización de mapas `gastosPorTareaMap` y `subtareasPorTareaMap`.
+  - Reemplazo del contenedor de tareas operativas por tarjetas Bento con franja semántica, micro-checklist y popover de gastos asociados.
+  - Modernización de `gastosHito`, `tareasGenerales` y `gastosGenerales` bajo el estándar de tarjetas compactas con franja semántica.
 
+#### 2. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado estricto.
+- `npm test -- --run`: 11/11 suites en verde (115/115 pruebas aprobadas al 100%).
+- `npm run build`: Compilación exitosa en 6.21s.
+
+---
+
+### CHANGELOG: REQ-HABITOS-UI-CARD-REFINEMENT-EXEC-61: REFINAMIENTO COBALT AERODYNAMIC EN TARJETAS Y TABLERO DE HÁBITOS
+**Fecha:** 2026-10-23  
+**Estado:** PRODUCCIÓN / CERTIFICADO  
+**Módulos Afectados:** `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`
+
+#### 1. Resumen de Mutaciones y Mejoras Tácticas
+1. **Erradicación de Confeti y Reducción de Overhead:**
+   - Supresión completa de la importación `import confetti from 'canvas-confetti'` y eliminación de la función auxiliar `lanzarConfettiCelebracion`.
+   - Eliminación de disparadores de confeti en `handleToggleCheck` (al completar) y `handleAbrirAvanceCuantitativo` (al rescatar racha), manteniendo 100% íntegra la lógica reactiva en Dexie, cálculo matemático de rachas y toasts informativos.
+2. **Supresión de Badge Redundante de Categoría:**
+   - Eliminación del badge de texto `{catConfig.nombre}` dentro de cada tarjeta (duplicaba la cabecera de la columna temática correspondiente).
+   - Introducción de micro-franja vertical de acento semántico en el lateral izquierdo (`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full ${catConfig.colorBarra} opacity-80`) junto con un micro-icono sutil con tooltip (`w-5 h-5`), despejando la cabecera de la tarjeta.
+3. **Compactación de Etiqueta de Mora y Cero Emojis en DOM:**
+   - Erradicación del emoji `⚠️` y de la etiqueta verbosa `⚠️ En mora ({diasMora}d)`.
+   - Implementación de cápsula compacta de mora con icono Lucide `AlertTriangle` (`strokeWidth={1.75}`) y formato numérico `font-mono tabular-nums font-semibold` (`+{diasMora}d`).
+4. **Cinemática Aerodinámica y Superficies Tácticas:**
+   - Transiciones de tarjeta elevadas a `transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]` con elevación física en hover `hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/50 hover:border-slate-700`.
+   - Atenuación limpia en estado completado (`opacity-65 bg-[#070B14]/90 border-slate-800/40`) preservando legibilidad.
+   - Eliminación de emojis en opciones de filtro de metas en `TableroHabitos.tsx`.

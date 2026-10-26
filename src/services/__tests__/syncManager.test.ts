@@ -347,7 +347,7 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
     vi.restoreAllMocks();
   });
 
-  it('inicializa y expone los 4 métodos de sincronización requeridos', () => {
+  it('inicializa y expone los métodos de sincronización requeridos', () => {
     expect(typeof syncManager.sincronizarProyectos).toBe('function');
     expect(typeof syncManager.sincronizarHitos).toBe('function');
     expect(typeof syncManager.sincronizarTareas).toBe('function');
@@ -355,6 +355,9 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
     expect(typeof syncManager.sincronizarActividades).toBe('function');
     expect(typeof syncManager.sincronizarSubtareas).toBe('function');
     expect(typeof syncManager.syncPendingRecords).toBe('function');
+    expect(typeof syncManager.descargarDatosDescendientes).toBe('function');
+    expect(typeof syncManager.procesarColaPendiente).toBe('function');
+    expect(typeof syncManager.sincronizarTodo).toBe('function');
   });
 
   it('construye mapas topológicos correctamente a partir de Dexie', async () => {
@@ -503,5 +506,51 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
 
     await syncManager.syncPendingRecords();
     expect(syncManager.getStatus()).toBe('synced');
+  });
+
+  it('descargarDatosDescendientes omite registros si Supabase no está conectado o es mock', async () => {
+    (syncManager as any).supabase = null;
+    const res = await syncManager.descargarDatosDescendientes();
+    expect(res.descargados).toBe(0);
+    expect(res.fallidos).toBe(0);
+  });
+
+  it('descargarDatosDescendientes preserva registros con sync_status === pending', async () => {
+    const mockRemoteTasks = [
+      { id: 't1', nombre_tarea_actividad: 'Remota 1' },
+      { id: 't2', nombre_tarea_actividad: 'Remota 2 Pendiente Local' }
+    ];
+
+    const fromSpy = vi.fn().mockImplementation((table: string) => ({
+      select: vi.fn().mockResolvedValue({
+        data: table === 'tareas' ? mockRemoteTasks : [],
+        error: null
+      })
+    }));
+    (syncManager as any).supabase = { from: fromSpy };
+
+    // t2 está pendiente en Dexie
+    vi.spyOn(db.tareas, 'where').mockReturnValue({
+      equals: () => ({
+        primaryKeys: async () => ['t2']
+      })
+    } as any);
+
+    const bulkPutSpy = vi.spyOn(db.tareas, 'bulkPut').mockResolvedValue('t1' as any);
+
+    const res = await syncManager.descargarDatosDescendientes();
+    expect(res.descargados).toBe(1);
+    expect(bulkPutSpy).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 't1', sync_status: 'synced' })
+    ]);
+  });
+
+  it('sincronizarTodo orquesta procesarColaPendiente y descargarDatosDescendientes secuencialmente', async () => {
+    const pushSpy = vi.spyOn(syncManager, 'procesarColaPendiente').mockResolvedValue(undefined);
+    const pullSpy = vi.spyOn(syncManager, 'descargarDatosDescendientes').mockResolvedValue({ descargados: 2, fallidos: 0 });
+
+    await syncManager.sincronizarTodo();
+    expect(pushSpy).toHaveBeenCalled();
+    expect(pullSpy).toHaveBeenCalled();
   });
 });

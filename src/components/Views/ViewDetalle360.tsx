@@ -27,7 +27,8 @@ import {
   Bot,
   Flame,
   FolderOpen,
-  Circle
+  Circle,
+  Tag
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -35,8 +36,13 @@ import { GrafoWBS } from '../WBS/GrafoWBS';
 import { calcularRutaCriticaCPM } from '../../services/cpmService';
 import { ModalGasto } from '../Modals/ModalGasto';
 import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
+import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
+import { ModalExportarPdf } from '../Modals/ModalExportarPdf';
+import { ModalNuevoHito } from '../Modals/ModalNuevoHito';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 import Swal from 'sweetalert2';
-import type { GastoRecord, TareaRecord, HitoWbsRecord } from '../../types';
+import type { GastoRecord, TareaRecord, HitoWbsRecord, SubtareaPaso } from '../../types';
 
 interface ViewDetalle360Props {
   proyectoIdSeleccionado?: string | null;
@@ -54,6 +60,33 @@ interface CriterioTradeOff {
   scoreC: number;
 }
 
+const obtenerEstadoSalud = (rawStatus?: string) => {
+  const textoLimpio = String(rawStatus || '')
+    .replace(/[\u{1F300}-\u{1F9FF}|🔴|🟢|🟡]/gu, '')
+    .trim() || 'Saludable';
+  const lower = textoLimpio.toLowerCase();
+
+  if (lower.includes('crit') || lower.includes('rojo')) {
+    return {
+      etiqueta: 'Crítico',
+      dotClass: 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]',
+      badgeClass: 'bg-rose-950/60 text-rose-300 border-rose-800/80',
+    };
+  }
+  if (lower.includes('riesgo') || lower.includes('amarillo') || lower.includes('alerta')) {
+    return {
+      etiqueta: 'En Riesgo',
+      dotClass: 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]',
+      badgeClass: 'bg-amber-950/60 text-amber-300 border-amber-800/80',
+    };
+  }
+  return {
+    etiqueta: 'Saludable',
+    dotClass: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]',
+    badgeClass: 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80',
+  };
+};
+
 export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
   proyectoIdSeleccionado,
   onVolverAlPortafolio
@@ -64,8 +97,21 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
   // Modales interactivos
   const [isModalGastoOpen, setIsModalGastoOpen] = useState(false);
   const [isModalTareaOpen, setIsModalTareaOpen] = useState(false);
+  const [modalEditarAbierto, setModalEditarAbierto] = useState(false);
+  const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
+  const [modalNuevoHitoAbierto, setModalNuevoHitoAbierto] = useState(false);
+  const [faseSeleccionadaParaHito, setFaseSeleccionadaParaHito] = useState<string | undefined>(undefined);
+  const [elementoResaltadoId, setElementoResaltadoId] = useState<string | null>(null);
   const [tareaAEditarId, setTareaAEditarId] = useState<string | null>(null);
   const [hitoPreseleccionadoGasto, setHitoPreseleccionadoGasto] = useState<string | undefined>(undefined);
+  const [pasosExpandidosMap, setPasosExpandidosMap] = useState<Record<string, boolean>>({});
+
+  const togglePasosTarea = (tareaId: string) => {
+    setPasosExpandidosMap((prev) => ({
+      ...prev,
+      [tareaId]: !prev[tareaId]
+    }));
+  };
 
   // Estado de Matriz Trade-Off interactiva
   const [toTitulo, setToTitulo] = useState('Selección de Infraestructura y Servidor Cloud');
@@ -83,11 +129,20 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
     Array<{ id: string; fecha: string; titulo: string; tipo: string; ganador: string; score: number }>
   >([]);
 
-  // Consultas reactivas en Dexie
-  const proyectos = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
-  const hitos = useLiveQuery(() => db.hitos_wbs.toArray(), []) ?? [];
-  const tareas = useLiveQuery(() => db.tareas.toArray(), []) ?? [];
-  const gastos = useLiveQuery(() => db.gastos.toArray(), []) ?? [];
+  const { programarEliminacion, estaOculto } = useUndoDelete();
+
+  // Consultas reactivas en Dexie filtradas con el búfer reactivo de deshacer
+  const rawProyectos = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
+  const rawHitos = useLiveQuery(() => db.hitos_wbs.toArray(), []) ?? [];
+  const rawTareas = useLiveQuery(() => db.tareas.toArray(), []) ?? [];
+  const rawGastos = useLiveQuery(() => db.gastos.toArray(), []) ?? [];
+  const rawSubtareas = useLiveQuery(() => db.subtareas_pasos.toArray(), []) ?? [];
+
+  const proyectos = useMemo(() => rawProyectos.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado)), [rawProyectos, estaOculto]);
+  const hitos = useMemo(() => rawHitos.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado) && !estaOculto(item.proyecto_id)), [rawHitos, estaOculto]);
+  const tareas = useMemo(() => rawTareas.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado) && !estaOculto(item.proyecto_codigo) && !estaOculto(item.hito_codigo)), [rawTareas, estaOculto]);
+  const gastos = useMemo(() => rawGastos.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado) && !estaOculto(item.id_origen_vinculado) && !estaOculto(item.ID_Proyecto)), [rawGastos, estaOculto]);
+  const todasSubtareas = useMemo(() => rawSubtareas.filter((s: any) => !estaOculto(s.id) && !estaOculto(s.codigo_legado) && !estaOculto(s.id_padre_vinculado)), [rawSubtareas, estaOculto]);
 
   // Proyecto activo seleccionado o primero disponible
   const proyectoActivo = useMemo(() => {
@@ -104,6 +159,11 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
     }
     return proyectos[0];
   }, [proyectos, proyectoIdSeleccionado]);
+
+  const estadoSalud = useMemo(
+    () => obtenerEstadoSalud(proyectoActivo?.health_status),
+    [proyectoActivo?.health_status]
+  );
 
   const proyCod = proyectoActivo?.codigo_legado || proyectoActivo?.id || '';
   const proyId = proyectoActivo?.id || '';
@@ -203,6 +263,37 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
 
     return { gastosPorHito: porHito, gastosGenerales: generales, gastosProyectoTotal: todosProy };
   }, [gastos, proyCod, proyId, idsHitosSet, tareaIdToHitoMap]);
+
+  // Mapa de gastos imputados directamente a tareas
+  const gastosPorTareaMap = useMemo(() => {
+    const map = new Map<string, GastoRecord[]>();
+    gastos.forEach((g: any) => {
+      const idOrig = String(
+        g.id_origen_vinculado || g.ID_Tarea || g.tarea_id || g.ID_Entidad_Vinculada || ''
+      ).trim().toUpperCase();
+      if (idOrig) {
+        if (!map.has(idOrig)) map.set(idOrig, []);
+        map.get(idOrig)!.push(g);
+      }
+    });
+    return map;
+  }, [gastos]);
+
+  // Mapa de subtareas/pasos ordenados vinculados a tareas
+  const subtareasPorTareaMap = useMemo(() => {
+    const map = new Map<string, SubtareaPaso[]>();
+    todasSubtareas.forEach((s) => {
+      const pId = String(s.id_padre_vinculado || '').trim().toUpperCase();
+      if (pId) {
+        if (!map.has(pId)) map.set(pId, []);
+        map.get(pId)!.push(s);
+      }
+    });
+    map.forEach((lista) => {
+      lista.sort((a, b) => (a.numero_paso ?? 0) - (b.numero_paso ?? 0));
+    });
+    return map;
+  }, [todasSubtareas]);
 
   // Agrupamiento WBS Nivel 1 por Fase_Asociada
   const fasesAgrupadas = useMemo(() => {
@@ -384,102 +475,38 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
       estado: nuevoEstado,
       fecha_real_fin: nuevoEstado === '03_Completado' ? new Date().toISOString().split('T')[0] : ('' as any)
     });
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: esCompletado ? 'Marcador reabierto' : 'Checkpoint DoD validado',
-      timer: 1600,
-      showConfirmButton: false,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    mostrarToastCobalt(
+      esCompletado ? 'Marcador reabierto' : 'Checkpoint DoD validado',
+      'success',
+      2000
+    );
   };
 
-  // Crear entregable dentro de una fase
-  const abrirModalCrearHitoFase = (nombreFase: string) => {
-    Swal.fire({
-      title: `Nuevo Entregable en ${nombreFase}`,
-      html: `
-        <div class="space-y-3 text-left text-xs">
-          <div>
-            <label class="block font-semibold mb-1 text-slate-300">Nombre del Entregable / Hito</label>
-            <input id="swal-hito-nombre" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100" placeholder="Ej. Diseño de Arquitectura Cloud" />
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block font-semibold mb-1 text-slate-300">Tipo de Elemento</label>
-              <select id="swal-hito-tipo" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100">
-                <option value="PAQUETE_TRABAJO">Paquete de Trabajo (WP)</option>
-                <option value="HITO_MARCADOR">Checkpoint DoD (HIT)</option>
-              </select>
-            </div>
-            <div>
-              <label class="block font-semibold mb-1 text-slate-300">Presupuesto PEN</label>
-              <input id="swal-hito-costo" type="number" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100" placeholder="0.00" />
-            </div>
-          </div>
-          <div>
-            <label class="block font-semibold mb-1 text-slate-300">Fecha Límite Plan</label>
-            <input id="swal-hito-fecha" type="date" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-100" />
-          </div>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'Crear Entregable',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#4f46e5',
-      background: '#0D1526',
-      color: '#f8fafc',
-      preConfirm: () => {
-        const nombre = (document.getElementById('swal-hito-nombre') as HTMLInputElement)?.value;
-        const tipo = (document.getElementById('swal-hito-tipo') as HTMLSelectElement)?.value;
-        const costo = parseFloat((document.getElementById('swal-hito-costo') as HTMLInputElement)?.value || '0');
-        const fecha = (document.getElementById('swal-hito-fecha') as HTMLInputElement)?.value;
-        if (!nombre) {
-          Swal.showValidationMessage('El nombre del entregable es requerido');
-          return false;
-        }
-        return { nombre, tipo, costo, fecha };
-      }
-    }).then(async (res) => {
-      if (res.isConfirmed && res.value) {
-        const count = hitosProyecto.length + 1;
-        const prefijo = res.value.tipo === 'HITO_MARCADOR' ? 'HIT' : 'WP';
-        const nuevoCodigo = `${prefijo}-${String(count).padStart(3, '0')}`;
+  // Abrir modal canónico Bento para crear entregable / hito WBS
+  const abrirModalCrearHitoFase = (nombreFase?: string) => {
+    setFaseSeleccionadaParaHito(nombreFase && nombreFase !== 'Fase General' ? nombreFase : undefined);
+    setModalNuevoHitoAbierto(true);
+  };
 
-        await db.hitos_wbs.add({
-          id: `hito-${Date.now()}`,
-          codigo_legado: nuevoCodigo,
-          proyecto_id: proyId,
-          proyecto_codigo: proyCod,
-          nombre_hito: res.value.nombre,
-          nombre_elemento: res.value.nombre,
-          fase_asociada: nombreFase,
-          tipo_elemento_wbs: res.value.tipo as any,
-          estado: '01_Pendiente',
-          peso_pct: 0.1,
-          peso_ponderado_pct: 0.1,
-          presupuesto_asignado: res.value.tipo === 'HITO_MARCADOR' ? 0 : res.value.costo,
-          fecha_limite: res.value.fecha || new Date().toISOString().split('T')[0],
-          fecha_limite_plan: res.value.fecha || new Date().toISOString().split('T')[0],
-          duracion_dias: res.value.tipo === 'HITO_MARCADOR' ? 0 : 5,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        } as any);
+  // Navegación interactiva desde nodos del Grafo WBS hacia la estructura WBS con scroll y halo
+  const handleNodoGrafoClick = (tipo: string, id: string, hitoPadreId?: string) => {
+    setSubTabActiva('wbs');
+    if (hitoPadreId) {
+      setHitosExpandidos((prev) => ({ ...prev, [hitoPadreId]: true }));
+    }
 
-        Swal.fire({
-          toast: true,
-          position: 'top-end',
-          icon: 'success',
-          title: `Entregable ${nuevoCodigo} creado`,
-          timer: 1600,
-          showConfirmButton: false,
-          background: '#0D1526',
-          color: '#f8fafc'
-        });
+    setTimeout(() => {
+      const targetId = tipo.includes('tarea') ? `wbs-tarea-${id}` : `wbs-nodo-${id}`;
+      let elem = document.getElementById(targetId);
+      if (!elem) {
+        elem = document.getElementById(`wbs-tarea-${id}`) || document.getElementById(`wbs-nodo-${id}`);
       }
-    });
+      if (elem) {
+        elem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setElementoResaltadoId(id);
+        setTimeout(() => setElementoResaltadoId(null), 1800);
+      }
+    }, 60);
   };
 
   // Check-in de gobernanza hoy
@@ -563,94 +590,59 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
-            onClick={() =>
-              Swal.fire({
-                title: 'Exportar Informe',
-                text: `Generando PDF ejecutivo para ${proyectoActivo.codigo_legado}...`,
-                icon: 'info',
-                background: '#0D1526',
-                color: '#f8fafc'
-              })
-            }
-            className="px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+            onClick={() => setModalPdfAbierto(true)}
+            className="px-3 py-1.5 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
             title="Descargar Informe Ejecutivo PDF de este Proyecto"
           >
-            <FileDown className="w-4 h-4" />
+            <FileDown className="w-4 h-4" strokeWidth={1.75} />
             <span>Exportar Informe</span>
           </button>
 
           <button
             type="button"
-            onClick={() => {
-              Swal.fire({
-                title: `Editar ${proyectoActivo.codigo_legado}`,
-                input: 'text',
-                inputValue: proyectoActivo.nombre_proyecto || (proyectoActivo as any).nombre,
-                showCancelButton: true,
-                confirmButtonText: 'Guardar',
-                cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#4f46e5',
-                background: '#0D1526',
-                color: '#f8fafc'
-              }).then(async (res) => {
-                if (res.isConfirmed && res.value) {
-                  await db.proyectos.update(proyectoActivo.id, {
-                    nombre_proyecto: res.value
-                  } as any);
-                  Swal.fire({
-                    icon: 'success',
-                    title: 'Proyecto actualizado',
-                    timer: 1400,
-                    showConfirmButton: false,
-                    background: '#0D1526',
-                    color: '#f8fafc'
-                  });
-                }
-              });
-            }}
+            onClick={() => setModalEditarAbierto(true)}
             className="px-3 py-1.5 rounded-xl border border-slate-800 bg-[#0D1526] text-slate-300 hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
             title="Editar parámetros del proyecto"
           >
-            <Edit3 className="w-4 h-4" />
+            <Edit3 className="w-4 h-4" strokeWidth={1.75} />
             <span>Editar</span>
           </button>
 
           <button
             type="button"
             onClick={() => {
-              Swal.fire({
-                title: '¿Eliminar proyecto?',
-                text: `Se eliminará ${proyectoActivo.codigo_legado} y sus dependencias.`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#e11d48',
-                confirmButtonText: 'Sí, eliminar',
-                cancelButtonText: 'Cancelar',
-                background: '#0D1526',
-                color: '#f8fafc'
-              }).then(async (res) => {
-                if (res.isConfirmed) {
-                  await db.proyectos.delete(proyectoActivo.id);
-                  onVolverAlPortafolio();
+              const targetProyId = proyectoActivo.id;
+              const etiqueta = (proyectoActivo as any).nombre_proyecto || (proyectoActivo as any).nombre || proyectoActivo.codigo_legado || 'Proyecto';
+              programarEliminacion({
+                tabla: 'proyectos',
+                id: targetProyId,
+                etiqueta,
+                tipo: 'PROYECTO',
+                commit: async () => {
+                  await db.proyectos.delete(targetProyId);
                 }
               });
+              onVolverAlPortafolio();
             }}
             className="p-2 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 rounded-xl border border-rose-500/20 hover:border-rose-500/40 transition shadow-2xs cursor-pointer"
-            title="Eliminar este proyecto y todas sus dependencias"
+            title="Eliminar este proyecto (con opción a deshacer)"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-4 h-4" strokeWidth={1.75} />
           </button>
         </div>
       </div>
 
       {/* HERO CARD DEL PROYECTO & OKR / DOD */}
-      <div className="portal-surface bg-[#0D1526] rounded-2xl p-6 border border-slate-800/40 shadow-xs relative overflow-hidden">
-        <div className="absolute -right-20 -top-20 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="portal-surface bg-[#0D1526] rounded-2xl p-6 border border-slate-800/40 shadow-xs relative">
+        {/* Capa decorativa confinada con overflow-hidden para orbes de luz */}
+        <div className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden">
+          <div className="absolute -right-20 -top-20 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl" />
+          <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl" />
+        </div>
 
         {/* Encabezado Principal del Proyecto */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-800/60 pb-5 mb-5 relative z-10">
-          <div className="space-y-2">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-start gap-4 border-b border-slate-800/60 pb-5 mb-5 relative z-10">
+          <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-xs font-extrabold bg-slate-900 text-white px-2.5 py-0.5 rounded-lg tracking-wide border border-slate-800 shadow-2xs">
                 {proyectoActivo.codigo_legado || proyectoActivo.id}
@@ -661,9 +653,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold">
                 {proyectoActivo.estado_proyecto || 'En Ejecución'}
               </span>
-              <span className="bg-emerald-950/60 text-emerald-300 border border-emerald-800 flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-bold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                <span>{proyectoActivo.health_status || 'Saludable'}</span>
+              <span className={`${estadoSalud.badgeClass} flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-bold border`}>
+                <span className={`w-1.5 h-1.5 rounded-full inline-block ${estadoSalud.dotClass}`} />
+                <span>{estadoSalud.etiqueta}</span>
               </span>
             </div>
             <h1 className="text-xl md:text-2xl lg:text-3xl font-black text-slate-100 leading-tight tracking-tight">
@@ -724,11 +716,11 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
           <div className="bg-slate-900/60 p-3.5 rounded-xl border border-slate-800 flex flex-col justify-between">
             <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
               <span className="uppercase tracking-wider">Salud Operativa</span>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+              <span className={`w-2.5 h-2.5 rounded-full inline-block ${estadoSalud.dotClass}`} />
             </div>
             <div className="my-2">
               <div className="text-base font-black text-slate-100 leading-tight">
-                {proyectoActivo.health_status || 'Saludable'}
+                {estadoSalud.etiqueta}
               </div>
               <div className="text-[11px] text-slate-400 mt-0.5">
                 {cpmCalculo.rutaCritica.length} hitos críticos
@@ -931,6 +923,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
             <GrafoWBS
               proyectoId={proyectoActivo.codigo_legado || proyectoActivo.id}
               hitosExternos={hitosProyecto}
+              onNodoClick={handleNodoGrafoClick}
             />
           </div>
 
@@ -1063,10 +1056,20 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                             const pctHito =
                               tareasHito.length > 0 ? Math.round((tareasHechasHito / tareasHito.length) * 100) : 0;
 
+                            const esElementoResaltado =
+                              elementoResaltadoId === hitoIdKey ||
+                              elementoResaltadoId === h.id ||
+                              elementoResaltadoId === h.codigo_legado;
+
                             return (
                               <div
                                 key={h.id}
-                                className="portal-surface bg-[#0D1526] rounded-2xl border border-slate-800/80 overflow-hidden shadow-xs transition-all"
+                                id={`wbs-nodo-${hitoIdKey}`}
+                                className={`portal-surface bg-[#0D1526] rounded-2xl border border-slate-800/80 overflow-hidden shadow-xs transition-all ${
+                                  esElementoResaltado
+                                    ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
+                                    : ''
+                                }`}
                               >
                                 {/* Header Paquete WP */}
                                 <div className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 gap-3.5 bg-slate-950/40">
@@ -1225,24 +1228,20 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          Swal.fire({
-                                            title: '¿Eliminar paquete?',
-                                            text: `Se eliminará ${hitoIdKey} y sus vínculos.`,
-                                            icon: 'warning',
-                                            showCancelButton: true,
-                                            confirmButtonColor: '#e11d48',
-                                            confirmButtonText: 'Sí, eliminar',
-                                            cancelButtonText: 'Cancelar',
-                                            background: '#0D1526',
-                                            color: '#f8fafc'
-                                          }).then(async (res) => {
-                                            if (res.isConfirmed) {
-                                              await db.hitos_wbs.delete(h.id);
+                                          const targetHitoId = h.id;
+                                          const etiqueta = h.nombre_hito || hitoIdKey || 'Paquete de trabajo';
+                                          programarEliminacion({
+                                            tabla: 'hitos_wbs',
+                                            id: targetHitoId,
+                                            etiqueta,
+                                            tipo: 'HITO',
+                                            commit: async () => {
+                                              await db.hitos_wbs.delete(targetHitoId);
                                             }
                                           });
                                         }}
                                         className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
-                                        title="Eliminar paquete de trabajo"
+                                        title="Eliminar paquete de trabajo (con opción a deshacer)"
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />
                                       </button>
@@ -1272,51 +1271,283 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                       ) : (
                                         <div className="space-y-2">
                                           {tareasHito.map((t: any) => {
-                                            const esDone = String(t.Estado_Tarea || t.estado_tarea || '').includes(
-                                              'Completad'
-                                            );
+                                            const tareaIdKey = t.codigo_legado || t.ID_Tarea || t.id;
+                                            const esTareaResaltada =
+                                              elementoResaltadoId === tareaIdKey ||
+                                              elementoResaltadoId === t.id;
+
+                                            // Estado semántico de la tarea
+                                            const estRaw = String(t.Estado_Tarea || t.estado_tarea || '').trim();
+                                            const estLower = estRaw.toLowerCase();
+                                            const esDone =
+                                              estLower.includes('completad') ||
+                                              estLower.includes('04_') ||
+                                              estLower.includes('done');
+                                            const esProg =
+                                              estLower.includes('proceso') ||
+                                              estLower.includes('03_') ||
+                                              estLower.includes('progress');
+                                            const esBloqOVenc =
+                                              estLower.includes('bloquead') ||
+                                              estLower.includes('imped') ||
+                                              estLower.includes('vencid') ||
+                                              estLower.includes('cancel');
+
+                                            // Franja lateral semántica (3.5px)
+                                            const franjaClase = esDone
+                                              ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                                              : esProg
+                                              ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]'
+                                              : esBloqOVenc
+                                              ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+                                              : 'bg-slate-600';
+
+                                            // Pasos/Subtareas vinculadas
+                                            const pasosTarea =
+                                              subtareasPorTareaMap.get(String(tareaIdKey).toUpperCase()) ||
+                                              subtareasPorTareaMap.get(String(t.id).toUpperCase()) ||
+                                              (Array.isArray(t.pasos)
+                                                ? t.pasos
+                                                : Array.isArray(t.subtareas)
+                                                ? t.subtareas
+                                                : []);
+                                            const totalPasos = pasosTarea.length;
+                                            const pasosHechos = pasosTarea.filter((p: any) => p.completado).length;
+                                            const pctPasos = totalPasos > 0 ? Math.round((pasosHechos / totalPasos) * 100) : 0;
+                                            const pasosAbiertos = Boolean(pasosExpandidosMap[t.id]);
+
+                                            // Gastos vinculados directamente a la tarea
+                                            const gastosDeEstaTarea =
+                                              gastosPorTareaMap.get(String(tareaIdKey).toUpperCase()) ||
+                                              gastosPorTareaMap.get(String(t.id).toUpperCase()) ||
+                                              [];
+                                            const totalGastosTarea = gastosDeEstaTarea.reduce((acc: number, g: any) => {
+                                              return (
+                                                acc +
+                                                (parseFloat(
+                                                  g.Monto_PEN || g.Monto_Moneda_Base || g.monto_pen || g.monto || 0
+                                                ) || 0)
+                                              );
+                                            }, 0);
+
+                                            // Prioridad Eisenhower
+                                            const prio = String(
+                                              t.Prioridad_Eisenhower || t.prioridad_eisenhower || ''
+                                            ).toUpperCase();
+                                            const esAltaPrio =
+                                              prio.includes('P1') || prio.includes('ALTA') || prio.includes('URGENTE');
+
                                             return (
                                               <div
                                                 key={t.id}
-                                                className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between gap-3 text-xs hover:border-slate-700 transition"
+                                                id={`wbs-tarea-${tareaIdKey}`}
+                                                className={`group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-3.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-700/80 hover:bg-[#0D1526] hover:shadow-[0_4px_20px_-2px_rgba(2,6,23,0.7)] hover:translate-y-[-1px] ${
+                                                  esTareaResaltada
+                                                    ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
+                                                    : ''
+                                                }`}
                                               >
-                                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                                  <button
-                                                    type="button"
-                                                    onClick={async () => {
-                                                      const nvo = esDone ? '02_Por_Hacer' : '04_Completado';
-                                                      await db.tareas.update(t.id, {
-                                                        estado_tarea: nvo,
-                                                        Estado_Tarea: nvo
-                                                      } as any);
-                                                    }}
-                                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 cursor-pointer transition ${
-                                                      esDone
-                                                        ? 'bg-emerald-600 border-emerald-500 text-white'
-                                                        : 'border-slate-700 hover:border-slate-500 bg-slate-800'
-                                                    }`}
-                                                  >
-                                                    {esDone && <Check className="w-3 h-3" />}
-                                                  </button>
-                                                  <span className="font-mono text-[10px] text-slate-400">
-                                                    {t.codigo_legado || t.ID_Tarea}
-                                                  </span>
-                                                  <span
-                                                    onClick={() => {
-                                                      setTareaAEditarId(t.id);
-                                                      setIsModalTareaOpen(true);
-                                                    }}
-                                                    className={`truncate font-medium cursor-pointer hover:underline ${
-                                                      esDone ? 'line-through text-slate-500' : 'text-slate-200'
-                                                    }`}
-                                                  >
-                                                    {t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}
-                                                  </span>
+                                                {/* Franja Lateral Izquierda Semántica (3.5px) */}
+                                                <div
+                                                  className={`absolute left-0 top-0 bottom-0 w-[3.5px] rounded-l-xl ${franjaClase}`}
+                                                />
+
+                                                {/* Cuerpo Principal de la Tarea */}
+                                                <div className="flex items-start justify-between gap-2.5 pl-1">
+                                                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                                    {/* Checkbox táctil */}
+                                                    <button
+                                                      type="button"
+                                                      onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        const nvo = esDone ? '02_Por_Hacer' : '04_Completado';
+                                                        await db.tareas.update(t.id, {
+                                                          estado_tarea: nvo,
+                                                          Estado_Tarea: nvo,
+                                                          updated_at: new Date().toISOString()
+                                                        } as any);
+                                                      }}
+                                                      className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center shrink-0 cursor-pointer transition ${
+                                                        esDone
+                                                          ? 'bg-emerald-600 border-emerald-500 text-white shadow-xs'
+                                                          : 'border-slate-700 hover:border-slate-500 bg-slate-800/90'
+                                                      }`}
+                                                      title={
+                                                        esDone ? 'Marcar como pendiente' : 'Marcar como completada'
+                                                      }
+                                                    >
+                                                      {esDone && <Check className="w-3 h-3" strokeWidth={2.5} />}
+                                                    </button>
+
+                                                    <div className="min-w-0 flex-1">
+                                                      {/* Micro-pills de metadatos */}
+                                                      <div className="flex items-center gap-1.5 flex-wrap mb-1 leading-none">
+                                                        <span className="font-mono text-[9.5px] font-bold text-slate-300 bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-700/70">
+                                                          {tareaIdKey}
+                                                        </span>
+
+                                                        {/* Badge de Prioridad */}
+                                                        {esAltaPrio ? (
+                                                          <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/30">
+                                                            <Flame className="w-2.5 h-2.5 text-rose-400" strokeWidth={1.75} />
+                                                            <span>Alta</span>
+                                                         </span>
+                                                        ) : (
+                                                          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-800/60 text-slate-400 border border-slate-700/50">
+                                                            Media
+                                                          </span>
+                                                        )}
+
+                                                        {/* Horas estimadas */}
+                                                        <span className="flex items-center gap-1 font-mono text-[10px] text-slate-400 tabular-nums bg-slate-900/60 px-1.5 py-0.5 rounded border border-slate-800">
+                                                          <Clock className="w-2.5 h-2.5 text-slate-500" strokeWidth={1.75} />
+                                                          <span>{t.horas_estimadas || t.Horas_Estimadas || 1}h</span>
+                                                        </span>
+
+                                                        {/* Badge y Mini-cápsula de Gastos Asociados (Paso 3) */}
+                                                        {totalGastosTarea > 0 && (
+                                                          <div className="relative group/gastos inline-block">
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/40 text-[9.5px] font-mono tabular-nums font-semibold cursor-help">
+                                                              <DollarSign className="w-2.5 h-2.5 text-emerald-400" strokeWidth={1.75} />
+                                                              <span>S/ {totalGastosTarea.toFixed(2)}</span>
+                                                            </span>
+
+                                                            {/* Popover con conceptos y montos */}
+                                                            <div className="pointer-events-none group-hover/gastos:pointer-events-auto opacity-0 group-hover/gastos:opacity-100 transition-all duration-200 absolute left-0 bottom-full mb-1.5 z-40 w-52 p-2 rounded-xl bg-[#0D1526] border border-slate-700/80 shadow-2xl space-y-1 text-left">
+                                                              <div className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider pb-1 border-b border-slate-800 flex items-center justify-between">
+                                                                <span>Gastos ({gastosDeEstaTarea.length})</span>
+                                                                <span className="font-mono text-emerald-400">
+                                                                  S/ {totalGastosTarea.toFixed(2)}
+                                                                </span>
+                                                              </div>
+                                                              <div className="max-h-28 overflow-y-auto space-y-1 text-[10px]">
+                                                                {gastosDeEstaTarea.map((gt: any) => (
+                                                                  <div
+                                                                    key={gt.id}
+                                                                    className="flex items-center justify-between gap-1 text-slate-300"
+                                                                  >
+                                                                    <span className="truncate flex-1">
+                                                                      {gt.Descripcion_Gasto ||
+                                                                        gt.descripcion_gasto ||
+                                                                        gt.concepto ||
+                                                                        'Gasto'}
+                                                                    </span>
+                                                                    <span className="font-mono tabular-nums font-bold text-emerald-400 shrink-0">
+                                                                      S/{' '}
+                                                                      {(
+                                                                        parseFloat(
+                                                                          gt.Monto_PEN ||
+                                                                            gt.monto_pen ||
+                                                                            gt.monto ||
+                                                                            0
+                                                                        ) || 0
+                                                                      ).toFixed(2)}
+                                                                    </span>
+                                                                  </div>
+                                                                ))}
+                                                              </div>
+                                                            </div>
+                                                          </div>
+                                                        )}
+                                                      </div>
+
+                                                      {/* Título de la Tarea */}
+                                                      <h4
+                                                        onClick={() => {
+                                                          setTareaAEditarId(t.id);
+                                                          setIsModalTareaOpen(true);
+                                                        }}
+                                                        className={`text-xs font-semibold leading-snug cursor-pointer transition-colors group-hover:text-sky-300 line-clamp-2 ${
+                                                          esDone ? 'line-through text-slate-500' : 'text-slate-200'
+                                                        }`}
+                                                        title={t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}
+                                                      >
+                                                        {t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}
+                                                      </h4>
+                                                    </div>
+                                                  </div>
                                                 </div>
 
-                                                <div className="flex items-center gap-2 shrink-0 font-mono text-[11px] tabular-nums text-slate-400">
-                                                  <span>{t.horas_estimadas || 1}h</span>
-                                                </div>
+                                                {/* Micro-Checklist de Pasos/Subtareas (Paso 2) */}
+                                                {totalPasos > 0 && (
+                                                  <div className="mt-2.5 pt-2 border-t border-slate-800/70 pl-1">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => togglePasosTarea(t.id)}
+                                                        className="flex items-center gap-1.5 text-[10.5px] font-medium text-slate-400 hover:text-sky-300 transition-colors cursor-pointer"
+                                                      >
+                                                        <ChevronRight
+                                                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                                            pasosAbiertos ? 'rotate-90 text-sky-400' : 'text-slate-500'
+                                                          }`}
+                                                          strokeWidth={1.75}
+                                                        />
+                                                        <span>
+                                                          {pasosHechos}/{totalPasos} pasos
+                                                        </span>
+                                                        <span className="font-mono tabular-nums text-slate-500 text-[9.5px]">
+                                                          ({pctPasos}%)
+                                                        </span>
+                                                      </button>
+
+                                                      {/* Micro barra segmentada de progreso */}
+                                                      <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden shrink-0">
+                                                        <div
+                                                          className={`h-full transition-all duration-300 ${
+                                                            pctPasos === 100 ? 'bg-emerald-400' : 'bg-sky-400'
+                                                          }`}
+                                                          style={{ width: `${pctPasos}%` }}
+                                                        />
+                                                      </div>
+                                                    </div>
+
+                                                    {/* Lista de pasos con checkboxes interactivos */}
+                                                    {pasosAbiertos && (
+                                                      <div className="mt-2 space-y-1 pl-3.5 border-l-2 border-slate-800/80 animate-in fade-in duration-150">
+                                                        {pasosTarea.map((paso: any) => (
+                                                          <div
+                                                            key={paso.id}
+                                                            className="text-[11px] text-slate-300 py-0.5 flex items-center justify-between gap-2 hover:bg-slate-800/30 rounded px-1.5 transition-colors"
+                                                          >
+                                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                              <button
+                                                                type="button"
+                                                                onClick={async (e) => {
+                                                                  e.stopPropagation();
+                                                                  await db.subtareas_pasos.update(paso.id, {
+                                                                    completado: !paso.completado,
+                                                                    updated_at: new Date().toISOString()
+                                                                  });
+                                                                }}
+                                                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 cursor-pointer transition ${
+                                                                  paso.completado
+                                                                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                                                                    : 'border-slate-700 hover:border-slate-500 bg-slate-800'
+                                                                }`}
+                                                              >
+                                                                {paso.completado && (
+                                                                  <Check className="w-2.5 h-2.5" strokeWidth={2.5} />
+                                                                )}
+                                                              </button>
+                                                              <span
+                                                                className={`truncate ${
+                                                                  paso.completado
+                                                                    ? 'line-through text-slate-500'
+                                                                    : 'text-slate-300'
+                                                                }`}
+                                                              >
+                                                                {paso.descripcion_paso ||
+                                                                  paso.nombre_paso ||
+                                                                  'Paso'}
+                                                              </span>
+                                                            </div>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                )}
                                               </div>
                                             );
                                           })}
@@ -1347,35 +1578,72 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                               parseFloat(
                                                 g.Monto_PEN || g.Monto_Moneda_Base || g.monto_pen || g.monto || 0
                                               ) || 0;
-                                            const estPago = String(g.Estado_Pago || g.estado_pago || g.Estado || '');
-                                            const esPag = estPago.toLowerCase() === 'pagado';
+                                            const estPago = String(g.Estado_Pago || g.estado_pago || g.Estado || '').trim().toLowerCase();
+                                            const esDesvio = Boolean(g.desvio || g.es_sobrecosto || estPago.includes('desv') || estPago.includes('sobrecosto'));
+                                            const esPagado = estPago === 'pagado' || estPago === 'ejecutado';
+                                            const categoria = g.Categoria_Gasto || g.categoria || g.tipo || '';
+                                            const vinculo = g.tarea_nombre || g.tarea_id || g.Tarea_Asociada || null;
+
+                                            let franjaGastoClass = 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.4)]';
+                                            if (esDesvio) {
+                                              franjaGastoClass = 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]';
+                                            } else if (esPagado) {
+                                              franjaGastoClass = 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]';
+                                            }
+
                                             return (
                                               <div
                                                 key={g.id}
-                                                className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                                                className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-[1px] hover:border-sky-500/30 hover:bg-[#0D1526] hover:shadow-[0_4px_16px_rgba(56,189,248,0.08)]"
                                               >
-                                                <div className="min-w-0 flex-1">
-                                                  <div className="font-medium text-slate-200 truncate">
-                                                    {g.Descripcion_Gasto || g.concepto || g.descripcion || 'Gasto'}
-                                                  </div>
-                                                  <span className="text-[10px] text-slate-400 font-mono">
-                                                    {g.Fecha_Gasto || g.fecha || '-'}
-                                                  </span>
-                                                </div>
+                                                {/* Franja Lateral Semántica */}
+                                                <div className={`absolute left-0 top-0 bottom-0 w-[3.5px] rounded-l-xl ${franjaGastoClass}`} />
 
-                                                <div className="text-right shrink-0">
-                                                  <div className="font-mono tabular-nums font-bold text-slate-100">
-                                                    PEN {mGasto.toLocaleString('es-PE')}
+                                                <div className="pl-2 flex items-center justify-between gap-3">
+                                                  {/* Columna 1, 2 y 3: Concepto, Categoría, Vínculo y Fecha */}
+                                                  <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                      <span className="text-xs font-semibold text-slate-200 truncate group-hover:text-sky-300 transition-colors">
+                                                        {g.Descripcion_Gasto || g.concepto || g.descripcion || 'Gasto'}
+                                                      </span>
+                                                      {categoria && (
+                                                        <span className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 text-sky-300 bg-sky-950/40 border border-sky-800/40 rounded">
+                                                          <Tag className="w-2.5 h-2.5" strokeWidth={1.75} />
+                                                          <span>{categoria}</span>
+                                                        </span>
+                                                      )}
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-400 tabular-nums">
+                                                        <Calendar className="w-2.5 h-2.5 text-slate-500" strokeWidth={1.75} />
+                                                        <span>{g.Fecha_Gasto || g.fecha || '-'}</span>
+                                                      </span>
+                                                      {vinculo && (
+                                                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60 truncate max-w-[130px]">
+                                                          {vinculo}
+                                                        </span>
+                                                      )}
+                                                    </div>
                                                   </div>
-                                                  <span
-                                                    className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                                                      esPag
-                                                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                                                    }`}
-                                                  >
-                                                    {esPag ? 'Pagado' : 'Pendiente'}
-                                                  </span>
+
+                                                  {/* Columna 4: Monto y Estado */}
+                                                  <div className="text-right shrink-0">
+                                                    <div className="font-mono tabular-nums text-xs md:text-sm font-bold text-slate-100">
+                                                      PEN {mGasto.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </div>
+                                                    <span
+                                                      className={`inline-block text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider ${
+                                                        esDesvio
+                                                          ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                                                          : esPagado
+                                                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                                      }`}
+                                                    >
+                                                      {esDesvio ? 'Desvío' : esPagado ? 'Pagado' : 'Pendiente'}
+                                                    </span>
+                                                  </div>
                                                 </div>
                                               </div>
                                             );
@@ -1412,10 +1680,20 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                             {fase.marcadores.map((h: any) => {
                               const esComp =
                                 h.estado === '03_Completado' || (h as any).Estado === '03_Completado';
+                              const marcadorIdKey = h.codigo_legado || h.id;
+                              const esMarcadorResaltado =
+                                elementoResaltadoId === marcadorIdKey ||
+                                elementoResaltadoId === h.id ||
+                                elementoResaltadoId === h.codigo_legado;
                               return (
                                 <div
                                   key={h.id}
-                                  className="portal-surface bg-[#0D1526] p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                                  id={`wbs-nodo-${marcadorIdKey}`}
+                                  className={`portal-surface bg-[#0D1526] p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition-all ${
+                                    esMarcadorResaltado
+                                      ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
+                                      : ''
+                                  }`}
                                 >
                                   <div className="flex items-center gap-3 min-w-0 flex-1">
                                     <div
@@ -1506,32 +1784,66 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
                       Tareas Generales
                     </span>
-                    {tareasGenerales.map((t: any) => (
-                      <div
-                        key={t.id}
-                        className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs"
-                      >
-                        <span className="text-slate-200">{t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}</span>
-                        <span className="font-mono text-slate-400">{t.horas_estimadas || 1}h</span>
-                      </div>
-                    ))}
+                    {tareasGenerales.map((t: any) => {
+                      const est = String(t.estado || t.Estado || 'PENDIENTE').toUpperCase();
+                      const esComp = est === 'COMPLETADA' || est === 'HECHO';
+                      const esProc = est === 'EN_PROCESO' || est === 'EN_PROGRESO';
+                      const esBloq = est === 'BLOQUEADA' || est === 'CANCELADA';
+                      let franjaTarea = 'bg-slate-600';
+                      if (esComp) franjaTarea = 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]';
+                      else if (esProc) franjaTarea = 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.4)]';
+                      else if (esBloq) franjaTarea = 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]';
+
+                      return (
+                        <div
+                          key={t.id}
+                          className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-[1px] hover:border-sky-500/30 hover:bg-[#0D1526] hover:shadow-[0_4px_16px_rgba(56,189,248,0.08)] flex items-center justify-between text-xs"
+                        >
+                          <div className={`absolute left-0 top-0 bottom-0 w-[3.5px] rounded-l-xl ${franjaTarea}`} />
+                          <span className="pl-2 font-medium text-slate-200 group-hover:text-sky-300 transition-colors truncate">
+                            {t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}
+                          </span>
+                          <span className="font-mono tabular-nums text-slate-400 text-[11px] shrink-0">
+                            {t.horas_estimadas || 1}h
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="lg:col-span-5 space-y-2 border-t lg:border-t-0 lg:border-l lg:pl-5 border-slate-800">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
                       Gastos Generales
                     </span>
-                    {gastosGenerales.map((g: any) => (
-                      <div
-                        key={g.id}
-                        className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs"
-                      >
-                        <span className="text-slate-200">{g.Descripcion_Gasto || g.concepto || 'Gasto'}</span>
-                        <span className="font-mono text-emerald-400 font-bold">
-                          PEN {parseFloat(g.Monto_PEN || g.monto_pen || 0).toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
+                    {gastosGenerales.map((g: any) => {
+                      const mGasto = parseFloat(g.Monto_PEN || g.Monto_Moneda_Base || g.monto_pen || g.monto || 0) || 0;
+                      const estPago = String(g.Estado_Pago || g.estado_pago || g.Estado || '').trim().toLowerCase();
+                      const esDesvio = Boolean(g.desvio || g.es_sobrecosto || estPago.includes('desv') || estPago.includes('sobrecosto'));
+                      const esPagado = estPago === 'pagado' || estPago === 'ejecutado';
+                      let franjaGastoClass = 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.4)]';
+                      if (esDesvio) franjaGastoClass = 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]';
+                      else if (esPagado) franjaGastoClass = 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]';
+
+                      return (
+                        <div
+                          key={g.id}
+                          className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-[1px] hover:border-sky-500/30 hover:bg-[#0D1526] hover:shadow-[0_4px_16px_rgba(56,189,248,0.08)] flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className={`absolute left-0 top-0 bottom-0 w-[3.5px] rounded-l-xl ${franjaGastoClass}`} />
+                          <div className="pl-2 min-w-0 flex-1">
+                            <span className="font-semibold text-slate-200 group-hover:text-sky-300 transition-colors truncate block">
+                              {g.Descripcion_Gasto || g.concepto || 'Gasto'}
+                            </span>
+                            <span className="font-mono text-[10px] text-slate-400 tabular-nums">
+                              {g.Fecha_Gasto || g.fecha || '-'}
+                            </span>
+                          </div>
+                          <span className="font-mono tabular-nums text-slate-100 font-bold shrink-0 text-xs md:text-sm">
+                            PEN {mGasto.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -2215,6 +2527,47 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
         tareaId={tareaAEditarId}
         initialProyectoCodigo={proyCod || proyId}
       />
+
+      {/* Modal Canónico de Edición de Proyecto */}
+      {proyectoActivo && (
+        <ModalNuevoProyecto
+          abierto={modalEditarAbierto}
+          onCerrar={() => setModalEditarAbierto(false)}
+          proyectoAEditarId={proyectoActivo.id}
+          onProyectoCreado={() => {
+            setModalEditarAbierto(false);
+            mostrarToastCobalt('Proyecto actualizado con éxito', 'success', 2500);
+          }}
+        />
+      )}
+
+      {/* Modal Canónico de Exportación PDF */}
+      {proyectoActivo && (
+        <ModalExportarPdf
+          abierto={modalPdfAbierto}
+          onCerrar={() => setModalPdfAbierto(false)}
+          proyectoIdSeleccionado={proyectoActivo.id}
+        />
+      )}
+
+      {/* Modal Canónico Bento para Nuevo Hito / Entregable WBS */}
+      {proyectoActivo && (
+        <ModalNuevoHito
+          abierto={modalNuevoHitoAbierto}
+          onCerrar={() => {
+            setModalNuevoHitoAbierto(false);
+            setFaseSeleccionadaParaHito(undefined);
+          }}
+          proyectoId={proyectoActivo.id}
+          proyectoCodigo={proyectoActivo.codigo_legado}
+          faseSugerida={faseSeleccionadaParaHito}
+          fasesDisponibles={fasesAgrupadas.map((f) => f.nombre)}
+          onHitoCreado={() => {
+            setModalNuevoHitoAbierto(false);
+            setFaseSeleccionadaParaHito(undefined);
+          }}
+        />
+      )}
     </div>
   );
 };

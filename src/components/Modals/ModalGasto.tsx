@@ -24,6 +24,7 @@ import {
   Save
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 
 export interface ModalGastoProps {
   isOpen: boolean;
@@ -43,6 +44,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
   tareaPreseleccionadaId
 }) => {
   useBodyScrollLock(isOpen);
+  const { programarEliminacion } = useUndoDelete();
 
   // Modo Dual: Real vs Programado
   const [modoDual, setModoDual] = useState<'REAL' | 'PROGRAMADO'>('REAL');
@@ -218,34 +220,20 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
     onClose();
   };
 
-  const handleEliminar = async () => {
+  const handleEliminar = () => {
     if (!gastoEditar) return;
-    const result = await Swal.fire({
-      title: '¿Eliminar registro de gasto?',
-      text: `Se eliminará "${gastoEditar.descripcion_gasto}" (${gastoEditar.codigo_legado}).`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#e11d48',
-      background: '#0D1526',
-      color: '#f8fafc'
+    const targetId = gastoEditar.id;
+    const desc = gastoEditar.descripcion_gasto || gastoEditar.codigo_legado || 'Gasto';
+    programarEliminacion({
+      tabla: 'gastos',
+      id: targetId,
+      etiqueta: desc,
+      tipo: 'GASTO',
+      commit: async () => {
+        await db.gastos.delete(targetId);
+      }
     });
-
-    if (result.isConfirmed) {
-      await db.gastos.delete(gastoEditar.id);
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: 'Gasto eliminado',
-        showConfirmButton: false,
-        timer: 2000,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
-      onClose();
-    }
+    onClose();
   };
 
   return createPortal(

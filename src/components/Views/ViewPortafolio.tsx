@@ -27,6 +27,10 @@ import {
   normalizeProyecto,
   type CanonicalProyecto
 } from '../../utils/entityNormalizer';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { ModalExportarPdf } from '../Modals/ModalExportarPdf';
+import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
+import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import Swal from 'sweetalert2';
 
 interface ViewPortafolioProps {
@@ -34,6 +38,8 @@ interface ViewPortafolioProps {
 }
 
 export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarProyecto }) => {
+  const { programarEliminacion, estaOculto } = useUndoDelete();
+
   // Estados de Filtros
   const [filtroTipo, setFiltroTipo] = useState<string>('');
   const [filtroEstado, setFiltroEstado] = useState<string>('');
@@ -45,9 +51,39 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
   // Estados de menús desplegables
   const [openDropdown, setOpenDropdown] = useState<'estado' | 'salud' | 'orden' | null>(null);
 
-  // Consultas reactivas Dexie
-  const rawProyectos = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
-  const rawTareas = useLiveQuery(() => db.tareas.toArray(), []) ?? [];
+  // Estados de modales canónicos
+  const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
+  const [modalProyectoAbierto, setModalProyectoAbierto] = useState(false);
+  const [proyectoAEditarId, setProyectoAEditarId] = useState<string | null>(null);
+  const [modalTareaProps, setModalTareaProps] = useState<{ abierto: boolean; proyectoCodigo?: string | null }>({
+    abierto: false,
+    proyectoCodigo: null
+  });
+
+  // Consultas reactivas Dexie filtradas con el búfer de deshacer
+  const rawProyectosLive = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
+  const rawTareasLive = useLiveQuery(() => db.tareas.toArray(), []) ?? [];
+
+  const rawProyectos = useMemo(
+    () => rawProyectosLive.filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado)),
+    [rawProyectosLive, estaOculto]
+  );
+  const rawTareas = useMemo(
+    () =>
+      rawTareasLive.filter((t: any) => {
+        if (estaOculto(t.id) || estaOculto(t.codigo_legado)) return false;
+        const pid = String(
+          t.proyecto_codigo ||
+            t.id_proyecto ||
+            (t.ID_Proyecto && String(t.ID_Proyecto).startsWith('PRO-') ? t.ID_Proyecto : '')
+        ).trim();
+        const proyUuid = String(t.proyecto_id || '').trim();
+        if (pid && estaOculto(pid)) return false;
+        if (proyUuid && estaOculto(proyUuid)) return false;
+        return true;
+      }),
+    [rawTareasLive, estaOculto]
+  );
 
   const proyectos: CanonicalProyecto[] = useMemo(() => {
     return rawProyectos.map(normalizeProyecto);
@@ -206,106 +242,93 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
     setFiltroOrden('avance_desc');
   };
 
-  const handleCrearProyecto = () => {
-    Swal.fire({
-      title: 'Nuevo Proyecto WBS',
-      background: '#0D1526',
-      color: '#f8fafc',
-      html: `
-        <div class="space-y-3 text-left text-xs">
-          <div>
-            <label class="block font-bold text-slate-300 mb-1">Nombre del Proyecto *</label>
-            <input id="swal-inp-nombre" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-sans text-xs focus:outline-none focus:border-indigo-500" placeholder="Ej: Implementación Portal 360">
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block font-bold text-slate-300 mb-1">Tipo de Cartera</label>
-              <select id="swal-inp-tipo" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-sans text-xs focus:outline-none focus:border-indigo-500">
-                <option value="Profesional">Profesional</option>
-                <option value="Personal">Personal</option>
-                <option value="Inversiones">Inversiones</option>
-                <option value="Social">Social</option>
-              </select>
-            </div>
-            <div>
-              <label class="block font-bold text-slate-300 mb-1">Presupuesto Tope (S/)</label>
-              <input id="swal-inp-bac" type="number" step="any" min="0" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:outline-none focus:border-indigo-500" placeholder="0.00">
-            </div>
-          </div>
-          <div>
-            <label class="block font-bold text-slate-300 mb-1">North Star OKR</label>
-            <input id="swal-inp-okr" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-sans text-xs focus:outline-none focus:border-indigo-500" placeholder="Objetivo de impacto estratégico">
-          </div>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'Crear Proyecto',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#4f46e5',
-      preConfirm: () => {
-        const nom = (document.getElementById('swal-inp-nombre') as HTMLInputElement)?.value;
-        const tip = (document.getElementById('swal-inp-tipo') as HTMLSelectElement)?.value;
-        const bac = parseFloat((document.getElementById('swal-inp-bac') as HTMLInputElement)?.value) || 0;
-        const okr = (document.getElementById('swal-inp-okr') as HTMLInputElement)?.value;
-
-        if (!nom || !nom.trim()) {
-          Swal.showValidationMessage('Ingresa el nombre del proyecto');
-          return false;
-        }
-        return { nom: nom.trim(), tip, bac, okr };
-      }
-    }).then(async (res) => {
-      if (res.isConfirmed && res.value) {
-        const nuevoCodigo = `PRO-${String(totalProyectos + 1).padStart(3, '0')}`;
-        await db.proyectos.add({
-          id: nuevoCodigo,
-          codigo_legado: nuevoCodigo,
-          nombre_proyecto: res.value.nom,
-          tipo_iniciativa: res.value.tip,
-          estado_proyecto: '02_Planificado',
-          health_status: 'En Rango',
-          presupuesto_tope: res.value.bac,
-          costo_ejecutado_real_pen: 0,
-          north_star_okr: res.value.okr,
-          avance_real_pct: 0
-        } as any);
-
-        Swal.fire({
-          icon: 'success',
-          title: 'Proyecto Creado',
-          text: `${nuevoCodigo} - ${res.value.nom} registrado con éxito`,
-          timer: 1600,
-          showConfirmButton: false,
-          background: '#0D1526',
-          color: '#f8fafc'
-        });
-      }
-    });
-  };
-
-  const handleEliminarProyecto = (e: React.MouseEvent, p: CanonicalProyecto) => {
-    e.stopPropagation();
-    Swal.fire({
-      title: '¿Eliminar proyecto?',
-      text: `Se eliminará ${p.codigo_legado} - ${p.nombre}. Esta acción no se puede deshacer.`,
+  const confirmarEliminacionCascada = async (p: CanonicalProyecto) => {
+    const nombreProy = p.nombre || p.codigo_legado || 'Proyecto';
+    const resultado = await Swal.fire({
+      title: '⚠️ ¿Eliminar Proyecto en Cascada?',
+      html: `Estás a punto de eliminar el proyecto <strong class="text-sky-300">${nombreProy}</strong>.<br/><br/><span class="text-rose-400 text-xs">Esta acción eliminará también en cascada todos sus hitos WBS, tareas operativas, subtareas y gastos vinculados.</span><br/><br/>Tendrás un margen de <strong>4 segundos</strong> para Deshacer.`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#e11d48',
-      cancelButtonColor: '#475569',
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, eliminar en cascada',
       cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#334155',
       background: '#0D1526',
-      color: '#f8fafc'
-    }).then(async (result) => {
-      if (result.isConfirmed) {
-        await db.proyectos.delete(p.id);
-        Swal.fire({
-          icon: 'success',
-          title: 'Proyecto eliminado',
-          timer: 1500,
-          showConfirmButton: false,
-          background: '#0D1526',
-          color: '#f8fafc'
+      color: '#f8fafc',
+      customClass: {
+        popup: 'border border-rose-500/40 shadow-2xl rounded-2xl text-xs'
+      }
+    });
+
+    if (!resultado.isConfirmed) return;
+
+    const targetId = p.id;
+    const codLegado = p.codigo_legado || p.id;
+    const etiqueta = p.nombre || codLegado;
+
+    programarEliminacion({
+      tabla: 'proyectos',
+      id: targetId,
+      idsSecundarios: codLegado && codLegado !== targetId ? [codLegado] : undefined,
+      etiqueta: `Proyecto: ${etiqueta}`,
+      tipo: 'PROYECTO',
+      commit: async () => {
+        await db.transaction('rw', [db.proyectos, db.hitos_wbs, db.tareas, db.subtareas_pasos, db.gastos], async () => {
+          // 1. Obtener hitos del proyecto
+          const hitos = await db.hitos_wbs
+            .where('proyecto_id')
+            .equals(targetId)
+            .or('proyecto_id')
+            .equals(codLegado)
+            .toArray();
+          const hitoIds = hitos.map((h) => h.id);
+          const hitoCodigos = hitos.map((h) => h.codigo_legado).filter(Boolean);
+
+          // 2. Obtener tareas del proyecto
+          const tareas = await db.tareas
+            .where('proyecto_codigo')
+            .equals(targetId)
+            .or('proyecto_codigo')
+            .equals(codLegado)
+            .toArray();
+          const tareaIds = tareas.map((t) => t.id);
+          const tareaCodigos = tareas.map((t) => t.codigo_legado).filter(Boolean);
+
+          // 3. Eliminar subtareas subordinadas vinculadas a tareas
+          const subPadres = Array.from(new Set([...tareaIds, ...tareaCodigos]));
+          if (subPadres.length > 0) {
+            await db.subtareas_pasos.where('id_padre_vinculado').anyOf(subPadres).delete();
+          }
+
+          // 4. Eliminar gastos subordinados
+          const gastosProy = await db.gastos.toArray();
+          const gastosABorrar = gastosProy.filter((g: any) => {
+            const gProy = String(g.id_origen_vinculado || g.ID_Proyecto || g.proyecto_id || '').trim();
+            const gHito = String(g.ID_Hito || g.id_hito || '').trim();
+            const gTarea = String(g.ID_Tarea || g.id_tarea || '').trim();
+            return (
+              gProy === targetId ||
+              gProy === codLegado ||
+              (gHito && (hitoIds.includes(gHito) || hitoCodigos.includes(gHito))) ||
+              (gTarea && (tareaIds.includes(gTarea) || tareaCodigos.includes(gTarea)))
+            );
+          });
+          if (gastosABorrar.length > 0) {
+            await db.gastos.bulkDelete(gastosABorrar.map((g) => g.id));
+          }
+
+          // 5. Eliminar tareas subordinadas
+          if (tareaIds.length > 0) {
+            await db.tareas.bulkDelete(tareaIds);
+          }
+
+          // 6. Eliminar hitos subordinados
+          if (hitoIds.length > 0) {
+            await db.hitos_wbs.bulkDelete(hitoIds);
+          }
+
+          // 7. Eliminar proyecto raíz
+          await db.proyectos.delete(targetId);
         });
       }
     });
@@ -341,7 +364,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <button
             type="button"
-            onClick={() => Swal.fire({ title: 'Exportar PDF', text: 'Compilando informe ejecutivo consolidado en PDF...', icon: 'info', background: '#0D1526', color: '#f8fafc' })}
+            onClick={() => setModalPdfAbierto(true)}
             className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-750 text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
             title="Compilar y Descargar Ficha Ejecutiva en PDF"
           >
@@ -351,7 +374,10 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
 
           <button
             type="button"
-            onClick={handleCrearProyecto}
+            onClick={() => {
+              setProyectoAEditarId(null);
+              setModalProyectoAbierto(true);
+            }}
             className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-900/30 dark:shadow-indigo-950/50 px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98] cursor-pointer"
             title="Crear Nuevo Proyecto"
           >
@@ -1100,29 +1126,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        Swal.fire({
-                          title: `Añadir Tarea a ${p.codigo_legado}`,
-                          input: 'text',
-                          inputPlaceholder: 'Nombre de la nueva tarea',
-                          showCancelButton: true,
-                          confirmButtonText: 'Crear',
-                          cancelButtonText: 'Cancelar',
-                          confirmButtonColor: '#10b981',
-                          background: '#0D1526',
-                          color: '#f8fafc'
-                        }).then(async (res) => {
-                          if (res.isConfirmed && res.value) {
-                            const codTar = `TAR-${Date.now().toString().slice(-4)}`;
-                            await db.tareas.add({
-                              id: codTar,
-                              codigo_legado: codTar,
-                              nombre_tarea_actividad: res.value,
-                              proyecto_codigo: p.codigo_legado,
-                              estado_tarea: '01_Backlog'
-                            } as any);
-                            Swal.fire({ icon: 'success', title: 'Tarea creada', timer: 1400, showConfirmButton: false, background: '#0D1526', color: '#f8fafc' });
-                          }
-                        });
+                        setModalTareaProps({ abierto: true, proyectoCodigo: p.codigo_legado || p.id });
                       }}
                       className="p-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-xl border border-emerald-200 dark:border-emerald-800/60 transition shadow-2xs active:scale-95 shrink-0 cursor-pointer"
                       title="Añadir Tarea"
@@ -1134,25 +1138,8 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        Swal.fire({
-                          title: `Editar ${p.codigo_legado}`,
-                          input: 'text',
-                          inputValue: p.nombre,
-                          inputPlaceholder: 'Nuevo nombre de proyecto',
-                          showCancelButton: true,
-                          confirmButtonText: 'Guardar',
-                          cancelButtonText: 'Cancelar',
-                          confirmButtonColor: '#4f46e5',
-                          background: '#0D1526',
-                          color: '#f8fafc'
-                        }).then(async (res) => {
-                          if (res.isConfirmed && res.value) {
-                            await db.proyectos.update(p.id, {
-                              nombre_proyecto: res.value
-                            });
-                            Swal.fire({ icon: 'success', title: 'Proyecto actualizado', timer: 1400, showConfirmButton: false, background: '#0D1526', color: '#f8fafc' });
-                          }
-                        });
+                        setProyectoAEditarId(p.id);
+                        setModalProyectoAbierto(true);
                       }}
                       className="p-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 transition shadow-2xs active:scale-95 shrink-0 cursor-pointer"
                       title="Editar Proyecto"
@@ -1162,7 +1149,10 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
 
                     <button
                       type="button"
-                      onClick={(e) => handleEliminarProyecto(e, p)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmarEliminacionCascada(p);
+                      }}
                       className="p-2 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 rounded-xl border border-rose-500/20 hover:border-rose-500/40 transition shadow-2xs shrink-0 cursor-pointer"
                       title="Eliminar Proyecto en Cascada"
                     >
@@ -1262,6 +1252,29 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
           </table>
         </div>
       )}
+
+      {/* Modales Canónicos del Portafolio */}
+      <ModalExportarPdf
+        abierto={modalPdfAbierto}
+        onCerrar={() => setModalPdfAbierto(false)}
+        proyectoIdSeleccionado={null}
+      />
+
+      <ModalNuevoProyecto
+        abierto={modalProyectoAbierto}
+        onCerrar={() => {
+          setModalProyectoAbierto(false);
+          setProyectoAEditarId(null);
+        }}
+        proyectoAEditarId={proyectoAEditarId}
+      />
+
+      <ModalTareaFlow
+        isOpen={modalTareaProps.abierto}
+        onClose={() => setModalTareaProps({ abierto: false, proyectoCodigo: null })}
+        tareaId={null}
+        initialProyectoCodigo={modalTareaProps.proyectoCodigo}
+      />
     </div>
   );
 };

@@ -23,6 +23,7 @@ import { db } from '../../db/db';
 import { getProp } from '../../utils/entityNormalizer';
 import { ModalGasto } from '../Modals/ModalGasto';
 import { ModalIngreso } from '../Modals/ModalIngreso';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 import Swal from 'sweetalert2';
 
 type TabFinanzas = 'general' | 'transacciones' | 'cuotas' | 'presupuesto';
@@ -49,12 +50,20 @@ export const ViewFinanzas: React.FC = () => {
   const [modalIngresoAbierto, setModalIngresoAbierto] = useState(false);
   const [modalCuotaAbierto, setModalCuotaAbierto] = useState(false);
 
-  // Queries reactivos desde Dexie
-  const gastosRaw = useLiveQuery(() => db.gastos.toArray(), []) ?? [];
-  const ingresosRaw = useLiveQuery(() => db.ingresos.toArray(), []) ?? [];
-  const cuotasRaw = useLiveQuery(() => db.cuotas.toArray(), []) ?? [];
-  const proyectosRaw = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
-  const actividadesRaw = useLiveQuery(() => db.actividades_personales.toArray(), []) ?? [];
+  const { estaOculto } = useUndoDelete();
+
+  // Queries reactivos desde Dexie filtrados con el búfer de deshacer
+  const rawGastosLive = useLiveQuery(() => db.gastos.toArray(), []) ?? [];
+  const rawIngresosLive = useLiveQuery(() => db.ingresos.toArray(), []) ?? [];
+  const rawCuotasLive = useLiveQuery(() => db.cuotas.toArray(), []) ?? [];
+  const rawProyectosLive = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
+  const rawActividadesLive = useLiveQuery(() => db.actividades_personales.toArray(), []) ?? [];
+
+  const gastosRaw = useMemo(() => rawGastosLive.filter((g: any) => !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto)), [rawGastosLive, estaOculto]);
+  const ingresosRaw = useMemo(() => rawIngresosLive.filter((i: any) => !estaOculto(i.id) && !estaOculto(i.codigo_legado)), [rawIngresosLive, estaOculto]);
+  const cuotasRaw = useMemo(() => rawCuotasLive.filter((c: any) => !estaOculto(c.id) && !estaOculto(c.codigo_legado)), [rawCuotasLive, estaOculto]);
+  const proyectosRaw = useMemo(() => rawProyectosLive.filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado)), [rawProyectosLive, estaOculto]);
+  const actividadesRaw = useMemo(() => rawActividadesLive.filter((a: any) => !estaOculto(a.id) && !estaOculto(a.codigo_legado)), [rawActividadesLive, estaOculto]);
 
   // Actualización manual de TC SUNAT
   const handleRefreshTC = () => {

@@ -22,6 +22,7 @@ import {
   Trash2
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 
 export interface ModalIngresoProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
   onGuardadoExitoso
 }) => {
   useBodyScrollLock(isOpen);
+  const { programarEliminacion } = useUndoDelete();
 
   // Modo Dual: Real vs Programado
   const [modoDual, setModoDual] = useState<'REAL' | 'PROGRAMADO'>('REAL');
@@ -179,34 +181,20 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
     onClose();
   };
 
-  const handleEliminar = async () => {
+  const handleEliminar = () => {
     if (!ingresoEditar) return;
-    const result = await Swal.fire({
-      title: '¿Eliminar registro de ingreso?',
-      text: `Se borrará "${ingresoEditar.descripcion_ingreso}" (${ingresoEditar.codigo_legado}).`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#e11d48',
-      background: '#0D1526',
-      color: '#f8fafc'
+    const targetId = ingresoEditar.id;
+    const desc = ingresoEditar.descripcion_ingreso || ingresoEditar.codigo_legado || 'Ingreso';
+    programarEliminacion({
+      tabla: 'ingresos',
+      id: targetId,
+      etiqueta: desc,
+      tipo: 'INGRESO',
+      commit: async () => {
+        await db.ingresos.delete(targetId);
+      }
     });
-
-    if (result.isConfirmed) {
-      await db.ingresos.delete(ingresoEditar.id);
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: 'Ingreso eliminado',
-        showConfirmButton: false,
-        timer: 2000,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
-      onClose();
-    }
+    onClose();
   };
 
   return createPortal(

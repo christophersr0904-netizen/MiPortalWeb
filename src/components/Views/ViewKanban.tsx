@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 import {
   normalizeProyecto,
   normalizeTarea,
@@ -161,7 +162,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   // Modal Canónico de Nuevo Proyecto
   const [modalNuevoProyectoAbierto, setModalNuevoProyectoAbierto] = useState(false);
 
-  // Live queries reactivas desde Dexie
+  const { programarEliminacion, estaOculto } = useUndoDelete();
+
+  // Live queries reactivas desde Dexie filtradas con el búfer de deshacer
   const rawProyectosLive = useLiveQuery(() => db.proyectos.toArray(), []);
   const rawTareasLive = useLiveQuery(() => db.tareas.toArray(), []);
   const rawSubtareasLive = useLiveQuery(() => db.subtareas_pasos.toArray(), []);
@@ -170,11 +173,26 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
   const cargandoDatosIniciales = rawTareasLive === undefined || rawProyectosLive === undefined;
 
-  const rawProyectos = rawProyectosLive ?? [];
-  const rawTareas = rawTareasLive ?? [];
-  const rawSubtareas = rawSubtareasLive ?? [];
-  const rawHitos = rawHitosLive ?? [];
-  const rawGastos = rawGastosLive ?? [];
+  const rawProyectos = useMemo(
+    () => (rawProyectosLive ?? []).filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado)),
+    [rawProyectosLive, estaOculto]
+  );
+  const rawTareas = useMemo(
+    () => (rawTareasLive ?? []).filter((t: any) => !estaOculto(t.id) && !estaOculto(t.codigo_legado) && !estaOculto(t.proyecto_codigo) && !estaOculto(t.proyecto_id)),
+    [rawTareasLive, estaOculto]
+  );
+  const rawSubtareas = useMemo(
+    () => (rawSubtareasLive ?? []).filter((s: any) => !estaOculto(s.id) && !estaOculto(s.codigo_legado) && !estaOculto(s.id_padre_vinculado)),
+    [rawSubtareasLive, estaOculto]
+  );
+  const rawHitos = useMemo(
+    () => (rawHitosLive ?? []).filter((h: any) => !estaOculto(h.id) && !estaOculto(h.codigo_legado) && !estaOculto(h.proyecto_id)),
+    [rawHitosLive, estaOculto]
+  );
+  const rawGastos = useMemo(
+    () => (rawGastosLive ?? []).filter((g: any) => !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto)),
+    [rawGastosLive, estaOculto]
+  );
 
   const proyectos: CanonicalProyecto[] = useMemo(() => rawProyectos.map(normalizeProyecto), [rawProyectos]);
   const tareas: CanonicalTarea[] = useMemo(() => rawTareas.map(normalizeTarea), [rawTareas]);
@@ -1888,9 +1906,17 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                                     if (onEliminarTarea) {
                                       onEliminarTarea(tar.id, tar.nombre);
                                     } else {
-                                      if (window.confirm(`¿Deseas eliminar definitivamente la tarea "${tar.nombre}"?`)) {
-                                        await db.tareas.delete(tar.id);
-                                      }
+                                      const targetId = tar.id;
+                                      const etiqueta = tar.nombre || 'Tarea';
+                                      programarEliminacion({
+                                        tabla: 'tareas',
+                                        id: targetId,
+                                        etiqueta,
+                                        tipo: 'TAREA',
+                                        commit: async () => {
+                                          await db.tareas.delete(targetId);
+                                        }
+                                      });
                                     }
                                   }}
                                   className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors duration-100 cursor-pointer"

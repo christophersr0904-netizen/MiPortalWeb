@@ -5,9 +5,8 @@ import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
 import { ModalAlcanceRecurrencia } from '../Modals/ModalAlcanceRecurrencia';
 import {
   Check, Flame, Calendar, Clock, DollarSign, PlusCircle, Pencil, Trash2,
-  HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee
+  HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee, AlertTriangle
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import Swal from 'sweetalert2';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
 import { recalcularProgresoMetaLocal } from '../../services/metasService';
@@ -78,21 +77,6 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
   const esHabitual = actividad.tipo_compromiso === 'HABITUAL';
   const racha = actividad.racha_actual || 0;
 
-  // Disparador de confeti según nivel de racha
-  const lanzarConfettiCelebracion = (rachaNum: number) => {
-    try {
-      confetti({
-        particleCount: rachaNum >= 5 ? 60 : 30,
-        spread: 55,
-        origin: { y: 0.75 },
-        colors: ['#38bdf8', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'],
-        ticks: 200,
-        zIndex: 99999
-      });
-    } catch {
-      // Ignorar en entornos sin soporte de canvas
-    }
-  };
 
   // Handlers de acción con alcance
   const handleSolicitarEditar = (e: React.MouseEvent) => {
@@ -159,8 +143,6 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         title: '¡Hábito Cumplido!',
         text: `${actividad.nombre_actividad}${msgRacha}`
       });
-
-      lanzarConfettiCelebracion(res.nuevaRacha);
     } else {
       Toast.fire({
         icon: 'info',
@@ -232,7 +214,6 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         }
 
         if (res.rachaRescatada) {
-          lanzarConfettiCelebracion(res.actividadActualizada.racha_actual);
           Swal.fire({
             icon: 'success',
             title: '¡Racha Rescatada!',
@@ -249,31 +230,42 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
 
   return (
     <div
-      className={`portal-surface p-3 space-y-2.5 transition-all duration-200 border rounded-xl ${
+      className={`portal-surface p-3 pl-3.5 space-y-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] border rounded-xl relative overflow-hidden ${
         esCompletada
-          ? 'opacity-75 border-slate-800/40 bg-[#0A101D]'
-          : 'border-slate-800/40 hover:border-slate-700 bg-[#0D1526]'
+          ? 'opacity-65 border-slate-800/40 bg-[#070B14]/90'
+          : 'border-slate-800/40 hover:border-slate-700 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/50 bg-[#0D1526]'
       }`}
     >
+      {/* Micro-franja lateral de acento semántico por categoría */}
+      <div
+        className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full ${catConfig.colorBarra} opacity-80`}
+        title={`Categoría: ${catConfig.nombre}`}
+      />
+
       {/* Cabecera de la Tarjeta */}
       <div className="flex items-center justify-between gap-1.5 flex-wrap">
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${catConfig.badgeClase}`}>
-            <span>{renderIconoCategoriaVida(catConfig.icono, "w-3 h-3")}</span>
-            <span>{catConfig.nombre}</span>
+          {/* Micro-icono sutil con tooltip (sustituye badge tosco redundante) */}
+          <span
+            className={`inline-flex items-center justify-center w-5 h-5 rounded-md border ${catConfig.badgeClase} shrink-0`}
+            title={`Categoría: ${catConfig.nombre}`}
+          >
+            {renderIconoCategoriaVida(catConfig.icono, "w-3 h-3")}
           </span>
 
+          {/* Cápsula compacta de mora sin emojis en DOM */}
           {diasMora > 0 && !esCompletada && (
             <span
-              className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 inline-flex items-center gap-1"
-              title={`Hábito con retraso de ${diasMora} días`}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-mono tabular-nums font-semibold shrink-0"
+              title={`Retraso acumulado: ${diasMora} día(s)`}
             >
-              ⚠️ En mora ({diasMora}d)
+              <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" strokeWidth={1.75} />
+              <span>+{diasMora}d</span>
             </span>
           )}
 
           {esHabitual && actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'DIARIA' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60 font-mono">
               {actividad.frecuencia_ciclo}
             </span>
           )}

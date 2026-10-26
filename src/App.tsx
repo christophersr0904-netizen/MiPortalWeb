@@ -30,7 +30,10 @@ import { ModalActividadFlow } from './components/Modals/ModalActividadFlow';
 import { ModalGasto } from './components/Modals/ModalGasto';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { db, inicializarDatosSemillaSiVacio } from './db/db';
+import { syncManager } from './services/syncManager';
 import type { ActividadPersonal, VinculoEntidad } from './types';
+import { UndoDeleteProvider } from './context/UndoDeleteContext';
+import { UndoToastContainer } from './components/UI/UndoToastContainer';
 
 export const App: React.FC = () => {
   const [vistaActiva, setVistaActiva] = useState<VistaGlobal>('kanban');
@@ -101,7 +104,16 @@ export const App: React.FC = () => {
     }
 
     // Hidratar en frío si la base de datos Dexie está vacía o incompleta (I/O paralelo ultra-rápido)
-    inicializarDatosSemillaSiVacio().catch((err) => {
+    inicializarDatosSemillaSiVacio().then(() => {
+      // Disparar sincronización bidireccional en modo HUD / widget nativo de escritorio
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const isHud = params?.get('mode') === 'hud' || params?.get('widget') === 'desktop' || Boolean((window as any).desktopWidget);
+      if (isHud) {
+        syncManager.sincronizarTodo().catch((err) => {
+          console.warn('[App] Error en syncManager.sincronizarTodo al arrancar modo HUD:', err);
+        });
+      }
+    }).catch((err) => {
       console.warn('[App] Error al inicializar semilla de datos:', err);
     });
 
@@ -206,9 +218,10 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen md:h-full flex flex-col overflow-y-auto md:overflow-hidden bg-slate-50 dark:bg-[#040711] text-slate-800 dark:text-slate-200 antialiased font-sans safe-area-insets">
-      {/* 1. Header Maestro Global */}
-      <HeaderMaestro
+    <UndoDeleteProvider>
+      <div className="min-h-screen md:h-full flex flex-col overflow-y-auto md:overflow-hidden bg-slate-50 dark:bg-[#040711] text-slate-800 dark:text-slate-200 antialiased font-sans safe-area-insets">
+        {/* 1. Header Maestro Global */}
+        <HeaderMaestro
         vistaActiva={vistaActiva}
         onCambiarVista={(vista) => setVistaActiva(vista)}
         onAbrirAsistenteIA={() => setAsistenteAbierto(true)}
@@ -357,6 +370,10 @@ export const App: React.FC = () => {
 
       {/* 8. Cápsula Flotante y Cockpit Diario Global */}
       <DailyCockpit />
+
+      {/* 9. Notificaciones y Búfer Global de Deshacer */}
+      <UndoToastContainer />
     </div>
+  </UndoDeleteProvider>
   );
 };

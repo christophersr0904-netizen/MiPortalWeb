@@ -484,8 +484,8 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
               onChange={(e) => setFiltroMetaId(e.target.value)}
               className="bg-transparent text-xs text-slate-200 font-medium focus:outline-none cursor-pointer max-w-[160px] sm:max-w-[200px] truncate"
             >
-              <option value="TODAS" className="bg-[#0D1526] text-slate-200">🎯 Todas las Metas</option>
-              <option value="__SIN_META__" className="bg-[#0D1526] text-slate-200">⚡ Hábitos de Rutina Base (Sin meta)</option>
+              <option value="TODAS" className="bg-[#0D1526] text-slate-200">Todas las Metas</option>
+              <option value="__SIN_META__" className="bg-[#0D1526] text-slate-200">Hábitos de Rutina Base (Sin meta)</option>
               {metasPlanesOrdenadas.length > 0 && (
                 <optgroup label="Metas y Planes Activos" className="bg-[#0D1526] text-cyan-400 font-bold">
                   {metasPlanesOrdenadas.map((m) => (
@@ -636,11 +636,11 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           return (
             <div
               key={catKey}
-              className="w-80 flex-shrink-0 flex flex-col portal-surface bg-white dark:bg-[#0D1526] rounded-2xl border border-slate-200/80 dark:border-slate-800/40 h-full min-h-0 overflow-hidden transition-all duration-150 shadow-xs relative"
+              className="w-80 flex-shrink-0 flex flex-col portal-surface bg-white dark:bg-[#0D1526] rounded-2xl border border-slate-200/80 dark:border-slate-800/40 h-full min-h-0 overflow-hidden transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-xs relative"
               data-categoria={catKey}
             >
               {/* Encabezado Sticky de Categoría */}
-              <div className="p-3.5 pb-2.5 border-b border-slate-200/80 dark:border-slate-800/40 shrink-0 sticky top-0 z-10 bg-slate-50/95 dark:bg-[#0D1526]/95 backdrop-blur-xs">
+              <div className="p-3.5 pb-2.5 border-b border-slate-200/80 dark:border-slate-800/40 shrink-0 sticky top-0 z-10 bg-slate-50/95 dark:bg-[#0D1526]/95 backdrop-blur-md">
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center text-xs shadow-2xs font-semibold">

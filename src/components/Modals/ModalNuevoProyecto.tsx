@@ -11,11 +11,13 @@ import {
 } from 'lucide-react';
 import { db } from '../../db/db';
 import type { ProyectoRecord, HitoWbsRecord, TareaRecord, GastoRecord } from '../../types';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 interface ModalNuevoProyectoProps {
   abierto: boolean;
   onCerrar: () => void;
   onProyectoCreado?: (proyectoCodigo: string) => void;
+  proyectoAEditarId?: string | null;
 }
 
 interface HitoWizItem {
@@ -50,7 +52,8 @@ interface GastoWizItem {
 export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
   abierto,
   onCerrar,
-  onProyectoCreado
+  onProyectoCreado,
+  proyectoAEditarId
 }) => {
   // Bloqueo incondicional de scroll de fondo según abierto
   useBodyScrollLock(abierto);
@@ -61,6 +64,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
   const [codigoProyecto, setCodigoProyecto] = useState('');
   const [nombreProyecto, setNombreProyecto] = useState('');
   const [descripcion, setDescripcion] = useState('');
+  const [estadoProyecto, setEstadoProyecto] = useState('02_Planificado');
   const [estadoPartida, setEstadoPartida] = useState('Cero Absoluto (Greenfield)');
   const [perfilEjecutor, setPerfilEjecutor] = useState('Ejecutor Directo');
   const [recursosMateriales, setRecursosMateriales] = useState('');
@@ -83,19 +87,81 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
   const [gastosWiz, setGastosWiz] = useState<GastoWizItem[]>([]);
   const [guardando, setGuardando] = useState(false);
 
-  // Inicializar correlativo y fecha por defecto al abrir
+  // Inicializar o cargar datos del proyecto reactivamente
   useEffect(() => {
     if (abierto) {
-      const initCorrelativo = async () => {
-        const count = await db.proyectos.count();
-        setCodigoProyecto(`PRO-${String(count + 1).padStart(3, '0')}`);
-      };
-      initCorrelativo();
-      const hoy = new Date().toISOString().split('T')[0];
-      setFechaInicioPlan(hoy);
-      setTabActiva('datos');
+      if (proyectoAEditarId) {
+        const cargarProyectoAEditar = async () => {
+          let proy = await db.proyectos.get(proyectoAEditarId);
+          if (!proy) {
+            proy = await db.proyectos.where('codigo_legado').equals(proyectoAEditarId).first();
+          }
+          if (proy) {
+            setCodigoProyecto(proy.codigo_legado || '');
+            setNombreProyecto(proy.nombre_proyecto || '');
+            setEstadoProyecto(proy.estado_proyecto || '02_Planificado');
+            setTipoIniciativa(proy.tipo_iniciativa || 'Hogar / Construcción');
+            setMagnitudComplejidad(proy.magnitud_complejidad || 'Medium');
+            setArquetipoProyecto(proy.arquetipo_proyecto || '1_Infraestructura');
+            setMonedaBase((proy.moneda_base as 'PEN' | 'USD') || 'PEN');
+            setPresupuestoTope(proy.presupuesto_tope ? String(proy.presupuesto_tope) : '');
+            setFechaInicioPlan(proy.fecha_inicio_plan || '');
+            setFechaFinPlan(proy.fecha_fin_plan || '');
+            setNorthStarOKR(proy.north_star_okr || '');
+            setCriteriosDoD(proy.criterios_aceptacion_dod || '');
+            setEntregableTangible(proy.entregable_tangible_objeto || '');
+
+            const hitosExistentes = await db.hitos_wbs
+              .where('proyecto_id')
+              .equals(proy.codigo_legado)
+              .or('proyecto_id')
+              .equals(proy.id)
+              .toArray();
+
+            if (hitosExistentes.length > 0) {
+              setHitosWiz(
+                hitosExistentes.map((h) => ({
+                  id: h.id,
+                  codigo: h.codigo_legado,
+                  nombre: h.nombre_elemento,
+                  tipo: (h.tipo_elemento_wbs as any) || 'PAQUETE_TRABAJO',
+                  wbsCode: h.wbs_code || '',
+                  fase: h.fase_asociada || '',
+                  pesoPct: (h.peso_pct || 0) <= 1 ? (h.peso_pct || 0) * 100 : (h.peso_pct || 0),
+                  fechaLimite: h.fecha_limite || '',
+                  presupuesto: h.presupuesto_asignado || 0
+                }))
+              );
+            } else {
+              setHitosWiz([]);
+            }
+          }
+        };
+        cargarProyectoAEditar();
+        setTabActiva('datos');
+      } else {
+        const initCorrelativo = async () => {
+          const count = await db.proyectos.count();
+          setCodigoProyecto(`PRO-${String(count + 1).padStart(3, '0')}`);
+        };
+        initCorrelativo();
+        const hoy = new Date().toISOString().split('T')[0];
+        setFechaInicioPlan(hoy);
+        setFechaFinPlan('');
+        setNombreProyecto('');
+        setDescripcion('');
+        setEstadoProyecto('02_Planificado');
+        setPresupuestoTope('');
+        setNorthStarOKR('');
+        setCriteriosDoD('');
+        setEntregableTangible('');
+        setHitosWiz([]);
+        setTareasWiz([]);
+        setGastosWiz([]);
+        setTabActiva('datos');
+      }
     }
-  }, [abierto]);
+  }, [abierto, proyectoAEditarId]);
 
   // Manejo incondicional de tecla Escape para cerrar
   useEffect(() => {
@@ -256,8 +322,44 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
     setGuardando(true);
     try {
       const nowIso = new Date().toISOString();
-      const pId = crypto.randomUUID ? crypto.randomUUID() : `p-${Date.now()}`;
       const presNum = parseFloat(presupuestoTope) || 0;
+
+      // MODO EDICIÓN
+      if (proyectoAEditarId) {
+        let targetId = proyectoAEditarId;
+        const proyExistente = await db.proyectos.get(proyectoAEditarId);
+        if (!proyExistente) {
+          const proyPorCod = await db.proyectos.where('codigo_legado').equals(proyectoAEditarId).first();
+          if (proyPorCod) targetId = proyPorCod.id;
+        }
+
+        await db.proyectos.update(targetId, {
+          nombre_proyecto: nombreProyecto.trim(),
+          tipo_iniciativa: tipoIniciativa,
+          categoria_tshirt: magnitudComplejidad === 'Light' ? 'S-Light' : magnitudComplejidad === 'Heavy' ? 'L-Heavy' : 'M-Medium',
+          magnitud_complejidad: magnitudComplejidad,
+          arquetipo_proyecto: arquetipoProyecto,
+          estado_proyecto: estadoProyecto,
+          moneda_base: monedaBase === 'USD' ? 'USD' : 'PEN',
+          presupuesto_tope: presNum,
+          fecha_inicio_plan: fechaInicioPlan || undefined,
+          fecha_fin_plan: fechaFinPlan || undefined,
+          north_star_okr: northStarOKR.trim() || undefined,
+          criterios_aceptacion_dod: criteriosDoD.trim() || undefined,
+          entregable_tangible_objeto: entregableTangible.trim() || undefined,
+          updated_at: nowIso
+        });
+
+        mostrarToastCobalt('Proyecto actualizado con éxito', 'success', 2500);
+        if (onProyectoCreado) {
+          onProyectoCreado(codigoProyecto);
+        }
+        onCerrar();
+        return;
+      }
+
+      // MODO CREACIÓN NUEVO
+      const pId = crypto.randomUUID ? crypto.randomUUID() : `p-${Date.now()}`;
 
       const nuevoProyecto: ProyectoRecord = {
         id: pId,
@@ -268,7 +370,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
         categoria_tshirt: magnitudComplejidad === 'Light' ? 'S-Light' : magnitudComplejidad === 'Heavy' ? 'L-Heavy' : 'M-Medium',
         magnitud_complejidad: magnitudComplejidad,
         arquetipo_proyecto: arquetipoProyecto,
-        estado_proyecto: '02_Planificado',
+        estado_proyecto: estadoProyecto,
         avance_real_pct: 0,
         fecha_inicio_plan: fechaInicioPlan || undefined,
         fecha_fin_plan: fechaFinPlan || undefined,
@@ -391,13 +493,13 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-black text-slate-800 dark:text-slate-100 text-sm md:text-base">
-                  Nuevo Proyecto & Estructura WBS
+                  {proyectoAEditarId ? `Editar Proyecto: ${codigoProyecto || ''}` : 'Nuevo Proyecto & Estructura WBS'}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80">
                   {codigoProyecto || 'PRO-XXX'}
                 </span>
                 <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80">
-                  Asistido por IA
+                  {proyectoAEditarId ? 'Modo Edición' : 'Asistido por IA'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -760,11 +862,11 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   </div>
                 </div>
 
-                {/* Magnitud / T-Shirt & Arquetipo */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Magnitud / T-Shirt & Arquetipo & Estado */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
-                      Magnitud de Complejidad (T-Shirt)
+                      Magnitud (T-Shirt)
                     </label>
                     <select
                       value={magnitudComplejidad}
@@ -786,11 +888,29 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                       onChange={(e) => setArquetipoProyecto(e.target.value)}
                       className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 font-bold text-slate-800 dark:text-slate-100 text-xs outline-none"
                     >
-                      <option value="1_Infraestructura">1_Infraestructura (Obras, Hardware, Despliegue Físico)</option>
-                      <option value="2_Venture">2_Venture (Software, Startups, Productos Digitales)</option>
-                      <option value="3_Activo">3_Activo (Inversiones, Bienes Raíces, Activos)</option>
-                      <option value="4_Carrera">4_Carrera (Certificaciones, Idiomas, Estudios)</option>
-                      <option value="5_Evento">5_Evento (Conferencias, Campañas, Eventos T-Minus)</option>
+                      <option value="1_Infraestructura">1_Infraestructura (Obras, HW)</option>
+                      <option value="2_Venture">2_Venture (Software, Startups)</option>
+                      <option value="3_Activo">3_Activo (Inversiones, Bienes)</option>
+                      <option value="4_Carrera">4_Carrera (Certificaciones)</option>
+                      <option value="5_Evento">5_Evento (Campañas, Eventos)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                      Estado del Proyecto
+                    </label>
+                    <select
+                      value={estadoProyecto}
+                      onChange={(e) => setEstadoProyecto(e.target.value)}
+                      className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 font-bold text-slate-800 dark:text-slate-100 text-xs outline-none"
+                    >
+                      <option value="01_Backlog">01_Backlog</option>
+                      <option value="02_Planificado">02_Planificado</option>
+                      <option value="03_En_Ejecucion">03_En_Ejecución</option>
+                      <option value="04_En_Pausa">04_En_Pausa</option>
+                      <option value="05_Cancelado">05_Cancelado</option>
+                      <option value="06_Cerrado">06_Cerrado</option>
                     </select>
                   </div>
                 </div>
@@ -1167,7 +1287,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-900/30 flex items-center gap-2 transition cursor-pointer disabled:opacity-50"
           >
             <CheckCircle2 className="w-4 h-4" />
-            <span>{guardando ? 'Guardando...' : 'Guardar Proyecto'}</span>
+            <span>{guardando ? 'Guardando...' : proyectoAEditarId ? 'Guardar Cambios' : 'Guardar Proyecto'}</span>
           </button>
         </div>
       </div>

@@ -142,7 +142,9 @@ export function sanitizarProyectoPayload(raw: ProyectoRecord, userId: string = D
     magnitud_complejidad: normalizarMagnitud(raw.magnitud_complejidad || raw.categoria_tshirt),
     arquetipo_proyecto: normalizarArquetipo(raw.arquetipo_proyecto),
     estado_proyecto: normalizarEstadoProyecto(raw.estado_proyecto),
-    health_status: raw.health_status || '🟢 Saludable',
+    health_status: raw.health_status
+      ? String(raw.health_status).replace(/[\u{1F300}-\u{1F9FF}|🔴|🟢|🟡]/gu, '').trim() || 'Saludable'
+      : 'Saludable',
     avance_real_pct: clampedAvance,
     entregable_tangible_objeto: raw.entregable_tangible_objeto?.trim() || null,
     north_star_okr: raw.north_star_okr?.trim() || null,

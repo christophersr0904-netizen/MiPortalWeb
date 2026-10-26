@@ -244,4 +244,20 @@ html, body {
   animation: marquee 6s linear infinite;
 }
 
+/* ============================================================================
+ * ANIMACIONES UI - UNDO TOAST REGRESIVO 4S (REQ-GLOBAL-SOFT-DELETE-UNDO-BUFFER-EXEC-57)
+ * ============================================================================ */
+@keyframes shrinkWidth {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.animate-shrink-width {
+  animation: shrinkWidth 4s linear forwards;
+}
+
 

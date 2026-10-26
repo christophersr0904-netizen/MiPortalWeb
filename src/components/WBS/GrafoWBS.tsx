@@ -16,6 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { calcularRutaCriticaCPM, calcularCPMCanoicoTareas } from '../../services/cpmService';
 import {
   NodoProyecto,
@@ -48,6 +49,7 @@ import type {
   NodoCalculadoCPM
 } from '../../types';
 import { CanaletaEdge } from './CanaletaEdge';
+import { OrtogonalTreeEdge } from './OrtogonalTreeEdge';
 import { TooltipFlotanteWBS, type TooltipInfo } from './TooltipFlotanteWBS';
 
 const nodeTypes = {
@@ -60,7 +62,8 @@ const nodeTypes = {
 };
 
 const edgeTypes = {
-  canaletaEdge: CanaletaEdge
+  canaletaEdge: CanaletaEdge,
+  ortogonalTreeEdge: OrtogonalTreeEdge
 };
 
 // Constantes de dimensiones canónicas (Paridad 1:1 REQ-F2-P2.1p)
@@ -89,8 +92,8 @@ export const Y_LEVELS = {
   gasto: 780                   // Nivel 4: Gastos imputados
 };
 
-export const GAP_X = 36;       // Separación horizontal canónica entre entregables/tareas (36px)
-export const GAP_FASE = 60;    // Separación horizontal canónica entre ramas de fases (60px)
+export const GAP_X = 52;       // Separación horizontal canónica entre entregables/tareas (52px para pasillos despejados)
+export const GAP_FASE = 72;    // Separación horizontal canónica entre ramas de fases (72px)
 
 export function safeCoord(num: any, fallback = 60): number {
   if (typeof num === 'number' && Number.isFinite(num)) {
@@ -121,9 +124,10 @@ function formatFecha(f: any): string {
 export interface GrafoWBSProps {
   proyectoId?: string | null;
   hitosExternos?: HitoWbsRecord[];
+  onNodoClick?: (tipo: string, id: string, hitoPadreId?: string) => void;
 }
 
-export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos }) => {
+export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, onNodoClick }) => {
   const [soloRutaCritica, setSoloRutaCritica] = useState(false);
   const [soloHitos, setSoloHitos] = useState(false);
   const [verTareas, setVerTareas] = useState(true);
@@ -137,13 +141,40 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
 
+  const { estaOculto } = useUndoDelete();
+
   // Consultas Dexie en tiempo real para todas las entidades requeridas
-  const todosLosProyectos = useLiveQuery(() => db.proyectos.toArray(), []);
-  const todosLosHitos = useLiveQuery(() => db.hitos_wbs.toArray(), []);
-  const todasLasTareas = useLiveQuery(() => db.tareas.toArray(), []);
-  const todosLosGastos = useLiveQuery(() => db.gastos.toArray(), []);
-  const todosLosIngresos = useLiveQuery(() => db.ingresos.toArray(), []);
-  const todasLasNotas = useLiveQuery(() => db.notas.toArray(), []);
+  const rawTodosLosProyectos = useLiveQuery(() => db.proyectos.toArray(), []);
+  const rawTodosLosHitos = useLiveQuery(() => db.hitos_wbs.toArray(), []);
+  const rawTodasLasTareas = useLiveQuery(() => db.tareas.toArray(), []);
+  const rawTodosLosGastos = useLiveQuery(() => db.gastos.toArray(), []);
+  const rawTodosLosIngresos = useLiveQuery(() => db.ingresos.toArray(), []);
+  const rawTodasLasNotas = useLiveQuery(() => db.notas.toArray(), []);
+
+  const todosLosProyectos = useMemo(
+    () => (rawTodosLosProyectos ?? []).filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado)),
+    [rawTodosLosProyectos, estaOculto]
+  );
+  const todosLosHitos = useMemo(
+    () => (rawTodosLosHitos ?? []).filter((h: any) => !estaOculto(h.id) && !estaOculto(h.codigo_legado) && !estaOculto(h.proyecto_id)),
+    [rawTodosLosHitos, estaOculto]
+  );
+  const todasLasTareas = useMemo(
+    () => (rawTodasLasTareas ?? []).filter((t: any) => !estaOculto(t.id) && !estaOculto(t.codigo_legado) && !estaOculto(t.proyecto_codigo) && !estaOculto(t.hito_codigo)),
+    [rawTodasLasTareas, estaOculto]
+  );
+  const todosLosGastos = useMemo(
+    () => (rawTodosLosGastos ?? []).filter((g: any) => !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto)),
+    [rawTodosLosGastos, estaOculto]
+  );
+  const todosLosIngresos = useMemo(
+    () => (rawTodosLosIngresos ?? []).filter((i: any) => !estaOculto(i.id) && !estaOculto(i.codigo_legado)),
+    [rawTodosLosIngresos, estaOculto]
+  );
+  const todasLasNotas = useMemo(
+    () => (rawTodasLasNotas ?? []).filter((n: any) => !estaOculto(n.id) && !estaOculto(n.codigo_legado)),
+    [rawTodasLasNotas, estaOculto]
+  );
 
   // Identificar el proyecto activo
   const proyectoActivo = useMemo(() => {
@@ -704,14 +735,14 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
         }
       });
 
-      // Conector Proyecto (Bottom) -> Fase (Top) en 90° con smoothstep (árbol superior)
+      // Conector Proyecto (Bottom) -> Fase (Top) en 90° con canaleta ortogonal pura
       eList.push({
         id: `edge-${proyNodeId}-${fb.id}`,
         source: proyNodeId,
         sourceHandle: 'proy-bottom',
         target: fb.id,
         targetHandle: 'fase-top',
-        type: 'smoothstep',
+        type: 'ortogonalTreeEdge',
         data: { esArbolSuperior: true, esCritica: false },
         style: {
           stroke: '#8b5cf6',
@@ -770,18 +801,19 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
             mostrarGastos: verGastos,
             gastoTotal: eb.gHitoSum,
             tareasCount: eb.tCount,
-            notasCount: eb.notasCount
+            notasCount: eb.notasCount,
+            hitoId: eb.hCod
           }
         });
 
-        // Conector Fase (Bottom) -> WP (Top) en 90° con smoothstep (árbol superior)
+        // Conector Fase (Bottom) -> WP (Top) en 90° con canaleta ortogonal pura
         eList.push({
           id: `edge-${fb.id}-${eb.hCod}`,
           source: fb.id,
           sourceHandle: 'fase-bottom',
           target: eb.hCod,
           targetHandle: 'wbs-top',
-          type: 'smoothstep',
+          type: 'ortogonalTreeEdge',
           data: { esArbolSuperior: true, esCritica: false },
           style: {
             stroke: eb.hito.tipo_elemento_wbs === 'HITO_MARCADOR' ? '#6366f1' : '#0ea5e9',
@@ -820,18 +852,19 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
               isCriticalFocused: false,
               soloRutaCritica: false,
               direccion: 'TB',
-              notasCount: tb.notasCount
+              notasCount: tb.notasCount,
+              hitoPadreId: eb.hCod
             }
           });
 
-          // Conector WP (Bottom) -> Tarea (Top) en 90° con smoothstep (árbol superior)
+          // Conector WP (Bottom) -> Tarea (Top) en 90° con canaleta ortogonal pura
           eList.push({
             id: `edge-${eb.hCod}-${tb.tCod}`,
             source: eb.hCod,
             sourceHandle: 'wbs-bottom',
             target: tb.tCod,
             targetHandle: 'tar-top',
-            type: 'smoothstep',
+            type: 'ortogonalTreeEdge',
             data: { esArbolSuperior: true, esCritica: false, esEnlaceCritico: false },
             style: {
               stroke: '#94a3b8',
@@ -848,7 +881,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
           // Precedencias operativas entre tareas (Ruta operativa de precedencias)
           if (tb.tarea.id_dependencia) {
             const rawDeps = String(tb.tarea.id_dependencia).split(',').map((d) => d.trim()).filter(Boolean);
-            rawDeps.forEach((depCod) => {
+            rawDeps.forEach((depCod, depIdx) => {
               const depCodUpper = depCod.toUpperCase();
               const depInfo = taskMap.get(depCodUpper);
 
@@ -890,7 +923,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
                     }
                   });
                 } else {
-                  // 2. Trazo rectangular limpio en 'U' invertida por la pista inferior (Y = 700px)
+                  // 2. Trazo rectangular limpio en 'U' por canaleta inferior con escalonamiento
                   eList.push({
                     id: `edge-dep-${sourceNodeId}-${targetNodeId}`,
                     source: sourceNodeId,
@@ -901,6 +934,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
                     data: {
                       esArbolSuperior: false,
                       canalY: Y_LEVELS.canaletaDependencias,
+                      pistaIndex: depIdx,
                       isAdjacente: false,
                       esVecinoInmediato: false,
                       esCritica: isDepCrit,
@@ -945,7 +979,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
                 sourceHandle: 'tar-bottom',
                 target: gCod,
                 targetHandle: 'gasto-top',
-                type: 'smoothstep',
+                type: 'ortogonalTreeEdge',
                 data: { esArbolSuperior: true, esCritica: false },
                 style: {
                   stroke: '#10b981',
@@ -976,7 +1010,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
                   sourceHandle: 'tar-bottom',
                   target: gCod,
                   targetHandle: 'gasto-top',
-                  type: 'smoothstep',
+                  type: 'ortogonalTreeEdge',
                   data: { esArbolSuperior: true, esCritica: false },
                   style: {
                     stroke: '#10b981',
@@ -1013,7 +1047,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
               sourceHandle: 'wbs-bottom',
               target: gCod,
               targetHandle: 'gasto-top',
-              type: 'smoothstep',
+              type: 'ortogonalTreeEdge',
               data: { esArbolSuperior: true, esCritica: false },
               style: {
                 stroke: '#10b981',
@@ -1427,6 +1461,11 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos })
           panOnDrag={true}
           zoomOnScroll={true}
           onInit={(instance) => setRfInstance(instance)}
+          onNodeClick={(_, node) => {
+            const d = node.data as any;
+            const hitoPadre = d?.hitoPadreId || (d?.tarea ? (d.tarea.hito_codigo || d.tarea.id_hito) : undefined);
+            onNodoClick?.(node.type || '', node.id, hitoPadre);
+          }}
           onNodeMouseEnter={(event, node) => {
             if (hideTimerRef.current) {
               clearTimeout(hideTimerRef.current);

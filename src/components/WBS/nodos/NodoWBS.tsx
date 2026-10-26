@@ -70,7 +70,7 @@ export const NodoWBS: React.FC<NodoWBSProps> = memo(({ data }) => {
 
   return (
     <div
-      className={`relative w-[240px] h-[120px] rounded-xl backdrop-blur-md transition-all duration-200 border p-2.5 select-none flex flex-col justify-between overflow-hidden ${getSemanticBorder()}`}
+      className={`relative w-[240px] h-[120px] rounded-xl backdrop-blur-md transition-all duration-200 border p-2.5 select-none flex flex-col justify-between overflow-hidden cursor-pointer hover:ring-2 hover:ring-sky-400/50 active:scale-[0.98] ${getSemanticBorder()}`}
     >
       {/* Handle Target (Superior en TB) */}
       <Handle
