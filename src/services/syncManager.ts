@@ -602,10 +602,143 @@ class SyncManager {
    * Sincronización bidireccional completa:
    * 1. Push local -> nube (procesarColaPendiente)
    * 2. Pull nube -> local (descargarDatosDescendientes)
+   * 3. Sincronización de fallback con el puente HTTP local 127.0.0.1:48123
    */
   public async sincronizarTodo(): Promise<void> {
     await this.procesarColaPendiente();
-    await this.descargarDatosDescendientes();
+    const pullResult = await this.descargarDatosDescendientes();
+
+    // Si Supabase es mock o no hubo datos remotos, hidratar desde el almacén local en disco
+    if (pullResult.descargados === 0) {
+      await this.cargarSnapshotDesdePuenteLocal();
+    }
+    // Publicar snapshot en el puente local para que la otra instancia (Electron o Web) lo reciba
+    await this.guardarSnapshotEnPuenteLocal();
+  }
+
+  /**
+   * Guarda un snapshot completo de las tablas operativas en el puente local HTTP 127.0.0.1:48123
+   */
+  public async guardarSnapshotEnPuenteLocal(): Promise<boolean> {
+    if (typeof fetch === 'undefined') return false;
+
+    try {
+      const [tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos] = await Promise.all([
+        db.tareas.toArray(),
+        db.actividades_personales.toArray(),
+        db.gastos.toArray(),
+        db.ingresos.toArray(),
+        db.cuotas.toArray(),
+        db.proyectos.toArray(),
+        db.hitos_wbs.toArray()
+      ]);
+
+      const payload = {
+        version: 1,
+        timestamp: Date.now(),
+        data: {
+          tareas,
+          actividades,
+          gastos,
+          ingresos,
+          cuotas,
+          proyectos,
+          hitos
+        }
+      };
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 600);
+
+      const res = await fetch('http://127.0.0.1:48123/api/sync-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        mode: 'cors',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return res.ok;
+    } catch {
+      // Silencioso si Electron o el socket local no están corriendo
+      return false;
+    }
+  }
+
+  /**
+   * Descarga e hidrata un snapshot desde el puente local HTTP 127.0.0.1:48123 hacia Dexie
+   */
+  public async cargarSnapshotDesdePuenteLocal(): Promise<boolean> {
+    if (typeof fetch === 'undefined') return false;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 600);
+
+      const res = await fetch('http://127.0.0.1:48123/api/sync-data', {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) return false;
+      const json = await res.json();
+      if (!json || !json.data) return false;
+
+      const { tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos } = json.data;
+
+      await db.transaction('rw', [
+        db.tareas,
+        db.actividades_personales,
+        db.gastos,
+        db.ingresos,
+        db.cuotas,
+        db.proyectos,
+        db.hitos_wbs
+      ], async () => {
+        if (Array.isArray(tareas) && tareas.length > 0) {
+          const pendingIds = new Set(await db.tareas.where('sync_status').equals('pending').primaryKeys());
+          const toPut = tareas.filter((t) => t.id && !pendingIds.has(t.id));
+          if (toPut.length > 0) await db.tareas.bulkPut(toPut);
+        }
+        if (Array.isArray(actividades) && actividades.length > 0) {
+          const pendingIds = new Set(await db.actividades_personales.where('sync_status').equals('pending').primaryKeys());
+          const toPut = actividades.filter((a) => a.id && !pendingIds.has(a.id));
+          if (toPut.length > 0) await db.actividades_personales.bulkPut(toPut);
+        }
+        if (Array.isArray(gastos) && gastos.length > 0) {
+          const pendingIds = new Set(await db.gastos.where('sync_status').equals('pending').primaryKeys());
+          const toPut = gastos.filter((g) => g.id && !pendingIds.has(g.id));
+          if (toPut.length > 0) await db.gastos.bulkPut(toPut);
+        }
+        if (Array.isArray(ingresos) && ingresos.length > 0) {
+          const pendingIds = new Set(await db.ingresos.where('sync_status').equals('pending').primaryKeys());
+          const toPut = ingresos.filter((i) => i.id && !pendingIds.has(i.id));
+          if (toPut.length > 0) await db.ingresos.bulkPut(toPut);
+        }
+        if (Array.isArray(cuotas) && cuotas.length > 0) {
+          const pendingIds = new Set(await db.cuotas.where('sync_status').equals('pending').primaryKeys());
+          const toPut = cuotas.filter((c) => c.id && !pendingIds.has(c.id));
+          if (toPut.length > 0) await db.cuotas.bulkPut(toPut);
+        }
+        if (Array.isArray(proyectos) && proyectos.length > 0) {
+          const pendingIds = new Set(await db.proyectos.where('sync_status').equals('pending').primaryKeys());
+          const toPut = proyectos.filter((p) => p.id && !pendingIds.has(p.id));
+          if (toPut.length > 0) await db.proyectos.bulkPut(toPut);
+        }
+        if (Array.isArray(hitos) && hitos.length > 0) {
+          const pendingIds = new Set(await db.hitos_wbs.where('sync_status').equals('pending').primaryKeys());
+          const toPut = hitos.filter((h) => h.id && !pendingIds.has(h.id));
+          if (toPut.length > 0) await db.hitos_wbs.bulkPut(toPut);
+        }
+      });
+
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

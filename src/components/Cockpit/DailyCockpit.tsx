@@ -28,6 +28,7 @@ import {
   type HorizonteAgenda,
   type DailyScheduleItem
 } from '../../hooks/useDailySchedule';
+import { syncManager } from '../../services/syncManager';
 
 const DRAG_REGION_STYLE: React.CSSProperties = { WebkitAppRegion: 'drag' } as unknown as React.CSSProperties;
 const NO_DRAG_REGION_STYLE: React.CSSProperties = { WebkitAppRegion: 'no-drag' } as unknown as React.CSSProperties;
@@ -207,17 +208,29 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
   }, [esWidgetNativo]);
 
-  // Detección de coexistencia exclusiva: verifica si el servidor loopback de Electron (127.0.0.1:48123) está activo
+  // Detección de coexistencia exclusiva y sincronización de puente local
   const [hayWidgetDeEscritorioActivo, setHayWidgetDeEscritorioActivo] = useState(false);
 
   useEffect(() => {
-    if (esWidgetNativo || modoForzadoDesacoplado) return;
+    // Si estamos dentro del widget nativo de Electron, NUNCA ocultarse
+    if (esWidgetNativo) {
+      setHayWidgetDeEscritorioActivo(false);
+      // Al montar o al recibir foco en el widget nativo, cargar el snapshot más reciente del puente local
+      syncManager.cargarSnapshotDesdePuenteLocal().catch(() => {});
+      const handleFocus = () => {
+        syncManager.cargarSnapshotDesdePuenteLocal().catch(() => {});
+      };
+      window.addEventListener('focus', handleFocus);
+      return () => window.removeEventListener('focus', handleFocus);
+    }
+
+    if (modoForzadoDesacoplado) return;
 
     let cancelado = false;
 
     const pingLoopbackDesktop = async () => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 400);
+      const timeoutId = setTimeout(() => controller.abort(), 300);
 
       try {
         const res = await fetch('http://127.0.0.1:48123/status', {
@@ -244,9 +257,9 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       }
     };
 
-    // Ping inmediato al montar y recurrente cada 1500ms
+    // Ping inmediato al montar y recurrente cada 1200ms
     pingLoopbackDesktop();
-    const timer = setInterval(pingLoopbackDesktop, 1500);
+    const timer = setInterval(pingLoopbackDesktop, 1200);
 
     return () => {
       cancelado = true;
@@ -294,6 +307,11 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     e.stopPropagation();
     const marcar = !item.completado;
     await toggleCompletar(item);
+
+    // Enviar snapshot al puente local si estamos en navegador web para actualizar Electron
+    if (!esWidgetNativo) {
+      syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
+    }
 
     if (marcar) {
       confetti({
@@ -700,7 +718,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           /* ========================================================
              VISTA B: RIEL HORARIO (TIMELINE CONTINUO 06:00 - 23:00)
              ======================================================== */
-          <div className="relative border-l border-slate-800 ml-12 my-2 space-y-6">
+          <div className="relative border border-slate-800/60 rounded-2xl bg-slate-950/40 divide-y divide-slate-800/40 overflow-hidden my-1">
             {slotsHorarios.map((slot) => {
               const esSlotActual = horizonte === 'HOY' && slot.startsWith(horaActual.split(':')[0]);
               const itemsEnSlot = itemsFiltrados.filter((i) => {
@@ -709,86 +727,84 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                 return hItem === hSlot;
               });
 
+              // Cálculo de porcentaje de minutos para posición exacta de la línea viva dentro de la hora
+              const minutosActuales = parseInt(horaActual.split(':')[1], 10) || 0;
+              const pctMinutos = Math.min(95, Math.max(5, (minutosActuales / 60) * 100));
+
               return (
                 <div
                   key={slot}
                   ref={esSlotActual ? slotActualRef : undefined}
-                  className={`relative pl-4 min-h-[44px] transition-all duration-200 ${
-                    esSlotActual
-                      ? 'bg-sky-950/30 border-l-2 border-sky-400 shadow-[0_0_15px_-3px_rgba(56,189,248,0.25)] rounded-r-xl p-2 -ml-2'
-                      : ''
+                  className={`relative flex items-stretch border-b border-slate-800/40 transition-colors ${
+                    esSlotActual ? 'bg-sky-950/20' : 'hover:bg-slate-900/20'
                   }`}
                 >
-                  {/* Etiqueta horaria */}
-                  <span
-                    className={`absolute -left-12 top-0 text-[10px] font-mono tabular-nums w-10 text-right ${
-                      esSlotActual ? 'text-sky-300 font-bold' : 'text-slate-400'
-                    }`}
-                  >
-                    {slot}
-                  </span>
+                  {/* Columna lateral fija con las horas */}
+                  <div className="w-14 shrink-0 py-2.5 pr-2.5 border-r border-slate-800/60 flex items-start justify-end select-none">
+                    <span
+                      className={`text-[10px] font-mono tabular-nums leading-none ${
+                        esSlotActual ? 'text-sky-300 font-bold' : 'text-slate-500'
+                      }`}
+                    >
+                      {slot}
+                    </span>
+                  </div>
 
-                  {/* Nodo de punto en la línea */}
-                  <div
-                    className={`absolute top-1.5 w-2 h-2 rounded-full transition-all ${
-                      esSlotActual
-                        ? '-left-[5px] bg-sky-400 ring-4 ring-sky-500/20'
-                        : '-left-[5px] bg-slate-700 border border-slate-900'
-                    }`}
-                  />
+                  {/* Carril de contenido del slot */}
+                  <div className="flex-1 p-2 min-h-[52px] flex flex-col justify-center relative">
+                    {/* Línea Viva de la Hora Actual en Tiempo Real */}
+                    {esSlotActual && (
+                      <div
+                        className="absolute left-0 right-0 h-[2px] bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)] z-20 pointer-events-none flex items-center"
+                        style={{ top: `${pctMinutos}%` }}
+                      >
+                        <span className="absolute -left-14 px-1.5 py-0.5 rounded bg-rose-500 text-white font-mono text-[9px] font-bold shadow-sm whitespace-nowrap z-30 pointer-events-auto">
+                          AHORA · {horaActual}
+                        </span>
+                      </div>
+                    )}
 
-                  {/* Cabecera Iluminada de Hora Actual */}
-                  {esSlotActual && (
-                    <div className="mb-2 flex items-center gap-1.5">
-                      <span className="bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded inline-flex items-center gap-1 shadow-sm animate-pulse">
-                        <Clock className="w-2.5 h-2.5" strokeWidth={1.75} />
-                        AHORA · {horaActual}
-                      </span>
-                      <div className="h-[1px] bg-sky-500/30 flex-1" />
-                    </div>
-                  )}
-
-                  {/* Contenedor de entidades en esta hora */}
-                  <div className="space-y-1.5">
                     {itemsEnSlot.length === 0 ? (
-                      <div className="text-[10px] text-slate-400 font-mono italic">
-                        — Disponible —
+                      <div className="text-[10px] text-slate-600 font-mono italic select-none py-1 pl-1">
+                        — Libre —
                       </div>
                     ) : (
-                      itemsEnSlot.map((item) => {
-                        const estaCompletado = item.completado;
-                        return (
-                          <div
-                            key={`${item.tipo}-${item.id}`}
-                            onClick={(e) => handleToggle(item, e)}
-                            className={`p-2 rounded-xl border text-xs cursor-pointer transition-all duration-200 flex items-start justify-between gap-2 ${
-                              estaCompletado
-                                ? 'bg-slate-900/30 border-slate-800/40 opacity-35'
-                                : 'bg-slate-900/70 hover:bg-slate-900 border-slate-800'
-                            }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <span
-                                className={`font-medium block leading-snug truncate transition-all duration-200 ${
-                                  estaCompletado ? 'line-through text-slate-500' : 'text-slate-200'
-                                }`}
-                              >
-                                {item.titulo}
-                              </span>
-                              <span className="text-[10px] font-mono text-slate-400">
-                                {item.horaInicio} - {item.horaFin} · {item.tipo}
-                              </span>
+                      <div className="space-y-1.5 z-10">
+                        {itemsEnSlot.map((item) => {
+                          const estaCompletado = item.completado;
+                          return (
+                            <div
+                              key={`${item.tipo}-${item.id}`}
+                              onClick={(e) => handleToggle(item, e)}
+                              className={`p-2 rounded-xl border text-xs cursor-pointer transition-all duration-200 flex items-start justify-between gap-2 ${
+                                estaCompletado
+                                  ? 'bg-slate-900/30 border-slate-800/40 opacity-35'
+                                  : 'bg-slate-900/70 hover:bg-slate-900 border-slate-800'
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <span
+                                  className={`font-medium block leading-snug truncate transition-all duration-200 ${
+                                    estaCompletado ? 'line-through text-slate-500' : 'text-slate-200'
+                                  }`}
+                                >
+                                  {item.titulo}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-400">
+                                  {item.horaInicio} - {item.horaFin} · {item.tipo}
+                                </span>
+                              </div>
+                              <div className="shrink-0 pt-0.5 text-sky-400">
+                                {estaCompletado ? (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" strokeWidth={1.75} />
+                                ) : (
+                                  <Circle className="w-4 h-4 text-slate-500" strokeWidth={1.75} />
+                                )}
+                              </div>
                             </div>
-                            <div className="shrink-0 pt-0.5 text-sky-400">
-                              {estaCompletado ? (
-                                <CheckCircle2 className="w-4 h-4 text-emerald-400" strokeWidth={1.75} />
-                              ) : (
-                                <Circle className="w-4 h-4 text-slate-500" strokeWidth={1.75} />
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -913,7 +929,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
   // Si hay un widget nativo de escritorio activo en Windows y el Cockpit web no está abierto ni en PiP,
   // se oculta la cápsula web para evitar duplicidad visual en pantalla
-  if (!modoForzadoDesacoplado && hayWidgetDeEscritorioActivo && !cockpitAbierto && !pipWindow) {
+  if (!esWidgetNativo && !modoForzadoDesacoplado && hayWidgetDeEscritorioActivo && !cockpitAbierto && !pipWindow) {
     return null;
   }
 

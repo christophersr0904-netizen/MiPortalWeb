@@ -1,54 +1,101 @@
 const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
+
+// Configuración de switches y flags antes de whenReady
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 let tray = null;
 let widgetWin = null;
 let statusServer = null;
 
-// Micro-servidor HTTP loopback en 127.0.0.1:48123 para handshake y exclusión mutua Web/Desktop
+// Bloqueo de instancia única estricto
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+  process.exit(0);
+}
+
+// Micro-servidor HTTP loopback en 127.0.0.1:48123 para handshake, exclusión mutua y sync local
 try {
   statusServer = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', '*');
+
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
       return;
     }
+
     if (req.url === '/status') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ desktopWidgetAlive: true, timestamp: Date.now() }));
       return;
     }
+
+    if (req.url === '/api/sync-data' && req.method === 'GET') {
+      try {
+        const storeDir = app.getPath('userData');
+        const storePath = path.join(storeDir, 'local_pmo_store.json');
+        if (fs.existsSync(storePath)) {
+          const content = fs.readFileSync(storePath, 'utf-8');
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(content);
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ version: 1, timestamp: Date.now(), data: null }));
+        }
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    if (req.url === '/api/sync-data' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const parsed = JSON.parse(body);
+          const storeDir = app.getPath('userData');
+          if (!fs.existsSync(storeDir)) {
+            fs.mkdirSync(storeDir, { recursive: true });
+          }
+          const storePath = path.join(storeDir, 'local_pmo_store.json');
+          fs.writeFileSync(storePath, JSON.stringify(parsed, null, 2), 'utf-8');
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, timestamp: Date.now() }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'JSON inválido o error al persistir: ' + err.message }));
+        }
+      });
+      return;
+    }
+
     res.writeHead(404);
     res.end();
   });
+
   statusServer.listen(48123, '127.0.0.1');
   statusServer.on('error', (err) => {
-    console.warn('[Desktop Widget] Servidor loopback ocupado o inaccesible:', err.message);
+    console.warn('[Desktop Widget] Servidor loopback ocupado o reintento:', err.message);
   });
 } catch (err) {
   console.warn('[Desktop Widget] Error al iniciar servidor de status local:', err);
 }
 
-// Bloqueo de instancia única para evitar múltiples widgets o caídas en ventana predeterminada
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  if (statusServer) {
-    try { statusServer.close(); } catch {}
+app.on('second-instance', () => {
+  if (widgetWin) {
+    if (!widgetWin.isVisible()) widgetWin.show();
+    if (widgetWin.isMinimized()) widgetWin.restore();
+    widgetWin.focus();
   }
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    if (widgetWin) {
-      if (!widgetWin.isVisible()) widgetWin.show();
-      if (widgetWin.isMinimized()) widgetWin.restore();
-      widgetWin.focus();
-    }
-  });
-}
+});
 
 function toggleWidgetVisibility() {
   if (!widgetWin || widgetWin.isDestroyed()) return;
