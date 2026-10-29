@@ -19,8 +19,13 @@ import {
   X,
   Gauge,
   CheckCircle2,
-  Circle,
-  Zap
+  Zap,
+  Flame,
+  FolderKanban,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  Check
 } from 'lucide-react';
 import {
   useDailySchedule,
@@ -41,39 +46,51 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   modoForzadoDesacoplado = false,
   onCerrarDesacoplado
 }) => {
-  // Detección de wrapper nativo de escritorio (Electron o ?widget=desktop)
+  // Detección de wrapper nativo standalone HUD (?widget=desktop o ?mode=hud o ?mode=cockpit-only)
   const esWidgetNativo = typeof window !== 'undefined' && (
-    Boolean(window.desktopWidget) ||
-    new URLSearchParams(window.location.search).get('widget') === 'desktop'
+    new URLSearchParams(window.location.search).get('widget') === 'desktop' ||
+    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('widget') === 'desktop' ||
+    new URLSearchParams(window.location.search).get('mode') === 'hud' ||
+    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('mode') === 'hud' ||
+    new URLSearchParams(window.location.search).get('mode') === 'cockpit-only' ||
+    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('mode') === 'cockpit-only' ||
+    window.location.hash.includes('cockpit-widget') ||
+    Boolean(window.desktopWidget?.isNative)
   );
 
   // Estado de visibilidad y visualización (adaptativo en standalone HUD según altura o parámetro)
   const [cockpitAbierto, setCockpitAbierto] = useState(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('state') === 'open') return true;
-      if (params.get('state') === 'rest') return false;
-      if (params.get('widget') === 'desktop' || Boolean(window.desktopWidget)) {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const getParam = (k: string) => searchParams.get(k) || hashParams.get(k);
+
+      if (getParam('state') === 'open') return true;
+      if (getParam('state') === 'rest') return false;
+      if (getParam('mode') === 'cockpit-only' || window.location.hash.includes('cockpit-widget')) {
+        return true; // En modo ventana de Cockpit independiente (420x720) arranca abierto y listo
+      }
+      if (getParam('widget') === 'desktop') {
         return false; // El widget nativo arranca en reposo (380x100)
       }
-      if (params.get('mode') === 'hud') {
+      if (getParam('mode') === 'hud') {
         return window.innerHeight > 400;
       }
     }
     return modoForzadoDesacoplado;
   });
 
-  // Expansión con sincronización de ventana nativa de Electron si aplica
+  // Expansión con sincronización de ventana nativa de Electron si aplica en modo HUD
   const handleAbrirCockpit = () => {
-    if (typeof window !== 'undefined' && window.desktopWidget) {
+    if (esWidgetNativo && typeof window !== 'undefined' && window.desktopWidget) {
       window.desktopWidget.expand();
     }
     setCockpitAbierto(true);
   };
 
-  // Contracción con sincronización de ventana nativa de Electron si aplica
+  // Contracción con sincronización de ventana nativa de Electron si aplica en modo HUD
   const handleContraerCockpit = () => {
-    if (typeof window !== 'undefined' && window.desktopWidget) {
+    if (esWidgetNativo && typeof window !== 'undefined' && window.desktopWidget) {
       window.desktopWidget.collapse();
     }
     setCockpitAbierto(false);
@@ -273,21 +290,21 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   // Referencia para anclaje y auto-scroll centrado en el slot horario en curso
   const slotActualRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll centrado en el slot actual cuando se visualiza el Riel Horario
-  useEffect(() => {
-    if (cockpitAbierto && modoVista === 'RIEL') {
-      const timer = setTimeout(() => {
-        slotActualRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [cockpitAbierto, modoVista, horizonte]);
-
   // Estado de ventana Picture-in-Picture nativa
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
 
   // Hook unificado de datos y ritmo
   const { items, metricas, horaActual, fechaActual, toggleCompletar, cargando } = useDailySchedule(horizonte);
+
+  // Auto-scroll centrado en el slot actual cuando se visualiza el Riel Horario en HOY
+  useEffect(() => {
+    if (cockpitAbierto && modoVista === 'RIEL' && horizonte === 'HOY' && !cargando) {
+      const timer = setTimeout(() => {
+        slotActualRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [cockpitAbierto, modoVista, horizonte, cargando]);
 
   // Filtrado de items según filtro secundario
   const itemsFiltrados = useMemo(() => {
@@ -295,15 +312,17 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       if (filtroTipo === 'TODOS') return true;
       if (filtroTipo === 'TAREAS') return item.tipo === 'TAREA';
       if (filtroTipo === 'HABITOS') return item.tipo === 'HABITO';
-      if (filtroTipo === 'FINANZAS') return item.tipo === 'GASTO' || item.tipo === 'CUOTA';
+      if (filtroTipo === 'FINANZAS') return item.tipo === 'GASTO' || item.tipo === 'INGRESO' || item.tipo === 'CUOTA';
       if (filtroTipo === 'VENCIDAS') return item.estadoRitmo === 'VENCIDO_PASADO' && !item.completado;
       return true;
     });
   }, [items, filtroTipo]);
 
-  // Completar rápido
-  const handleToggle = async (item: DailyScheduleItem, e: React.MouseEvent) => {
-    e.stopPropagation();
+  // Completar rápido con aislamiento de propagación
+  const handleToggle = async (item: DailyScheduleItem, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
     await toggleCompletar(item);
 
     // Enviar snapshot al puente local si estamos en navegador web para actualizar Electron
@@ -376,14 +395,114 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     );
   };
 
-  // Horas del Riel Horario (06:00 a 23:00)
-  const slotsHorarios = useMemo(() => {
-    const slots: string[] = [];
-    for (let h = 6; h <= 23; h++) {
-      slots.push(`${String(h).padStart(2, '0')}:00`);
-    }
-    return slots;
+  // Altura base fija por cada hora en el lienzo tipo Calendar (64px * 24h = 1536px)
+  const ALTURA_HORA_PX = 64;
+
+  // Reloj reactivo dedicado con intervalo de 60 segundos para la línea viva 24H
+  const [relojVivo, setRelojVivo] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const actualizarReloj = () => setRelojVivo(new Date());
+    actualizarReloj();
+    const timer = setInterval(actualizarReloj, 60000);
+    return () => clearInterval(timer);
   }, []);
+
+  // Horas del Riel Horario Completo 24H (00:00 a 23:00) ininterrumpidas con Array.from({ length: 24 })
+  const slotsHorarios = useMemo(() => {
+    return Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
+  }, []);
+
+  // Cálculo explícito de la posición en píxeles de la línea de tiempo actual desde las 00:00
+  const ahora = relojVivo;
+  const minutosTotales = ahora.getHours() * 60 + ahora.getMinutes();
+  const topLineaActualPx = (minutosTotales / 60) * ALTURA_HORA_PX;
+
+  // Etiqueta compacta de hora real con formato HH:mm AM/PM para el indicador en vivo
+  const horaActualAmPm = useMemo(() => {
+    const h24 = relojVivo.getHours();
+    const mStr = String(relojVivo.getMinutes()).padStart(2, '0');
+    const sufijo = h24 >= 12 ? 'PM' : 'AM';
+    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+    return `${String(h12).padStart(2, '0')}:${mStr} ${sufijo}`;
+  }, [relojVivo]);
+
+  // Motor de posicionamiento proporcional tipo Calendar 24H con distribución en columnas si hay solapamiento horario
+  const bloquesCalendarPosicion = useMemo(() => {
+    const parseMinutos = (hm: string): number => {
+      const [hStr, mStr] = (hm || '00:00').split(':');
+      const h = parseInt(hStr, 10) || 0;
+      const m = parseInt(mStr, 10) || 0;
+      return Math.min(1439, Math.max(0, h * 60 + m));
+    };
+
+    const rawBlocks = itemsFiltrados.map((item) => {
+      const startMin = parseMinutos(item.horaInicio);
+      const durMin = Math.max(20, item.duracionMinutos || 30);
+      const endMin = Math.min(1440, startMin + durMin);
+      const topPx = (startMin / 60) * ALTURA_HORA_PX;
+      const heightPx = Math.max(28, (durMin / 60) * ALTURA_HORA_PX - 2);
+      return {
+        item,
+        startMin,
+        endMin,
+        topPx,
+        heightPx,
+        colIndex: 0,
+        totalCols: 1
+      };
+    });
+
+    // Ordenar por minuto de inicio y luego por mayor duración
+    rawBlocks.sort((a, b) => a.startMin - b.startMin || (b.endMin - b.startMin) - (a.endMin - a.startMin));
+
+    // Agrupar bloques que se solapan en clusters para repartir el ancho proporcionalmente
+    let cluster: typeof rawBlocks = [];
+    let clusterMaxEnd = -1;
+
+    const procesarCluster = (grupo: typeof rawBlocks) => {
+      if (grupo.length === 0) return;
+      const colsEnd: number[] = [];
+      for (const b of grupo) {
+        let placedCol = -1;
+        for (let c = 0; c < colsEnd.length; c++) {
+          if (colsEnd[c] <= b.startMin) {
+            placedCol = c;
+            colsEnd[c] = b.endMin;
+            break;
+          }
+        }
+        if (placedCol === -1) {
+          placedCol = colsEnd.length;
+          colsEnd.push(b.endMin);
+        }
+        b.colIndex = placedCol;
+      }
+      const numCols = Math.max(1, colsEnd.length);
+      for (const b of grupo) {
+        b.totalCols = numCols;
+      }
+    };
+
+    for (const block of rawBlocks) {
+      if (cluster.length === 0) {
+        cluster.push(block);
+        clusterMaxEnd = block.endMin;
+      } else if (block.startMin < clusterMaxEnd) {
+        cluster.push(block);
+        if (block.endMin > clusterMaxEnd) {
+          clusterMaxEnd = block.endMin;
+        }
+      } else {
+        procesarCluster(cluster);
+        cluster = [block];
+        clusterMaxEnd = block.endMin;
+      }
+    }
+    procesarCluster(cluster);
+
+    return rawBlocks;
+  }, [itemsFiltrados]);
 
   // Semáforo dinámico de color según ritmo horario
   const colorRitmo = useMemo(() => {
@@ -396,31 +515,31 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   // Contenido interno del Cockpit
   const cockpitContent = (
     <div
-      className={`flex flex-col bg-[#0D1526] border border-slate-800/80 text-slate-100 shadow-[0_25px_60px_-12px_rgba(0,0,0,0.85),0_0_40px_-5px_rgba(56,189,248,0.12)] backdrop-blur-2xl select-none transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-        modoForzadoDesacoplado || pipWindow
-          ? 'w-full h-full flex-1 rounded-2xl border'
+      className={`flex flex-col bg-[#0B132B]/95 border border-slate-700/60 text-slate-100 shadow-2xl backdrop-blur-md select-none transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        modoForzadoDesacoplado || pipWindow || esWidgetNativo
+          ? 'w-full h-full flex-1 rounded-2xl border overflow-hidden'
           : 'w-full md:w-[440px] h-[85vh] md:h-[680px] max-h-[85vh] rounded-t-3xl md:rounded-3xl border-t md:border'
       }`}
     >
-      {/* 1. Cabecera Táctica Canónica */}
+      {/* 1. Cabecera Táctica Canónica con Región de Arrastre Libre */}
       <div
-        style={esWidgetNativo ? DRAG_REGION_STYLE : undefined}
-        className="px-4 py-3 border-b border-slate-800/80 bg-slate-950/70 flex items-center justify-between shrink-0 cursor-default"
+        style={DRAG_REGION_STYLE}
+        className="px-4 py-3 border-b border-slate-700/60 bg-slate-950/80 flex items-center justify-between shrink-0 cursor-grab active:cursor-grabbing"
       >
-        <div className="flex items-center gap-2">
-          <div className="relative w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+        <div className="flex items-center gap-2" style={DRAG_REGION_STYLE}>
+          <div className="relative w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0" style={NO_DRAG_REGION_STYLE}>
             <Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
             <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
             </span>
           </div>
-          <div>
+          <div style={DRAG_REGION_STYLE}>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold font-mono tracking-tight text-white uppercase">
                 Cockpit Diario
               </span>
-              <span className="text-[10px] font-mono tabular-nums px-1.5 py-0.2 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60">
+              <span className="text-[10px] font-mono tabular-nums px-1.5 py-0.2 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60" style={NO_DRAG_REGION_STYLE}>
                 {horaActual}
               </span>
             </div>
@@ -430,7 +549,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" style={NO_DRAG_REGION_STYLE}>
           {/* Badge Ritmo Horario */}
           <div
             className={`px-2 py-0.5 rounded-lg border text-[11px] font-mono tabular-nums font-bold flex items-center gap-1 ${colorRitmo}`}
@@ -444,7 +563,6 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           {!pipWindow && !esWidgetNativo && (
             <button
               type="button"
-              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
               onClick={desacoplarAEscritorio}
               className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
               title="Desacoplar Cockpit a ventana flotante Always-on-Top en PC"
@@ -456,7 +574,6 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           {/* Botón Contraer a Píldora de Reposo / Minimizar */}
           <button
             type="button"
-            style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
             onClick={() => {
               if (pipWindow) {
                 pipWindow.close();
@@ -471,10 +588,9 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           </button>
 
           {/* Botón Salir de Modo Standalone / Cerrar Widget */}
-          {modoForzadoDesacoplado && (onCerrarDesacoplado || esWidgetNativo) && (
+          {(modoForzadoDesacoplado || esWidgetNativo) && (
             <button
               type="button"
-              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
               onClick={() => {
                 if (esWidgetNativo && window.desktopWidget?.close) {
                   window.desktopWidget.close();
@@ -483,7 +599,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                 }
               }}
               className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors cursor-pointer"
-              title={esWidgetNativo ? "Cerrar Widget de Escritorio" : "Volver a la vista completa del Portal"}
+              title={esWidgetNativo ? "Ocultar a la bandeja del sistema" : "Volver a la vista completa del Portal"}
             >
               <X className="w-4 h-4" strokeWidth={1.75} />
             </button>
@@ -603,202 +719,401 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             <div className="w-6 h-6 rounded-full border-2 border-sky-500/20 border-t-sky-400 animate-spin" />
             <span className="text-xs font-mono">Sincronizando agenda...</span>
           </div>
-        ) : itemsFiltrados.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 text-slate-500 border border-dashed border-slate-800/80 rounded-2xl">
-            <CheckCircle2 className="w-8 h-8 text-slate-600 mb-2" strokeWidth={1.75} />
-            <span className="text-xs font-semibold text-slate-400">Sin entidades para este horizonte</span>
-            <span className="text-[10px] text-slate-600 mt-0.5">Estás al día o cambia el filtro de vista</span>
-          </div>
         ) : modoVista === 'CHECKLIST' ? (
           /* ========================================================
-             VISTA A: CHECKLIST DIRECTO CON OPACIDAD 35% Y TACHADO
+             VISTA A: CHECKLIST TÁCTICO DIRECTO (OPACIDAD 40% Y TACHADO)
              ======================================================== */
-          <div className="space-y-2">
-            {itemsFiltrados.map((item) => {
-              const estaCompletado = item.completado;
-              const esVencido = item.estadoRitmo === 'VENCIDO_PASADO' && !estaCompletado;
-              const esFocus = item.estadoRitmo === 'FOCUS_ACTUAL' && !estaCompletado;
+          itemsFiltrados.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-8 text-slate-500 border border-dashed border-slate-800/80 rounded-2xl">
+              <CheckCircle2 className="w-8 h-8 text-slate-600 mb-2" strokeWidth={1.75} />
+              <span className="text-xs font-semibold text-slate-400">Sin entidades para este horizonte</span>
+              <span className="text-[10px] text-slate-600 mt-0.5">Estás al día o cambia el filtro de vista</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {itemsFiltrados.map((item) => {
+                const estaCompletado = item.completado;
+                const esVencido = item.estadoRitmo === 'VENCIDO_PASADO' && !estaCompletado;
+                const esFocus = item.estadoRitmo === 'FOCUS_ACTUAL' && !estaCompletado;
+                const esHabito = item.tipo === 'HABITO';
+                const esTarea = item.tipo === 'TAREA';
+                const esIngreso = item.tipo === 'INGRESO';
+                const esGasto = item.tipo === 'GASTO' || item.tipo === 'CUOTA';
 
-              return (
-                <div
-                  key={`${item.tipo}-${item.id}`}
-                  onClick={(e) => handleToggle(item, e)}
-                  className={`group flex items-start gap-3 p-2.5 rounded-xl border transition-all duration-200 cursor-pointer ${
-                    estaCompletado
-                      ? 'bg-slate-900/30 border-slate-800/40 opacity-35'
-                      : esFocus
-                      ? 'bg-sky-950/25 border-sky-500/40 shadow-sm shadow-sky-500/10'
-                      : esVencido
-                      ? 'bg-rose-950/15 border-rose-500/30'
-                      : 'bg-slate-900/60 hover:bg-slate-900 border-slate-800/80'
-                  }`}
-                >
-                  {/* Checkbox táctil */}
-                  <div className="shrink-0 pt-0.5 text-sky-400">
-                    {estaCompletado ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 fill-emerald-500/20" strokeWidth={1.75} />
-                    ) : (
-                      <Circle className="w-4 h-4 text-slate-500 group-hover:text-sky-400 transition-colors" strokeWidth={1.75} />
-                    )}
-                  </div>
+                const bordeIzquierdoClase = estaCompletado
+                  ? 'border-l-slate-600'
+                  : esHabito
+                  ? 'border-l-emerald-500'
+                  : esTarea
+                  ? 'border-l-indigo-500'
+                  : esIngreso
+                  ? 'border-l-emerald-400'
+                  : 'border-l-rose-500';
 
-                  {/* Cuerpo de la tarjeta */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span
-                        className={`text-xs font-medium leading-snug break-words transition-all duration-200 ${
-                          estaCompletado
-                            ? 'line-through text-slate-500'
-                            : esFocus
-                            ? 'text-sky-200 font-semibold'
-                            : 'text-slate-100'
-                        }`}
-                      >
-                        {item.titulo}
-                      </span>
-                    </div>
+                const badgeTipoClase = esHabito
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : esTarea
+                  ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
+                  : esIngreso
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20';
 
-                    <div className="flex items-center gap-2 mt-1 flex-wrap text-[10px] font-mono tabular-nums text-slate-400">
-                      {/* Horario */}
-                      <span className="flex items-center gap-0.5 text-slate-400">
-                        <Clock className="w-2.5 h-2.5 text-slate-400" strokeWidth={1.75} />
-                        {item.horaInicio} - {item.horaFin}
-                      </span>
-
-                      {/* Tipo / Categoría */}
-                      <span className="px-1.5 py-0.2 rounded bg-slate-800/80 text-slate-400 border border-slate-700/60 text-[9px]">
-                        {item.tipo}
-                      </span>
-
-                      {/* Tag secundario */}
-                      {item.categoria && (
-                        <span className="truncate max-w-[120px] text-slate-400">
-                          {item.categoria}
-                        </span>
-                      )}
-
-                      {/* Monto si aplica */}
-                      {item.monto !== undefined && item.monto > 0 && (
-                        <span className="text-emerald-400 font-bold">
-                          {item.moneda || 'PEN'} {item.monto.toFixed(2)}
-                        </span>
-                      )}
-
-                      {/* Badge Focus actual */}
-                      {esFocus && (
-                        <span className="px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30 text-[9px] animate-pulse">
-                          EN CURSO
-                        </span>
-                      )}
-
-                      {/* Badge Vencida */}
-                      {esVencido && (
-                        <span className="px-1 py-0.2 rounded bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30 text-[9px]">
-                          VENCIDA
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          /* ========================================================
-             VISTA B: RIEL HORARIO (TIMELINE CONTINUO 06:00 - 23:00)
-             ======================================================== */
-          <div className="relative border border-slate-800/60 rounded-2xl bg-slate-950/40 divide-y divide-slate-800/40 overflow-hidden my-1">
-            {slotsHorarios.map((slot) => {
-              const esSlotActual = horizonte === 'HOY' && slot.startsWith(horaActual.split(':')[0]);
-              const itemsEnSlot = itemsFiltrados.filter((i) => {
-                const hItem = i.horaInicio.split(':')[0];
-                const hSlot = slot.split(':')[0];
-                return hItem === hSlot;
-              });
-
-              // Cálculo de porcentaje de minutos para posición exacta de la línea viva dentro de la hora
-              const minutosActuales = parseInt(horaActual.split(':')[1], 10) || 0;
-              const pctMinutos = Math.min(95, Math.max(5, (minutosActuales / 60) * 100));
-
-              return (
-                <div
-                  key={slot}
-                  ref={esSlotActual ? slotActualRef : undefined}
-                  className={`relative flex items-stretch border-b border-slate-800/40 transition-colors ${
-                    esSlotActual ? 'bg-sky-950/20' : 'hover:bg-slate-900/20'
-                  }`}
-                >
-                  {/* Columna lateral fija con las horas */}
-                  <div className="w-14 shrink-0 py-2.5 pr-2.5 border-r border-slate-800/60 flex items-start justify-end select-none">
-                    <span
-                      className={`text-[10px] font-mono tabular-nums leading-none ${
-                        esSlotActual ? 'text-sky-300 font-bold' : 'text-slate-500'
+                return (
+                  <div
+                    key={`${item.tipo}-${item.id}`}
+                    onClick={(e) => handleToggle(item, e)}
+                    className={`group relative flex items-start gap-3 pl-3 pr-3 py-2.5 rounded-xl border border-l-4 transition-all transition-opacity duration-200 cursor-pointer overflow-hidden ${bordeIzquierdoClase} ${
+                      estaCompletado
+                        ? 'bg-slate-900/30 border-slate-800/40 opacity-40'
+                        : esFocus
+                        ? 'bg-gradient-to-r from-sky-950/35 to-[#0D1526]/95 border-sky-500/50 shadow-[0_6px_18px_-4px_rgba(14,165,233,0.18)] hover:border-sky-400'
+                        : esVencido
+                        ? 'bg-gradient-to-r from-[#0B132B]/95 to-[#0D1526]/90 border-rose-500/35 hover:border-rose-400/60 hover:translate-y-[-1px]'
+                        : 'bg-gradient-to-r from-[#0B132B]/95 to-[#0D1526]/90 border-slate-800/80 hover:border-sky-500/40 hover:translate-y-[-1px]'
+                    }`}
+                  >
+                    {/* Checkbox responsivo tipo cuadrado redondeado con micro-animación de check */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggle(item, e);
+                      }}
+                      aria-label={estaCompletado ? `Desmarcar ${item.titulo}` : `Completar ${item.titulo}`}
+                      className={`mt-0.5 w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 cursor-pointer ${
+                        estaCompletado
+                          ? 'bg-emerald-500 border-emerald-400 text-slate-950 shadow-[0_0_10px_rgba(16,185,129,0.45)] scale-100'
+                          : 'bg-slate-900/80 border-slate-600/80 text-transparent group-hover:border-sky-400 group-hover:bg-sky-950/30 active:scale-90'
                       }`}
                     >
-                      {slot}
-                    </span>
-                  </div>
+                      <Check
+                        className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                          estaCompletado ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
+                        }`}
+                        strokeWidth={2.5}
+                      />
+                    </button>
 
-                  {/* Carril de contenido del slot */}
-                  <div className="flex-1 p-2 min-h-[52px] flex flex-col justify-center relative">
-                    {/* Línea Viva de la Hora Actual en Tiempo Real */}
-                    {esSlotActual && (
-                      <div
-                        className="absolute left-0 right-0 h-[2px] bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)] z-20 pointer-events-none flex items-center"
-                        style={{ top: `${pctMinutos}%` }}
-                      >
-                        <span className="absolute -left-14 px-1.5 py-0.5 rounded bg-rose-500 text-white font-mono text-[9px] font-bold shadow-sm whitespace-nowrap z-30 pointer-events-auto">
-                          AHORA · {horaActual}
+                    {/* Cuerpo de la tarjeta */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <span
+                          className={`text-xs font-semibold leading-snug break-words transition-all duration-200 ${
+                            estaCompletado
+                              ? 'line-through text-slate-500'
+                              : esFocus
+                              ? 'text-sky-200'
+                              : 'text-slate-100 group-hover:text-white'
+                          }`}
+                        >
+                          {item.titulo}
                         </span>
-                      </div>
-                    )}
 
-                    {itemsEnSlot.length === 0 ? (
-                      <div className="text-[10px] text-slate-600 font-mono italic select-none py-1 pl-1">
-                        — Libre —
+                        {/* Badge semántico de monto formateado para Gastos/Ingresos/Cuotas */}
+                        {item.montoFormateado && (
+                          <span
+                            className={`shrink-0 px-1.5 py-0.5 rounded-md border font-mono tabular-nums text-[10px] font-bold ${
+                              esIngreso
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                            }`}
+                          >
+                            {esIngreso ? `+${item.montoFormateado}` : `-${item.montoFormateado}`}
+                          </span>
+                        )}
                       </div>
-                    ) : (
-                      <div className="space-y-1.5 z-10">
-                        {itemsEnSlot.map((item) => {
-                          const estaCompletado = item.completado;
-                          return (
-                            <div
-                              key={`${item.tipo}-${item.id}`}
-                              onClick={(e) => handleToggle(item, e)}
-                              className={`p-2 rounded-xl border text-xs cursor-pointer transition-all duration-200 flex items-start justify-between gap-2 ${
-                                estaCompletado
-                                  ? 'bg-slate-900/30 border-slate-800/40 opacity-35'
-                                  : 'bg-slate-900/70 hover:bg-slate-900 border-slate-800'
-                              }`}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <span
-                                  className={`font-medium block leading-snug truncate transition-all duration-200 ${
-                                    estaCompletado ? 'line-through text-slate-500' : 'text-slate-200'
-                                  }`}
-                                >
-                                  {item.titulo}
-                                </span>
-                                <span className="text-[10px] font-mono text-slate-400">
-                                  {item.horaInicio} - {item.horaFin} · {item.tipo}
-                                </span>
-                              </div>
-                              <div className="shrink-0 pt-0.5 text-sky-400">
-                                {estaCompletado ? (
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" strokeWidth={1.75} />
-                                ) : (
-                                  <Circle className="w-4 h-4 text-slate-500" strokeWidth={1.75} />
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap text-[10px] font-mono tabular-nums text-slate-400">
+                        {/* Badge semántico por tipo de ente con icono representativo */}
+                        <span
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[9px] font-bold tracking-tight ${badgeTipoClase}`}
+                        >
+                          {esHabito ? (
+                            <Flame className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          ) : esTarea ? (
+                            <FolderKanban className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          ) : esIngreso ? (
+                            <TrendingUp className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          ) : esGasto ? (
+                            <TrendingDown className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          ) : (
+                            <Wallet className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          )}
+                          <span>{item.codigoLegado || item.tipo}</span>
+                        </span>
+
+                        {/* Tiempo programado y duración estimada */}
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-900/80 border border-slate-800 text-slate-300 font-mono tabular-nums">
+                          <Clock className="w-2.5 h-2.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                          <span>
+                            {item.horaInicio} - {item.horaFin} ({item.duracionMinutos}m)
+                          </span>
+                        </span>
+
+                        {/* Categoría o Proyecto Padre */}
+                        {item.categoria && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-slate-900/60 border border-slate-800/70 truncate max-w-[130px] text-slate-300">
+                            {item.categoria}
+                          </span>
+                        )}
+
+                        {/* Prioridad en Tareas con badge Índigo/Zafiro */}
+                        {esTarea && item.prioridad && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-[9px] font-bold">
+                            {item.prioridad}
+                          </span>
+                        )}
+
+                        {/* Estado explícito en Finanzas */}
+                        {(esGasto || esIngreso) && item.estadoEntidad && (
+                          <span
+                            className={`px-1.5 py-0.5 rounded-md border text-[9px] font-bold ${
+                              estaCompletado
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                            }`}
+                          >
+                            {item.estadoEntidad}
+                          </span>
+                        )}
+
+                        {/* Badge Focus actual */}
+                        {esFocus && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30 text-[9px] animate-pulse">
+                            EN CURSO
+                          </span>
+                        )}
+
+                        {/* Badge Vencida */}
+                        {esVencido && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30 text-[9px]">
+                            VENCIDA
+                          </span>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          )
+        ) : (
+          /* ========================================================
+             VISTA B: LIENZO TEMPORAL CONTINUO TIPO CALENDAR 24H (1536px)
+             ======================================================== */
+          <div
+            id="cockpit-calendar-24h-canvas"
+            className="relative min-h-[1536px] h-[1536px] border border-slate-800/60 rounded-2xl bg-[#040711]/95 overflow-hidden my-1 select-none"
+            style={{ height: `${24 * ALTURA_HORA_PX}px`, minHeight: `${24 * ALTURA_HORA_PX}px` }}
+          >
+            {/* 1. Capa Base en Flujo Normal: 24 Horas Ininterrumpidas (00:00 a 23:00) con Array.from({ length: 24 }) */}
+            <div className="relative w-full h-[1536px] min-h-[1536px] flex flex-col pointer-events-none">
+              {Array.from({ length: 24 }, (_, idx) => {
+                const slot = slotsHorarios[idx] || `${String(idx).padStart(2, '0')}:00`;
+                const horaActualPad = String(relojVivo.getHours()).padStart(2, '0');
+                const hSlot = slot.split(':')[0];
+                const esHoraEnCurso = hSlot === horaActualPad;
+
+                return (
+                  <div
+                    key={slot}
+                    className={`flex items-stretch h-[64px] min-h-[64px] border-b border-slate-800/40 relative shrink-0 ${
+                      esHoraEnCurso ? 'bg-sky-950/15' : ''
+                    }`}
+                    style={{ height: `${ALTURA_HORA_PX}px`, minHeight: `${ALTURA_HORA_PX}px` }}
+                  >
+                    {/* Eje izquierdo de marcas horarias (00:00 a 23:00) */}
+                    <div className="w-16 shrink-0 pr-2.5 pt-1.5 border-r border-slate-800/60 flex items-start justify-end">
+                      <span
+                        className={`text-[10px] font-mono tabular-nums leading-none ${
+                          esHoraEnCurso ? 'text-sky-400 font-bold' : 'text-slate-500'
+                        }`}
+                      >
+                        {slot}
+                      </span>
+                    </div>
+
+                    {/* Guía intermedia tenue de media hora (:30) */}
+                    <div className="flex-1 relative">
+                      <div className="absolute left-0 right-0 top-1/2 border-b border-dashed border-slate-800/25" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 2. Capa de Eventos Proporcionales Tipo Calendar (Posición y Altura según Minutos/Duración) */}
+            <div className="absolute top-0 bottom-0 left-16 right-0">
+              {bloquesCalendarPosicion.map(({ item, topPx, heightPx, colIndex, totalCols }) => {
+                const estaCompletado = item.completado;
+                const esFocus = item.estadoRitmo === 'FOCUS_ACTUAL' && !estaCompletado;
+                const esHabito = item.tipo === 'HABITO';
+                const esTarea = item.tipo === 'TAREA';
+                const esIngreso = item.tipo === 'INGRESO';
+                const esGasto = item.tipo === 'GASTO' || item.tipo === 'CUOTA';
+                const widthPct = 100 / totalCols;
+                const leftPct = colIndex * widthPct;
+                const esCompacto = heightPx < 44;
+
+                const bordeIzquierdoClase = estaCompletado
+                  ? 'border-l-slate-600'
+                  : esHabito
+                  ? 'border-l-emerald-500'
+                  : esTarea
+                  ? 'border-l-indigo-500'
+                  : esIngreso
+                  ? 'border-l-emerald-400'
+                  : 'border-l-rose-500';
+
+                const badgeTipoClase = esHabito
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : esTarea
+                  ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
+                  : esIngreso
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+
+                return (
+                  <div
+                    key={`cal-${item.tipo}-${item.id}`}
+                    onClick={(e) => handleToggle(item, e)}
+                    style={{
+                      top: `${topPx}px`,
+                      height: `${heightPx}px`,
+                      left: `calc(${leftPct}% + 4px)`,
+                      width: `calc(${widthPct}% - 8px)`
+                    }}
+                    title={`${item.titulo} · ${item.subtitulo} (${item.horaInicio} - ${item.horaFin})`}
+                    className={`group absolute rounded-xl border border-l-4 px-2.5 py-1 text-xs cursor-pointer bg-[#0B132B]/90 backdrop-blur-sm border-slate-700/50 hover:scale-[1.01] hover:border-sky-400/60 hover:shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-150 overflow-hidden flex items-start justify-between gap-2 z-10 hover:z-20 ${bordeIzquierdoClase} ${
+                      estaCompletado ? 'opacity-40' : ''
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {/* Badge semántico por tipo de ente */}
+                        <span
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[8.5px] font-mono tabular-nums font-bold shrink-0 border ${badgeTipoClase}`}
+                        >
+                          {esHabito ? (
+                            <Flame className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          ) : esTarea ? (
+                            <FolderKanban className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          ) : esIngreso ? (
+                            <TrendingUp className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          ) : esGasto ? (
+                            <TrendingDown className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          ) : (
+                            <Wallet className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
+                          )}
+                          <span>{item.codigoLegado || item.tipo}</span>
+                        </span>
+
+                        <span
+                          className={`font-semibold truncate leading-tight transition-colors ${
+                            esCompacto ? 'text-[10.5px]' : 'text-[11.5px]'
+                          } ${
+                            estaCompletado
+                              ? 'line-through text-slate-500'
+                              : esFocus
+                              ? 'text-sky-200'
+                              : 'text-slate-100 group-hover:text-white'
+                          }`}
+                        >
+                          {item.titulo}
+                        </span>
+
+                        {/* Badge de monto formateado para Gastos/Ingresos/Cuotas */}
+                        {item.montoFormateado && (
+                          <span
+                            className={`ml-auto shrink-0 px-1.5 py-0.2 rounded border font-mono tabular-nums text-[9px] font-bold ${
+                              esIngreso
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                            }`}
+                          >
+                            {esIngreso ? `+${item.montoFormateado}` : `-${item.montoFormateado}`}
+                          </span>
+                        )}
+                      </div>
+
+                      {!esCompacto && (
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[9.5px] font-mono tabular-nums text-slate-400 truncate">
+                          <span className="text-slate-300">
+                            {item.horaInicio} - {item.horaFin}
+                          </span>
+                          {item.categoria && (
+                            <>
+                              <span>·</span>
+                              <span className="truncate">{item.categoria}</span>
+                            </>
+                          )}
+                          {esTarea && item.prioridad && (
+                            <>
+                              <span>·</span>
+                              <span className="text-indigo-300 font-semibold">{item.prioridad}</span>
+                            </>
+                          )}
+                          {(esGasto || esIngreso) && item.estadoEntidad && (
+                            <>
+                              <span>·</span>
+                              <span className={estaCompletado ? 'text-emerald-400' : 'text-amber-300'}>
+                                {item.estadoEntidad}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Checkbox táctil con aislamiento de propagación */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggle(item, e);
+                      }}
+                      aria-label={estaCompletado ? `Desmarcar ${item.titulo}` : `Completar ${item.titulo}`}
+                      className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-all duration-200 cursor-pointer ${
+                        estaCompletado
+                          ? 'bg-emerald-500 border-emerald-400 text-slate-950 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                          : 'bg-slate-950/80 border-slate-600/80 text-transparent group-hover:border-sky-400'
+                      }`}
+                    >
+                      <Check
+                        className={`w-3 h-3 transition-transform duration-200 ${
+                          estaCompletado ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
+                        }`}
+                        strokeWidth={2.5}
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 3. Línea de Hora Actual en Vivo Global (Live Time Indicator 24H) */}
+            <div
+              id="cockpit-live-time-indicator"
+              ref={slotActualRef}
+              className="absolute left-0 right-0 z-30 pointer-events-none flex items-center"
+              style={{ top: `${topLineaActualPx}px` }}
+            >
+              {/* Etiqueta digital de hora actual en el eje izquierdo (HH:mm AM/PM) */}
+              <div className="w-16 shrink-0 pr-1.5 flex items-center justify-end">
+                <span className="px-1.5 py-0.5 rounded-md bg-rose-600 border border-rose-400 text-white font-mono tabular-nums text-[9px] font-bold shadow-[0_0_12px_rgba(244,63,94,0.7)] whitespace-nowrap leading-none">
+                  {horaActualAmPm}
+                </span>
+              </div>
+
+              {/* Micro-punto radar vivo en la intersección del eje horario */}
+              <span className="relative -ml-1.5 flex h-3 w-3 shrink-0 items-center justify-center z-10">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-85"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 ring-2 ring-white/80 shadow-[0_0_10px_rgba(244,63,94,1)]"></span>
+              </span>
+
+              {/* Trazo horizontal luminoso continuo sobre todo el ancho del riel */}
+              <div className="flex-1 h-[2px] bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.85)]" />
+            </div>
           </div>
         )}
       </div>

@@ -15,8 +15,17 @@ import {
   Flame,
   CheckSquare,
   Square,
-  ShieldCheck
+  ShieldCheck,
+  Compass
 } from 'lucide-react';
+import {
+  deduplicarPorCodigoCanonico,
+  deduplicarMetasPlanes,
+  deduplicarHitosPlan,
+  deduplicarVinculosMeta
+} from '../../../utils/entityNormalizer';
+import { ModalDetalleMeta360 } from './ModalDetalleMeta360';
+import { HistogramaSeguimientoTemporal } from '../HistogramaSeguimientoTemporal';
 import {
   CATEGORIAS_VIDA_MAP,
   type CategoriaVida,
@@ -45,6 +54,7 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
   const [filtroCategoria, setFiltroCategoria] = useState<CategoriaVida | 'TODAS'>('TODAS');
   const [modalFlowAbierto, setModalFlowAbierto] = useState(false);
   const [metaParaEditar, setMetaParaEditar] = useState<MetaPlanRecord | null>(null);
+  const [metaSeleccionada360Id, setMetaSeleccionada360Id] = useState<string | null>(null);
   const [hitosExpandidosMap, setHitosExpandidosMap] = useState<Record<string, boolean>>({});
 
   // Promoción automática de metas internas preexistentes hacia metas_planes (REQ-HABITS-CREATE-METAS-INLINE-15)
@@ -54,12 +64,17 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
     });
   }, []);
 
-  // Consultas reactivas en vivo a Dexie con latencia 0 ms
-  const todasLasMetas = useLiveQuery(() => db.metas_planes.toArray(), [], [] as MetaPlanRecord[]);
-  const todosLosHitos = useLiveQuery(() => db.planes_accion_hitos.toArray(), [], [] as HitoPlanRecord[]);
-  const todosLosVinculos = useLiveQuery(() => db.habitos_metas_vinculos.toArray(), [], [] as HabitoMetaVinculo[]);
-  const todasLasActividades = useLiveQuery(() => db.actividades_personales.toArray(), [], [] as ActividadPersonal[]);
+  // Consultas reactivas en vivo a Dexie con latencia 0 ms y deduplicación canónica
+  const rawTodasLasMetas = useLiveQuery(() => db.metas_planes.toArray(), [], [] as MetaPlanRecord[]);
+  const rawTodosLosHitos = useLiveQuery(() => db.planes_accion_hitos.toArray(), [], [] as HitoPlanRecord[]);
+  const rawTodosLosVinculos = useLiveQuery(() => db.habitos_metas_vinculos.toArray(), [], [] as HabitoMetaVinculo[]);
+  const rawTodasLasActividades = useLiveQuery(() => db.actividades_personales.toArray(), [], [] as ActividadPersonal[]);
   const logs = useLiveQuery(() => db.habito_cumplimiento_logs.toArray(), []) || [];
+
+  const todasLasMetas = useMemo(() => deduplicarMetasPlanes(rawTodasLasMetas), [rawTodasLasMetas]);
+  const todosLosHitos = useMemo(() => deduplicarHitosPlan(rawTodosLosHitos), [rawTodosLosHitos]);
+  const todosLosVinculos = useMemo(() => deduplicarVinculosMeta(rawTodosLosVinculos), [rawTodosLosVinculos]);
+  const todasLasActividades = useMemo(() => deduplicarPorCodigoCanonico(rawTodasLasActividades), [rawTodasLasActividades]);
 
   // Mapeo en memoria O(1) de logs por habito_id
   const logsPorHabito = useMemo(() => {
@@ -269,6 +284,15 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
         </div>
       </div>
 
+      {/* 1.5. HISTOGRAMA TEMPORAL DE SEGUIMIENTO POR META Y UNIDAD DE MEDIDA */}
+      <HistogramaSeguimientoTemporal
+        metasDisponibles={todasLasMetas}
+        actividades={todasLasActividades}
+        vinculos={todosLosVinculos}
+        logs={logs}
+        onAbrirMeta360={(m) => setMetaSeleccionada360Id(m.id)}
+      />
+
       {/* 2. BARRA DE CONTROL, FILTROS GHOST Y ACCIÓN PRIMARIA */}
       <div className="portal-surface p-3.5 rounded-2xl bg-white dark:bg-[#0D1526] border border-slate-200/80 dark:border-slate-800/40 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         {/* Filtros por Categoría de Vida (Ghost Controls) */}
@@ -406,6 +430,15 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
+                        onClick={() => setMetaSeleccionada360Id(meta.id)}
+                        className="px-2 py-1 rounded-lg bg-sky-950/50 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-800/60 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                        title="Abrir Vista Detallada 360° de la Meta y Plan"
+                      >
+                        <Compass className="w-3 h-3" strokeWidth={1.75} />
+                        <span>360°</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleEditarMeta(meta)}
                         className="text-slate-500 hover:text-teal-400 p-1.5 rounded-lg hover:bg-slate-800/60 transition cursor-pointer"
                         title="Editar Meta & Plan"
@@ -424,7 +457,11 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
                   </div>
 
                   {/* Título y Descripción */}
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-teal-400 transition-colors mb-1">
+                  <h4
+                    onClick={() => setMetaSeleccionada360Id(meta.id)}
+                    className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-teal-400 transition-colors mb-1 cursor-pointer"
+                    title="Clic para abrir la Vista Detallada 360°"
+                  >
                     {meta.nombre_meta}
                   </h4>
                   {meta.descripcion && (
@@ -571,10 +608,20 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
                   )}
                 </div>
 
-                {/* Footer de Tarjeta con Fechas */}
-                <div className="pt-3 border-t border-slate-800/60 mt-3 flex items-center justify-between text-[10.5px] text-slate-500 font-mono">
-                  <span>Inicio: {meta.fecha_inicio || 'Hoy'}</span>
-                  <span>Límite: {meta.fecha_fin || 'Sin límite'}</span>
+                {/* Footer de Tarjeta con Fechas y Acceso Directo a Vista 360° */}
+                <div className="pt-3 border-t border-slate-800/60 mt-3 flex items-center justify-between gap-2 text-[10.5px] text-slate-500 font-mono">
+                  <div className="flex items-center gap-3">
+                    <span>Inicio: {meta.fecha_inicio || 'Hoy'}</span>
+                    <span>Límite: {meta.fecha_fin || 'Sin límite'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMetaSeleccionada360Id(meta.id)}
+                    className="px-2.5 py-1 rounded-lg bg-sky-950/60 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-800/60 font-sans font-bold text-[10.5px] flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Compass className="w-3 h-3" strokeWidth={1.75} />
+                    <span>Vista Detallada 360°</span>
+                  </button>
                 </div>
               </div>
             );
@@ -593,6 +640,25 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
           metaParaEditar={metaParaEditar}
         />
       )}
+
+      {/* Vista Detallada 360° de Meta / Plan (Pantalla Completa) */}
+      {metaSeleccionada360Id && (() => {
+        const metaActiva360 = metasDetalladas.find((m) => m.id === metaSeleccionada360Id);
+        if (!metaActiva360) return null;
+        return (
+          <ModalDetalleMeta360
+            meta={metaActiva360}
+            todasLasActividades={todasLasActividades}
+            todosLosVinculos={todosLosVinculos}
+            logs={logs}
+            onClose={() => setMetaSeleccionada360Id(null)}
+            onAbrirModalEdicionCompleta={(m) => {
+              setMetaSeleccionada360Id(null);
+              handleEditarMeta(m);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

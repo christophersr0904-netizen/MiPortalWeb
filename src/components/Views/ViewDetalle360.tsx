@@ -40,6 +40,7 @@ import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
 import { ModalExportarPdf } from '../Modals/ModalExportarPdf';
 import { ModalNuevoHito } from '../Modals/ModalNuevoHito';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
+import { deduplicarPorCodigoCanonico } from '../../utils/entityNormalizer';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import Swal from 'sweetalert2';
 import type { GastoRecord, TareaRecord, HitoWbsRecord, SubtareaPaso } from '../../types';
@@ -138,11 +139,26 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
   const rawGastos = useLiveQuery(() => db.gastos.toArray(), []) ?? [];
   const rawSubtareas = useLiveQuery(() => db.subtareas_pasos.toArray(), []) ?? [];
 
-  const proyectos = useMemo(() => rawProyectos.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado)), [rawProyectos, estaOculto]);
-  const hitos = useMemo(() => rawHitos.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado) && !estaOculto(item.proyecto_id)), [rawHitos, estaOculto]);
-  const tareas = useMemo(() => rawTareas.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado) && !estaOculto(item.proyecto_codigo) && !estaOculto(item.hito_codigo)), [rawTareas, estaOculto]);
-  const gastos = useMemo(() => rawGastos.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado) && !estaOculto(item.id_origen_vinculado) && !estaOculto(item.ID_Proyecto)), [rawGastos, estaOculto]);
-  const todasSubtareas = useMemo(() => rawSubtareas.filter((s: any) => !estaOculto(s.id) && !estaOculto(s.codigo_legado) && !estaOculto(s.id_padre_vinculado)), [rawSubtareas, estaOculto]);
+  const proyectos = useMemo(
+    () => deduplicarPorCodigoCanonico(rawProyectos.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado))),
+    [rawProyectos, estaOculto]
+  );
+  const hitos = useMemo(
+    () => deduplicarPorCodigoCanonico(rawHitos.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado) && !estaOculto(item.proyecto_id))),
+    [rawHitos, estaOculto]
+  );
+  const tareas = useMemo(
+    () => deduplicarPorCodigoCanonico(rawTareas.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado) && !estaOculto(item.proyecto_codigo) && !estaOculto(item.hito_codigo))),
+    [rawTareas, estaOculto]
+  );
+  const gastos = useMemo(
+    () => deduplicarPorCodigoCanonico(rawGastos.filter((item: any) => !estaOculto(item.id) && !estaOculto(item.codigo_legado) && !estaOculto(item.id_origen_vinculado) && !estaOculto(item.ID_Proyecto))),
+    [rawGastos, estaOculto]
+  );
+  const todasSubtareas = useMemo(
+    () => deduplicarPorCodigoCanonico(rawSubtareas.filter((s: any) => !estaOculto(s.id) && !estaOculto(s.codigo_legado) && !estaOculto(s.id_padre_vinculado))),
+    [rawSubtareas, estaOculto]
+  );
 
   // Proyecto activo seleccionado o primero disponible
   const proyectoActivo = useMemo(() => {
@@ -168,12 +184,12 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
   const proyCod = proyectoActivo?.codigo_legado || proyectoActivo?.id || '';
   const proyId = proyectoActivo?.id || '';
 
-  // Hitos del proyecto activo
+  // Hitos del proyecto activo deduplicados por clave canónica
   const hitosProyecto = useMemo(() => {
     if (!proyectoActivo) return [];
     const cUpper = String(proyCod || '').trim().toUpperCase();
     const idUpper = String(proyId || '').trim().toUpperCase();
-    return hitos.filter((h: any) => {
+    const filtrados = hitos.filter((h: any) => {
       const hProy = String(h.proyecto_id || h.ID_Proyecto || '').trim().toUpperCase();
       const hProyCod = String(h.proyecto_codigo || '').trim().toUpperCase();
       const hCod = String(h.codigo_legado || h.id || '').trim().toUpperCase();
@@ -182,50 +198,78 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
         (idUpper !== '' && hProy === idUpper)
       );
     });
+    return deduplicarPorCodigoCanonico(filtrados);
   }, [hitos, proyectoActivo, proyId, proyCod]);
 
-  // Set de IDs de hitos del proyecto
-  const idsHitosSet = useMemo(() => {
+  // Set de IDs y mapa de resolución canónica de hitos (UUID / codigo_legado -> codigo_legado)
+  const { idsHitosSet, hitoCanonicalKeyMap } = useMemo(() => {
     const s = new Set<string>();
+    const map = new Map<string, string>();
     hitosProyecto.forEach((h: any) => {
-      if (h.id) s.add(String(h.id).toUpperCase());
-      if (h.codigo_legado) s.add(String(h.codigo_legado).toUpperCase());
-      if (h.ID_Hito) s.add(String(h.ID_Hito).toUpperCase());
+      const canonical = String(h.codigo_legado || h.ID_Hito || h.id || '').trim().toUpperCase();
+      if (!canonical) return;
+      s.add(canonical);
+      map.set(canonical, canonical);
+      if (h.id) {
+        const idUp = String(h.id).trim().toUpperCase();
+        s.add(idUp);
+        map.set(idUp, canonical);
+      }
+      if (h.codigo_legado) {
+        const codUp = String(h.codigo_legado).trim().toUpperCase();
+        s.add(codUp);
+        map.set(codUp, canonical);
+      }
+      if (h.ID_Hito) {
+        const legUp = String(h.ID_Hito).trim().toUpperCase();
+        s.add(legUp);
+        map.set(legUp, canonical);
+      }
     });
-    return s;
+    return { idsHitosSet: s, hitoCanonicalKeyMap: map };
   }, [hitosProyecto]);
 
-  // Tareas del proyecto activo
+  // Tareas del proyecto activo deduplicadas por clave canónica
   const tareasProyecto = useMemo(() => {
     if (!proyectoActivo) return [];
-    return tareas.filter((t: any) => {
-      const tProy = String(t.proyecto_codigo || t.ID_Proyecto || t.proyecto_id || '').toUpperCase();
-      const tHito = String(t.hito_codigo || t.ID_Hito || t.id_hito || '').toUpperCase();
-      return tProy === proyCod.toUpperCase() || tProy === proyId.toUpperCase() || (tHito && idsHitosSet.has(tHito));
+    const cUpper = String(proyCod || '').trim().toUpperCase();
+    const idUpper = String(proyId || '').trim().toUpperCase();
+    const filtradas = tareas.filter((t: any) => {
+      const tProy = String(t.proyecto_codigo || t.ID_Proyecto || t.proyecto_id || '').trim().toUpperCase();
+      const tHito = String(t.hito_codigo || t.hito_id || t.ID_Hito || t.id_hito || '').trim().toUpperCase();
+      return (
+        (cUpper !== '' && tProy === cUpper) ||
+        (idUpper !== '' && tProy === idUpper) ||
+        (tHito !== '' && idsHitosSet.has(tHito))
+      );
     });
+    return deduplicarPorCodigoCanonico(filtradas);
   }, [tareas, proyectoActivo, proyCod, proyId, idsHitosSet]);
 
-  // Mapas de tareas por hito
+  // Mapas de tareas por hito (resueltos siempre a la clave canónica del paquete WP)
   const { tareasPorHito, tareasGenerales, tareaIdToHitoMap } = useMemo(() => {
     const porHito = new Map<string, TareaRecord[]>();
     const generales: TareaRecord[] = [];
     const idToHito = new Map<string, string>();
 
     tareasProyecto.forEach((t: any) => {
-      const hKey = String(t.hito_codigo || t.ID_Hito || t.id_hito || '').trim().toUpperCase();
-      const tId = String(t.codigo_legado || t.ID_Tarea || t.id || '').trim().toUpperCase();
+      const rawHKey = String(t.hito_codigo || t.hito_id || t.ID_Hito || t.id_hito || '').trim().toUpperCase();
+      const canonicalHKey = hitoCanonicalKeyMap.get(rawHKey) || (idsHitosSet.has(rawHKey) ? rawHKey : '');
+      const tCod = String(t.codigo_legado || t.ID_Tarea || t.id || '').trim().toUpperCase();
+      const tUuid = String(t.id || '').trim().toUpperCase();
 
-      if (hKey && idsHitosSet.has(hKey)) {
-        if (!porHito.has(hKey)) porHito.set(hKey, []);
-        porHito.get(hKey)!.push(t);
-        if (tId) idToHito.set(tId, hKey);
+      if (canonicalHKey) {
+        if (!porHito.has(canonicalHKey)) porHito.set(canonicalHKey, []);
+        porHito.get(canonicalHKey)!.push(t);
+        if (tCod) idToHito.set(tCod, canonicalHKey);
+        if (tUuid) idToHito.set(tUuid, canonicalHKey);
       } else {
         generales.push(t);
       }
     });
 
     return { tareasPorHito: porHito, tareasGenerales: generales, tareaIdToHitoMap: idToHito };
-  }, [tareasProyecto, idsHitosSet]);
+  }, [tareasProyecto, idsHitosSet, hitoCanonicalKeyMap]);
 
   // Gastos del proyecto activo (por hito y generales)
   const { gastosPorHito, gastosGenerales, gastosProyectoTotal } = useMemo(() => {
@@ -237,8 +281,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
 
     gastos.forEach((g: any) => {
       const gProy = String(g.ID_Proyecto || g.proyecto_id || '').trim().toUpperCase();
-      let gHito = String(g.ID_Hito || g.id_hito || '').trim().toUpperCase();
-      const gTarea = String(g.ID_Tarea || g.ID_Entidad_Vinculada || g.id_origen_vinculado || '').trim().toUpperCase();
+      const rawGHito = String(g.ID_Hito || g.id_hito || g.hito_id || '').trim().toUpperCase();
+      let gHito = hitoCanonicalKeyMap.get(rawGHito) || (idsHitosSet.has(rawGHito) ? rawGHito : '');
+      const gTarea = String(g.ID_Tarea || g.tarea_id || g.ID_Entidad_Vinculada || g.id_origen_vinculado || '').trim().toUpperCase();
 
       if (!gHito && gTarea && tareaIdToHitoMap.has(gTarea)) {
         gHito = tareaIdToHitoMap.get(gTarea)!;
@@ -247,12 +292,12 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
       const perteneceProy =
         gProy === proyCod.toUpperCase() ||
         gProy === proyId.toUpperCase() ||
-        (gHito && idsHitosSet.has(gHito)) ||
-        (gTarea && tareaIdToHitoMap.has(gTarea));
+        Boolean(gHito && idsHitosSet.has(gHito)) ||
+        Boolean(gTarea && tareaIdToHitoMap.has(gTarea));
 
       if (perteneceProy) {
         todosProy.push(g);
-        if (gHito && idsHitosSet.has(gHito)) {
+        if (gHito) {
           if (!porHito.has(gHito)) porHito.set(gHito, []);
           porHito.get(gHito)!.push(g);
         } else {
@@ -262,7 +307,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
     });
 
     return { gastosPorHito: porHito, gastosGenerales: generales, gastosProyectoTotal: todosProy };
-  }, [gastos, proyCod, proyId, idsHitosSet, tareaIdToHitoMap]);
+  }, [gastos, proyCod, proyId, idsHitosSet, hitoCanonicalKeyMap, tareaIdToHitoMap]);
 
   // Mapa de gastos imputados directamente a tareas
   const gastosPorTareaMap = useMemo(() => {
@@ -324,7 +369,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
       }
 
       const grupo = mapaFases.get(faseKey)!;
-      const peso = parseFloat(h.peso_ponderado_pct || h.Peso_Ponderado_Pct || 0) || 0;
+      const rawPeso = parseFloat(h.peso_pct ?? h.peso_ponderado_pct ?? h.Peso_Ponderado_Pct ?? 0) || 0;
+      const peso = rawPeso > 1 ? rawPeso / 100 : rawPeso;
       grupo.pesoTotal += peso;
 
       const tipo = String(h.tipo_elemento_wbs || h.Tipo_Elemento_WBS || '').toUpperCase();
@@ -1110,7 +1156,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                           <span>Límite: <b>{h.fecha_limite || h.Fecha_Limite_Plan || h.fecha_limite_plan || '-'}</b></span>
                                         </span>
                                         <span className="text-xs bg-indigo-950/60 text-indigo-300 font-mono tabular-nums font-bold px-2 py-0.5 rounded border border-indigo-800">
-                                          Peso: {Math.round(((h.peso_pct ?? h.peso_ponderado_pct ?? h.Peso_Ponderado_Pct ?? 0)) * 100)}%
+                                          Peso: {(() => {
+                                            const rawP = Number(h.peso_pct ?? h.peso_ponderado_pct ?? h.Peso_Ponderado_Pct ?? 0) || 0;
+                                            return Math.round(rawP > 1 ? rawP : rawP * 100);
+                                          })()}%
                                         </span>
                                       </div>
 

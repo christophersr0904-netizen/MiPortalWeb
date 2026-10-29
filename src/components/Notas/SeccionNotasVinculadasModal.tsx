@@ -106,21 +106,14 @@ export const SeccionNotasVinculadasModal: React.FC<SeccionNotasVinculadasModalPr
           title="Vincular nota existente o redactar nueva"
         >
           <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
-          <span className="text-xs font-medium">Nota</span>
+          <span className="text-xs font-medium">Vincular Nota</span>
         </button>
       </div>
 
       {/* Lista de Notas o Estado Vacío */}
       {notas.length === 0 ? (
-        <div className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 text-[11px] text-slate-400">
-          <span>No hay notas vinculadas a este registro.</span>
-          <button
-            type="button"
-            onClick={() => setModalVincularAbierto(true)}
-            className="text-sky-400 hover:text-sky-300 font-semibold underline text-[11px] cursor-pointer"
-          >
-            + Vincular Nota
-          </button>
+        <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/80 text-[11px] text-slate-400 text-center italic">
+          Sin notas vinculadas a este registro. Usa el botón superior para asociar o redactar una nota.
         </div>
       ) : (
         <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">

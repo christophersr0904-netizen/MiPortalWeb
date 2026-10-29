@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { ActividadPersonal, MetaPlanRecord } from '../../../types';
 import { CATEGORIAS_VIDA_MAP } from '../../../types';
-import { Target, Plus, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Target, Plus, ShieldCheck, ChevronRight, Compass } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface MetasCuantitativasProps {
@@ -9,6 +9,7 @@ interface MetasCuantitativasProps {
   metas?: MetaPlanRecord[];
   onRegistrarAvance: (act: any, valor: number) => Promise<unknown>;
   onCrearMeta?: () => void;
+  onAbrirMeta360?: (metaId: string) => void;
 }
 
 interface ItemMetaCuantitativa {
@@ -27,7 +28,8 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
   actividades,
   metas,
   onRegistrarAvance,
-  onCrearMeta
+  onCrearMeta,
+  onAbrirMeta360
 }) => {
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -168,15 +170,36 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
                 className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 flex flex-col justify-between hover:border-teal-500/40 transition-all group"
               >
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-teal-400 transition-colors">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span
+                      onClick={() => {
+                        if (onAbrirMeta360) onAbrirMeta360(m.id);
+                      }}
+                      className={`text-xs font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-teal-400 transition-colors ${
+                        onAbrirMeta360 ? 'cursor-pointer hover:underline' : ''
+                      }`}
+                      title="Clic para abrir la Vista Detallada 360°"
+                    >
                       {m.nombre}
                     </span>
-                    {cfg && (
-                      <span className={`text-[9.5px] font-bold px-2 py-0.2 rounded-md border ${cfg.badgeClase} truncate`}>
-                        {cfg.nombre.split(' ')[0]}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {onAbrirMeta360 && (
+                        <button
+                          type="button"
+                          onClick={() => onAbrirMeta360(m.id)}
+                          className="px-1.5 py-0.5 rounded-md bg-sky-950/60 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-800/60 text-[9.5px] font-bold flex items-center gap-1 transition cursor-pointer"
+                          title="Abrir Vista Detallada 360°"
+                        >
+                          <Compass className="w-3 h-3" strokeWidth={1.75} />
+                          <span>360°</span>
+                        </button>
+                      )}
+                      {cfg && (
+                        <span className={`text-[9.5px] font-bold px-2 py-0.2 rounded-md border ${cfg.badgeClase} truncate`}>
+                          {cfg.nombre.split(' ')[0]}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {m.meta_macro_nombre && (

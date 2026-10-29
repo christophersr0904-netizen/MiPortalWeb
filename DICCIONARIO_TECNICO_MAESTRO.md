@@ -28,6 +28,115 @@
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.67 — Modal Global Centrado de Editor de Notas con Portal y Purga Definitiva de Parpadeo (REQ-KANBAN-NOTE-MODAL-PORTAL-102)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Notas/BadgeNotasVinculadas.tsx`, `src/components/Notas/PopoverPreviewNotas.tsx`, `src/components/Notas/EditorNotaModal.tsx`, `src/components/Notas/ModalVincularEntidades.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Falla:** Al presionar "Abrir Editor Completo" desde el popover de la tarjeta Kanban, el editor sufría parpadeos o quedaba atrapado en el transform de la tarjeta. Asimismo, el movimiento del cursor cerca de la tarjeta durante la apertura re-disparaba el hover del popover generando conflicto visual.
+- **Causa:** `EditorNotaModal` y `ModalVincularEntidades` se montaban dentro de la jerarquía DOM de `.kanban-card`, quedando atrapados por la propiedad CSS `transform` de la tarjeta (anulando el `position: fixed` al viewport) y sin inhibir eventos de hover entrantes.
+
+#### Solución Implementada
+1. **Purga Inmediata de Hover y Parpadeos en `BadgeNotasVinculadas.tsx`:**
+   - Cancelación atómica del temporizador de hover (`clearTimeout(timerRef.current)`).
+   - Cierre inmediato del popover (`setPopoverAbierto(false)`) al solicitar la apertura del editor o modal de vinculación.
+   - Guarda de inhibición en `handleMouseEnter`: si `notaParaEditar` o `modalVincularAbierto` están activos, se bloquea cualquier re-apertura del popover por movimiento de cursor.
+2. **Montaje Centrado Global en `document.body` (`createPortal`):**
+   - `EditorNotaModal` y `ModalVincularEntidades` ahora se proyectan fuera de la tarjeta directamente sobre `document.body` con `createPortal`.
+   - **Telón de Fondo (Backdrop):** `fixed inset-0 z-[100000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4`, con cierre accesible al hacer clic exterior o presionar la tecla `Escape`.
+   - **Contenedor Modal Centrado:** `w-full max-w-3xl max-h-[85vh] flex flex-col bg-[#0B132B] border border-slate-700/70 rounded-2xl shadow-2xl overflow-hidden`.
+   - **Cuerpo Interno:** Scroll independiente `overflow-y-auto custom-scrollbar` y micro-animación `animate-in zoom-in-95 duration-200 ease-out`.
+3. **Sincronización en `PopoverPreviewNotas.tsx`:**
+   - Callback `onAbrirNota` y `onAbrirModalVincular` precedidos por `e.stopPropagation()`, `e.preventDefault()` y `onCerrar()` para una transición fluida e instantánea sin solapamientos.
+
+
+### FASE 4.66 — Erradicación de Recorte de Popover de Notas Vinculadas mediante React Portal y Posicionamiento Fijo (FIX-KANBAN-NOTE-POPOVER-CLIPPING-101)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Notas/BadgeNotasVinculadas.tsx`, `src/components/Notas/PopoverPreviewNotas.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Falla:** Al interactuar con el badge de notas vinculadas en las tarjetas Kanban de Proyectos, el cuadro de vista previa/resumen aparecía cortado por los límites de la tarjeta (`overflow: hidden`) y por el contenedor de columna con scroll vertical (`overflow-y: auto`).
+- **Causa:** El popover se renderizaba como hijo DOM directo de la tarjeta con `position: absolute`, quedando atrapado en el clipping box y el stacking context de sus contenedores ancestros.
+
+#### Solución Implementada
+1. **Desacoplamiento Estructural con React Portal (`createPortal`):**
+   - El popover `PopoverPreviewNotas` ahora se monta directamente en `document.body` mediante `createPortal`, evadiendo de raíz cualquier restricción de `overflow`, `clip-path` o `contain` de la jerarquía de componentes del Kanban.
+2. **Cálculo Determinístico de Coordenadas Viewport (`fixed`):**
+   - Posicionamiento dinámico a través de `getBoundingClientRect()` con detección de espacio disponible vertical (`placeAbove` vs. abajo) y acotamiento horizontal (`Math.max(12, Math.min(...))` para evitar desbordes en los bordes de la ventana.
+   - Sincronización reactiva con listeners de `scroll` (en fase de captura `true` para columnas con scroll interno) y `resize`.
+3. **Cierre Limpio y Accesibilidad:**
+   - Cierre automático al hacer clic fuera del badge/popover (`pointerdown`) o pulsar `Escape`.
+   - Preservación de margen de 250ms al mover el cursor entre el botón y el popover.
+4. **Refinamiento Estético Cobalt Aerodynamic:**
+   - Actualizado a `bg-[#0B132B]/95`, `backdrop-blur-md`, `border border-slate-700/60`, sombra multicapa `shadow-2xl` y microtipografía `font-mono tabular-nums`. Cero emojis en DOM.
+
+
+### FASE 4.65 — Restauración de Widget Flotante Puro con Residencia en Iconos Ocultos / System Tray (RESTORE-COCKPIT-TRAY-WIDGET-FINAL-100)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `desktop/main.js`, `package.json`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico & Motivación
+Concluido el ciclo de diagnóstico y verificada la carga impecable a través del microservidor loopback HTTP en `127.0.0.1:48123`, se restituye la experiencia de widget de escritorio flotante nativo:
+- Eliminación de DevTools desacopladas.
+- Ocultamiento de la barra de tareas de Windows (`skipTaskbar: true`).
+- Residencia permanente en la bandeja del sistema (System Tray) con alternancia de visibilidad al clic/doble clic.
+
+#### Solución Implementada
+1. **Restauración de Propiedades de Widget Puro en `BrowserWindow`:**
+   - `skipTaskbar: true` asegurado en la creación y en todas las transiciones de visibilidad (`toggleWidgetVisibility`).
+   - Removido `mainWindow.webContents.openDevTools({ mode: 'detach' })`.
+   - Preservadas propiedades translúcidas: `frame: false`, `transparent: true`, `backgroundColor: '#00000000'`, `hasShadow: false`, `resizable: false`, `alwaysOnTop: true ('floating')`.
+2. **Residencia en Bandeja del Sistema (System Tray):**
+   - Intercepción de evento `'close'` de la ventana para ocultar (`mainWindow.hide()`) sin terminar el proceso a menos que `app.isQuitting === true`.
+   - Eventos `'click'` y `'double-click'` del tray invocan `toggleWidgetVisibility()` para mostrar y enfocar o esconder la cápsula.
+3. **Scripts de Arranque en `package.json`:**
+   - Añadido script `cockpit` (`cross-env ELECTRON_RUN_AS_NODE= electron desktop/main.js`).
+   - `widget` y `widget:clean` consolidados con saneamiento de entorno.
+
+
+### FASE 4.64 — Forzado de Visibilidad Inmediata, Desacople DevTools, Purga de ELECTRON_RUN_AS_NODE y Diagnóstico Activo (FIX-ELECTRON-FORCE-SHOW-AND-DEBUG-99)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `desktop/main.js`, `package.json`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Falla:** Al ejecutar Electron no aparecía ventana visible en pantalla.
+- **Causa Raíz Principal:**
+  1. La variable de entorno `ELECTRON_RUN_AS_NODE=1` heredada en la sesión forzaba a Electron a operar estrictamente en modo CLI de Node.js, bloqueando el motor de renderizado Chromium y la exposición del namespace `electron` (`app`, `BrowserWindow`).
+  2. Procesos huérfanos de Electron retenían el singleton lock (`app.requestSingleInstanceLock() = false`), provocando salida silenciosa inmediata.
+  3. Parámetro `show: false` esperando `ready-to-show` y `skipTaskbar: true` impedían la visibilidad antes de que concluyera la negociación HTTP.
+
+#### Solución Implementada
+1. **Blindaje contra `ELECTRON_RUN_AS_NODE` & Wrapper Node:**
+   - Detección inmediata en cabecera de `desktop/main.js`: si la variable está presente o `require('electron')` retorna string, se purga del entorno y se re-invoca de forma transparente el binario de Electron con stdio heredado.
+   - Scripts `npm run widget` y `widget:clean` reforzados con `cross-env ELECTRON_RUN_AS_NODE=`.
+2. **Forzado de Visibilidad Inmediata:**
+   - `show: true` activado desde el ciclo de creación de la ventana.
+   - `skipTaskbar: false` para visualización táctica en la barra de tareas durante diagnóstico.
+3. **Apertura Automática de DevTools Desacopladas:**
+   - Inyección de `mainWindow.webContents.openDevTools({ mode: 'detach' });`.
+4. **Instrumentación Exhaustiva de Logs:**
+   - Logs en consola para el servidor loopback HTTP (puerto, solicitudes entrantes con método y URL).
+   - Logs de Electron para URL solicitada, eventos de `did-finish-load` y `did-fail-load`.
+   - Inyección de `app.commandLine.appendSwitch('enable-logging')`.
+
+
+### FASE 4.63 — Erradicación de ERR_FAILED (-2) en Carga Nativa de Electron y Despliegue sobre Loopback HTTP Server (FIX-ELECTRON-ERR-FAILED-LOADFILE-98)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `desktop/main.js`, `src/App.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Falla:** `[Electron][did-fail-load] Código: -2 | "ERR_FAILED" | URL: file:///C:/Users/CHRISTOPHER/Desktop/MiPortalWeb/dist/index.html`.
+- **Causa:** Chromium en Electron bloquea la ejecución de ES Modules (`<script type="module" crossorigin src="./assets/...">`) generados por Vite bajo el protocolo `file://`, arrojando `ERR_FAILED (-2)` y evitando el montaje del DOM.
+
+#### Solución Implementada
+1. **Eliminación Total de `mainWindow.loadFile()`:**
+   - Erradicado cualquier llamado a `loadFile()` con rutas `file:///`.
+2. **Servido Nativo mediante Loopback HTTP en `127.0.0.1:48123`:**
+   - La ventana de Electron carga `http://127.0.0.1:48123/?widget=desktop`.
+   - Se ampliaron los tipos MIME del micro-servidor interno (`.wasm`, `.webmanifest`, `.map`).
+   - El micro-servidor mapea limpiamente la ruta raíz `/` a `/index.html` y sirve los bundles de JavaScript y CSS con sus correspondientes cabeceras HTTP sin bloqueos de sandbox ni restricciones CORS de archivo local.
+3. **Fallback Automático Resiliente:**
+   - En modo desarrollo (`--dev-server`), intenta cargar `http://localhost:3000/?widget=desktop`; si el dev server no responde, el evento `did-fail-load` redirige de forma transparente al loopback `http://127.0.0.1:48123/?widget=desktop`.
+4. **Preservación del Widget Flotante Translúcido de Escritorio:**
+   - Propiedades de ventana nativa intactas: `frame: false`, `transparent: true`, `backgroundColor: '#00000000'`, `skipTaskbar: true`, `alwaysOnTop: true ('floating')`.
+   - React garantiza transparencia en `html`, `body` y `#root`, renderizando directamente la cápsula `DailyCockpit` desacoplada.
+
+
 ### FASE 4.57 — Refactorización Bento 1:1 de ModalActividadFlow con ModalTareaFlow, Unificación de Notas y Cinemática Cobalt (REQ-MODAL-ACTIVIDAD-BENTO-NOTAS-EXEC-63)
 **Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Modals/ModalActividadFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 
@@ -794,6 +903,75 @@ Restaurar la experiencia ejecutiva y operativa completa del Tablero Kanban segú
    - `evaluarFiltroTemporal(fechaIso, filtro, fechaRef)`: Cálculo de horizonte temporal (`TODO`, `HOY`, `SEMANA`, `MES`).
    - `evaluarFiltroPlazo(fechaIso, plazo, estado, fechaRef)`: Evaluación de vencimientos (`vencidas`, `hoy`, `7dias`, `sin_fecha`).
    - 4 nuevas pruebas unitarias (24 pruebas totales en la suite, 100% aprobadas).
+
+---
+
+### FASE 4.20 — Despacho Estático de HUD mediante Loopback HTTP y Relajación WebSecurity (REQ-ELECTRON-STATIC-SERVE-HUD-FIX-79)
+**Fecha:** Octubre 2026 | **Archivos modificados/creados:** `desktop/main.js`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación
+Superar de forma definitiva las restricciones de CORS, resolución de módulos ES (`<script type="module">`) y bloqueo de rutas relativas/absolutas (`/assets/...`) impuestas por Chromium en Windows bajo el esquema `file://`. Se convierte el microservidor loopback existente en `127.0.0.1:48123` en despachador estático con streaming de archivos y encabezados MIME precisos, cargando el HUD sobre un origen HTTP estándar `http://127.0.0.1:48123/?mode=hud&widget=desktop` con `webSecurity: false` y `allowRunningInsecureContent: true`.
+
+#### Componentes Intervenidos
+1. **`desktop/main.js`**:
+   - Mapeo de `MIME_TYPES` para `.html`, `.js`, `.css`, `.json`, `.png`, `.svg`, `.ico`, etc.
+   - En `statusServer`: streaming de archivos de `dist/` con sanitización de rutas (`safePath.startsWith(distDir)`) y fallback SPA hacia `dist/index.html`.
+   - En `widgetWin`: activación de `webSecurity: false` y `allowRunningInsecureContent: true`.
+   - Carga de producción dirigida a `http://127.0.0.1:48123/?mode=hud&widget=desktop`.
+
+---
+
+### FASE 4.19 — Carga Nativa de HUD en Electron con Hash Routing (REQ-ELECTRON-LOADFILE-HASH-FIX-78)
+**Fecha:** Octubre 2026 | **Archivos modificados/creados:** `desktop/main.js`, `src/App.tsx`, `src/components/Cockpit/DailyCockpit.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación
+Erradicar definitivamente los fallos de resolución de protocolo `file://` en Windows Chromium (`ERR_FAILED`) causados por query strings (`?mode=hud&widget=desktop`) sobre el sistema de archivos local. Se migra la invocación a `loadFile(distPath, { hash: 'mode=hud&widget=desktop' })` y se implementa soporte dual e interoperable en el frontend (`window.location.search` y `window.location.hash`), previniendo además bucles de recarga en `did-fail-load`.
+
+#### Componentes Intervenidos
+1. **`desktop/main.js`**:
+   - `widgetWin.loadFile(distPath, { hash: 'mode=hud&widget=desktop' })`: Carga local nativa en Windows sin colisión de query strings.
+   - Protección en `did-fail-load` para abortar reintentos cíclicos cuando el destino ya era `localhost:5173` o `127.0.0.1`.
+2. **`src/App.tsx` & `src/components/Cockpit/DailyCockpit.tsx`**:
+   - Detección reactiva dual que extrae parámetros tanto de `window.location.search` como de `window.location.hash.replace(/^#/, '')`.
+   - Inicialización inmediata de `esModoHud` y `esWidgetNativo` bajo esquemas `?` y `#`.
+
+---
+
+### FASE 4.18 — Resilencia de Carga en Electron con url.format y Manejo did-fail-load (REQ-ELECTRON-URL-PROTOCOL-QUERY-FIX-76)
+**Fecha:** Octubre 2026 | **Archivos modificados/creados:** `desktop/main.js`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación
+Resolver el fallo `ERR_FAILED` (-2) en Windows originado por la incompatibilidad de `loadFile` con parámetros de consulta (`query`) en rutas con letras de unidad y barras invertidas. Reemplazar por la construcción estandarizada de URLs mediante `url.format({ protocol: 'file:', pathname, query })`, incorporar detección reactiva `did-fail-load` con fallback automático a `localhost:5173`, y garantizar visibilidad mediante `ready-to-show`.
+
+#### Componentes Intervenidos
+1. **`desktop/main.js`**:
+   - Importación de `const url = require('url');`.
+   - Carga de `dist/index.html` mediante `url.format` con query params `{ mode: 'hud', widget: 'desktop' }`.
+   - Manejador `webContents.on('did-fail-load')` con fallback automático a `http://localhost:5173/?mode=hud&widget=desktop`.
+   - Evento `widgetWin.once('ready-to-show', () => widgetWin.show())` para asegurar la apertura limpia del HUD.
+
+---
+
+### FASE 4.17 — Consolidación del Chip "Al Día", Fusión de Sincronización Global y Conexión de Atajo 'R' (REQ-NAV-SYNC-BUTTON-MERGE-EXEC-74)
+**Fecha:** Octubre 2026 | **Archivos modificados/creados:** `src/components/Layout/HeaderMaestro.tsx`, `src/hooks/useGlobalShortcuts.ts`, `src/components/Modals/ModalAtajosTeclado.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación
+Eliminar la redundancia visual del botón aislado de sincronización `#btn-refresh-global` en el flanco derecho del Header y unificar su comportamiento en el chip reactivo "Al día" (`#btn-sync-status-merged`). Conectar el atajo de teclado universal `'r'` / `'R'` para sincronización omnicanal con blindaje riguroso contra inputs editables, proveyendo microanimación aerodinámica de rotación (`RotateCw` con `animate-spin text-sky-400`) y feedback visual instantáneo.
+
+#### Componentes Intervenidos
+1. **`src/components/Layout/HeaderMaestro.tsx`**:
+   - Supresión definitiva del botón flotante redundante `#btn-refresh-global`.
+   - Transformación del chip de estado en un botón interactivo y accesible (`#btn-sync-status-merged`, `data-legacy-id="btn-header-refresh"`).
+   - **Depuración Visual (REQ-HEADER-SYNC-CHIP-SIMPLIFY-75):** Erradicación total del punto/LED redundante (tanto el ping animado como el punto esmeralda), consolidando un diseño sobrio y limpio de un solo icono gráfico interactivo (`RotateCw`, `w-3.5 h-3.5`, `strokeWidth={1.75}`).
+   - Monocromía Cobalt Aerodynamic: Contenedor con borde tenue `border-slate-200/80 dark:border-slate-800/80`, fondo `bg-slate-100/60 dark:bg-slate-900/40` y texto `text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100`.
+   - Estados dinámicos: En reposo (`text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200`, texto "Al día") vs Sincronizando (`animate-spin text-sky-400`, texto "Sincronizando...").
+   - Suscripción directa y reactiva a `syncManager.subscribe((estado) => setSyncManagerEstado(estado))` y al evento de broadcast `pmo:sync-triggered`.
+2. **`src/hooks/useGlobalShortcuts.ts`**:
+   - Mapeo de la tecla `'r'` / `'R'` en el switch de atajos globales.
+   - Invocación de `syncManager.sincronizarTodo()` con emisión de `pmo:sync-triggered` para feedback inmediato.
+   - Blindaje preservado contra campos de entrada (`INPUT`, `TEXTAREA`, `SELECT`, `isContentEditable`) impidiendo disparos involuntarios al escribir.
+3. **`src/components/Modals/ModalAtajosTeclado.tsx`**:
+   - Incorporación del atajo `global_sync` (`'r'`, icono `refresh` / `RotateCcw`) en `CANONICAL_SHORTCUTS` para paridad documental y visual 1:1.
 
 ---
 

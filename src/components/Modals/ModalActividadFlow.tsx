@@ -54,9 +54,24 @@ import {
   Coffee,
   ListOrdered,
   Link2,
-  Flame
+  Flame,
+  Clock
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import {
+  formatearDuracionLegible,
+  convertirStringToHorasDecimal,
+  convertirHorasDecimalAString
+} from '../../utils/timeFormatters';
+
+export type TipoRecurrenciaOpcion =
+  | 'NINGUNA'
+  | 'DIARIA'
+  | 'DIARIA_LABORAL'
+  | 'FIN_SEMANA'
+  | 'SEMANAL'
+  | 'MENSUAL'
+  | 'PERSONALIZADO';
 
 export interface ModalActividadFlowProps {
   isOpen: boolean;
@@ -139,13 +154,17 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   const [calendarSync, setCalendarSync] = useState<'Sí' | 'No'>('Sí');
   const [notas, setNotas] = useState('');
 
-  // Fecha, Hora y Recurrencia
+  // Fecha, Hora, Duración y Recurrencia (Google Calendar / Tasks Style)
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('08:00');
   const [duracionHoras, setDuracionHoras] = useState(1.0);
-  const [esPuntual, setEsPuntual] = useState(false);
-  const [frecuencia, setFrecuencia] = useState<FrecuenciaCiclo>('DIARIA');
+  const [duracionStr, setDuracionStr] = useState('1:00');
+  const [tipoRecurrencia, setTipoRecurrencia] = useState<TipoRecurrenciaOpcion>('DIARIA');
   const [diasSemana, setDiasSemana] = useState<string[]>(['LU', 'MA', 'MI', 'JU', 'VI']);
+  const [intervaloRepeticion, setIntervaloRepeticion] = useState<number>(1);
+  const [unidadIntervalo, setUnidadIntervalo] = useState<'dias' | 'semanas' | 'meses'>('semanas');
+  const [tieneFechaFin, setTieneFechaFin] = useState<boolean>(false);
+  const [fechaFin, setFechaFin] = useState<string>('');
 
   // Sección Gasto Asociado
   const [mostrarGasto, setMostrarGasto] = useState(false);
@@ -192,12 +211,55 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       setCalendarSync(actividadEditar.agendado_calendar || 'Sí');
       setFecha(actividadEditar.fecha_programada || '');
       setHora(actividadEditar.hora_inicio || '08:00');
-      setDuracionHoras(actividadEditar.duracion_horas || 1.0);
-      setEsPuntual(actividadEditar.duracion_horas === 0 || actividadEditar.tipo_compromiso === 'PUNTUAL');
-      setFrecuencia(actividadEditar.frecuencia_ciclo || 'DIARIA');
+      const dur = actividadEditar.duracion_horas ?? 1.0;
+      setDuracionHoras(dur);
+      setDuracionStr(convertirHorasDecimalAString(dur));
+
+      // Determinar Tipo de Recurrencia Google Style
+      const freq = actividadEditar.frecuencia_ciclo;
+      const regla = actividadEditar.regla_repeticion || '';
+
+      if (freq === 'NINGUNA' || (!freq && !regla && actividadEditar.tipo_compromiso === 'PUNTUAL')) {
+        setTipoRecurrencia('NINGUNA');
+      } else if (freq === 'DIARIA_LABORAL' || regla === 'L-V') {
+        setTipoRecurrencia('DIARIA_LABORAL');
+      } else if (freq === 'FIN_SEMANA') {
+        setTipoRecurrencia('FIN_SEMANA');
+      } else if (freq === 'SEMANAL') {
+        setTipoRecurrencia('SEMANAL');
+      } else if (freq === 'MENSUAL') {
+        setTipoRecurrencia('MENSUAL');
+      } else if (regla.startsWith('INTERVALO:')) {
+        setTipoRecurrencia('PERSONALIZADO');
+      } else if (freq === 'DIARIA') {
+        setTipoRecurrencia('DIARIA');
+      } else {
+        setTipoRecurrencia('DIARIA');
+      }
+
+      if (actividadEditar.fecha_fin) {
+        setTieneFechaFin(true);
+        setFechaFin(actividadEditar.fecha_fin);
+      } else {
+        setTieneFechaFin(false);
+        setFechaFin('');
+      }
+
+      if (regla.startsWith('INTERVALO:')) {
+        const parts = regla.split(';')[0].split(':');
+        const num = parseInt(parts[1], 10) || 1;
+        const u = parts[2]?.toLowerCase();
+        const unidad = u === 'dias' ? 'dias' : u === 'meses' ? 'meses' : 'semanas';
+        setIntervaloRepeticion(num);
+        setUnidadIntervalo(unidad);
+      } else {
+        setIntervaloRepeticion(1);
+        setUnidadIntervalo('semanas');
+      }
+
       if (actividadEditar.regla_repeticion) {
-        const rawRegla = actividadEditar.regla_repeticion.startsWith('DIAS:')
-          ? actividadEditar.regla_repeticion.substring(5)
+        const rawRegla = actividadEditar.regla_repeticion.includes('DIAS:')
+          ? actividadEditar.regla_repeticion.split('DIAS:')[1].split(';')[0]
           : actividadEditar.regla_repeticion;
         const tokens = rawRegla.toUpperCase().split(',').map((t) => t.trim()).filter(Boolean);
         const mapDias: Record<string, string> = {
@@ -284,9 +346,13 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       setFecha(hoy);
       setHora('08:00');
       setDuracionHoras(1.0);
-      setEsPuntual(false);
-      setFrecuencia('DIARIA');
+      setDuracionStr('1:00');
+      setTipoRecurrencia('DIARIA');
       setDiasSemana(['LU', 'MA', 'MI', 'JU', 'VI']);
+      setIntervaloRepeticion(1);
+      setUnidadIntervalo('semanas');
+      setTieneFechaFin(false);
+      setFechaFin('');
       setMostrarGasto(false);
       setGastoMonto('');
       setGastoConcepto('');
@@ -405,10 +471,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     const catCambio = payload.categoria_vida !== actividadEditar.categoria_vida;
     const tipoCambio = payload.tipo_compromiso !== actividadEditar.tipo_compromiso;
     const fechaCambio = payload.fecha_programada !== (actividadEditar.fecha_programada || '');
+    const fechaFinCambio = (payload.fecha_fin || '') !== (actividadEditar.fecha_fin || '');
     const horaCambio = payload.hora_inicio !== (actividadEditar.hora_inicio || '08:00');
     const duracionCambio = (payload.duracion_horas ?? 0) !== (actividadEditar.duracion_horas ?? 0);
     const syncCambio = payload.agendado_calendar !== (actividadEditar.agendado_calendar || 'Sí');
-    const freqCambio = payload.frecuencia_ciclo !== (actividadEditar.frecuencia_ciclo || 'DIARIA');
+    const freqCambio = (payload.frecuencia_ciclo || 'DIARIA') !== (actividadEditar.frecuencia_ciclo || 'DIARIA');
     const reglaCambio = (payload.regla_repeticion || '') !== (actividadEditar.regla_repeticion || '');
     const notasCambio = (payload.notas_checklist || '').trim() !== (actividadEditar.notas_checklist || '').trim();
     const gastoCambio = (payload.monto_gasto_asociado || 0) !== (actividadEditar.monto_gasto_asociado || 0);
@@ -425,6 +492,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       catCambio ||
       tipoCambio ||
       fechaCambio ||
+      fechaFinCambio ||
       horaCambio ||
       duracionCambio ||
       syncCambio ||
@@ -622,12 +690,54 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       metaMacroNombre = metasDisponibles.find((m) => m.id === metaSeleccionadaId)?.nombre_meta || metaMacro.trim();
     }
 
+    let freqFinal: FrecuenciaCiclo = 'DIARIA';
+    let reglaFinal = '';
+
+    if (tipoRecurrencia === 'NINGUNA') {
+      freqFinal = 'NINGUNA';
+      reglaFinal = '';
+    } else if (tipoRecurrencia === 'DIARIA') {
+      freqFinal = 'DIARIA';
+      reglaFinal = 'DIAS:LU,MA,MI,JU,VI,SA,DO';
+    } else if (tipoRecurrencia === 'DIARIA_LABORAL') {
+      freqFinal = 'DIARIA_LABORAL';
+      reglaFinal = 'DIAS:LU,MA,MI,JU,VI';
+    } else if (tipoRecurrencia === 'FIN_SEMANA') {
+      freqFinal = 'FIN_SEMANA';
+      reglaFinal = 'DIAS:SA,DO';
+    } else if (tipoRecurrencia === 'SEMANAL') {
+      freqFinal = 'SEMANAL';
+      reglaFinal = diasSemana.length > 0 ? `DIAS:${diasSemana.join(',')}` : 'DIAS:LU';
+    } else if (tipoRecurrencia === 'MENSUAL') {
+      freqFinal = 'MENSUAL';
+      reglaFinal = '';
+    } else if (tipoRecurrencia === 'PERSONALIZADO') {
+      if (unidadIntervalo === 'dias') {
+        freqFinal = 'DIARIA';
+        reglaFinal = intervaloRepeticion > 1 ? `INTERVALO:${intervaloRepeticion}:DIAS` : 'DIAS:LU,MA,MI,JU,VI,SA,DO';
+      } else if (unidadIntervalo === 'semanas') {
+        freqFinal = 'SEMANAL';
+        const diasStr = diasSemana.length > 0 ? diasSemana.join(',') : 'LU';
+        reglaFinal = intervaloRepeticion > 1 ? `INTERVALO:${intervaloRepeticion}:SEMANAS;DIAS:${diasStr}` : `DIAS:${diasStr}`;
+      } else {
+        freqFinal = 'MENSUAL';
+        reglaFinal = intervaloRepeticion > 1 ? `INTERVALO:${intervaloRepeticion}:MESES` : '';
+      }
+    }
+
+    const tipoCompromisoFinal: TipoCompromiso =
+      tipoRecurrencia === 'NINGUNA' ? 'PUNTUAL' : metaTotal ? 'META' : tipoCompromiso === 'PUNTUAL' ? 'HABITUAL' : tipoCompromiso;
+
+    const fechaFinFinal = (tipoRecurrencia === 'PERSONALIZADO' && tieneFechaFin && fechaFin)
+      ? fechaFin
+      : undefined;
+
     const payload: ActividadPersonal = {
       id: idActividad!,
       user_id: '00000000-0000-0000-0000-000000000001',
       codigo_legado: codigoLegado!,
       nombre_actividad: titulo.trim(),
-      tipo_compromiso: esPuntual ? 'PUNTUAL' : metaTotal ? 'META' : tipoCompromiso,
+      tipo_compromiso: tipoCompromisoFinal,
       categoria_vida: categoria,
       meta_macro_nombre: metaMacroNombre || undefined,
       unidad_medida: unidadMedida.trim() || undefined,
@@ -638,14 +748,15 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       estado: actividadEditar?.estado || '01_Backlog',
       racha_actual: actividadEditar?.racha_actual || 0,
       fecha_programada: fecha || new Date().toISOString().split('T')[0],
+      fecha_fin: fechaFinFinal,
       hora_inicio: hora || '08:00',
-      duracion_horas: esPuntual ? 0 : duracionHoras,
+      duracion_horas: duracionHoras,
       agendado_calendar: calendarSync,
       id_evento_calendar: actividadEditar?.id_evento_calendar,
       monto_gasto_asociado: montoGastoFinal,
       notas_checklist: notas.trim() || undefined,
-      frecuencia_ciclo: frecuencia,
-      regla_repeticion: diasSemana.length > 0 ? `DIAS:${diasSemana.join(',')}` : '',
+      frecuencia_ciclo: freqFinal,
+      regla_repeticion: reglaFinal,
       created_at: actividadEditar?.created_at || nowIso,
       updated_at: nowIso,
       version: (actividadEditar?.version || 0) + 1,
@@ -672,14 +783,14 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
       // 2. Evaluar si es actividad recurrente
       const tieneRecurrencia = Boolean(
-        (frecuencia && frecuencia !== 'NINGUNA') ||
+        (freqFinal && freqFinal !== 'NINGUNA') ||
         (actividadEditar.frecuencia_ciclo && actividadEditar.frecuencia_ciclo !== 'NINGUNA') ||
         (actividadEditar.regla_repeticion && actividadEditar.regla_repeticion.trim() !== '')
       );
       const esRutinaria = payload.tipo_compromiso === 'HABITUAL' || actividadEditar.tipo_compromiso === 'HABITUAL' || tieneRecurrencia;
 
       // 3. Si es recurrente y la frecuencia NO es NINGUNA: solicitar alcance al guardar
-      if (esRutinaria && frecuencia !== 'NINGUNA') {
+      if (esRutinaria && freqFinal !== 'NINGUNA') {
         setPayloadPendiente(payload);
         setMostrarModalAlcance(true);
         return;
@@ -817,13 +928,17 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
                 <span>
-                  {esPuntual
-                    ? 'Puntual'
-                    : frecuencia === 'DIARIA'
+                  {tipoRecurrencia === 'NINGUNA'
+                    ? 'No se repite'
+                    : tipoRecurrencia === 'DIARIA'
                     ? 'Diario'
-                    : frecuencia === 'SEMANAL'
+                    : tipoRecurrencia === 'DIARIA_LABORAL'
+                    ? 'Lun a Vie'
+                    : tipoRecurrencia === 'FIN_SEMANA'
+                    ? 'Fines de semana'
+                    : tipoRecurrencia === 'SEMANAL'
                     ? 'Semanal'
-                    : frecuencia === 'MENSUAL'
+                    : tipoRecurrencia === 'MENSUAL'
                     ? 'Mensual'
                     : 'Personalizado'}
                 </span>
@@ -900,75 +1015,75 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   </div>
 
-                  {/* Frecuencia de Repetición */}
+                  {/* Frecuencia de Repetición (Google Style) */}
                   <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Frecuencia de Ciclo</label>
-                    <div className="grid grid-cols-4 gap-1 p-0.5 bg-[#040711] rounded-lg border border-slate-800">
-                      {(
-                        [
-                          { id: 'PUNTUAL', label: 'Puntual' },
-                          { id: 'DIARIA', label: 'Diario' },
-                          { id: 'SEMANAL', label: 'Semanal' },
-                          { id: 'MENSUAL', label: 'Mensual' }
-                        ] as const
-                      ).map((f) => {
-                        const activo = (f.id === 'PUNTUAL' && esPuntual) || (!esPuntual && frecuencia === f.id);
-                        return (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => {
-                              if (f.id === 'PUNTUAL') {
-                                setEsPuntual(true);
-                                setTipoCompromiso('PUNTUAL');
-                                setDuracionHoras(0);
-                              } else {
-                                setEsPuntual(false);
-                                setTipoCompromiso('HABITUAL');
-                                setFrecuencia(f.id as FrecuenciaCiclo);
-                                if (duracionHoras === 0) setDuracionHoras(0.5);
-                              }
-                            }}
-                            className={`py-1 rounded-md text-[10px] font-semibold transition cursor-pointer text-center ${
-                              activo
-                                ? 'bg-indigo-600 text-white shadow-xs'
-                                : 'text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            {f.label}
-                          </button>
-                        );
-                      })}
+                    <label className="text-[10px] text-slate-400 block mb-0.5">Frecuencia / Repetición</label>
+                    <div className="relative">
+                      <select
+                        value={tipoRecurrencia}
+                        onChange={(e) => {
+                          const val = e.target.value as TipoRecurrenciaOpcion;
+                          setTipoRecurrencia(val);
+                          if (val === 'DIARIA') {
+                            setDiasSemana(['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO']);
+                          } else if (val === 'DIARIA_LABORAL') {
+                            setDiasSemana(['LU', 'MA', 'MI', 'JU', 'VI']);
+                          } else if (val === 'FIN_SEMANA') {
+                            setDiasSemana(['SA', 'DO']);
+                          } else if (val === 'SEMANAL') {
+                            if (diasSemana.length === 0) setDiasSemana(['LU']);
+                          }
+                        }}
+                        className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs font-medium text-slate-200 outline-none focus:border-sky-500/50 appearance-none cursor-pointer pr-7"
+                      >
+                        <option value="NINGUNA" className="bg-[#0D1526] text-slate-200">No se repite</option>
+                        <option value="DIARIA" className="bg-[#0D1526] text-slate-200">Todos los días</option>
+                        <option value="DIARIA_LABORAL" className="bg-[#0D1526] text-slate-200">De lunes a viernes</option>
+                        <option value="FIN_SEMANA" className="bg-[#0D1526] text-slate-200">Fines de semana</option>
+                        <option value="SEMANAL" className="bg-[#0D1526] text-slate-200">Cada semana</option>
+                        <option value="MENSUAL" className="bg-[#0D1526] text-slate-200">Cada mes</option>
+                        <option value="PERSONALIZADO" className="bg-[#0D1526] text-slate-200">Personalizado...</option>
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
                     </div>
                   </div>
 
-                  {/* Selector de días (LU..DO) cuando aplica */}
-                  {!esPuntual && (frecuencia === 'SEMANAL' || frecuencia === 'DIARIA') && (
+                  {/* Grilla circular táctica de días (L M M J V S D) cuando aplica */}
+                  {(tipoRecurrencia === 'SEMANAL' || tipoRecurrencia === 'PERSONALIZADO') && (
                     <div className="pt-1">
-                      <label className="text-[10px] text-slate-400 block mb-1">Días de Ejecución</label>
-                      <div className="grid grid-cols-7 gap-1">
-                        {['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO'].map((dia) => {
-                          const sel = diasSemana.includes(dia);
+                      <label className="text-[10px] text-slate-400 block mb-1">Repetir el</label>
+                      <div className="flex items-center justify-between gap-1">
+                        {[
+                          { id: 'LU', label: 'L' },
+                          { id: 'MA', label: 'M' },
+                          { id: 'MI', label: 'M' },
+                          { id: 'JU', label: 'J' },
+                          { id: 'VI', label: 'V' },
+                          { id: 'SA', label: 'S' },
+                          { id: 'DO', label: 'D' }
+                        ].map(({ id, label }) => {
+                          const activo = diasSemana.includes(id);
                           return (
                             <button
-                              key={dia}
+                              key={id}
                               type="button"
                               onClick={() => {
-                                if (sel) {
+                                if (activo) {
                                   if (diasSemana.length > 1) {
-                                    setDiasSemana(diasSemana.filter((d) => d !== dia));
+                                    setDiasSemana(diasSemana.filter((d) => d !== id));
                                   }
                                 } else {
-                                  setDiasSemana([...diasSemana, dia]);
+                                  setDiasSemana([...diasSemana, id]);
                                 }
                               }}
-                              className={`py-1 rounded-md text-[10px] font-mono font-bold transition cursor-pointer ${
-                                sel
-                                  ? 'bg-sky-600/30 text-sky-300 border border-sky-500/50'
-                                  : 'bg-[#040711] text-slate-500 border border-slate-800 hover:text-slate-300'
+                              className={`w-7 h-7 rounded-full text-xs font-mono font-bold transition flex items-center justify-center cursor-pointer ${
+                                activo
+                                  ? 'bg-sky-500 text-slate-950 font-black shadow-[0_0_8px_rgba(14,165,233,0.4)]'
+                                  : 'bg-[#040711] text-slate-400 border border-slate-800 hover:border-slate-700 hover:text-slate-200'
                               }`}
+                              title={id}
                             >
-                              {dia}
+                              {label}
                             </button>
                           );
                         })}
@@ -976,64 +1091,139 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   )}
 
-                  {/* Estimación de Duración & Micro-Acción */}
-                  <div className="pt-1 space-y-1.5 border-t border-slate-800/60">
+                  {/* Configuración avanzada de Personalizado (Intervalo y Fin) */}
+                  {tipoRecurrencia === 'PERSONALIZADO' && (
+                    <div className="pt-2 space-y-2 border-t border-slate-800/60">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 shrink-0">Repetir cada</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="99"
+                          value={intervaloRepeticion}
+                          onChange={(e) => setIntervaloRepeticion(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          className="w-14 bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-center text-slate-200 outline-none focus:border-sky-500/50"
+                        />
+                        <select
+                          value={unidadIntervalo}
+                          onChange={(e) => setUnidadIntervalo(e.target.value as 'dias' | 'semanas' | 'meses')}
+                          className="bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 cursor-pointer"
+                        >
+                          <option value="dias" className="bg-[#0D1526]">día(s)</option>
+                          <option value="semanas" className="bg-[#0D1526]">semana(s)</option>
+                          <option value="meses" className="bg-[#0D1526]">mes(es)</option>
+                        </select>
+                      </div>
+
+                      {/* Fecha de término */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-400 block">Finaliza</label>
+                        <div className="flex items-center gap-3">
+                          <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="finRecurrencia"
+                              checked={!tieneFechaFin}
+                              onChange={() => setTieneFechaFin(false)}
+                              className="text-sky-500 focus:ring-sky-500"
+                            />
+                            <span>Nunca</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="finRecurrencia"
+                              checked={tieneFechaFin}
+                              onChange={() => setTieneFechaFin(true)}
+                              className="text-sky-500 focus:ring-sky-500"
+                            />
+                            <span>El</span>
+                          </label>
+                          {tieneFechaFin && (
+                            <input
+                              type="date"
+                              value={fechaFin}
+                              onChange={(e) => setFechaFin(e.target.value)}
+                              className="flex-1 bg-[#040711] px-2 py-0.5 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Estimación de Duración Desacoplada (Formato H:MM / Xh Ymin) */}
+                  <div className="pt-2 space-y-1.5 border-t border-slate-800/60">
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-slate-400">Duración Estimada</label>
+                      <label className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-sky-400" />
+                        <span>Duración Estimada</span>
+                      </label>
                       <button
                         type="button"
                         onClick={() => {
-                          const nuevoEstado = !esPuntual;
-                          setEsPuntual(nuevoEstado);
-                          if (nuevoEstado) {
-                            setDuracionHoras(0);
-                          } else {
-                            setDuracionHoras(0.5);
-                          }
+                          setDuracionHoras(0);
+                          setDuracionStr('0:00');
                         }}
-                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                          esPuntual
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                          duracionHoras === 0
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
                             : 'bg-[#040711] text-slate-400 border border-slate-800 hover:text-slate-200'
                         }`}
                       >
-                        <Zap className="w-3 h-3" />
-                        <span>Micro-Acción (0m)</span>
+                        <Zap className="w-3 h-3 text-amber-400" />
+                        <span>Micro-Acción (0min)</span>
                       </button>
                     </div>
 
-                    {!esPuntual && (
-                      <div className="flex items-center gap-1.5">
-                        {[15, 30, 45, 60].map((min) => {
-                          const h = min / 60;
-                          const activo = Math.abs(duracionHoras - h) < 0.05;
-                          return (
-                            <button
-                              key={min}
-                              type="button"
-                              onClick={() => setDuracionHoras(h)}
-                              className={`flex-1 py-1 rounded-md text-[10px] font-mono tabular-nums font-bold transition cursor-pointer ${
-                                activo
-                                  ? 'bg-indigo-600 text-white shadow-xs'
-                                  : 'bg-[#040711] text-slate-400 border border-slate-800 hover:text-slate-200'
-                              }`}
-                            >
-                              {min}m
-                            </button>
-                          );
-                        })}
-                        <input
-                          type="number"
-                          step="0.25"
-                          min="0"
-                          value={duracionHoras}
-                          onChange={(e) => setDuracionHoras(parseFloat(e.target.value) || 0)}
-                          placeholder="Horas"
-                          className="w-16 bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-center text-slate-200 outline-none focus:border-sky-500/50"
-                          title="Duración en horas decimales (ej. 1.5)"
-                        />
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={duracionStr}
+                        onChange={(e) => setDuracionStr(e.target.value)}
+                        onBlur={() => {
+                          const dec = convertirStringToHorasDecimal(duracionStr);
+                          setDuracionHoras(dec);
+                          setDuracionStr(convertirHorasDecimalAString(dec));
+                        }}
+                        placeholder="H:MM"
+                        className="w-20 bg-[#040711] px-2.5 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-center text-slate-200 outline-none focus:border-sky-500/50"
+                        title="Duración en formato H:MM o minutos (ej. 1:30, 45m)"
+                      />
+                      <span className="text-[11px] font-mono tabular-nums text-sky-400 font-semibold">
+                        ({formatearDuracionLegible(duracionHoras)})
+                      </span>
+                    </div>
+
+                    {/* Botones rápidos de duración */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      {[
+                        { label: '15min', horas: 0.25 },
+                        { label: '30min', horas: 0.5 },
+                        { label: '45min', horas: 0.75 },
+                        { label: '1h', horas: 1.0 },
+                        { label: '2h', horas: 2.0 }
+                      ].map((p) => {
+                        const activo = Math.abs(duracionHoras - p.horas) < 0.02;
+                        return (
+                          <button
+                            key={p.label}
+                            type="button"
+                            onClick={() => {
+                              setDuracionHoras(p.horas);
+                              setDuracionStr(convertirHorasDecimalAString(p.horas));
+                            }}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-mono tabular-nums font-bold transition cursor-pointer ${
+                              activo
+                                ? 'bg-sky-600 text-white shadow-xs'
+                                : 'bg-[#040711] text-slate-400 border border-slate-800 hover:text-slate-200'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* Sincronización Google Calendar */}

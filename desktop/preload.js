@@ -1,5 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Marca explícita inmutable de entorno widget nativo de escritorio
+contextBridge.exposeInMainWorld('IS_DESKTOP_WIDGET', true);
+
 // Exposición segura del puente IPC en window.desktopWidget
 contextBridge.exposeInMainWorld('desktopWidget', {
   expand: () => ipcRenderer.send('widget-expand'),

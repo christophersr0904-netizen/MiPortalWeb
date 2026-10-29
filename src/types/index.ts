@@ -502,6 +502,8 @@ export interface DesktopWidgetBridge {
 declare global {
   interface Window {
     desktopWidget?: DesktopWidgetBridge;
+    IS_DESKTOP_WIDGET?: boolean;
+    IS_ELECTRON_COCKPIT?: boolean;
   }
 }
 

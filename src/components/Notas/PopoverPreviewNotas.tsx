@@ -95,7 +95,7 @@ export const PopoverPreviewNotas: React.FC<PopoverPreviewNotasProps> = ({
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="w-80 sm:w-96 p-3.5 bg-[#0D1526] border border-slate-800/90 rounded-2xl shadow-cobalt-3 text-slate-200 text-xs animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-2.5 z-[100]"
+      className="w-80 sm:w-96 p-3.5 bg-[#0B132B]/95 backdrop-blur-md border border-slate-700/60 rounded-2xl shadow-2xl text-slate-200 text-xs animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-2.5"
     >
       {/* Cabecera del Popover */}
       <div className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">
@@ -197,9 +197,11 @@ export const PopoverPreviewNotas: React.FC<PopoverPreviewNotasProps> = ({
       <div className="flex items-center justify-between gap-2 pt-1">
         <button
           type="button"
-          onClick={() => {
-            onAbrirNota(notaActiva);
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
             onCerrar();
+            onAbrirNota(notaActiva);
           }}
           className="flex-1 py-1.5 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-sm active:scale-98 cursor-pointer"
         >
@@ -209,7 +211,10 @@ export const PopoverPreviewNotas: React.FC<PopoverPreviewNotasProps> = ({
 
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onCerrar();
             onAbrirModalVincular();
           }}
           className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-sky-950/40 text-slate-400 hover:text-sky-300 border border-slate-700/60 hover:border-sky-800/50 transition cursor-pointer"

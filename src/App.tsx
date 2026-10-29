@@ -7,6 +7,48 @@ import { ViewPortafolio } from './components/Views/ViewPortafolio';
 import { ViewHabitos } from './components/Views/ViewHabitos';
 import { ViewNotas } from './components/Views/ViewNotas';
 
+// ErrorBoundary para blindar el Cockpit contra pantallas blancas en Electron
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+class CockpitErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[Cockpit ErrorBoundary]', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-[#070C18] text-rose-300 font-sans text-xs select-none">
+          <p className="font-bold text-sm mb-2 text-rose-400">Error al montar el Cockpit</p>
+          <pre className="p-3 rounded-lg bg-black/50 border border-rose-500/30 text-[10px] font-mono text-left max-w-full overflow-auto">
+            {this.state.error?.message || 'Error desconocido'}
+          </pre>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 px-3 py-1.5 rounded-lg bg-sky-600 text-white font-bold cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Carga diferida con code-splitting para optimización de bundle (REQ-PROD-002)
 const ViewDetalle360 = lazy(() =>
   import('./components/Views/ViewDetalle360').then((m) => ({ default: m.ViewDetalle360 }))
@@ -44,7 +86,19 @@ export const App: React.FC = () => {
   const [drawerArchivadosAbierto, setDrawerArchivadosAbierto] = useState(false);
   const [esModoHud, setEsModoHud] = useState(() => {
     if (typeof window !== 'undefined') {
-      return new URLSearchParams(window.location.search).get('mode') === 'hud';
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      return (
+        searchParams.get('mode') === 'hud' ||
+        hashParams.get('mode') === 'hud' ||
+        searchParams.get('mode') === 'cockpit-only' ||
+        hashParams.get('mode') === 'cockpit-only' ||
+        window.location.hash.includes('cockpit-widget') ||
+        searchParams.get('widget') === 'desktop' ||
+        hashParams.get('widget') === 'desktop' ||
+        Boolean((window as any).IS_DESKTOP_WIDGET) ||
+        Boolean((window as any).desktopWidget)
+      );
     }
     return false;
   });
@@ -76,10 +130,21 @@ export const App: React.FC = () => {
   });
 
   useEffect(() => {
-    // Detectar si se solicitó modo HUD por parámetro de URL (?mode=hud)
+    // Detectar si se solicitó modo HUD por parámetro de URL (?mode=hud o #mode=hud o ?mode=cockpit-only)
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('mode') === 'hud') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      if (
+        searchParams.get('mode') === 'hud' ||
+        hashParams.get('mode') === 'hud' ||
+        searchParams.get('mode') === 'cockpit-only' ||
+        hashParams.get('mode') === 'cockpit-only' ||
+        window.location.hash.includes('cockpit-widget') ||
+        searchParams.get('widget') === 'desktop' ||
+        hashParams.get('widget') === 'desktop' ||
+        Boolean((window as any).IS_DESKTOP_WIDGET) ||
+        Boolean((window as any).desktopWidget)
+      ) {
         setEsModoHud(true);
       }
 
@@ -104,18 +169,34 @@ export const App: React.FC = () => {
     }
 
     // Hidratar en frío si la base de datos Dexie está vacía o incompleta (I/O paralelo ultra-rápido)
-    inicializarDatosSemillaSiVacio().then(() => {
-      // Disparar sincronización bidireccional en modo HUD / widget nativo de escritorio
-      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-      const isHud = params?.get('mode') === 'hud' || params?.get('widget') === 'desktop' || Boolean((window as any).desktopWidget);
-      if (isHud) {
-        syncManager.sincronizarTodo().catch((err) => {
-          console.warn('[App] Error en syncManager.sincronizarTodo al arrancar modo HUD:', err);
-        });
+    // En modo HUD / widget nativo de escritorio, priorizar snapshot del puente local antes de la semilla fría
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const hashParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.hash.replace(/^#/, '')) : null;
+    const isHud =
+      searchParams?.get('mode') === 'hud' ||
+      hashParams?.get('mode') === 'hud' ||
+      searchParams?.get('mode') === 'cockpit-only' ||
+      hashParams?.get('mode') === 'cockpit-only' ||
+      window.location.hash.includes('cockpit-widget') ||
+      searchParams?.get('widget') === 'desktop' ||
+      hashParams?.get('widget') === 'desktop' ||
+      Boolean((window as any).desktopWidget);
+
+    (async () => {
+      try {
+        if (isHud) {
+          await syncManager.cargarSnapshotDesdePuenteLocal().catch(() => false);
+        }
+        await inicializarDatosSemillaSiVacio();
+        if (isHud) {
+          await syncManager.sincronizarTodo().catch((err) => {
+            console.warn('[App] Error en syncManager.sincronizarTodo al arrancar modo HUD:', err);
+          });
+        }
+      } catch (err) {
+        console.warn('[App] Error al inicializar semilla de datos:', err);
       }
-    }).catch((err) => {
-      console.warn('[App] Error al inicializar semilla de datos:', err);
-    });
+    })();
 
     // Listener global para navegación inversa desde notas vinculadas (Fase 4.43)
     const handleAbrirEntidad = async (e: Event) => {
@@ -179,41 +260,46 @@ export const App: React.FC = () => {
   };
 
   const esWidgetNativo = typeof window !== 'undefined' && (
-    Boolean(window.desktopWidget) ||
-    new URLSearchParams(window.location.search).get('widget') === 'desktop'
+    Boolean(window.IS_DESKTOP_WIDGET) ||
+    Boolean(window.IS_ELECTRON_COCKPIT) ||
+    Boolean(window.desktopWidget?.isNative) ||
+    new URLSearchParams(window.location.search).get('widget') === 'desktop' ||
+    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('widget') === 'desktop'
   );
 
   // Garantizar fondo 100% transparente en Electron para widget frameless
   useEffect(() => {
-    if (esModoHud && esWidgetNativo) {
-      document.documentElement.classList.remove('bg-[#020617]');
+    if (esModoHud || esWidgetNativo) {
+      document.documentElement.classList.remove('bg-[#020617]', 'bg-[#040711]', 'bg-slate-50');
       document.documentElement.style.backgroundColor = 'transparent';
-      document.body.classList.remove('bg-[#020617]');
+      document.body.classList.remove('bg-[#020617]', 'bg-[#040711]', 'bg-slate-50');
       document.body.style.backgroundColor = 'transparent';
       const root = document.getElementById('root');
       if (root) root.style.backgroundColor = 'transparent';
     }
   }, [esModoHud, esWidgetNativo]);
 
-  // Si está en modo HUD flotante compacto (Windows Widget / Desktop Window / Standalone HUD)
-  if (esModoHud) {
+  // Si está en modo widget flotante de escritorio (Electron / Desktop HUD / Standalone)
+  if (esModoHud || esWidgetNativo) {
     return (
-      <div className={`h-screen w-screen ${esWidgetNativo ? 'bg-transparent p-0' : 'bg-[#040711] p-2'} overflow-hidden flex flex-col font-sans select-none`}>
-        <DailyCockpit
-          modoForzadoDesacoplado={true}
-          onCerrarDesacoplado={() => {
-            if (esWidgetNativo && window.desktopWidget?.close) {
-              window.desktopWidget.close();
-            } else {
-              setEsModoHud(false);
-            }
-          }}
-        />
-        <AsistenteIaModal
-          isOpen={asistenteAbierto}
-          onClose={() => setAsistenteAbierto(false)}
-        />
-      </div>
+      <CockpitErrorBoundary>
+        <div className="h-screen w-screen bg-transparent p-0 overflow-hidden flex flex-col font-sans select-none">
+          <DailyCockpit
+            modoForzadoDesacoplado={true}
+            onCerrarDesacoplado={() => {
+              if (esWidgetNativo && window.desktopWidget?.close) {
+                window.desktopWidget.close();
+              } else {
+                setEsModoHud(false);
+              }
+            }}
+          />
+          <AsistenteIaModal
+            isOpen={asistenteAbierto}
+            onClose={() => setAsistenteAbierto(false)}
+          />
+        </div>
+      </CockpitErrorBoundary>
     );
   }
 

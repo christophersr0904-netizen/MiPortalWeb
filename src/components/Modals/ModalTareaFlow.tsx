@@ -31,47 +31,17 @@ import { getProp } from '../../utils/entityNormalizer';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 
-/**
- * Convierte una cadena de texto en formato 'H:MM', 'H', 'MMm' o decimal a número de horas decimal.
- * Ej: '1:30' -> 1.5, '0:45' -> 0.75, '2' -> 2.0, '90m' -> 1.5
- */
-export function convertirStringToHorasDecimal(str: string): number {
-  if (!str || typeof str !== 'string') return 0;
-  const s = str.trim().toLowerCase();
-  if (!s) return 0;
+import {
+  convertirStringToHorasDecimal,
+  convertirHorasDecimalAString,
+  formatearDuracionLegible
+} from '../../utils/timeFormatters';
 
-  // Formato minutos puro: '90m' o '45min'
-  if (s.endsWith('m') || s.endsWith('min')) {
-    const minVal = parseFloat(s.replace(/[^0-9.]/g, ''));
-    return isNaN(minVal) ? 0 : Number((minVal / 60).toFixed(2));
-  }
-
-  // Formato H:MM o HH:MM
-  if (s.includes(':')) {
-    const parts = s.split(':');
-    const horas = parseInt(parts[0], 10) || 0;
-    const minutos = parseInt(parts[1], 10) || 0;
-    return Number((horas + minutos / 60).toFixed(2));
-  }
-
-  // Formato decimal directo '1.5' o '2'
-  const parsed = parseFloat(s.replace(',', '.'));
-  return isNaN(parsed) ? 0 : Number(parsed.toFixed(2));
-}
-
-/**
- * Convierte un valor numérico decimal de horas a cadena canónica 'H:MM'.
- * Ej: 1.5 -> '1:30', 0.75 -> '0:45', 2 -> '2:00', 0 -> '0:00'
- */
-export function convertirHorasDecimalAString(num: number | undefined | null): string {
-  if (num === undefined || num === null || isNaN(num) || num <= 0) return '0:00';
-  const horas = Math.floor(num);
-  const minutos = Math.round((num - horas) * 60);
-  if (minutos >= 60) {
-    return `${horas + 1}:00`;
-  }
-  return `${horas}:${String(minutos).padStart(2, '0')}`;
-}
+export {
+  convertirStringToHorasDecimal,
+  convertirHorasDecimalAString,
+  formatearDuracionLegible
+};
 
 interface ModalTareaFlowProps {
   isOpen: boolean;

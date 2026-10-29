@@ -1,4 +1,5 @@
-import { db } from '../db/db';
+import { db, sanearDuplicadosDexie } from '../db/db';
+import { deduplicarPorCodigoCanonico, deduplicarMetasPlanes } from '../utils/entityNormalizer';
 import type {
   MetaPlanRecord,
   HitoPlanRecord,
@@ -461,6 +462,7 @@ export async function crearMetaRapidaDesdeActividadLocal(params: {
   nombre: string;
   categoria: CategoriaVida;
   metaTotal?: number;
+  valorAcumulado?: number;
   unidad?: string;
   nivelRescate?: number;
   habitoId?: string;
@@ -480,7 +482,7 @@ export async function crearMetaRapidaDesdeActividadLocal(params: {
     tipo_meta: 'CUANTITATIVA',
     unidad_medida: params.unidad?.trim() || 'unidades',
     meta_objetivo_total: params.metaTotal !== undefined ? params.metaTotal : 100,
-    valor_acumulado_actual: 0,
+    valor_acumulado_actual: params.valorAcumulado !== undefined ? params.valorAcumulado : 0,
     nivel_rescate_minimo: params.nivelRescate || 0,
     peso_hitos_pct: 0,
     peso_habitos_pct: 100,
@@ -522,62 +524,83 @@ export async function crearMetaRapidaDesdeActividadLocal(params: {
   return nuevaMeta;
 }
 
+let syncMetasInternasEnCurso: Promise<number> | null = null;
+
 /**
  * REQ-HABITS-CREATE-METAS-INLINE-15: Promoción automática de metas internas preexistentes hacia metas_planes
+ * Protegido con candado de concurrencia para evitar duplicación en doble montaje (StrictMode).
  */
 export async function sincronizarMetasInternasHaciaPlanesLocal(): Promise<number> {
-  const [actividades, vinculos, metasExistentes] = await Promise.all([
-    db.actividades_personales.toArray(),
-    db.habitos_metas_vinculos.toArray(),
-    db.metas_planes.toArray()
-  ]);
-
-  const vinculosSet = new Set(vinculos.map((v) => v.habito_id));
-  const metasPorNombre = new Map<string, MetaPlanRecord>();
-  for (const m of metasExistentes) {
-    metasPorNombre.set(m.nombre_meta.trim().toLowerCase(), m);
+  if (syncMetasInternasEnCurso) {
+    return syncMetasInternasEnCurso;
   }
 
-  let metasPromovidas = 0;
+  syncMetasInternasEnCurso = (async () => {
+    try {
+      await sanearDuplicadosDexie();
 
-  for (const act of actividades) {
-    const tieneMetaMacro = Boolean(act.meta_macro_nombre && act.meta_macro_nombre.trim().length > 0);
-    const esTipoMeta = act.tipo_compromiso === 'META';
+      const [rawActividades, vinculos, rawMetasExistentes] = await Promise.all([
+        db.actividades_personales.toArray(),
+        db.habitos_metas_vinculos.toArray(),
+        db.metas_planes.toArray()
+      ]);
 
-    if ((tieneMetaMacro || esTipoMeta) && !vinculosSet.has(act.id)) {
-      const nombreMeta = (act.meta_macro_nombre?.trim()) || act.nombre_actividad.trim();
-      const nombreKey = nombreMeta.toLowerCase();
+      const actividades = deduplicarPorCodigoCanonico(rawActividades);
+      const metasExistentes = deduplicarMetasPlanes(rawMetasExistentes);
 
-      let metaDestino = metasPorNombre.get(nombreKey);
-
-      if (!metaDestino) {
-        metaDestino = await crearMetaRapidaDesdeActividadLocal({
-          nombre: nombreMeta,
-          categoria: act.categoria_vida,
-          metaTotal: act.meta_objetivo_total || 100,
-          unidad: act.unidad_medida || 'unidades',
-          nivelRescate: act.nivel_rescate_minimo || 0,
-          habitoId: act.id
-        });
-        metasPorNombre.set(nombreKey, metaDestino);
-        metasPromovidas++;
-      } else {
-        await vincularHabitoAMetaLocal(
-          act.id,
-          metaDestino.id,
-          'VOLUMEN_DIRECTO',
-          1.0,
-          100,
-          act.meta_objetivo_total || metaDestino.meta_objetivo_total
-        );
-        await recalcularProgresoMetaLocal(metaDestino.id);
+      const vinculosSet = new Set(vinculos.map((v) => v.habito_id));
+      const metasPorNombre = new Map<string, MetaPlanRecord>();
+      for (const m of metasExistentes) {
+        metasPorNombre.set(m.nombre_meta.trim().toLowerCase(), m);
       }
 
-      vinculosSet.add(act.id);
-    }
-  }
+      let metasPromovidas = 0;
 
-  return metasPromovidas;
+      for (const act of actividades) {
+        const tieneMetaMacro = Boolean(act.meta_macro_nombre && act.meta_macro_nombre.trim().length > 0);
+        const esTipoMeta = act.tipo_compromiso === 'META';
+
+        if ((tieneMetaMacro || esTipoMeta) && !vinculosSet.has(act.id)) {
+          const nombreMeta = (act.meta_macro_nombre?.trim()) || act.nombre_actividad.trim();
+          const nombreKey = nombreMeta.toLowerCase();
+
+          let metaDestino = metasPorNombre.get(nombreKey);
+
+          if (!metaDestino) {
+            metaDestino = await crearMetaRapidaDesdeActividadLocal({
+              nombre: nombreMeta,
+              categoria: act.categoria_vida,
+              metaTotal: act.meta_objetivo_total || 100,
+              valorAcumulado: act.valor_acumulado_actual || 0,
+              unidad: act.unidad_medida || 'unidades',
+              nivelRescate: act.nivel_rescate_minimo || 0,
+              habitoId: act.id
+            });
+            metasPorNombre.set(nombreKey, metaDestino);
+            metasPromovidas++;
+          } else {
+            await vincularHabitoAMetaLocal(
+              act.id,
+              metaDestino.id,
+              'VOLUMEN_DIRECTO',
+              1.0,
+              100,
+              act.meta_objetivo_total || metaDestino.meta_objetivo_total
+            );
+            await recalcularProgresoMetaLocal(metaDestino.id);
+          }
+
+          vinculosSet.add(act.id);
+        }
+      }
+
+      return metasPromovidas;
+    } finally {
+      syncMetasInternasEnCurso = null;
+    }
+  })();
+
+  return syncMetasInternasEnCurso;
 }
 
 export interface ProyeccionMetaResult {

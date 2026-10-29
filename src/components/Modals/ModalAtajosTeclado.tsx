@@ -61,6 +61,7 @@ export const CANONICAL_SHORTCUTS: ShortcutItem[] = [
   { id: 'global_nav_finanzas', scope: 'global', defaultKey: '4', label: 'Ir a Flujo y Finanzas', iconName: 'finanzas', desc: 'Navega al control financiero, gastos e ingresos' },
   { id: 'global_nav_notas', scope: 'global', defaultKey: '5', label: 'Ir a Notas Inteligentes', iconName: 'notas', desc: 'Navega a notas inteligentes, checklists y referencias' },
   { id: 'global_calendar', scope: 'global', defaultKey: 'c', label: 'Abrir Google Calendar', iconName: 'calendar', desc: 'Abre Google Calendar en pestaña nueva (blindado fuera de inputs)' },
+  { id: 'global_sync', scope: 'global', defaultKey: 'r', label: 'Sincronizar y Refrescar', iconName: 'refresh', desc: 'Sincroniza datos con la nube y puente local, y refresca estados' },
   { id: 'global_limpiar', scope: 'global', defaultKey: 'x', label: 'Limpiar Filtros Activos', iconName: 'limpiar', desc: 'Resetea filtros, búsquedas y selecciones en la vista activa' },
   { id: 'global_atajos', scope: 'global', defaultKey: '?', label: 'Abrir Guía de Atajos', iconName: 'atajos', desc: 'Despliega este configurador interactivo de comandos' },
 

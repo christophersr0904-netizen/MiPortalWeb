@@ -990,3 +990,222 @@ export function normalizeNota(raw: any): NotaRecord {
   };
 }
 
+// ============================================================================
+// MOTOR DE DEDUPLICACIÓN Y FUSIÓN CANÓNICA (REQ-VISTA-360-DEDUPLICATION-AUDIT-89)
+// ============================================================================
+
+/**
+ * Detecta si un ID primario corresponde al patrón determinista de semilla local
+ * (ej. p0000000-0000-0000-0000-000000000001, h0000..., t0000..., etc.).
+ */
+export function esUuidSemilla(id: unknown): boolean {
+  if (typeof id !== 'string') return false;
+  return /^[a-z]0000000-0000-0000-0000-\d{12}$/i.test(id.trim());
+}
+
+/**
+ * Extrae la clave de identidad canónica de negocio de cualquier entidad PMO / Life OS,
+ * priorizando `codigo_legado` o los identificadores semánticos (`ID_Proyecto`, `ID_Hito`,
+ * `ID_Elemento_WBS`, `ID_Tarea`, etc.) sobre el UUID técnico (`id`).
+ */
+export function extraerCodigoCanonico(entidad: any): string {
+  if (!entidad || typeof entidad !== 'object') return '';
+  const rawCode = getProp<string>(
+    entidad,
+    'codigo_legado',
+    'ID_Proyecto',
+    'ID_Elemento_WBS',
+    'ID_Hito',
+    'ID_Tarea',
+    'ID_Subtarea',
+    'ID_Actividad',
+    'ID_Gasto',
+    'ID_Ingreso',
+    'ID_Nota',
+    'ID_Idea',
+    'ID_Cuota',
+    'ID_Meta',
+    'ID_Hito_Plan',
+    'id'
+  );
+  return String(rawCode ?? '').trim().toUpperCase();
+}
+
+/**
+ * Fusiona dos registros que representan la misma entidad canónica (`codigo_legado`),
+ * preservando mutaciones locales pendientes (`sync_status === 'pending'`), el UUID real
+ * de Supabase frente a UUIDs sintéticos de semilla, y enriqueciendo códigos relacionales
+ * (`proyecto_codigo`, `hito_codigo`, `fase_asociada`, `wbs_code`) para evitar pérdida de vínculos.
+ */
+export function fusionarRegistrosDuplicados<T extends Record<string, any>>(a: T, b: T): T {
+  if (!a) return b;
+  if (!b) return a;
+
+  const aPending = a.sync_status === 'pending';
+  const bPending = b.sync_status === 'pending';
+
+  const aEsSemilla = esUuidSemilla(a.id);
+  const bEsSemilla = esUuidSemilla(b.id);
+
+  let ganador: T = b;
+  let secundario: T = a;
+
+  if (aPending && !bPending) {
+    ganador = a;
+    secundario = b;
+  } else if (bPending && !aPending) {
+    ganador = b;
+    secundario = a;
+  } else if (!aEsSemilla && bEsSemilla) {
+    ganador = a;
+    secundario = b;
+  } else if (!bEsSemilla && aEsSemilla) {
+    ganador = b;
+    secundario = a;
+  } else {
+    const tA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+    const tB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+    if (tA > tB) {
+      ganador = a;
+      secundario = b;
+    }
+  }
+
+  const resultado: Record<string, any> = { ...secundario, ...ganador };
+
+  // Conservar propiedades no vacías del registro secundario cuando en el ganador vienen nulas o vacías
+  for (const key of Object.keys(secundario)) {
+    const valGanador = ganador[key];
+    const valSecundario = secundario[key];
+    if (
+      (valGanador === undefined || valGanador === null || valGanador === '') &&
+      valSecundario !== undefined &&
+      valSecundario !== null &&
+      valSecundario !== ''
+    ) {
+      resultado[key] = valSecundario;
+    }
+  }
+
+  // Asegurar que prevalezca el UUID real de servidor sobre el UUID placeholder de semilla
+  if (esUuidSemilla(resultado.id)) {
+    if (!aEsSemilla && a.id) resultado.id = a.id;
+    else if (!bEsSemilla && b.id) resultado.id = b.id;
+  }
+
+  return resultado as T;
+}
+
+/**
+ * Deduplica una colección de entidades por su código canónico (`codigo_legado` / `ID_*` / `id`),
+ * fusionando de forma determinista cualquier par de registros con distinto UUID pero igual código.
+ */
+export function deduplicarPorCodigoCanonico<T extends Record<string, any>>(items: T[] | undefined | null): T[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const mapa = new Map<string, T>();
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const clave = extraerCodigoCanonico(item);
+    if (!clave) {
+      const fallbackKey = `__ANON_${mapa.size}`;
+      mapa.set(fallbackKey, item);
+      continue;
+    }
+    if (mapa.has(clave)) {
+      const previo = mapa.get(clave)!;
+      mapa.set(clave, fusionarRegistrosDuplicados(previo, item));
+    } else {
+      mapa.set(clave, item);
+    }
+  }
+
+  return Array.from(mapa.values());
+}
+
+/**
+ * Deduplica metas y planes estratégicos (`metas_planes`) tanto por `codigo_legado` (`MET-XXX`)
+ * como por `nombre_meta` normalizado, evitando duplicaciones generadas por autopromoción
+ * concurrente o sincronización con Supabase.
+ */
+export function deduplicarMetasPlanes<T extends Record<string, any>>(metas: T[] | undefined | null): T[] {
+  if (!Array.isArray(metas) || metas.length === 0) return [];
+  const porCodigo = deduplicarPorCodigoCanonico(metas);
+  const porNombre = new Map<string, T>();
+
+  for (const meta of porCodigo) {
+    const rawNombre = String(meta.nombre_meta || meta.nombre || '').trim().toUpperCase();
+    const clave = rawNombre || extraerCodigoCanonico(meta) || String(meta.id || '');
+    if (!clave) continue;
+
+    if (porNombre.has(clave)) {
+      const previo = porNombre.get(clave)!;
+      const fusionado = fusionarRegistrosDuplicados(previo, meta);
+      // Preservar el código correlativo menor (ej. MET-001 frente a MET-015) y el mayor acumulado
+      const codPrev = String(previo.codigo_legado || '').trim();
+      const codAct = String(meta.codigo_legado || '').trim();
+      if (codPrev && codAct && codPrev.localeCompare(codAct, undefined, { numeric: true }) < 0) {
+        (fusionado as any).codigo_legado = codPrev;
+      }
+      const acumPrev = Number(previo.valor_acumulado_actual || 0);
+      const acumAct = Number(meta.valor_acumulado_actual || 0);
+      if (Math.max(acumPrev, acumAct) > 0) {
+        (fusionado as any).valor_acumulado_actual = Math.max(acumPrev, acumAct);
+      }
+      porNombre.set(clave, fusionado);
+    } else {
+      porNombre.set(clave, meta);
+    }
+  }
+
+  return Array.from(porNombre.values());
+}
+
+/**
+ * Deduplica hitos de planes de acción (`planes_accion_hitos`) por clave compuesta
+ * `meta_id::(titulo_hito || codigo_legado)`, ya que distintos planes pueden compartir `HIT-PLN-001`.
+ */
+export function deduplicarHitosPlan<T extends Record<string, any>>(hitos: T[] | undefined | null): T[] {
+  if (!Array.isArray(hitos) || hitos.length === 0) return [];
+  const mapa = new Map<string, T>();
+
+  for (const h of hitos) {
+    if (!h || typeof h !== 'object') continue;
+    const metaId = String(h.meta_id || '').trim().toUpperCase();
+    const subKey = String(h.titulo_hito || h.codigo_legado || h.id || '').trim().toUpperCase();
+    const clave = `${metaId}::${subKey}`;
+    if (mapa.has(clave)) {
+      mapa.set(clave, fusionarRegistrosDuplicados(mapa.get(clave)!, h));
+    } else {
+      mapa.set(clave, h);
+    }
+  }
+
+  return Array.from(mapa.values());
+}
+
+/**
+ * Deduplica vínculos N:M (`habitos_metas_vinculos`) por par único `meta_id::habito_id`.
+ */
+export function deduplicarVinculosMeta<T extends Record<string, any>>(vinculos: T[] | undefined | null): T[] {
+  if (!Array.isArray(vinculos) || vinculos.length === 0) return [];
+  const mapa = new Map<string, T>();
+
+  for (const v of vinculos) {
+    if (!v || typeof v !== 'object') continue;
+    const metaId = String(v.meta_id || '').trim().toUpperCase();
+    const habitoId = String(v.habito_id || '').trim().toUpperCase();
+    if (!metaId || !habitoId) continue;
+    const clave = `${metaId}::${habitoId}`;
+    if (mapa.has(clave)) {
+      mapa.set(clave, fusionarRegistrosDuplicados(mapa.get(clave)!, v));
+    } else {
+      mapa.set(clave, v);
+    }
+  }
+
+  return Array.from(mapa.values());
+}
+
+
+

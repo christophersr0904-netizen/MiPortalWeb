@@ -1,9 +1,19 @@
 import React, { useState, useMemo } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../db/db';
 import { useHabitos } from '../../hooks/useHabitos';
 import { TarjetaHabito, renderIconoCategoriaVida } from './TarjetaHabito';
 import { ModalActividadFlow } from '../Modals/ModalActividadFlow';
+import { ModalDetalleMeta360 } from './Metas/ModalDetalleMeta360';
+import { calcularProgresoBimodal, type MetaConDetalle } from '../../services/metasService';
 import { CATEGORIAS_VIDA_MAP, type CategoriaVida, type ActividadPersonal, type AlcanceRecurrencia } from '../../types';
-import { esElementoArchivado, evaluarFiltroTemporal, evaluarFiltroMeta } from '../../utils/entityNormalizer';
+import {
+  esElementoArchivado,
+  evaluarFiltroTemporal,
+  evaluarFiltroMeta,
+  deduplicarHitosPlan,
+  deduplicarVinculosMeta
+} from '../../utils/entityNormalizer';
 import {
   Flame,
   CheckCircle2,
@@ -19,7 +29,8 @@ import {
   Target,
   Sun,
   CalendarRange,
-  Layers
+  Layers,
+  Compass
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
@@ -49,6 +60,7 @@ export interface TableroHabitosProps {
 export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = false }) => {
   const {
     actividades,
+    todasLasActividades,
     subtareasPorPadre,
     metasPorHabitoId,
     metasPlanes,
@@ -62,10 +74,37 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
   } = useHabitos();
 
   const [filtroMetaId, setFiltroMetaId] = useState<string>('TODAS');
+  const [meta360Id, setMeta360Id] = useState<string | null>(null);
   const [filtroCompromiso, setFiltroCompromiso] = useState<FiltroCompromiso>('TODOS');
   const [filtroTemporal, setFiltroTemporal] = useState<FiltroTemporal>('TODOS');
   const [modoOrden, setModoOrden] = useState<ModoOrden>('TIME');
   const [showSortPopover, setShowSortPopover] = useState(false);
+
+  const hitosRaw = useLiveQuery(() => db.planes_accion_hitos.toArray(), []) || [];
+  const hitosPlan = useMemo(() => deduplicarHitosPlan(hitosRaw), [hitosRaw]);
+  const vinculosRaw = useLiveQuery(() => db.habitos_metas_vinculos.toArray(), []) || [];
+  const vinculosPlan = useMemo(() => deduplicarVinculosMeta(vinculosRaw), [vinculosRaw]);
+  const logsCumplimiento = useLiveQuery(() => db.habito_cumplimiento_logs.toArray(), []) || [];
+
+  const metaActiva360: MetaConDetalle | null = useMemo(() => {
+    if (!meta360Id) return null;
+    const base = (metasPlanes || []).find((m) => m.id === meta360Id);
+    if (!base) return null;
+    const mapAct = new Map((todasLasActividades || actividades).map((a) => [a.id, a]));
+    const hitosMeta = hitosPlan
+      .filter((h) => h.meta_id === base.id)
+      .sort((a, b) => (a.orden_secuencia || 0) - (b.orden_secuencia || 0));
+    const vinculosMeta = vinculosPlan
+      .filter((v) => v.meta_id === base.id)
+      .map((v) => ({ ...v, habito: mapAct.get(v.habito_id) }));
+    const calculo = calcularProgresoBimodal(base, hitosMeta, vinculosMeta);
+    return {
+      ...base,
+      hitos: hitosMeta,
+      vinculos: vinculosMeta,
+      ...calculo
+    };
+  }, [meta360Id, metasPlanes, todasLasActividades, actividades, hitosPlan, vinculosPlan]);
 
   // Estados Modal Canónico ActividadFlow
   const [modalActividadAbierto, setModalActividadAbierto] = useState(false);
@@ -496,6 +535,17 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                 </optgroup>
               )}
             </select>
+            {filtroMetaId !== 'TODAS' && filtroMetaId !== '__SIN_META__' && (
+              <button
+                type="button"
+                onClick={() => setMeta360Id(filtroMetaId)}
+                className="px-2 py-0.5 rounded-lg bg-sky-950/60 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-800/60 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer shrink-0"
+                title="Abrir Vista Detallada 360° de la meta seleccionada"
+              >
+                <Compass className="w-3 h-3" strokeWidth={1.75} />
+                <span>360°</span>
+              </button>
+            )}
             {filtroMetaId !== 'TODAS' && (
               <button
                 type="button"
@@ -698,6 +748,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                         onToggleSubtarea={toggleSubtarea}
                         onEditar={handleEditarActividad}
                         onEliminar={handleEliminarActividad}
+                        onAbrirMeta360={(m) => setMeta360Id(m.id)}
                       />
                     ))
                   )}
@@ -720,6 +771,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                         onToggleSubtarea={toggleSubtarea}
                         onEditar={handleEditarActividad}
                         onEliminar={handleEliminarActividad}
+                        onAbrirMeta360={(m) => setMeta360Id(m.id)}
                       />
                     ))}
                   </div>
@@ -738,6 +790,17 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
         categoriaInicial={categoriaSeleccionada}
         alcanceEdicion={alcanceEdicion}
       />
+
+      {/* Vista Detallada 360° de Meta / Plan (Pantalla Completa) */}
+      {metaActiva360 && (
+        <ModalDetalleMeta360
+          meta={metaActiva360}
+          todasLasActividades={todasLasActividades || actividades}
+          todosLosVinculos={vinculosPlan}
+          logs={logsCumplimiento}
+          onClose={() => setMeta360Id(null)}
+        />
+      )}
     </div>
   );
 };

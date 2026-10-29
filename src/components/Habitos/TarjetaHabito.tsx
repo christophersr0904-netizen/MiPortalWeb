@@ -32,6 +32,7 @@ interface TarjetaHabitoProps {
   onToggleSubtarea: (idSubtarea: string, deseado?: boolean) => Promise<{ success: boolean; error?: string }>;
   onEditar?: (actividad: ActividadPersonal, alcance?: AlcanceRecurrencia) => void;
   onEliminar?: (actividad: ActividadPersonal, alcance?: AlcanceRecurrencia) => void;
+  onAbrirMeta360?: (meta: MetaPlanRecord) => void;
 }
 
 export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
@@ -42,7 +43,8 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
   onRegistrarAvance,
   onToggleSubtarea,
   onEditar,
-  onEliminar
+  onEliminar,
+  onAbrirMeta360
 }) => {
   const [modalAlcanceAbierto, setModalAlcanceAbierto] = useState(false);
   const [accionAlcance, setAccionAlcance] = useState<'editar' | 'eliminar'>('editar');
@@ -357,13 +359,32 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         <div className="space-y-1.5 p-2 rounded-xl bg-cyan-950/20 border border-cyan-800/40 text-[11px]">
           <div className="flex items-center justify-between gap-1 flex-wrap font-mono">
             <div className="flex items-center gap-1.5 min-w-0 max-w-[65%]">
-              <span className="font-bold text-cyan-200 truncate" title={metaEfectiva.titulo}>
+              <span
+                onClick={(e) => {
+                  if (metaVinculada && onAbrirMeta360) {
+                    e.stopPropagation();
+                    onAbrirMeta360(metaVinculada);
+                  }
+                }}
+                className={`font-bold text-cyan-200 truncate ${
+                  metaVinculada && onAbrirMeta360 ? 'cursor-pointer hover:text-sky-300 hover:underline' : ''
+                }`}
+                title={metaVinculada ? `${metaEfectiva.titulo} (Clic para Vista 360°)` : metaEfectiva.titulo}
+              >
                 {metaEfectiva.titulo}
               </span>
               {metaVinculada && (
-                <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-mono shrink-0">
-                  Plan Vinculado
-                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onAbrirMeta360) onAbrirMeta360(metaVinculada);
+                  }}
+                  className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-white border border-sky-500/30 font-mono font-bold shrink-0 transition cursor-pointer"
+                  title="Abrir Vista Detallada 360° de la Meta"
+                >
+                  360°
+                </button>
               )}
             </div>
             <span className="font-bold text-cyan-300 tabular-nums">

@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { NotaRecord, VinculoEntidad, TipoEntidadVinculable } from '../../types';
@@ -155,29 +156,54 @@ export const ModalVincularEntidades: React.FC<ModalVincularEntidadesProps> = ({
     onClose();
   };
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-[10001] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-2xl bg-[#0D1526] border border-slate-800/80 rounded-2xl shadow-cobalt-3 overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Cabecera */}
-        <div className="px-5 py-3.5 border-b border-slate-800/70 flex items-center justify-between bg-slate-950/60 shrink-0">
-          <div className="flex items-center gap-2">
-            <Link2 className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
-            <h4 className="font-semibold text-slate-100 text-sm">
-              {esModoEntidad
-                ? `Vincular Nota a ${codigoEntidad}`
-                : 'Vincular Entidades a la Nota'}
-            </h4>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+  return typeof document !== 'undefined'
+    ? createPortal(
+        <div
+          className="fixed inset-0 z-[100001] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              onClose();
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-2xl bg-[#0B132B] border border-slate-700/70 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150 ease-out"
+            onClick={(e) => e.stopPropagation()}
           >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+            {/* Cabecera */}
+            <div className="px-5 py-3.5 border-b border-slate-800/70 flex items-center justify-between bg-slate-950/60 shrink-0">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
+                <h4 className="font-semibold text-slate-100 text-sm">
+                  {esModoEntidad
+                    ? `Vincular Nota a ${codigoEntidad}`
+                    : 'Vincular Entidades a la Nota'}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+                title="Cerrar (Esc)"
+              >
+                <X className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+            </div>
 
         {/* CUERPO MODO A: Vincular nota a una entidad específica */}
         {esModoEntidad ? (
@@ -483,6 +509,7 @@ export const ModalVincularEntidades: React.FC<ModalVincularEntidadesProps> = ({
           </div>
         )}
       </div>
-    </div>
-  );
+    </div>,
+    document.body
+  ) : null;
 };

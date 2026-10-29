@@ -16,6 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
+import { deduplicarPorCodigoCanonico } from '../../utils/entityNormalizer';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { calcularRutaCriticaCPM, calcularCPMCanoicoTareas } from '../../services/cpmService';
 import {
@@ -152,27 +153,27 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
   const rawTodasLasNotas = useLiveQuery(() => db.notas.toArray(), []);
 
   const todosLosProyectos = useMemo(
-    () => (rawTodosLosProyectos ?? []).filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado)),
+    () => deduplicarPorCodigoCanonico((rawTodosLosProyectos ?? []).filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado))),
     [rawTodosLosProyectos, estaOculto]
   );
   const todosLosHitos = useMemo(
-    () => (rawTodosLosHitos ?? []).filter((h: any) => !estaOculto(h.id) && !estaOculto(h.codigo_legado) && !estaOculto(h.proyecto_id)),
+    () => deduplicarPorCodigoCanonico((rawTodosLosHitos ?? []).filter((h: any) => !estaOculto(h.id) && !estaOculto(h.codigo_legado) && !estaOculto(h.proyecto_id))),
     [rawTodosLosHitos, estaOculto]
   );
   const todasLasTareas = useMemo(
-    () => (rawTodasLasTareas ?? []).filter((t: any) => !estaOculto(t.id) && !estaOculto(t.codigo_legado) && !estaOculto(t.proyecto_codigo) && !estaOculto(t.hito_codigo)),
+    () => deduplicarPorCodigoCanonico((rawTodasLasTareas ?? []).filter((t: any) => !estaOculto(t.id) && !estaOculto(t.codigo_legado) && !estaOculto(t.proyecto_codigo) && !estaOculto(t.hito_codigo))),
     [rawTodasLasTareas, estaOculto]
   );
   const todosLosGastos = useMemo(
-    () => (rawTodosLosGastos ?? []).filter((g: any) => !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto)),
+    () => deduplicarPorCodigoCanonico((rawTodosLosGastos ?? []).filter((g: any) => !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto))),
     [rawTodosLosGastos, estaOculto]
   );
   const todosLosIngresos = useMemo(
-    () => (rawTodosLosIngresos ?? []).filter((i: any) => !estaOculto(i.id) && !estaOculto(i.codigo_legado)),
+    () => deduplicarPorCodigoCanonico((rawTodosLosIngresos ?? []).filter((i: any) => !estaOculto(i.id) && !estaOculto(i.codigo_legado))),
     [rawTodosLosIngresos, estaOculto]
   );
   const todasLasNotas = useMemo(
-    () => (rawTodasLasNotas ?? []).filter((n: any) => !estaOculto(n.id) && !estaOculto(n.codigo_legado)),
+    () => deduplicarPorCodigoCanonico((rawTodasLasNotas ?? []).filter((n: any) => !estaOculto(n.id) && !estaOculto(n.codigo_legado))),
     [rawTodasLasNotas, estaOculto]
   );
 
@@ -194,24 +195,35 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
     return proyectoActivo ? String(proyectoActivo.codigo_legado || proyectoActivo.id).trim().toUpperCase() : '';
   }, [proyectoActivo]);
 
+  const proyIdUpper = useMemo(() => {
+    return proyectoActivo ? String(proyectoActivo.id || '').trim().toUpperCase() : '';
+  }, [proyectoActivo]);
+
   // Filtrar estrictamente hitos por proyecto activo (prioriza hitosExternos si vienen provistos)
   const hitos = useMemo(() => {
     if (hitosExternos && hitosExternos.length > 0) {
-      return hitosExternos;
+      return deduplicarPorCodigoCanonico(hitosExternos);
     }
     if (!todosLosHitos || !proyCod) return [];
-    return todosLosHitos.filter((h: any) => {
+    const filtrados = todosLosHitos.filter((h: any) => {
       const hProyId = String(h.proyecto_id || h.ID_Proyecto || '').trim().toUpperCase();
       const hProyCod = String(h.proyecto_codigo || '').trim().toUpperCase();
       const hCod = String(h.codigo_legado || h.id || '').trim().toUpperCase();
-      return hProyId === proyCod || hProyCod === proyCod || hCod.startsWith(proyCod);
+      return (
+        hProyId === proyCod ||
+        (proyIdUpper !== '' && hProyId === proyIdUpper) ||
+        hProyCod === proyCod ||
+        hCod.startsWith(proyCod)
+      );
     });
-  }, [todosLosHitos, proyCod, hitosExternos]);
+    return deduplicarPorCodigoCanonico(filtrados);
+  }, [todosLosHitos, proyCod, proyIdUpper, hitosExternos]);
 
   const idsHitosSet = useMemo(() => {
     const s = new Set<string>();
     hitos.forEach((h) => {
-      s.add(String(h.codigo_legado || h.id).trim().toUpperCase());
+      if (h.codigo_legado) s.add(String(h.codigo_legado).trim().toUpperCase());
+      if (h.id) s.add(String(h.id).trim().toUpperCase());
     });
     return s;
   }, [hitos]);
@@ -219,17 +231,23 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
   // Filtrar tareas por proyecto activo o hitos asociados
   const tareas = useMemo(() => {
     if (!todasLasTareas || !proyCod) return [];
-    return todasLasTareas.filter((t: any) => {
-      const tProy = String(t.proyecto_codigo || t.ID_Proyecto || '').trim().toUpperCase();
-      const tHito = String(t.hito_codigo || t.ID_Hito || '').trim().toUpperCase();
-      return tProy === proyCod || (tHito && idsHitosSet.has(tHito));
+    const filtradas = todasLasTareas.filter((t: any) => {
+      const tProy = String(t.proyecto_codigo || t.ID_Proyecto || t.proyecto_id || '').trim().toUpperCase();
+      const tHito = String(t.hito_codigo || t.hito_id || t.ID_Hito || t.id_hito || '').trim().toUpperCase();
+      return (
+        tProy === proyCod ||
+        (proyIdUpper !== '' && tProy === proyIdUpper) ||
+        (tHito !== '' && idsHitosSet.has(tHito))
+      );
     });
-  }, [todasLasTareas, proyCod, idsHitosSet]);
+    return deduplicarPorCodigoCanonico(filtradas);
+  }, [todasLasTareas, proyCod, proyIdUpper, idsHitosSet]);
 
   const idsTareasSet = useMemo(() => {
     const s = new Set<string>();
     tareas.forEach((t) => {
-      s.add(String(t.codigo_legado || t.id).trim().toUpperCase());
+      if (t.codigo_legado) s.add(String(t.codigo_legado).trim().toUpperCase());
+      if (t.id) s.add(String(t.id).trim().toUpperCase());
     });
     return s;
   }, [tareas]);

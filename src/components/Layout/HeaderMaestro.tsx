@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Calendar,
   Archive,
@@ -25,6 +25,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { esElementoArchivado } from '../../utils/entityNormalizer';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { syncManager, type SyncState } from '../../services/syncManager';
 
 export type VistaGlobal = 'kanban' | 'portafolio' | 'habitos' | 'financiero' | 'detalle' | 'notas';
 export type SaborTema = 'slate' | 'rose';
@@ -69,6 +70,42 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
   const [tabArchivados, setTabArchivados] = useState<'todos' | 'kanban' | 'portafolio' | 'habitos' | 'finanzas'>('todos');
   const [busquedaArchivados, setBusquedaArchivados] = useState('');
   const [recargandoAnim, setRecargandoAnim] = useState(false);
+  const [syncManagerEstado, setSyncManagerEstado] = useState<SyncState>(() => syncManager.getStatus());
+
+  useEffect(() => {
+    const unsubscribe = syncManager.subscribe((nuevoEstado) => {
+      setSyncManagerEstado(nuevoEstado);
+    });
+    return unsubscribe;
+  }, []);
+
+  const handleEjecutarSync = async () => {
+    setRecargandoAnim(true);
+    try {
+      await syncManager.sincronizarTodo();
+    } catch (err) {
+      console.warn('[HeaderMaestro] Error en sincronización manual:', err);
+    } finally {
+      setTimeout(() => {
+        setRecargandoAnim(false);
+      }, 750);
+    }
+  };
+
+  useEffect(() => {
+    const handleSyncEvent = () => {
+      setRecargandoAnim(true);
+      setTimeout(() => {
+        setRecargandoAnim(false);
+      }, 750);
+    };
+    window.addEventListener('pmo:sync-triggered', handleSyncEvent);
+    return () => {
+      window.removeEventListener('pmo:sync-triggered', handleSyncEvent);
+    };
+  }, []);
+
+  const estaSincronizando = sincronizando || syncManagerEstado === 'syncing' || recargandoAnim;
 
   // Queries reactivas para badges superiores
   const totalKanban = useLiveQuery(
@@ -116,12 +153,6 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
     gastosArchivados.length +
     ingresosArchivados.length;
 
-  const handleRecarga = () => {
-    setRecargandoAnim(true);
-    setTimeout(() => {
-      setRecargandoAnim(false);
-    }, 800);
-  };
 
   // Filtrado de elementos en la Bóveda de Archivados según pestaña y término de búsqueda
   const archivadosFiltrados = React.useMemo(() => {
@@ -227,26 +258,41 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             </span>
           </div>
 
-          {/* Indicador reactivo de sincronización (Desktop) */}
-          <div
-            id="sync-status-container"
-            className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-default bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 shadow-2xs"
-            title={sincronizando ? 'Sincronizando cambios locales...' : 'Última sincronización: Al día'}
+          {/* Indicador reactivo y botón de sincronización unificado (Desktop) */}
+          <button
+            type="button"
+            id="btn-sync-status-merged"
+            data-legacy-id="btn-header-refresh"
+            onClick={handleEjecutarSync}
+            className={`group hidden md:inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all duration-300 select-none cursor-pointer shadow-xs ${
+              estaSincronizando
+                ? 'border-sky-400/60 bg-white/10 dark:bg-white/[0.08] text-white shadow-[0_0_12px_rgba(56,189,248,0.25)] scale-[1.02]'
+                : 'border-slate-800/80 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60 hover:text-slate-100 active:scale-95'
+            }`}
+            title="Sincronizar datos y refrescar estados (Presiona R)"
           >
-            <span id="sync-status-led" className="relative flex h-2 w-2">
-              {sincronizando ? (
-                <>
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </>
+            {/* Indicador Radar / Spinner Cinemático */}
+            <div className="relative flex items-center justify-center w-3.5 h-3.5">
+              {estaSincronizando ? (
+                <RotateCw className="w-3.5 h-3.5 text-sky-400 animate-spin transition-transform duration-500" strokeWidth={2} />
               ) : (
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]"></span>
+                </span>
               )}
+            </div>
+
+            {/* Texto Dinámico */}
+            <span
+              id="sync-status-text"
+              className={`font-mono text-[10.5px] tracking-tight transition-colors duration-200 ${
+                estaSincronizando ? 'text-white font-semibold' : 'text-slate-300 group-hover:text-slate-100'
+              }`}
+            >
+              {estaSincronizando ? 'Sincronizando...' : 'Al día'}
             </span>
-            <span id="sync-status-text" className="text-[11px] font-medium hidden md:inline">
-              {sincronizando ? 'Sincronizando' : 'Al día'}
-            </span>
-          </div>
+          </button>
         </div>
 
         {/* CENTRO: Pestañas Principales Centradas Matemáticamente */}
@@ -391,17 +437,6 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             )}
           </button>
 
-          {/* 4. Recargar (#btn-refresh-global) */}
-          <button
-            type="button"
-            id="btn-refresh-global"
-            data-legacy-id="btn-header-refresh"
-            onClick={handleRecarga}
-            className="h-9 w-9 p-0 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 active:scale-95 transition-all duration-200 cursor-pointer hidden md:flex items-center justify-center"
-            title="Sincronizar datos y refrescar estados (Presiona R)"
-          >
-            <RotateCw className={`w-4 h-4 transition-transform duration-500 ${recargandoAnim ? 'animate-spin text-indigo-400' : ''}`} />
-          </button>
 
           {/* 5. Atajos (#btn-toggle-shortcuts-modal): Canónico según legacy L151-166 */}
           <button

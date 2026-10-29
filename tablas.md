@@ -481,9 +481,9 @@ Tras resolver la doble serialización en el volcado de Google Sheets (`volcado_s
 
 ### 17.1. Chasis Maestro y Navegación Responsive
 1. **`HeaderMaestro.tsx` (Layout Shell Executive Suite):**
-   - **Flanco Izquierdo:** Isotipo `P` gradiente índigo-violeta (`bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500`), subtítulo corporativo `PMO Modular / Executive Suite`, y LED reactivo de sincronización (`Al día` en verde esmeralda / `Sincronizando` con ping ámbar).
+   - **Flanco Izquierdo:** Isotipo `P` gradiente índigo-violeta (`bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500`), subtítulo corporativo `PMO Modular / Executive Suite`, y Chip interactivo de sincronización global unificada (`#btn-sync-status-merged`: diseño monocromático limpio con icono Lucide `RotateCw`, microanimación `animate-spin text-sky-400` y atajo 'R').
    - **Centro Flotante (`left-1/2 -translate-x-1/2`):** Pestañas de acceso directo para las vistas maestras (`Tablero`, `Portafolio`, `Hábitos`, `Finanzas`) con badges monospaciados reactivos alimentados desde Dexie.
-   - **Flanco Derecho:** Botón ámbar `#btn-nav-notas` visible en reposo (`bg-amber-500/[0.12]`), enlace directo a Google Calendar (`#btn-header-calendar`), botón `#btn-header-archivados` con badge y apertura del Drawer lateral deslizable de Archivados (+10 días), botón de recarga manual `#btn-refresh-global`, disparador modal `✨ Asistente IA` y selector de tema Glassmorphism con modos Claro/Oscuro y paletas Slate/Rose.
+   - **Flanco Derecho:** Botón ámbar `#btn-nav-notas` visible en reposo (`bg-amber-500/[0.12]`), enlace directo a Google Calendar (`#btn-header-calendar`), botón `#btn-header-archivados` con badge y apertura del Drawer lateral deslizable de Archivados (+10 días), disparador modal `✨ Asistente IA` y selector de tema Glassmorphism con modos Claro/Oscuro y paletas Slate/Rose.
    - **Drawer de Archivados:** Panel deslizable lateral (`w-full sm:w-[500px] lg:w-[580px]`) con buscador en vivo, filtrado por contexto (`Todos`, `Kanban`, `Portafolio`, `Hábitos`, `Finanzas`) y acción de reactivación en caliente (`db.*.update`).
 2. **`BottomNavMobile.tsx` (Barra Fija Inferior < 768px):**
    - 5 accesos táctiles ergonómicos: `Kanban`, `Hábitos`, botón central elevado `+` (`w-12 h-12` con anillo protector y gradiente), `Notas`, y botón `Más`.

@@ -10,7 +10,13 @@ import {
   validarDoDSubtareas,
   evaluarFiltroTemporal,
   evaluarFiltroPlazo,
-  evaluarFiltroMeta
+  evaluarFiltroMeta,
+  extraerCodigoCanonico,
+  fusionarRegistrosDuplicados,
+  deduplicarPorCodigoCanonico,
+  deduplicarMetasPlanes,
+  deduplicarHitosPlan,
+  deduplicarVinculosMeta
 } from '../entityNormalizer';
 import initialSeed from '../../db/initialSeed.json';
 
@@ -322,5 +328,133 @@ describe('REQ-1TO1-001: EntityNormalizer and Seed Integrity', () => {
       expect(evaluarFiltroMeta(actSinMeta, 'meta-uuid-1', metasPorHabitoId, metasPlanes)).toBe(false);
     });
   });
+
+  describe('REQ-VISTA-360-DEDUPLICATION-AUDIT-89: Deduplicación y Fusión Canónica por codigo_legado', () => {
+    it('extraerCodigoCanonico prioriza codigo_legado e ID_* sobre UUID', () => {
+      expect(extraerCodigoCanonico({ id: 'h0000000-0000-0000-0000-000000000001', codigo_legado: 'WP-001' })).toBe('WP-001');
+      expect(extraerCodigoCanonico({ id: 'uuid-1', ID_Tarea: 'TAR-005' })).toBe('TAR-005');
+      expect(extraerCodigoCanonico({ id: '550e8400-e29b-41d4-a716-446655440000' })).toBe('550E8400-E29B-41D4-A716-446655440000');
+    });
+
+    it('deduplicarPorCodigoCanonico consolida semilla (h0000...) y registro Supabase conservando UUID real y vínculos', () => {
+      const hitoSemilla: Record<string, any> = {
+        id: 'h0000000-0000-0000-0000-000000000001',
+        codigo_legado: 'WP-001',
+        proyecto_id: 'PRO-001',
+        nombre_elemento: 'Diagnóstico Inicial',
+        wbs_code: '1.1',
+        peso_pct: 0.15,
+        sync_status: 'synced'
+      };
+      const hitoRemoto: Record<string, any> = {
+        id: '550e8400-e29b-41d4-a716-446655440010',
+        codigo_legado: 'WP-001',
+        proyecto_id: '550e8400-e29b-41d4-a716-446655440001',
+        nombre_elemento: 'Diagnóstico Inicial Actualizado',
+        peso_ponderado_pct: 15,
+        sync_status: 'synced'
+      };
+
+      const resultado = deduplicarPorCodigoCanonico([hitoSemilla, hitoRemoto]);
+      expect(resultado).toHaveLength(1);
+      expect(resultado[0].id).toBe('550e8400-e29b-41d4-a716-446655440010');
+      expect(resultado[0].codigo_legado).toBe('WP-001');
+      expect(resultado[0].nombre_elemento).toBe('Diagnóstico Inicial Actualizado');
+      expect(resultado[0].wbs_code).toBe('1.1');
+      expect(resultado[0].peso_pct).toBe(0.15);
+    });
+
+    it('fusionarRegistrosDuplicados preserva mutaciones locales con sync_status === pending', () => {
+      const tareaRemota: Record<string, any> = {
+        id: '550e8400-e29b-41d4-a716-446655440020',
+        codigo_legado: 'TAR-001',
+        estado_tarea: '02_Por_Hacer',
+        sync_status: 'synced'
+      };
+      const tareaLocalPending: Record<string, any> = {
+        id: 't0000000-0000-0000-0000-000000000001',
+        codigo_legado: 'TAR-001',
+        proyecto_codigo: 'PRO-001',
+        hito_codigo: 'WP-001',
+        estado_tarea: '04_Completado',
+        sync_status: 'pending'
+      };
+
+      const fusionado = fusionarRegistrosDuplicados(tareaRemota, tareaLocalPending);
+      expect(fusionado.estado_tarea).toBe('04_Completado');
+      expect(fusionado.sync_status).toBe('pending');
+      expect(fusionado.proyecto_codigo).toBe('PRO-001');
+      expect(fusionado.hito_codigo).toBe('WP-001');
+      expect(fusionado.id).toBe('550e8400-e29b-41d4-a716-446655440020');
+    });
+  });
+
+  describe('REQ-HABITOS-METAS-360-FULL-SYSTEM-90: Deduplicación Canónica de Metas, Hitos de Plan y Vínculos', () => {
+    it('deduplicarMetasPlanes unifica metas duplicadas por nombre_meta o codigo_legado conservando el mayor avance', () => {
+      const meta1: Record<string, any> = {
+        id: 'meta-uuid-1',
+        codigo_legado: 'MET-001',
+        nombre_meta: 'Dominar Inglés C1',
+        valor_acumulado_actual: 12,
+        sync_status: 'synced'
+      };
+      const meta2DuplicadaPorNombre: Record<string, any> = {
+        id: 'meta-uuid-2',
+        codigo_legado: 'MET-002',
+        nombre_meta: '  dominar inglés c1  ',
+        valor_acumulado_actual: 25,
+        sync_status: 'pending'
+      };
+
+      const unificadas = deduplicarMetasPlanes([meta1, meta2DuplicadaPorNombre]);
+      expect(unificadas).toHaveLength(1);
+      expect(unificadas[0].valor_acumulado_actual).toBe(25);
+    });
+
+    it('deduplicarHitosPlan consolida hitos duplicados de una misma meta', () => {
+      const hitoA: Record<string, any> = {
+        id: 'hito-1',
+        meta_id: 'meta-uuid-1',
+        codigo_legado: 'MPL-001',
+        titulo_hito: 'Inscribirse al examen',
+        completado: false
+      };
+      const hitoBDuplicado: Record<string, any> = {
+        id: 'hito-2',
+        meta_id: 'meta-uuid-1',
+        codigo_legado: 'MPL-002',
+        titulo_hito: 'inscribirse al examen',
+        completado: true,
+        sync_status: 'pending'
+      };
+
+      const hitosUnicos = deduplicarHitosPlan([hitoA, hitoBDuplicado]);
+      expect(hitosUnicos).toHaveLength(1);
+      expect(hitosUnicos[0].completado).toBe(true);
+    });
+
+    it('deduplicarVinculosMeta elimina vínculos repetidos para el mismo par (meta_id, habito_id)', () => {
+      const v1: Record<string, any> = {
+        id: 'vinc-1',
+        meta_id: 'meta-uuid-1',
+        habito_id: 'act-uuid-1',
+        peso_contribucion: 1,
+        factor_conversion: 1
+      };
+      const v2: Record<string, any> = {
+        id: 'vinc-2',
+        meta_id: 'meta-uuid-1',
+        habito_id: 'act-uuid-1',
+        peso_contribucion: 2.5,
+        factor_conversion: 1.5,
+        sync_status: 'pending'
+      };
+
+      const vinculosUnicos = deduplicarVinculosMeta([v1, v2]);
+      expect(vinculosUnicos).toHaveLength(1);
+      expect(vinculosUnicos[0].peso_contribucion).toBe(2.5);
+    });
+  });
 });
+
 

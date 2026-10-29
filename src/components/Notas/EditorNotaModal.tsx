@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -113,6 +114,21 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
     setModoPreview(false);
   }, [nota, isOpen, initialBlock]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Manejo de Checklist
@@ -217,45 +233,57 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="w-full max-w-3xl bg-[#0D1526] border border-slate-800/80 rounded-2xl shadow-cobalt-3 overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Encabezado del Modal */}
-        <div className="px-5 py-3.5 border-b border-slate-800/60 flex items-center justify-between bg-slate-950/60 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <span className="font-mono text-xs text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20 font-bold">
-              {nota ? nota.codigo_legado : 'NUEVA NOTA'}
-            </span>
-            <span className="text-xs font-semibold text-slate-300">
-              Nota Modular Compuesta
-            </span>
-          </div>
+  return typeof document !== 'undefined'
+    ? createPortal(
+        <div
+          className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              onClose();
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[85vh] flex flex-col bg-[#0B132B] border border-slate-700/70 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 ease-out"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Encabezado del Modal */}
+            <div className="px-5 py-3.5 border-b border-slate-800/60 flex items-center justify-between bg-slate-950/60 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <span className="font-mono text-xs text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-md border border-sky-500/20 font-bold tabular-nums">
+                  {nota ? nota.codigo_legado : 'NUEVA NOTA'}
+                </span>
+                <span className="text-xs font-semibold text-slate-300">
+                  Nota Modular Compuesta
+                </span>
+              </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setEsFijada(!esFijada)}
-              className={`p-1.5 rounded-lg border transition cursor-pointer ${
-                esFijada
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
-              }`}
-              title={esFijada ? 'Desfijar' : 'Fijar arriba'}
-            >
-              <Pin className={`w-4 h-4 ${esFijada ? 'fill-amber-400 rotate-45' : ''}`} />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEsFijada(!esFijada)}
+                  className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                    esFijada
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-slate-200'
+                  }`}
+                  title={esFijada ? 'Desfijar' : 'Fijar arriba'}
+                >
+                  <Pin className={`w-4 h-4 ${esFijada ? 'fill-amber-400 rotate-45' : ''}`} strokeWidth={1.75} />
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+                  title="Cerrar modal (Esc)"
+                >
+                  <X className="w-4 h-4" strokeWidth={1.75} />
+                </button>
+              </div>
+            </div>
 
-        {/* Formulario */}
-        <form onSubmit={handleGuardar} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+            {/* Formulario con scroll interno limpio */}
+            <form onSubmit={handleGuardar} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
           {/* Título de la Nota */}
           <div>
             <input
@@ -685,6 +713,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
         enlacesActuales={enlacesEntidades}
         onGuardarEnlaces={(nuevos) => setEnlacesEntidades(nuevos)}
       />
-    </div>
-  );
+    </div>,
+    document.body
+  ) : null;
 };

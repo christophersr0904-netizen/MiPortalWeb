@@ -10,6 +10,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { VistaGlobal } from '../components/Layout/HeaderMaestro';
+import { syncManager } from '../services/syncManager';
 
 export interface UseGlobalShortcutsOptions {
   vistaActiva: VistaGlobal;
@@ -204,12 +205,22 @@ export function useGlobalShortcuts({
           break;
 
         // ====================================================================
-        // 7. ATAJOS ESENCIALES GLOBALES (C, X, ?)
+        // 7. ATAJOS ESENCIALES GLOBALES (C, R, X, ?)
         // ====================================================================
         case 'c':
           e.preventDefault();
           // Abrir Google Calendar en pestaña nueva con paridad legacy
           window.open('https://calendar.google.com/calendar/r', '_blank', 'noopener,noreferrer');
+          break;
+
+        case 'r':
+          e.preventDefault();
+          // Feedback inmediato en HeaderMaestro y componentes reactivos
+          window.dispatchEvent(new CustomEvent('pmo:sync-triggered'));
+          // Disparar sincronización bidireccional global
+          syncManager.sincronizarTodo().catch((err) => {
+            console.warn('[useGlobalShortcuts] Error en sync al pulsar R:', err);
+          });
           break;
 
         case 'x':

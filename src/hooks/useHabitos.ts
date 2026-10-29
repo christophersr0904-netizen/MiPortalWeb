@@ -3,6 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { ActividadPersonal, SubtareaPaso, CategoriaVida, MetaPlanRecord, HabitoMetaVinculo } from '../types';
 import {
+  deduplicarPorCodigoCanonico,
+  deduplicarMetasPlanes,
+  deduplicarVinculosMeta
+} from '../utils/entityNormalizer';
+import {
   completarActividadPersonalLocal,
   registrarAvanceCuantitativoLocal,
   toggleSubtareaSecuencialLocal,
@@ -21,28 +26,48 @@ export function useHabitos() {
   }, []);
 
   // Consultas reactivas en vivo a Dexie (IndexedDB) con latencia 0 ms
-  const todasLasActividades = useLiveQuery(
+  const rawTodasLasActividades = useLiveQuery(
     () => db.actividades_personales.toArray(),
     [],
     [] as ActividadPersonal[]
   );
 
-  const todasLasSubtareas = useLiveQuery(
+  const rawTodasLasSubtareas = useLiveQuery(
     () => db.subtareas_pasos.toArray(),
     [],
     [] as SubtareaPaso[]
   );
 
-  const vinculos = useLiveQuery(
+  const rawVinculos = useLiveQuery(
     () => db.habitos_metas_vinculos.toArray(),
     [],
     [] as HabitoMetaVinculo[]
   );
 
-  const metasPlanes = useLiveQuery(
+  const rawMetasPlanes = useLiveQuery(
     () => db.metas_planes.toArray(),
     [],
     [] as MetaPlanRecord[]
+  );
+
+  const todasLasActividades = useMemo(
+    () => deduplicarPorCodigoCanonico(rawTodasLasActividades),
+    [rawTodasLasActividades]
+  );
+
+  const todasLasSubtareas = useMemo(
+    () => deduplicarPorCodigoCanonico(rawTodasLasSubtareas),
+    [rawTodasLasSubtareas]
+  );
+
+  const metasPlanes = useMemo(
+    () => deduplicarMetasPlanes(rawMetasPlanes),
+    [rawMetasPlanes]
+  );
+
+  const vinculos = useMemo(
+    () => deduplicarVinculosMeta(rawVinculos),
+    [rawVinculos]
   );
 
   // Mapeo O(1) de MetaPlanRecord por habito_id

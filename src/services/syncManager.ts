@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { db } from '../db/db';
+import { db, sanearDuplicadosDexie } from '../db/db';
+import { extraerCodigoCanonico, fusionarRegistrosDuplicados } from '../utils/entityNormalizer';
 import {
   DEFAULT_USER_ID,
   isUuid,
@@ -523,6 +524,8 @@ class SyncManager {
       } else {
         this.setSyncState('synced');
       }
+
+      this.guardarSnapshotEnPuenteLocal().catch(() => {});
     } catch (err) {
       console.error('[SyncManager] Error general en orquestación de sincronización:', err);
       this.setSyncState('error');
@@ -571,12 +574,55 @@ class SyncManager {
           await (refDexie as any).where('sync_status').equals('pending').primaryKeys()
         );
 
-        const registrosParaActualizar = data
-          .filter((item: any) => item && item.id && !idsPendientesLocales.has(item.id))
-          .map((item: any) => ({
+        // Indexar registros locales actuales por código canónico (codigo_legado) para evitar duplicar semillas
+        const mapaLocalPorCodigo = new Map<string, any>();
+        try {
+          if (typeof (refDexie as any).toArray === 'function') {
+            const actuales = await (refDexie as any).toArray();
+            if (Array.isArray(actuales)) {
+              for (const loc of actuales) {
+                const cod = extraerCodigoCanonico(loc);
+                if (cod) mapaLocalPorCodigo.set(cod, loc);
+              }
+            }
+          }
+        } catch {
+          // Tolerancia ante mocks parciales en pruebas unitarias
+        }
+
+        const idsObsoletosAEliminar: string[] = [];
+        const registrosParaActualizar: any[] = [];
+
+        for (const item of data) {
+          if (!item || !item.id || idsPendientesLocales.has(item.id)) continue;
+
+          const codRemoto = extraerCodigoCanonico(item);
+          const existentePorCodigo = codRemoto ? mapaLocalPorCodigo.get(codRemoto) : undefined;
+
+          if (existentePorCodigo && existentePorCodigo.sync_status === 'pending') {
+            continue;
+          }
+
+          let registroFinal = {
             ...item,
             sync_status: 'synced' as const
-          }));
+          };
+
+          if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
+            registroFinal = {
+              ...fusionarRegistrosDuplicados(existentePorCodigo, registroFinal),
+              id: item.id,
+              sync_status: 'synced' as const
+            };
+            idsObsoletosAEliminar.push(String(existentePorCodigo.id));
+          }
+
+          registrosParaActualizar.push(registroFinal);
+        }
+
+        if (idsObsoletosAEliminar.length > 0 && typeof (refDexie as any).bulkDelete === 'function') {
+          await (refDexie as any).bulkDelete(idsObsoletosAEliminar);
+        }
 
         if (registrosParaActualizar.length > 0) {
           await (refDexie as any).bulkPut(registrosParaActualizar);
@@ -586,6 +632,10 @@ class SyncManager {
         console.warn(`[SyncManager] Error al sincronizar tabla descendente ${tabla}:`, err);
         summary.fallidos++;
       }
+    }
+
+    if (summary.descargados > 0) {
+      await sanearDuplicadosDexie();
     }
 
     return summary;
@@ -623,14 +673,17 @@ class SyncManager {
     if (typeof fetch === 'undefined') return false;
 
     try {
-      const [tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos] = await Promise.all([
+      const [tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos, metas, hitosPlan, vinculosMeta] = await Promise.all([
         db.tareas.toArray(),
         db.actividades_personales.toArray(),
         db.gastos.toArray(),
         db.ingresos.toArray(),
         db.cuotas.toArray(),
         db.proyectos.toArray(),
-        db.hitos_wbs.toArray()
+        db.hitos_wbs.toArray(),
+        db.metas_planes.toArray(),
+        db.planes_accion_hitos.toArray(),
+        db.habitos_metas_vinculos.toArray()
       ]);
 
       const payload = {
@@ -643,7 +696,10 @@ class SyncManager {
           ingresos,
           cuotas,
           proyectos,
-          hitos
+          hitos,
+          metas,
+          hitosPlan,
+          vinculosMeta
         }
       };
 
@@ -687,7 +743,7 @@ class SyncManager {
       const json = await res.json();
       if (!json || !json.data) return false;
 
-      const { tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos } = json.data;
+      const { tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos, metas, hitosPlan, vinculosMeta } = json.data;
 
       await db.transaction('rw', [
         db.tareas,
@@ -696,7 +752,10 @@ class SyncManager {
         db.ingresos,
         db.cuotas,
         db.proyectos,
-        db.hitos_wbs
+        db.hitos_wbs,
+        db.metas_planes,
+        db.planes_accion_hitos,
+        db.habitos_metas_vinculos
       ], async () => {
         if (Array.isArray(tareas) && tareas.length > 0) {
           const pendingIds = new Set(await db.tareas.where('sync_status').equals('pending').primaryKeys());
@@ -733,8 +792,24 @@ class SyncManager {
           const toPut = hitos.filter((h) => h.id && !pendingIds.has(h.id));
           if (toPut.length > 0) await db.hitos_wbs.bulkPut(toPut);
         }
+        if (Array.isArray(metas) && metas.length > 0) {
+          const pendingIds = new Set(await db.metas_planes.where('sync_status').equals('pending').primaryKeys());
+          const toPut = metas.filter((m) => m.id && !pendingIds.has(m.id));
+          if (toPut.length > 0) await db.metas_planes.bulkPut(toPut);
+        }
+        if (Array.isArray(hitosPlan) && hitosPlan.length > 0) {
+          const pendingIds = new Set(await db.planes_accion_hitos.where('sync_status').equals('pending').primaryKeys());
+          const toPut = hitosPlan.filter((hp) => hp.id && !pendingIds.has(hp.id));
+          if (toPut.length > 0) await db.planes_accion_hitos.bulkPut(toPut);
+        }
+        if (Array.isArray(vinculosMeta) && vinculosMeta.length > 0) {
+          const pendingIds = new Set(await db.habitos_metas_vinculos.where('sync_status').equals('pending').primaryKeys());
+          const toPut = vinculosMeta.filter((vm) => vm.id && !pendingIds.has(vm.id));
+          if (toPut.length > 0) await db.habitos_metas_vinculos.bulkPut(toPut);
+        }
       });
 
+      await sanearDuplicadosDexie();
       return true;
     } catch {
       return false;

@@ -11,11 +11,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { completarActividadPersonalLocal } from '../services/habitosService';
-import type { TareaRecord, ActividadPersonal, GastoRecord, CuotaRecord } from '../types';
+import { completarActividadPersonalLocal, calcularProximaFechaValida } from '../services/habitosService';
+import { syncManager } from '../services/syncManager';
+import { esElementoArchivado, getProp } from '../utils/entityNormalizer';
+import type { TareaRecord, ActividadPersonal, GastoRecord, IngresoRecord, CuotaRecord } from '../types';
 
 export type HorizonteAgenda = 'HOY' | 'MANANA' | 'SEMANA';
-export type TipoItemAgenda = 'TAREA' | 'HABITO' | 'GASTO' | 'CUOTA';
+export type TipoItemAgenda = 'TAREA' | 'HABITO' | 'GASTO' | 'INGRESO' | 'CUOTA';
 export type EstadoRitmoItem = 'VENCIDO_PASADO' | 'FOCUS_ACTUAL' | 'PROXIMO_EN_ESPERA';
 
 export interface DailyScheduleItem {
@@ -32,10 +34,19 @@ export interface DailyScheduleItem {
   categoria?: string;
   prioridad?: string;
   nivelEnergia?: string;
+  proyectoCodigo?: string;
   monto?: number;
   moneda?: string;
+  montoFormateado?: string;
+  estadoEntidad?: string;
   estadoRitmo: EstadoRitmoItem;
-  raw: TareaRecord | ActividadPersonal | GastoRecord | CuotaRecord;
+  raw: TareaRecord | ActividadPersonal | GastoRecord | IngresoRecord | CuotaRecord;
+}
+
+export function formatearMontoMoneda(monto: number, moneda: string = 'PEN'): string {
+  const mNorm = (moneda || 'PEN').toUpperCase();
+  const simbolo = mNorm === 'USD' ? '$' : mNorm === 'EUR' ? '€' : 'S/';
+  return `${simbolo} ${(Number(monto) || 0).toFixed(2)}`;
 }
 
 export interface MetricRitmoHorario {
@@ -126,14 +137,15 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
 
   // 2. Consulta reactiva unificada a Dexie
   const datosDexie = useLiveQuery(async () => {
-    const [actividades, tareas, gastos, cuotas] = await Promise.all([
+    const [actividades, tareas, gastos, ingresos, cuotas] = await Promise.all([
       db.actividades_personales.toArray(),
       db.tareas.toArray(),
       db.gastos.toArray(),
+      db.ingresos.toArray(),
       db.cuotas.toArray()
     ]);
 
-    return { actividades, tareas, gastos, cuotas };
+    return { actividades, tareas, gastos, ingresos, cuotas };
   }, []);
 
   // 3. Normalización y Ritmo Dinámico
@@ -143,37 +155,63 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
 
     // --- A. TAREAS WBS ---
     for (const t of datosDexie.tareas) {
-      if (t.estado_tarea === '05_Archivado') continue;
-      const fProg = t.fecha_programada ? t.fecha_programada.split('T')[0] : '';
-      if (!fProg || !fechasSet.has(fProg)) continue;
+      const estadoRaw = String(getProp(t, 'estado_tarea', 'Estado_Tarea', 'estado', 'Estado') ?? '02_Por_Hacer');
+      if (estadoRaw === '05_Archivado' || esElementoArchivado(t, 'tareas')) continue;
+      const fProgRaw = String(getProp(t, 'fecha_programada', 'Fecha_Programada') ?? '');
+      const fProg = fProgRaw ? fProgRaw.split('T')[0] : '';
+      if (!fProg) continue;
 
-      const horaIni = t.hora_inicio?.trim() || '09:00';
-      const durMin = Math.round((t.horas_estimadas || 1) * 60);
+      const completado = estadoRaw === '04_Completado' || estadoRaw.includes('Completad');
+      const estaEnMora = fProg < fechaActual && !completado;
+      const fechaCompTarea = String(getProp(t, 'fecha_completado', 'Fecha_Completado') ?? '');
+      const completadoHoy =
+        completado &&
+        (fProg === fechaActual ||
+          Boolean(fechaCompTarea && fechaCompTarea.startsWith(fechaActual)) ||
+          Boolean(t.updated_at && t.updated_at.startsWith(fechaActual)));
+
+      const incluirEnHoy = fechasSet.has(fechaActual) && (fProg === fechaActual || estaEnMora || completadoHoy);
+      const incluirEnHorizonte = fechasSet.has(fProg) || incluirEnHoy;
+      if (!incluirEnHorizonte) continue;
+
+      const fechaEfectiva = incluirEnHoy && !fechasSet.has(fProg) ? fechaActual : fProg;
+      const horaIni = String(getProp(t, 'hora_inicio', 'Hora_Inicio') ?? '09:00').trim() || '09:00';
+      const horasEst = Number(getProp(t, 'horas_estimadas', 'Horas_Estimadas') ?? 1) || 1;
+      const durMin = Math.max(15, Math.round(horasEst * 60));
       const horaFin = sumarMinutosAHora(horaIni, durMin);
-      const completado = t.estado_tarea === '04_Completado';
 
       // Estado del ritmo
       let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
-      if (fProg < fechaActual || (fProg === fechaActual && horaFin < horaActual)) {
+      if (fProg < fechaActual || (fechaEfectiva === fechaActual && horaFin < horaActual)) {
         estadoRitmo = 'VENCIDO_PASADO';
-      } else if (fProg === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
+      } else if (fechaEfectiva === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
         estadoRitmo = 'FOCUS_ACTUAL';
       }
+
+      const codigoLegado = String(getProp(t, 'codigo_legado', 'ID_Tarea', 'idTarea') ?? 'TAR-000');
+      const nombreTarea = String(
+        getProp(t, 'nombre_tarea_actividad', 'Nombre_Tarea_Actividad', 'nombre_tarea', 'nombre') ?? 'Tarea de Proyecto'
+      );
+      const proyCod = String(getProp(t, 'proyecto_codigo', 'ID_Proyecto', 'idProyecto') ?? 'General');
+      const prioRaw = String(getProp(t, 'prioridad_eisenhower', 'Prioridad_Eisenhower', 'prioridad') ?? '02_P2_Media');
+      const prioLimpia = prioRaw.replace(/^\d+_/, '').replace(/_/g, ' ');
 
       list.push({
         id: t.id,
         tipo: 'TAREA',
-        codigoLegado: t.codigo_legado,
-        titulo: t.nombre_tarea_actividad,
-        subtitulo: `${t.codigo_legado} · ${t.proyecto_codigo || 'General'}`,
-        fecha: fProg,
+        codigoLegado,
+        titulo: nombreTarea,
+        subtitulo: `${codigoLegado} · ${proyCod} · ${prioLimpia}`,
+        fecha: fechaEfectiva,
         horaInicio: horaIni,
         horaFin: horaFin,
         duracionMinutos: durMin,
         completado,
-        categoria: t.proyecto_codigo || 'Proyecto',
-        prioridad: t.prioridad_eisenhower || '02_P2_Media',
-        nivelEnergia: t.nivel_energia_requerido || 'Media_Operativa',
+        categoria: proyCod,
+        proyectoCodigo: proyCod,
+        prioridad: prioLimpia,
+        nivelEnergia: String(getProp(t, 'nivel_energia_requerido', 'Nivel_Energia_Requerido') ?? 'Media_Operativa'),
+        estadoEntidad: completado ? 'COMPLETADA' : 'PENDIENTE',
         estadoRitmo,
         raw: t
       });
@@ -181,107 +219,295 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
 
     // --- B. ACTIVIDADES PERSONALES / HÁBITOS ---
     for (const a of datosDexie.actividades) {
-      if (a.estado === '05_Archivado') continue;
-      const fProg = a.fecha_programada ? a.fecha_programada.split('T')[0] : '';
-      if (!fProg || !fechasSet.has(fProg)) continue;
+      const estadoAct = String(getProp(a, 'estado', 'Estado') ?? '02_Por_Hacer');
+      if (estadoAct === '05_Archivado' || esElementoArchivado(a, 'actividades')) continue;
+      const fProgRaw = String(getProp(a, 'fecha_programada', 'Fecha_Programada') ?? '');
+      const fProg = fProgRaw ? fProgRaw.split('T')[0] : '';
 
-      const horaIni = a.hora_inicio?.trim() || '07:00';
-      const durMin = Math.round((a.duracion_horas || 0.5) * 60);
-      const horaFin = sumarMinutosAHora(horaIni, durMin);
-      const completado = a.estado === '04_Completado';
+      const tieneRecurrencia = Boolean(
+        (a.frecuencia_ciclo && a.frecuencia_ciclo !== 'NINGUNA') ||
+        (a.regla_repeticion && a.regla_repeticion.trim() !== '')
+      );
+      const esRutinaria = a.tipo_compromiso !== 'PUNTUAL' || tieneRecurrencia;
 
-      let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
-      if (fProg < fechaActual || (fProg === fechaActual && horaFin < horaActual)) {
-        estadoRitmo = 'VENCIDO_PASADO';
-      } else if (fProg === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
-        estadoRitmo = 'FOCUS_ACTUAL';
+      const completadoHoy =
+        a.ultima_fecha_completado === fechaActual ||
+        Boolean(Array.isArray(a.historial_fechas) && a.historial_fechas.includes(fechaActual)) ||
+        (estadoAct === '04_Completado' && fProg === fechaActual);
+
+      const estaEnMora = Boolean(fProg && fProg < fechaActual && estadoAct !== '04_Completado' && !completadoHoy);
+
+      // Determinar en qué fechas del horizonte seleccionado debe aparecer este hábito
+      const fechasAplicables: string[] = [];
+
+      for (const fHorizonte of fechasHorizonte) {
+        if (fHorizonte === fechaActual) {
+          const aplicaPorRecurrenciaHoy =
+            esRutinaria &&
+            calcularProximaFechaValida(fHorizonte, a.frecuencia_ciclo, a.regla_repeticion) === fHorizonte;
+
+          if (fProg === fechaActual || estaEnMora || completadoHoy || aplicaPorRecurrenciaHoy) {
+            fechasAplicables.push(fHorizonte);
+          }
+        } else {
+          const aplicaPorRecurrenciaFutura =
+            esRutinaria &&
+            a.frecuencia_ciclo &&
+            a.frecuencia_ciclo !== 'NINGUNA' &&
+            calcularProximaFechaValida(fHorizonte, a.frecuencia_ciclo, a.regla_repeticion) === fHorizonte;
+
+          if (fProg === fHorizonte || aplicaPorRecurrenciaFutura) {
+            fechasAplicables.push(fHorizonte);
+          }
+        }
       }
 
-      list.push({
-        id: a.id,
-        tipo: 'HABITO',
-        codigoLegado: a.codigo_legado,
-        titulo: a.nombre_actividad,
-        subtitulo: `${a.codigo_legado} · ${a.categoria_vida || 'Hábito'}`,
-        fecha: fProg,
-        horaInicio: horaIni,
-        horaFin: horaFin,
-        duracionMinutos: durMin,
-        completado,
-        categoria: a.categoria_vida,
-        estadoRitmo,
-        raw: a
-      });
+      if (fechasAplicables.length === 0) continue;
+
+      const horaIni = String(getProp(a, 'hora_inicio', 'Hora_Inicio') ?? '07:00').trim() || '07:00';
+      const durHoras = Number(getProp(a, 'duracion_horas', 'Duracion_Horas') ?? 0.5) || 0.5;
+      const durMin = Math.round(durHoras * 60);
+      const horaFin = sumarMinutosAHora(horaIni, durMin);
+      const codigoLegado = String(getProp(a, 'codigo_legado', 'ID_Actividad') ?? 'ACT-000');
+      const nombreHabito = String(
+        getProp(a, 'nombre_actividad', 'Nombre_Actividad', 'Nombre', 'nombre') ?? 'Hábito Personal'
+      );
+      const catVida = String(getProp(a, 'categoria_vida', 'Categoria_Vida') ?? 'SALUD_DEPORTE');
+      const catVidaLimpia = catVida.replace(/_/g, ' ');
+
+      for (const fechaItem of fechasAplicables) {
+        const completadoEnFecha =
+          estadoAct === '04_Completado' ||
+          (fechaItem === fechaActual && completadoHoy) ||
+          Boolean(Array.isArray(a.historial_fechas) && a.historial_fechas.includes(fechaItem));
+
+        let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
+        if (
+          (fechaItem === fechaActual && estaEnMora && horaFin < horaActual) ||
+          (fechaItem === fechaActual && horaFin < horaActual && !completadoEnFecha)
+        ) {
+          estadoRitmo = 'VENCIDO_PASADO';
+        } else if (fechaItem === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
+          estadoRitmo = 'FOCUS_ACTUAL';
+        }
+
+        list.push({
+          id: fechasAplicables.length > 1 ? `${a.id}_${fechaItem}` : a.id,
+          tipo: 'HABITO',
+          codigoLegado,
+          titulo: nombreHabito,
+          subtitulo: `${codigoLegado} · ${catVidaLimpia} · ${durMin} min`,
+          fecha: fechaItem,
+          horaInicio: horaIni,
+          horaFin: horaFin,
+          duracionMinutos: durMin,
+          completado: completadoEnFecha,
+          categoria: catVidaLimpia,
+          estadoEntidad: completadoEnFecha ? 'CUMPLIDO' : 'PENDIENTE',
+          estadoRitmo,
+          raw: a
+        });
+      }
     }
 
     // --- C. GASTOS COMPROMETIDOS ---
     for (const g of datosDexie.gastos) {
-      const fGasto = g.fecha_gasto ? g.fecha_gasto.split('T')[0] : '';
-      if (!fGasto || !fechasSet.has(fGasto)) continue;
-      // Excluir si ya fue pagado
-      if (g.estado_pago === 'PAGADO') continue;
+      if (esElementoArchivado(g, 'gastos')) continue;
+      const fGastoRaw = String(getProp(g, 'fecha_gasto', 'Fecha_Gasto', 'fecha_registro', 'Fecha_Registro') ?? '');
+      const fGasto = fGastoRaw ? fGastoRaw.split('T')[0] : '';
+      if (!fGasto) continue;
 
-      const horaIni = '08:00'; // Slot contable diurno
+      const estadoRaw = String(
+        getProp(g, 'estado_pago', 'Estado_Pago', 'estado', 'Estado', 'modalidad', 'Modalidad') ?? 'PENDIENTE'
+      ).toUpperCase();
+      const completado = estadoRaw === 'PAGADO';
+      const estaEnMora = fGasto < fechaActual && !completado;
+      const completadoHoy =
+        completado &&
+        (fGasto === fechaActual || Boolean(g.updated_at && g.updated_at.startsWith(fechaActual)));
+
+      const incluirEnHoy = fechasSet.has(fechaActual) && (fGasto === fechaActual || estaEnMora || completadoHoy);
+      const incluirEnHorizonte = fechasSet.has(fGasto) || incluirEnHoy;
+      if (!incluirEnHorizonte) continue;
+
+      const fechaEfectiva = incluirEnHoy && !fechasSet.has(fGasto) ? fechaActual : fGasto;
+      const horaIni = '08:00'; // Slot contable diurno gastos
       const horaFin = '08:30';
-      const completado = false;
 
       let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
-      if (fGasto < fechaActual || (fGasto === fechaActual && horaFin < horaActual)) {
+      if (fGasto < fechaActual || (fechaEfectiva === fechaActual && horaFin < horaActual)) {
         estadoRitmo = 'VENCIDO_PASADO';
-      } else if (fGasto === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
+      } else if (fechaEfectiva === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
         estadoRitmo = 'FOCUS_ACTUAL';
       }
+
+      const codigoLegado = String(getProp(g, 'codigo_legado', 'ID_Gasto', 'ID_Transaccion') ?? 'GAS-000');
+      const concepto = String(
+        getProp(g, 'descripcion_gasto', 'Descripcion_Gasto', 'concepto', 'Concepto', 'descripcion', 'Descripcion', 'nombre_gasto') ??
+          'Gasto Programado'
+      );
+      const categoriaGasto = String(
+        getProp(g, 'categoria_gasto', 'Categoria_Gasto', 'categoria', 'Categoria') ?? 'Finanzas'
+      ).replace(/_/g, ' ');
+      const moneda = String(getProp(g, 'moneda_original', 'Moneda_Original', 'moneda') ?? 'PEN').toUpperCase();
+      const montoOrig = Number(getProp(g, 'monto_original', 'Monto_Original') ?? 0);
+      const montoPen = Number(getProp(g, 'monto_pen', 'Monto_PEN', 'Monto_Moneda_Base') ?? 0);
+      const montoEfectivo = moneda === 'USD' && montoOrig > 0 ? montoOrig : montoPen > 0 ? montoPen : montoOrig;
+      const montoFormateado = formatearMontoMoneda(montoEfectivo, moneda);
+      const estadoEntidad = completado ? 'PAGADO' : 'PENDIENTE';
 
       list.push({
         id: g.id,
         tipo: 'GASTO',
-        codigoLegado: g.codigo_legado,
-        titulo: g.descripcion_gasto || 'Pago Programado',
-        subtitulo: `${g.codigo_legado} · S/ ${(g.monto_pen || 0).toFixed(2)}`,
-        fecha: fGasto,
+        codigoLegado,
+        titulo: concepto,
+        subtitulo: `${categoriaGasto} · ${montoFormateado} · ${estadoEntidad}`,
+        fecha: fechaEfectiva,
         horaInicio: horaIni,
         horaFin: horaFin,
         duracionMinutos: 30,
         completado,
-        categoria: g.categoria_gasto || 'Finanzas',
-        monto: g.monto_pen,
-        moneda: g.moneda_original || 'PEN',
+        categoria: categoriaGasto,
+        monto: montoEfectivo,
+        moneda,
+        montoFormateado,
+        estadoEntidad,
         estadoRitmo,
         raw: g
       });
     }
 
-    // --- D. CUOTAS FINANCIERAS ---
-    for (const c of datosDexie.cuotas) {
-      const fVenc = c.fecha_vencimiento ? c.fecha_vencimiento.split('T')[0] : '';
-      if (!fVenc || !fechasSet.has(fVenc)) continue;
-      if (c.estado_cuota === 'PAGADO') continue;
+    // --- D. INGRESOS PROGRAMADOS / POR COBRAR ---
+    for (const ing of datosDexie.ingresos) {
+      if (esElementoArchivado(ing, 'ingresos')) continue;
+      const fIngRaw = String(getProp(ing, 'fecha_ingreso', 'Fecha_Ingreso', 'fecha_registro', 'Fecha_Registro') ?? '');
+      const fIngreso = fIngRaw ? fIngRaw.split('T')[0] : '';
+      if (!fIngreso) continue;
 
-      const horaIni = '08:30';
-      const horaFin = '09:00';
-      const completado = false;
+      const estadoRaw = String(
+        getProp(ing, 'estado_cobro', 'Estado_Cobro', 'estado_pago', 'Estado_Pago', 'estado', 'Estado', 'modalidad', 'Modalidad') ??
+          'PENDIENTE'
+      ).toUpperCase();
+      const completado = estadoRaw === 'COBRADO' || estadoRaw === 'PAGADO';
+      const estaEnMora = fIngreso < fechaActual && !completado;
+      const completadoHoy =
+        completado &&
+        (fIngreso === fechaActual || Boolean(ing.updated_at && ing.updated_at.startsWith(fechaActual)));
+
+      const incluirEnHoy = fechasSet.has(fechaActual) && (fIngreso === fechaActual || estaEnMora || completadoHoy);
+      const incluirEnHorizonte = fechasSet.has(fIngreso) || incluirEnHoy;
+      if (!incluirEnHorizonte) continue;
+
+      const fechaEfectiva = incluirEnHoy && !fechasSet.has(fIngreso) ? fechaActual : fIngreso;
+      const horaIni = '10:00'; // Slot contable diurno ingresos
+      const horaFin = '10:30';
 
       let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
-      if (fVenc < fechaActual || (fVenc === fechaActual && horaFin < horaActual)) {
+      if (fIngreso < fechaActual || (fechaEfectiva === fechaActual && horaFin < horaActual)) {
         estadoRitmo = 'VENCIDO_PASADO';
-      } else if (fVenc === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
+      } else if (fechaEfectiva === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
         estadoRitmo = 'FOCUS_ACTUAL';
       }
+
+      const codigoLegado = String(getProp(ing, 'codigo_legado', 'ID_Ingreso', 'ID_Transaccion') ?? 'ING-000');
+      const concepto = String(
+        getProp(
+          ing,
+          'descripcion_ingreso',
+          'Descripcion_Ingreso',
+          'concepto',
+          'Concepto',
+          'descripcion',
+          'Descripcion',
+          'fuente_cliente',
+          'Origen_Fuente'
+        ) ?? 'Ingreso Programado'
+      );
+      const categoriaIngreso = String(
+        getProp(ing, 'categoria_ingreso', 'Categoria_Ingreso', 'categoria', 'Categoria', 'origen_fuente', 'Origen_Fuente') ??
+          'Ingresos'
+      ).replace(/_/g, ' ');
+      const moneda = String(getProp(ing, 'moneda_original', 'Moneda_Original', 'moneda') ?? 'PEN').toUpperCase();
+      const montoOrig = Number(getProp(ing, 'monto_original', 'Monto_Original') ?? 0);
+      const montoPen = Number(getProp(ing, 'monto_pen', 'Monto_PEN', 'Monto_Moneda_Base') ?? 0);
+      const montoEfectivo = moneda === 'USD' && montoOrig > 0 ? montoOrig : montoPen > 0 ? montoPen : montoOrig;
+      const montoFormateado = formatearMontoMoneda(montoEfectivo, moneda);
+      const estadoEntidad = completado ? 'COBRADO' : 'PENDIENTE';
+
+      list.push({
+        id: ing.id,
+        tipo: 'INGRESO',
+        codigoLegado,
+        titulo: concepto,
+        subtitulo: `${categoriaIngreso} · ${montoFormateado} · ${estadoEntidad}`,
+        fecha: fechaEfectiva,
+        horaInicio: horaIni,
+        horaFin: horaFin,
+        duracionMinutos: 30,
+        completado,
+        categoria: categoriaIngreso,
+        monto: montoEfectivo,
+        moneda,
+        montoFormateado,
+        estadoEntidad,
+        estadoRitmo,
+        raw: ing
+      });
+    }
+
+    // --- E. CUOTAS FINANCIERAS ---
+    for (const c of datosDexie.cuotas) {
+      const fVencRaw = String(getProp(c, 'fecha_vencimiento', 'Fecha_Vencimiento') ?? '');
+      const fVenc = fVencRaw ? fVencRaw.split('T')[0] : '';
+      if (!fVenc) continue;
+
+      const estadoRaw = String(getProp(c, 'estado_cuota', 'Estado_Cuota', 'estado', 'Estado') ?? 'PENDIENTE').toUpperCase();
+      const completado = estadoRaw === 'PAGADO';
+      const estaEnMora = fVenc < fechaActual && !completado;
+      const completadoHoy =
+        completado &&
+        (fVenc === fechaActual || Boolean(c.updated_at && c.updated_at.startsWith(fechaActual)));
+
+      const incluirEnHoy = fechasSet.has(fechaActual) && (fVenc === fechaActual || estaEnMora || completadoHoy);
+      const incluirEnHorizonte = fechasSet.has(fVenc) || incluirEnHoy;
+      if (!incluirEnHorizonte) continue;
+
+      const fechaEfectiva = incluirEnHoy && !fechasSet.has(fVenc) ? fechaActual : fVenc;
+      const horaIni = '08:30';
+      const horaFin = '09:00';
+
+      let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
+      if (fVenc < fechaActual || (fechaEfectiva === fechaActual && horaFin < horaActual)) {
+        estadoRitmo = 'VENCIDO_PASADO';
+      } else if (fechaEfectiva === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
+        estadoRitmo = 'FOCUS_ACTUAL';
+      }
+
+      const codigoLegado = String(getProp(c, 'codigo_legado', 'ID_Cuota') ?? 'CUO-000');
+      const numCuota = Number(getProp(c, 'numero_cuota', 'Numero_Cuota') ?? 1);
+      const totCuotas = Number(getProp(c, 'total_cuotas', 'Total_Cuotas') ?? 1);
+      const entidad = String(getProp(c, 'entidad_financiera', 'Entidad_Financiera') ?? 'Entidad');
+      const moneda = String(getProp(c, 'moneda', 'Moneda') ?? 'PEN').toUpperCase();
+      const montoCuota = Number(getProp(c, 'monto_cuota', 'Monto_Cuota') ?? 0);
+      const montoFormateado = formatearMontoMoneda(montoCuota, moneda);
+      const estadoEntidad = completado ? 'PAGADO' : 'PENDIENTE';
 
       list.push({
         id: c.id,
         tipo: 'CUOTA',
-        codigoLegado: c.codigo_legado,
-        titulo: `Cuota ${c.numero_cuota}/${c.total_cuotas} · ${c.entidad_financiera}`,
-        subtitulo: `${c.codigo_legado} · ${c.moneda} ${(c.monto_cuota || 0).toFixed(2)}`,
-        fecha: fVenc,
+        codigoLegado,
+        titulo: `Cuota ${numCuota}/${totCuotas} · ${entidad}`,
+        subtitulo: `Cuota Crédito · ${montoFormateado} · ${estadoEntidad}`,
+        fecha: fechaEfectiva,
         horaInicio: horaIni,
         horaFin: horaFin,
         duracionMinutos: 30,
         completado,
         categoria: 'Cuota Crédito',
-        monto: c.monto_cuota,
-        moneda: c.moneda,
+        monto: montoCuota,
+        moneda,
+        montoFormateado,
+        estadoEntidad,
         estadoRitmo,
         raw: c
       });
@@ -293,7 +519,7 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       if (cmpFecha !== 0) return cmpFecha;
       return a.horaInicio.localeCompare(b.horaInicio);
     });
-  }, [datosDexie, fechasSet, fechaActual, horaActual]);
+  }, [datosDexie, fechasHorizonte, fechasSet, fechaActual, horaActual]);
 
   // 4. Métricas de Ritmo Horario
   const metricas: MetricRitmoHorario = useMemo(() => {
@@ -339,33 +565,87 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
     };
   }, [items, fechaActual, horaActual]);
 
-  // 5. Toggle de completado rápido Local-First
+  // 5. Toggle de completado rápido Local-First para cualquier tipo de ente
   const toggleCompletar = useCallback(async (item: DailyScheduleItem) => {
     const nowIso = new Date().toISOString();
     const marcarCompletado = !item.completado;
+    const realId = (item.raw as any)?.id || item.id.split('_')[0];
 
     if (item.tipo === 'TAREA') {
       const nuevoEstado = marcarCompletado ? '04_Completado' : '02_Por_Hacer';
-      await db.tareas.update(item.id, {
+      await db.tareas.update(realId, {
         estado_tarea: nuevoEstado,
+        Estado_Tarea: nuevoEstado,
+        fecha_completado: marcarCompletado ? fechaActual : '',
+        sync_status: 'pending',
         updated_at: nowIso
-      });
+      } as any);
     } else if (item.tipo === 'HABITO') {
-      await completarActividadPersonalLocal(item.raw as ActividadPersonal, marcarCompletado);
+      const actRaw = (await db.actividades_personales.get(realId)) || (item.raw as ActividadPersonal);
+      const res = await completarActividadPersonalLocal(actRaw, marcarCompletado);
+      const fechaTarget = item.fecha || fechaActual;
+      const histActual = Array.isArray(res.actividadActualizada.historial_fechas)
+        ? [...res.actividadActualizada.historial_fechas]
+        : [];
+      const nuevoHist = marcarCompletado
+        ? histActual.includes(fechaTarget)
+          ? histActual
+          : [...histActual, fechaTarget]
+        : histActual.filter((f) => f !== fechaTarget);
+
+      await db.actividades_personales.update(realId, {
+        historial_fechas: nuevoHist,
+        ultima_fecha_completado:
+          marcarCompletado
+            ? fechaTarget === fechaActual
+              ? fechaActual
+              : res.actividadActualizada.ultima_fecha_completado || fechaTarget
+            : fechaTarget === fechaActual
+            ? ''
+            : res.actividadActualizada.ultima_fecha_completado,
+        Estado: res.actividadActualizada.estado,
+        sync_status: 'pending',
+        updated_at: nowIso
+      } as any);
     } else if (item.tipo === 'GASTO') {
       const nuevoEstado = marcarCompletado ? 'PAGADO' : 'PENDIENTE';
-      await db.gastos.update(item.id, {
+      await db.gastos.update(realId, {
         estado_pago: nuevoEstado,
+        Estado_Pago: nuevoEstado,
+        estado: nuevoEstado,
+        Estado: nuevoEstado,
+        modalidad: nuevoEstado,
+        Modalidad: nuevoEstado,
+        sync_status: 'pending',
         updated_at: nowIso
-      });
+      } as any);
+    } else if (item.tipo === 'INGRESO') {
+      const nuevoEstado = marcarCompletado ? 'COBRADO' : 'PENDIENTE';
+      await db.ingresos.update(realId, {
+        estado_cobro: nuevoEstado,
+        Estado_Cobro: nuevoEstado,
+        estado: nuevoEstado,
+        Estado: nuevoEstado,
+        modalidad: nuevoEstado,
+        Modalidad: nuevoEstado,
+        sync_status: 'pending',
+        updated_at: nowIso
+      } as any);
     } else if (item.tipo === 'CUOTA') {
       const nuevoEstado = marcarCompletado ? 'PAGADO' : 'PENDIENTE';
-      await db.cuotas.update(item.id, {
+      await db.cuotas.update(realId, {
         estado_cuota: nuevoEstado,
+        Estado_Cuota: nuevoEstado,
+        estado: nuevoEstado,
+        Estado: nuevoEstado,
+        sync_status: 'pending',
         updated_at: nowIso
-      });
+      } as any);
     }
-  }, []);
+
+    syncManager.syncPendingRecords().catch(() => {});
+    syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
+  }, [fechaActual]);
 
   return {
     items,
