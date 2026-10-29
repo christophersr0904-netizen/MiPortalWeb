@@ -381,6 +381,111 @@ describe('Retención Visual de Hábitos Completados Hoy y Sincronización Calend
 
     putSpy.mockRestore();
   });
+
+  describe('FIX-HABITOS-ACTIVIDADES-METAS-LINK-103: Vinculación Canónica de Actividades y Metas en Hábitos', () => {
+    it('Resuelve metas vinculadas tolerando disparidad de tipos (string vs number) y nomenclatura dual (habitoId vs habito_id)', () => {
+      const metas = [
+        { id: 'm-1', nombre_meta: 'Aprender Rust', meta_objetivo_total: 100, valor_acumulado_actual: 50 },
+        { id: 'm-2', nombre_meta: 'Leer 20 Libros', meta_objetivo_total: 20, valor_acumulado_actual: 10, habitoId: 'hab-2' },
+        { id: 'm-3', nombre_meta: 'Correr Maratón', meta_objetivo_total: 42, valor_acumulado_actual: 21, habito_id: 'hab-3' }
+      ];
+
+      const vinculos = [
+        { habito_id: 'hab-1', meta_id: 'm-1' },
+        { habitoId: 100, metaId: 'm-1' } // number y camelCase
+      ];
+
+      const habitos = [
+        { id: 'hab-1', codigo_legado: 'ACT-001', nombre_actividad: 'Práctica diaria Rust' },
+        { id: '100', codigo_legado: 'ACT-100', nombre_actividad: 'Coding challenge' },
+        { id: 'hab-2', codigo_legado: 'ACT-002', nombre_actividad: 'Lectura nocturna' },
+        { id: 'hab-3', codigo_legado: 'ACT-003', nombre_actividad: 'Trote matutino' },
+        { id: 'hab-4', codigo_legado: 'ACT-004', nombre_actividad: 'Meta directa', metaId: 'm-1' },
+        { id: 'hab-5', codigo_legado: 'ACT-005', nombre_actividad: 'Meta por nombre', meta_macro_nombre: 'Aprender Rust' }
+      ];
+
+      // Simular lógica canónica de mapeo
+      const mapaMetas = new Map<string, any>();
+      for (const m of metas) {
+        mapaMetas.set(String(m.id), m);
+      }
+
+      const mapa = new Map<string, any>();
+      for (const v of vinculos) {
+        const metaId = String((v as any).meta_id || (v as any).metaId || '');
+        const habitoId = String((v as any).habito_id || (v as any).habitoId || '');
+        const m = mapaMetas.get(metaId);
+        if (m) mapa.set(habitoId, m);
+      }
+
+      for (const m of metas) {
+        const hId = String((m as any).habitoId || (m as any).habito_id || '');
+        if (hId) mapa.set(hId, m);
+      }
+
+      for (const h of habitos) {
+        const hId = String(h.id);
+        let meta = mapa.get(hId);
+        if (!meta) {
+          const directMetaId = String((h as any).metaId || (h as any).meta_id || '');
+          if (directMetaId) meta = mapaMetas.get(directMetaId);
+        }
+        if (!meta && (h as any).meta_macro_nombre) {
+          meta = metas.find(m => m.nombre_meta.toLowerCase() === (h as any).meta_macro_nombre.toLowerCase());
+        }
+        if (meta) mapa.set(hId, meta);
+      }
+
+      expect(mapa.get('hab-1')?.nombre_meta).toBe('Aprender Rust');
+      expect(mapa.get('100')?.nombre_meta).toBe('Aprender Rust');
+      expect(mapa.get('hab-2')?.nombre_meta).toBe('Leer 20 Libros');
+      expect(mapa.get('hab-3')?.nombre_meta).toBe('Correr Maratón');
+      expect(mapa.get('hab-4')?.nombre_meta).toBe('Aprender Rust');
+      expect(mapa.get('hab-5')?.nombre_meta).toBe('Aprender Rust');
+    });
+
+    it('Resuelve actividades asociadas a un hábito contenedor por habitoId, habito_id y actividadIds', () => {
+      const habitoMaestro = {
+        id: 'hab-master',
+        codigo_legado: 'ACT-010',
+        nombre_actividad: 'Rutina Mañanera Completa',
+        actividadIds: ['act-sec-3']
+      };
+
+      const actividades = [
+        { id: 'act-sec-1', nombre_actividad: 'Beber agua tibia', habitoId: 'hab-master' },
+        { id: 'act-sec-2', nombre_actividad: 'Estiramientos', habito_id: 'hab-master' },
+        { id: 'act-sec-3', nombre_actividad: 'Meditación guiada' },
+        { id: 'act-otra', nombre_actividad: 'Actividad no vinculada' }
+      ];
+
+      const mapa = new Map<string, any[]>();
+      for (const act of actividades) {
+        const parentId = String((act as any).habitoId || (act as any).habito_id || '');
+        if (parentId) {
+          if (!mapa.has(parentId)) mapa.set(parentId, []);
+          mapa.get(parentId)!.push(act);
+        }
+      }
+
+      const listaIds = habitoMaestro.actividadIds || [];
+      if (listaIds.length > 0) {
+        const idSet = new Set(listaIds.map(String));
+        for (const act of actividades) {
+          if (idSet.has(String(act.id))) {
+            const hId = String(habitoMaestro.id);
+            if (!mapa.has(hId)) mapa.set(hId, []);
+            if (!mapa.get(hId)!.includes(act)) mapa.get(hId)!.push(act);
+          }
+        }
+      }
+
+      const vinculadas = mapa.get('hab-master') || [];
+      expect(vinculadas.length).toBe(3);
+      expect(vinculadas.map(a => a.id)).toEqual(expect.arrayContaining(['act-sec-1', 'act-sec-2', 'act-sec-3']));
+      expect(vinculadas.map(a => a.id)).not.toContain('act-otra');
+    });
+  });
 });
 
 

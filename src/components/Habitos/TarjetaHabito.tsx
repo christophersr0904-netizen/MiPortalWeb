@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { ActividadPersonal, SubtareaPaso, AlcanceRecurrencia, MetaPlanRecord } from '../../types';
 import { CATEGORIAS_VIDA_MAP } from '../../types';
 import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
 import { ModalAlcanceRecurrencia } from '../Modals/ModalAlcanceRecurrencia';
 import {
   Check, Flame, Calendar, Clock, DollarSign, PlusCircle, Pencil, Trash2,
-  HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee, AlertTriangle
+  HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee, AlertTriangle,
+  Target, ListTodo, ArrowUpRight
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
@@ -27,6 +28,7 @@ interface TarjetaHabitoProps {
   actividad: ActividadPersonal;
   subtareas: SubtareaPaso[];
   metaVinculada?: MetaPlanRecord;
+  actividadesVinculadas?: any[];
   onToggleCompletar: (actividad: ActividadPersonal, completadoDeseado: boolean) => Promise<{ actividadActualizada: ActividadPersonal; esRepetida: boolean; nuevaRacha: number }>;
   onRegistrarAvance: (actividad: ActividadPersonal, valor: number) => Promise<{ actividadActualizada: ActividadPersonal; rachaRescatada: boolean; metaCompletada: boolean }>;
   onToggleSubtarea: (idSubtarea: string, deseado?: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -39,6 +41,7 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
   actividad,
   subtareas,
   metaVinculada,
+  actividadesVinculadas,
   onToggleCompletar,
   onRegistrarAvance,
   onToggleSubtarea,
@@ -154,14 +157,30 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
     }
   };
 
-  // Normalización unificada de meta (REQ-HABITS-METAS-INTEGRATION-14)
+  const metaAsociada = metaVinculada || actividad.metaVinculada;
+  const actividadesAsociadas = actividadesVinculadas || actividad.actividadesVinculadas || [];
+
+  // Normalización unificada de meta (REQ-HABITS-METAS-INTEGRATION-14 & FIX-HABITOS-ACTIVIDADES-METAS-LINK-103)
   const metaEfectiva = {
-    titulo: metaVinculada?.nombre_meta || actividad.meta_macro_nombre || 'Meta Cuantificable',
-    total: metaVinculada?.meta_objetivo_total || actividad.meta_objetivo_total || 0,
+    titulo: metaAsociada?.nombre_meta || actividad.meta_macro_nombre || 'Meta Cuantificable',
+    total: metaAsociada?.meta_objetivo_total || actividad.meta_objetivo_total || 0,
     actual: actividad.valor_acumulado_actual || 0,
-    unidad: metaVinculada?.unidad_medida || actividad.unidad_medida || 'unidades',
-    rescateMin: metaVinculada?.nivel_rescate_minimo || actividad.nivel_rescate_minimo || 0
+    unidad: metaAsociada?.unidad_medida || actividad.unidad_medida || 'unidades',
+    rescateMin: metaAsociada?.nivel_rescate_minimo || actividad.nivel_rescate_minimo || 0
   };
+
+  const progresoMetaCalculado = useMemo(() => {
+    if (!metaAsociada) return null;
+    const tot = metaAsociada.meta_objetivo_total || 0;
+    const act = metaAsociada.valor_acumulado_actual || 0;
+    if (tot > 0) {
+      return Math.min(100, Math.round((act / tot) * 100));
+    }
+    if (metaAsociada.estado === '03_Completado' || metaAsociada.estado === 'COMPLETADA') {
+      return 100;
+    }
+    return null;
+  }, [metaAsociada]);
 
   const metaTotal = metaEfectiva.total;
   const valorAcum = metaEfectiva.actual;
@@ -209,8 +228,8 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         const res = await onRegistrarAvance(actividad, val);
 
         // Recalcular progreso en la meta padre vinculada si existe
-        if (metaVinculada?.id) {
-          recalcularProgresoMetaLocal(metaVinculada.id).catch((err) =>
+        if (metaAsociada?.id) {
+          recalcularProgresoMetaLocal(metaAsociada.id).catch((err) =>
             console.error('[TarjetaHabito] Error al recalcular progreso de meta padre:', err)
           );
         }
@@ -345,6 +364,85 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         </h4>
       </div>
 
+      {/* Badge / Indicador de Meta Vinculada (FIX-HABITOS-ACTIVIDADES-METAS-LINK-103) */}
+      {(metaAsociada || (actividad.meta_macro_nombre && actividad.meta_macro_nombre.trim() !== '')) && (
+        <div
+          onClick={(e) => {
+            if (metaAsociada && onAbrirMeta360) {
+              e.stopPropagation();
+              onAbrirMeta360(metaAsociada);
+            }
+          }}
+          className={`flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/30 border border-sky-800/40 text-[11px] transition-all duration-150 ${
+            metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:bg-sky-950/50 hover:border-sky-700/60' : ''
+          }`}
+          title={metaAsociada ? `Meta: ${metaAsociada.nombre_meta}${onAbrirMeta360 ? ' (Clic para abrir Vista 360°)' : ''}` : `Meta: ${actividad.meta_macro_nombre}`}
+        >
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <Target className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+            <span className="font-semibold text-sky-200 truncate">
+              {metaAsociada?.nombre_meta || actividad.meta_macro_nombre}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {progresoMetaCalculado !== null ? (
+              <span className="font-mono tabular-nums text-[9.5px] font-bold text-sky-300 bg-sky-900/50 px-1.5 py-0.2 rounded border border-sky-700/50">
+                {progresoMetaCalculado}%
+              </span>
+            ) : metaAsociada?.estado ? (
+              <span className="text-[9px] font-mono text-sky-300/80 uppercase">
+                {metaAsociada.estado.replace(/^\d+_/, '')}
+              </span>
+            ) : null}
+            {metaAsociada && onAbrirMeta360 && (
+              <span className="text-[9px] text-sky-400 opacity-70">
+                <ArrowUpRight className="w-3 h-3" strokeWidth={1.75} />
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Resumen / Conteo de Actividades Asociadas (FIX-HABITOS-ACTIVIDADES-METAS-LINK-103) */}
+      {actividadesAsociadas && actividadesAsociadas.length > 0 && (
+        <div className="space-y-1 p-2 rounded-xl bg-indigo-950/20 border border-indigo-800/40 text-[11px]">
+          <div className="flex items-center justify-between gap-1 text-[10.5px]">
+            <div className="flex items-center gap-1.5 text-indigo-300">
+              <ListTodo className="w-3.5 h-3.5 text-indigo-400 shrink-0" strokeWidth={1.75} />
+              <span className="font-semibold">Actividades Vinculadas</span>
+            </div>
+            <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-950/60 text-indigo-300 border border-indigo-800/60">
+              {actividadesAsociadas.length} {actividadesAsociadas.length === 1 ? 'actividad' : 'actividades'}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-1 pt-0.5">
+            {actividadesAsociadas.slice(0, 3).map((actItem: any, idx: number) => {
+              const nombre = actItem.nombre_actividad || actItem.nombre_tarea_actividad || actItem.nombre || actItem.Nombre || `Actividad ${idx + 1}`;
+              const completado = actItem.estado === '04_Completado' || actItem.estado_tarea === '04_Completado' || actItem.completado === true;
+              return (
+                <span
+                  key={actItem.id || idx}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium border transition-colors ${
+                    completado
+                      ? 'bg-emerald-950/30 text-emerald-300 border-emerald-800/40 line-through opacity-75'
+                      : 'bg-slate-900/80 text-slate-300 border-slate-800/80'
+                  }`}
+                  title={nombre}
+                >
+                  <span className="truncate max-w-[130px]">{nombre}</span>
+                </span>
+              );
+            })}
+            {actividadesAsociadas.length > 3 && (
+              <span className="text-[9.5px] text-slate-400 font-mono tabular-nums self-center px-1">
+                +{actividadesAsociadas.length - 3} más
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Subtareas / Checklist Procedural */}
       {subtareas && subtareas.length > 0 && (
         <ListaSubtareas
@@ -355,30 +453,30 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
       )}
 
       {/* Barra de Avance Cuantitativo (Fase 4.8 / REQ-HABITS-METAS-INTEGRATION-14) */}
-      {(metaTotal > 0 || valorAcum > 0 || actividad.meta_macro_nombre || Boolean(metaVinculada)) && (
+      {(metaTotal > 0 || valorAcum > 0 || actividad.meta_macro_nombre || Boolean(metaAsociada)) && (
         <div className="space-y-1.5 p-2 rounded-xl bg-cyan-950/20 border border-cyan-800/40 text-[11px]">
           <div className="flex items-center justify-between gap-1 flex-wrap font-mono">
             <div className="flex items-center gap-1.5 min-w-0 max-w-[65%]">
               <span
                 onClick={(e) => {
-                  if (metaVinculada && onAbrirMeta360) {
+                  if (metaAsociada && onAbrirMeta360) {
                     e.stopPropagation();
-                    onAbrirMeta360(metaVinculada);
+                    onAbrirMeta360(metaAsociada);
                   }
                 }}
                 className={`font-bold text-cyan-200 truncate ${
-                  metaVinculada && onAbrirMeta360 ? 'cursor-pointer hover:text-sky-300 hover:underline' : ''
+                  metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:text-sky-300 hover:underline' : ''
                 }`}
-                title={metaVinculada ? `${metaEfectiva.titulo} (Clic para Vista 360°)` : metaEfectiva.titulo}
+                title={metaAsociada ? `${metaEfectiva.titulo} (Clic para Vista 360°)` : metaEfectiva.titulo}
               >
                 {metaEfectiva.titulo}
               </span>
-              {metaVinculada && (
+              {metaAsociada && (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (onAbrirMeta360) onAbrirMeta360(metaVinculada);
+                    if (onAbrirMeta360) onAbrirMeta360(metaAsociada);
                   }}
                   className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-white border border-sky-500/30 font-mono font-bold shrink-0 transition cursor-pointer"
                   title="Abrir Vista Detallada 360° de la Meta"

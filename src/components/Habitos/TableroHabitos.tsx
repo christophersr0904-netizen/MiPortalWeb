@@ -63,6 +63,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     todasLasActividades,
     subtareasPorPadre,
     metasPorHabitoId,
+    actividadesPorHabitoId,
     metasPlanes,
     kpis,
     filtroTexto,
@@ -742,7 +743,8 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                         key={act.id}
                         actividad={act}
                         subtareas={subtareasPorPadre.get(act.codigo_legado) || []}
-                        metaVinculada={metasPorHabitoId.get(act.id)}
+                        metaVinculada={metasPorHabitoId.get(String(act.id)) || (act.codigo_legado ? metasPorHabitoId.get(String(act.codigo_legado)) : undefined) || (act as any).metaVinculada}
+                        actividadesVinculadas={actividadesPorHabitoId?.get(String(act.id)) || (act.codigo_legado ? actividadesPorHabitoId?.get(String(act.codigo_legado)) : []) || (act as any).actividadesVinculadas || []}
                         onToggleCompletar={toggleCompletar}
                         onRegistrarAvance={registrarAvance}
                         onToggleSubtarea={toggleSubtarea}
@@ -765,7 +767,8 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                         key={act.id}
                         actividad={act}
                         subtareas={subtareasPorPadre.get(act.codigo_legado) || []}
-                        metaVinculada={metasPorHabitoId.get(act.id)}
+                        metaVinculada={metasPorHabitoId.get(String(act.id)) || (act.codigo_legado ? metasPorHabitoId.get(String(act.codigo_legado)) : undefined) || (act as any).metaVinculada}
+                        actividadesVinculadas={actividadesPorHabitoId?.get(String(act.id)) || (act.codigo_legado ? actividadesPorHabitoId?.get(String(act.codigo_legado)) : []) || (act as any).actividadesVinculadas || []}
                         onToggleCompletar={toggleCompletar}
                         onRegistrarAvance={registrarAvance}
                         onToggleSubtarea={toggleSubtarea}

@@ -58,6 +58,13 @@ export interface ActividadPersonal {
   ultima_fecha_completado?: string; // YYYY-MM-DD día de última compleción
   proxima_fecha_programada?: string; // YYYY-MM-DD siguiente fecha proyectada
   historial_fechas?: string[]; // Fechas YYYY-MM-DD donde se completó la actividad
+  metaId?: string; // ID de meta vinculada en camelCase
+  meta_id?: string; // ID de meta vinculada en snake_case
+  habitoId?: string; // ID de hábito contenedor si es actividad secundaria
+  habito_id?: string; // ID de hábito contenedor en snake_case
+  actividadIds?: string[]; // IDs de actividades vinculadas si actúa como hábito agrupador
+  actividadesVinculadas?: any[]; // Objetos de actividades vinculadas resueltas en memoria
+  metaVinculada?: MetaPlanRecord; // Meta vinculada resuelta en memoria
   created_at?: string;
   updated_at: string;
   version: number;
@@ -164,6 +171,10 @@ export interface MetaPlanRecord {
   fecha_fin?: string; // YYYY-MM-DD
   estado: string; // '01_Backlog' | '02_En_Progreso' | '03_Completado' | '04_En_Pausa' | '05_Archivado'
   proyecto_id?: string | null;
+  habitoId?: string; // Hábito motor vinculado (camelCase)
+  habito_id?: string; // Hábito motor vinculado (snake_case)
+  habitoIds?: string[]; // Lista de hábitos motores asociados
+  habito_ids?: string[]; // Lista de hábitos motores asociados (snake_case)
   created_at?: string;
   updated_at: string;
   version: number;

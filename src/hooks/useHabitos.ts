@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import type { ActividadPersonal, SubtareaPaso, CategoriaVida, MetaPlanRecord, HabitoMetaVinculo } from '../types';
+import type { ActividadPersonal, SubtareaPaso, CategoriaVida, MetaPlanRecord, HabitoMetaVinculo, TareaRecord } from '../types';
 import {
   deduplicarPorCodigoCanonico,
   deduplicarMetasPlanes,
@@ -50,6 +50,12 @@ export function useHabitos() {
     [] as MetaPlanRecord[]
   );
 
+  const rawTodasLasTareas = useLiveQuery(
+    () => db.tareas.toArray(),
+    [],
+    [] as TareaRecord[]
+  );
+
   const todasLasActividades = useMemo(
     () => deduplicarPorCodigoCanonico(rawTodasLasActividades),
     [rawTodasLasActividades]
@@ -70,21 +76,207 @@ export function useHabitos() {
     [rawVinculos]
   );
 
-  // Mapeo O(1) de MetaPlanRecord por habito_id
+  const todasLasTareas = useMemo(
+    () => deduplicarPorCodigoCanonico(rawTodasLasTareas),
+    [rawTodasLasTareas]
+  );
+
+  // Mapeo O(1) de MetaPlanRecord por habito_id / id / codigo_legado
   const metasPorHabitoId = useMemo(() => {
     const mapaMetas = new Map<string, MetaPlanRecord>();
     for (const m of metasPlanes) {
-      mapaMetas.set(m.id, m);
+      if (!m) continue;
+      const mId = String(m.id ?? '').trim();
+      const mCod = String(m.codigo_legado ?? '').trim();
+      if (mId) mapaMetas.set(mId, m);
+      if (mCod) mapaMetas.set(mCod, m);
     }
+
     const mapa = new Map<string, MetaPlanRecord>();
+
+    // 1. Vínculos explícitos desde habitos_metas_vinculos (soporte dual habito_id / habitoId y meta_id / metaId)
     for (const v of vinculos) {
-      const meta = mapaMetas.get(v.meta_id);
+      if (!v) continue;
+      const metaId = String(v.meta_id || (v as any).metaId || '').trim();
+      const habitoId = String(v.habito_id || (v as any).habitoId || '').trim();
+      if (!metaId || !habitoId) continue;
+
+      const meta = mapaMetas.get(metaId);
       if (meta) {
-        mapa.set(v.habito_id, meta);
+        mapa.set(habitoId, meta);
       }
     }
+
+    // 2. Metas que contengan habitoId / habito_id o lista de hábitos directamente
+    for (const m of metasPlanes) {
+      if (!m) continue;
+      const hId = String((m as any).habitoId || (m as any).habito_id || (m as any).id_habito || '').trim();
+      if (hId) {
+        mapa.set(hId, m);
+      }
+      const hIds = (m as any).habitoIds || (m as any).habito_ids;
+      if (Array.isArray(hIds)) {
+        for (const item of hIds) {
+          if (item) mapa.set(String(item).trim(), m);
+        }
+      }
+    }
+
+    // 3. Resolución en hábitos: metaId / meta_id explícito o meta_macro_nombre
+    for (const h of todasLasActividades) {
+      if (!h) continue;
+      const hId = String(h.id ?? '').trim();
+      const hCod = String(h.codigo_legado ?? '').trim();
+
+      // Si ya fue asignada por vínculo previo
+      let meta = (hId ? mapa.get(hId) : undefined) || (hCod ? mapa.get(hCod) : undefined);
+
+      // Si el hábito tiene metaId o meta_id explícito
+      if (!meta) {
+        const directMetaId = String((h as any).metaId || (h as any).meta_id || (h as any).meta_plan_id || '').trim();
+        if (directMetaId) {
+          meta = mapaMetas.get(directMetaId);
+        }
+      }
+
+      // Si el hábito tiene meta_macro_nombre, buscar por coincidencia exacta o normalizada
+      if (!meta && h.meta_macro_nombre && h.meta_macro_nombre.trim() !== '') {
+        const nombreBuscado = h.meta_macro_nombre.trim().toLowerCase();
+        meta = metasPlanes.find(
+          (m) => m.nombre_meta && m.nombre_meta.trim().toLowerCase() === nombreBuscado
+        );
+      }
+
+      if (meta) {
+        if (hId) mapa.set(hId, meta);
+        if (hCod) mapa.set(hCod, meta);
+      }
+    }
+
     return mapa;
-  }, [vinculos, metasPlanes]);
+  }, [vinculos, metasPlanes, todasLasActividades]);
+
+  // Mapeo O(1) de actividades y tareas asociadas a cada hábito
+  const actividadesPorHabitoId = useMemo(() => {
+    const map = new Map<string, Array<ActividadPersonal | TareaRecord>>();
+
+    // Diccionario de lookup para mapear IDs y códigos de hábitos
+    const mapaHabitos = new Map<string, ActividadPersonal>();
+    for (const h of todasLasActividades) {
+      if (h.id) mapaHabitos.set(String(h.id), h);
+      if (h.codigo_legado) mapaHabitos.set(String(h.codigo_legado), h);
+    }
+
+    // 1. Actividades personales secundarias que referencian a un hábito contenedor
+    for (const act of todasLasActividades) {
+      const parentId = String(
+        (act as any).habitoId ||
+        (act as any).habito_id ||
+        (act as any).id_habito ||
+        (act as any).actividad_padre_id ||
+        ''
+      ).trim();
+
+      if (parentId && parentId !== String(act.id) && parentId !== String(act.codigo_legado)) {
+        if (!map.has(parentId)) map.set(parentId, []);
+        if (!map.get(parentId)!.some((item) => String(item.id) === String(act.id))) {
+          map.get(parentId)!.push(act);
+        }
+
+        const hab = mapaHabitos.get(parentId);
+        if (hab) {
+          const altKey = String(hab.id) === parentId ? String(hab.codigo_legado) : String(hab.id);
+          if (altKey && altKey !== parentId) {
+            if (!map.has(altKey)) map.set(altKey, []);
+            if (!map.get(altKey)!.some((item) => String(item.id) === String(act.id))) {
+              map.get(altKey)!.push(act);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Tareas de proyectos que referencian a un hábito motor
+    for (const tar of todasLasTareas) {
+      const parentId = String(
+        (tar as any).habitoId ||
+        (tar as any).habito_id ||
+        (tar as any).id_habito ||
+        (tar as any).habito_codigo ||
+        ''
+      ).trim();
+
+      if (parentId) {
+        if (!map.has(parentId)) map.set(parentId, []);
+        if (!map.get(parentId)!.some((item) => String(item.id) === String(tar.id))) {
+          map.get(parentId)!.push(tar);
+        }
+
+        const hab = mapaHabitos.get(parentId);
+        if (hab) {
+          const altKey = String(hab.id) === parentId ? String(hab.codigo_legado) : String(hab.id);
+          if (altKey && altKey !== parentId) {
+            if (!map.has(altKey)) map.set(altKey, []);
+            if (!map.get(altKey)!.some((item) => String(item.id) === String(tar.id))) {
+              map.get(altKey)!.push(tar);
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Hábitos que contienen una lista explícita de actividadIds o tareaIds
+    for (const h of todasLasActividades) {
+      const hId = String(h.id);
+      const hCod = String(h.codigo_legado);
+      const listaIds = (h as any).actividadIds || (h as any).actividad_ids || (h as any).actividades_ids || (h as any).tareaIds;
+      if (Array.isArray(listaIds) && listaIds.length > 0) {
+        const idSet = new Set(listaIds.map((x: any) => String(x).trim()));
+
+        // Buscar en todasLasActividades
+        for (const act of todasLasActividades) {
+          if (String(act.id) === hId || String(act.codigo_legado) === hCod) continue;
+          if (idSet.has(String(act.id)) || idSet.has(String(act.codigo_legado))) {
+            if (!map.has(hId)) map.set(hId, []);
+            if (!map.get(hId)!.some((item) => String(item.id) === String(act.id))) {
+              map.get(hId)!.push(act);
+            }
+            if (hCod) {
+              if (!map.has(hCod)) map.set(hCod, []);
+              if (!map.get(hCod)!.some((item) => String(item.id) === String(act.id))) {
+                map.get(hCod)!.push(act);
+              }
+            }
+          }
+        }
+
+        // Buscar en todasLasTareas
+        for (const tar of todasLasTareas) {
+          if (idSet.has(String(tar.id)) || idSet.has(String(tar.codigo_legado))) {
+            if (!map.has(hId)) map.set(hId, []);
+            if (!map.get(hId)!.some((item) => String(item.id) === String(tar.id))) {
+              map.get(hId)!.push(tar);
+            }
+            if (hCod) {
+              if (!map.has(hCod)) map.set(hCod, []);
+              if (!map.get(hCod)!.some((item) => String(item.id) === String(tar.id))) {
+                map.get(hCod)!.push(tar);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return map;
+  }, [todasLasActividades, todasLasTareas]);
+
+  // Selector seguro para obtener actividades vinculadas por ID o código
+  const obtenerActividadesDeHabito = (habitoId: string | number): Array<ActividadPersonal | TareaRecord> => {
+    if (!habitoId) return [];
+    const key = String(habitoId).trim();
+    return actividadesPorHabitoId.get(key) || [];
+  };
 
   // Mapeo O(1) de subtareas agrupadas por ID_Padre_Vinculado
   const subtareasPorPadre = useMemo(() => {
@@ -199,11 +391,28 @@ export function useHabitos() {
     return res;
   };
 
+  // Enriquecer cada actividad con sus actividades vinculadas y su meta vinculada resuelta
+  const actividadesEnriquecidas = useMemo(() => {
+    return actividadesFiltradas.map((a) => {
+      const aId = String(a.id);
+      const aCod = String(a.codigo_legado);
+      const actVinc = actividadesPorHabitoId.get(aId) || (aCod ? actividadesPorHabitoId.get(aCod) : []) || [];
+      const metaVinc = metasPorHabitoId.get(aId) || (aCod ? metasPorHabitoId.get(aCod) : undefined);
+      return {
+        ...a,
+        actividadesVinculadas: actVinc,
+        metaVinculada: metaVinc
+      };
+    });
+  }, [actividadesFiltradas, actividadesPorHabitoId, metasPorHabitoId]);
+
   return {
-    actividades: actividadesFiltradas,
+    actividades: actividadesEnriquecidas,
     todasLasActividades,
     subtareasPorPadre,
     metasPorHabitoId,
+    actividadesPorHabitoId,
+    obtenerActividadesDeHabito,
     metasPlanes,
     kpis,
     syncState,

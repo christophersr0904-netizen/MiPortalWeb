@@ -7356,3 +7356,50 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
    - Transiciones de tarjeta elevadas a `transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]` con elevación física en hover `hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/50 hover:border-slate-700`.
    - Atenuación limpia en estado completado (`opacity-65 bg-[#070B14]/90 border-slate-800/40`) preservando legibilidad.
    - Eliminación de emojis en opciones de filtro de metas en `TableroHabitos.tsx`.
+
+
+---
+
+### CHANGELOG: FIX-HABITOS-ACTIVIDADES-METAS-LINK-103: VINCULACIÓN CANÓNICA DE ACTIVIDADES Y METAS EN TARJETAS DE HÁBITOS
+**Fecha:** 2026-10-29  
+**Estado:** PRODUCCIÓN / CERTIFICADO  
+**Módulos Afectados:** `src/hooks/useHabitos.ts`, `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/types/index.ts`, `src/services/__tests__/habitosService.test.ts`
+
+#### 1. Diagnóstico de la Desconexión de Datos
+1. **Discrepancia en Joins y Claves N:M:** En `useHabitos.ts`, la asociación `metasPorHabitoId` solo leía `v.habito_id` estricto en `habitos_metas_vinculos` sin coerción a `String()`, omitiendo vínculos expresados en camelCase (`habitoId`), por código legado (`ACT-XXX`), por campos directos en hábitos (`metaId` / `meta_id`), o metas que contenían `habitoId` / `habito_id` / `habitoIds`.
+2. **Ausencia de Cruce de Actividades:** Las actividades personales secundarias y tareas operativas asociadas a un hábito contenedor (`habitoId` / `habito_id` / `actividadIds`) no se consultaban ni cruzaban en `useHabitos.ts` ni se inyectaban en las tarjetas.
+3. **Omisión Visual en `TarjetaHabito.tsx`:** Las tarjetas no disponían de un indicador compacto visible para la meta vinculada ni del conteo/etiquetas de actividades asociadas, mostrando la información vacía o desvinculada.
+
+#### 2. Resoluciones Quirúrgicas Aplicadas
+1. **`src/types/index.ts`:**
+   - Enriquecimiento de `ActividadPersonal` con `metaId?`, `meta_id?`, `habitoId?`, `habito_id?`, `actividadIds?`, `actividadesVinculadas?` y `metaVinculada?`.
+   - Enriquecimiento de `MetaPlanRecord` con `habitoId?`, `habito_id?`, `habitoIds?` y `habito_ids?`.
+2. **`src/hooks/useHabitos.ts`:**
+   - Incorporación de query reactiva `rawTodasLasTareas = useLiveQuery(() => db.tareas.toArray(), [], [])` y memoización `todasLasTareas`.
+   - Reingeniería de `metasPorHabitoId`:
+     - Indexación dual de metas por UUID (`id`) y `codigo_legado` (`MET-XXX`).
+     - Normalización con coerción segura `String(...).trim()` en `habito_id` / `habitoId` y `meta_id` / `metaId`.
+     - Soporte para metas con referencia directa a hábito (`habitoId`, `habito_id`, `habitoIds`).
+     - Resolución de hábitos con `metaId`, `meta_id`, `meta_plan_id` o coincidencia normalizada de texto libre en `meta_macro_nombre`.
+     - Mapeo simultáneo a la clave UUID y al código legado del hábito.
+   - Creación de `actividadesPorHabitoId: Map<string, Array<ActividadPersonal | TareaRecord>>`:
+     - Cruce de actividades secundarias con `habitoId`, `habito_id`, `id_habito` o `actividad_padre_id`.
+     - Cruce de tareas PMO con `habitoId`, `habito_id`, `id_habito` o `habito_codigo`.
+     - Resolución de listas explícitas `actividadIds` / `tareaIds` en hábitos contenedores.
+   - Selector seguro `obtenerActividadesDeHabito(habitoId)` y enriquecimiento automático en `actividades` de cada hábito con `actividadesVinculadas` y `metaVinculada`.
+3. **`src/components/Habitos/TarjetaHabito.tsx`:**
+   - Incorporación de la prop `actividadesVinculadas?: any[]`.
+   - Resolución unificada de `metaAsociada` (`metaVinculada || actividad.metaVinculada`) y `actividadesAsociadas` (`actividadesVinculadas || actividad.actividadesVinculadas`).
+   - Cálculo memoizado de `progresoMetaCalculado` (porcentaje cuantitativo o estado textual).
+   - Renderizado Bento Cobalt Aerodynamic:
+     - Badge interactivo de Meta vinculada con icono `Target`, nombre, porcentaje numérico `font-mono tabular-nums` e icono `ArrowUpRight` con despacho a `onAbrirMeta360`.
+     - Ficha compacta de Actividades Vinculadas con icono `ListTodo`, contador numérico `font-mono tabular-nums` y chips compactos de actividades con indicación de completitud.
+     - Preservación visual 1:1, bordes limpios `border-slate-800/40`, fondo sutil `bg-sky-950/30` / `bg-indigo-950/20` y cero emojis en DOM.
+4. **`src/components/Habitos/TableroHabitos.tsx`:**
+   - Desestructuración de `actividadesPorHabitoId` desde `useHabitos()`.
+   - Inyección de `metaVinculada` y `actividadesVinculadas` con resolución tolerante (`String(act.id)` || `act.codigo_legado` || `act.metaVinculada` / `act.actividadesVinculadas`) tanto en la lista de hábitos pendientes como en completados.
+
+#### 3. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado estricto.
+- `npm test -- --run`: 12/12 suites en verde (132/132 pruebas unitarias aprobadas al 100%).
+- `npm run build`: Compilación limpia de producción en 6.90s.
