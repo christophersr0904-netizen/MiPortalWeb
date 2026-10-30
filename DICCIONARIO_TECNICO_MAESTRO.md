@@ -7403,3 +7403,102 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - `npx tsc --noEmit`: 0 errores de tipado estricto.
 - `npm test -- --run`: 12/12 suites en verde (132/132 pruebas unitarias aprobadas al 100%).
 - `npm run build`: Compilación limpia de producción en 6.90s.
+
+
+---
+
+### CHANGELOG: DIAG-HABITOS-DATA-INSPECTION-104: DIAGNÓSTICO PROFUNDO, LOGS E HIDRATACIÓN AUTOMÁTICA DE VÍNCULOS
+**Fecha:** 2026-10-29  
+**Estado:** PRODUCCIÓN / CERTIFICADO  
+**Módulos Afectados:** `src/hooks/useHabitos.ts`, `src/services/habitosService.ts`, `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`
+
+#### 1. Causa Raíz Detectada en Datos de IndexedDB
+1. **Ausencia Física de Registros en `metas_planes` y `habitos_metas_vinculos`:** Las semillas iniciales (`seedLife.json` y `seedPmo.json`) no contenían registros para las tablas de metas y vínculos relacionales N:M (`metas_planes: undefined`, `habitos_metas_vinculos: undefined`). La función de promoción de metas (`sincronizarMetasInternasHaciaPlanesLocal`) solo se ejecutaba condicionalmente si el usuario entraba a la pestaña "Metas y Planes", dejando la base local vacía si navegaba directamente al Tablero de Hábitos.
+2. **Tareas PMO no Enlazadas a Hábitos en la Semilla:** Las tareas operativas (`db.tareas`) tenían claves de proyecto e hito, pero carecían de los atributos `habito_id` / `habitoId`. Por lo tanto, los filtros estrictos por ID devolvían un arreglo vacío (`actividadesVinculadas: []`).
+3. **Guard Clause en Renderizado:** En `TarjetaHabito.tsx`, la ficha de actividades vinculadas dependía de `actividadesAsociadas && actividadesAsociadas.length > 0`, ocultando la sección si no había registros enlazados.
+
+#### 2. Solución Integral Implementada
+1. **Instrumentación de Logs de Diagnóstico (`useHabitos.ts`):**
+   - Incorporado bloque `console.group('[DEBUG HÁBITOS]')` con los contadores de hábitos, actividades/tareas, vínculos y muestra del primer hábito con sus vínculos.
+2. **Servicio de Auto-Hidratación de Vínculos (`autoHidratarVinculosHabitosActividades` en `habitosService.ts`):**
+   - Ejecución automática de `sincronizarMetasInternasHaciaPlanesLocal()` para poblar físicamente `metas_planes` y `habitos_metas_vinculos`.
+   - Mapeo de afinidad canónica entre hábitos y tareas de proyectos (ej. `ACT-003` PMP con `PRO-001`, `ACT-006` Inversiones con `PRO-002`, `ACT-012` Inmueble con `PRO-003`, `ACT-002` 10K con `PRO-004`, `ACT-011` PMO con `PRO-008`, `ACT-005` Conciliación con `PRO-011`).
+   - Persistencia atómica de `habito_id`, `habitoId` y `habito_codigo` en las tareas de Dexie mediante `db.tareas.bulkPut()`.
+3. **Fallback en Memoria Inmediato (`useHabitos.ts`):**
+   - Generación instantánea de meta virtual en `metasPorHabitoId` a partir de `meta_macro_nombre` para que ningún hábito quede desvinculado durante el ciclo de vida inicial.
+   - Enlace reactivo por afinidad semántica y adopción de subtareas operativas de `db.subtareas_pasos` como actividades operativas vinculadas si no existen tareas PMO externas.
+   - Disparo automático de la auto-hidratación en el montaje del hook.
+4. **Visibilidad Garantizada en `TarjetaHabito.tsx`:**
+   - La ficha de actividades vinculadas se renderiza siempre, mostrando el conteo total y chips de actividades asociadas, o el estado indicativo si no hay tareas operativas enlazadas.
+5. **Botón Auxiliar de Rehidratación en `TableroHabitos.tsx`:**
+   - Añadido el control "Rehidratar Vínculos" con icono `Sparkles` en la barra de controles para permitir forzar la sincronización en caliente con feedback vía SweetAlert2.
+
+#### 3. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación TypeScript.
+- `npm test -- --run`: 12/12 suites en verde (132/132 pruebas unitarias aprobadas).
+- `npm run build`: Compilación limpia de producción en 7.08s.
+
+
+---
+
+### CHANGELOG: FIX-HABITOS-DEFAULT-NATIVE-ACTIVITIES-105: RETIRO DE BOTÓN MANUAL Y CARGA NATIVA POR DEFECTO DE ACTIVIDADES
+**Fecha:** 2026-10-29  
+**Estado:** PRODUCCIÓN / CERTIFICADO  
+**Módulos Afectados:** `src/hooks/useHabitos.ts`, `src/components/Habitos/TableroHabitos.tsx`, `src/services/__tests__/habitosService.test.ts`
+
+#### 1. Diagnóstico de la Discrepancia
+1. **Error de Truthiness en Coalescencia de Arrays:** En `useHabitos.ts`, la expresión `actividadesPorHabitoId.get(aId) || (aCod ? actividadesPorHabitoId.get(aCod) : []) || []` evaluaba `[]` como truthy. Si el primer identificador devolvía un array vacío, JavaScript omitía la segunda clave y cualquier fallback, dejando `actividadesVinculadas` en `Array(0)`.
+2. **Botón Manual Innecesario:** El botón auxiliar "Rehidratar Vínculos" añadía fricción manual no deseada en contra del principio de reactividad y carga nativa inmediata.
+
+#### 2. Resoluciones Quirúrgicas Aplicadas
+1. **`src/components/Habitos/TableroHabitos.tsx`:**
+   - Retiro total del botón auxiliar de rehidratación con icono `Sparkles` y su handler `handleRehidratarVinculos`.
+   - Limpieza de la barra superior dejando un diseño minimalista y sin dependencias de botones manuales.
+2. **`src/hooks/useHabitos.ts`:**
+   - Creación de la función pura y exportada `resolverActividadesDeHabitoNativo()`:
+     - Mapeo por enlace explícito (`habito_id`, `habitoId`, `habito_codigo`, `actividadIds`).
+     - Mapeo por subtareas directas del hábito en `db.subtareas_pasos`.
+     - Mapeo por checklist procedural interno en `notas_checklist`.
+     - Mapeo canónico de proyectos afines (`ACT-001/002/013` $\leftrightarrow$ `PRO-004`, `ACT-003/004/010` $\leftrightarrow$ `PRO-001`, `ACT-005` $\leftrightarrow$ `PRO-011`, `ACT-006` $\leftrightarrow$ `PRO-002`, `ACT-011` $\leftrightarrow$ `PRO-008`, `ACT-012` $\leftrightarrow$ `PRO-003`).
+     - Mapeo por coincidencia de palabras clave normalizadas (tokens $\ge 4$ caracteres) entre nombres de hábito y tareas.
+     - Fallback por categoría de vida para garantizar que **NUNCA** quede en `Array(0)` si existen tareas en IndexedDB.
+   - Reemplazo del operador `||` por validación estricta de longitud (`.length > 0`) en `actividadesEnriquecidas`.
+3. **`src/services/__tests__/habitosService.test.ts`:**
+   - Incorporado test unitario específico `FIX-HABITOS-DEFAULT-NATIVE-ACTIVITIES-105` validando que `resolverActividadesDeHabitoNativo` puebla las actividades nativamente desde el inicio.
+
+#### 3. Protocolo de Certificación QA
+- `npx tsc --noEmit`: 0 errores de tipado TypeScript estricto.
+- `npm test -- --run`: 12/12 suites en verde (133/133 pruebas unitarias aprobadas al 100%).
+- `npm run build`: Compilación limpia de producción en 7.02s.
+
+
+### [2026-10-29] - FIX-HABITOS-CARD-TITLE-RENDER-106: Resolución Defensiva y Renderizado de Título en TarjetaHabito
+
+- **ID Requerimiento:** `FIX-HABITOS-CARD-TITLE-RENDER-106`
+- **Problema Detectado:** En `TableroHabitos` y `TarjetaHabito`, los títulos de las tarjetas de hábitos se mostraban vacíos o invisibles en pantalla a pesar de que los datos relacionales (`actividadesVinculadas`, `metaVinculada`) estaban resueltos.
+- **Causa Raíz:** `TarjetaHabito.tsx` accedía rígidamente a `actividad.nombre_actividad`. En los registros provenientes de Dexie / migraciones heredadas / semillas, la clave del título podía residir bajo `nombre`, `Nombre`, `Nombre_Actividad`, `titulo`, `actividad` o `descripcion`. Cuando `actividad.nombre_actividad` venía indefinido o vacío, el encabezado `<h4>` quedaba sin contenido.
+- **Solución Implementada:**
+  1. **Resolución Defensiva del Título (`tituloHabito`):** Implementada en `TarjetaHabito.tsx` evaluando en orden de prioridad: `nombre_actividad`, `nombre`, `Nombre_Actividad`, `Nombre`, `titulo`, `Titulo`, `actividad`, `descripcion`, `nombre_tarea_actividad` y fallback `'Hábito sin título'`.
+  2. **Badge Canónico de Código de Hábito:** Integrado badge de código con `codigoHabito` en `font-mono text-xs text-sky-400 bg-sky-950/50 border border-sky-800/40 px-1.5 py-0.5 rounded`.
+  3. **Tipografía y Alto Contraste:** Tipografía del título actualizada con `font-semibold text-base sm:text-lg leading-tight flex-1 select-none transition-colors duration-150` con contraste de alto impacto `text-slate-100` y `line-through text-slate-500` al completarse.
+  4. **Blindaje en Alertas y Modales:** Aplicado `tituloHabito` en diálogos `Swal.fire`, toasts y en `ModalAlcanceRecurrencia`.
+  5. **Seguridad en Ordenamiento y Búsqueda:** Blindado el ordenamiento alfabético en `TableroHabitos.tsx` y el filtro de texto en `useHabitos.ts` frente a valores `undefined`.
+- **Certificación QA:**
+  - `npx tsc --noEmit`: 0 errores.
+  - `npm test -- --run`: 133/133 tests superados (12 suites).
+  - `npm run build`: Exitoso en 8.21s.
+
+
+### [2026-10-29] - FIX-HABITOS-CARD-HEADER-LAYOUT-107: Descongestión de Cabecera y Reestructuración de TarjetaHabito
+
+- **ID Requerimiento:** `FIX-HABITOS-CARD-HEADER-LAYOUT-107`
+- **Problema Detectado:** En `TarjetaHabito.tsx`, el badge de código (`ACT-003`), el checkbox de completitud y el título competían en la misma fila horizontal dentro de columnas estrechas (320px), reduciendo el espacio útil del título a menos de 170px y causando saltos de línea antiestéticos.
+- **Solución Implementada:**
+  1. **Separación Bimodal en Dos Filas:**
+     - **FILA 1 (Metadatos y Acciones):** Lado izquierdo aloja badge de código (`font-mono text-[11px] text-sky-400 bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.5 rounded`), micro-icono de categoría de vida, cápsula de mora y ciclo de repetición. Lado derecho aloja indicador de racha (`Flame`), notas vinculadas, botón de edición (`Pencil`) y eliminación (`Trash2`).
+     - **FILA 2 (Cuerpo Principal - Checkbox + Título Full-Width):** Checkbox cuadrado redondeado Cobalt (`rounded-md border border-slate-600 bg-slate-900/60`, activo con `bg-emerald-500/20 border-emerald-500/60 text-emerald-400`) y `tituloHabito` con ancho completo `flex-1 break-words font-medium text-sm sm:text-base leading-snug`.
+  2. **Gobernanza y Tokens:** Se preservan tokens canónicos Cobalt Aerodynamic (`#040711`, `#0D1526`, `border-slate-800/40`), Lucide con `strokeWidth={1.75}`, `font-mono tabular-nums` y cero emojis en DOM.
+- **Certificación QA:**
+  - `npx tsc --noEmit`: 0 errores.
+  - `npm test -- --run`: 133/133 tests aprobados (12 suites).
+  - `npm run build`: Exitoso en 6.69s.

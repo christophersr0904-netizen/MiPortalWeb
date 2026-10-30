@@ -1,6 +1,7 @@
 import { db } from '../db/db';
-import type { ActividadPersonal, SubtareaPaso, FrecuenciaCiclo } from '../types';
+import type { ActividadPersonal, SubtareaPaso, FrecuenciaCiclo, TareaRecord } from '../types';
 import { sincronizarActividadCalendar } from './calendarSyncService';
+import { sincronizarMetasInternasHaciaPlanesLocal } from './metasService';
 
 /**
  * ============================================================================
@@ -632,4 +633,106 @@ export async function editarActividadConAlcance(
   }
 
   return { actividadPrincipal: actividadOriginal, alcanceAplicado: 'ALL' };
+}
+
+/**
+ * DIAG-HABITOS-DATA-INSPECTION-104: Auto-hidratación y migración de vínculos entre Hábitos, Metas y Actividades/Tareas
+ * Resuelve la ausencia de datos en IndexedDB cruzando proyectos afines, similitud semántica y metas macro.
+ */
+export async function autoHidratarVinculosHabitosActividades(): Promise<{
+  metasPromovidas: number;
+  tareasVinculadas: number;
+}> {
+  let metasPromovidas = 0;
+  let tareasVinculadas = 0;
+
+  try {
+    // 1. Promover metas internas hacia metas_planes y habitos_metas_vinculos
+    metasPromovidas = await sincronizarMetasInternasHaciaPlanesLocal();
+
+    // 2. Cargar hábitos y tareas desde Dexie
+    const [habitos, tareas] = await Promise.all([
+      db.actividades_personales.toArray(),
+      db.tareas.toArray()
+    ]);
+
+    if (!habitos.length || !tareas.length) {
+      return { metasPromovidas, tareasVinculadas: 0 };
+    }
+
+    // Mapeo canónico de afinidad entre hábitos y códigos de proyecto o palabras clave
+    const reglasAfinidad: Array<{
+      codigoHabito: string;
+      idProyecto?: string;
+      keywords: string[];
+    }> = [
+      { codigoHabito: 'ACT-001', idProyecto: 'PRO-004', keywords: ['fuerza', 'gimnasio', 'entrenamiento', 'acondicionamiento'] },
+      { codigoHabito: 'ACT-002', idProyecto: 'PRO-004', keywords: ['10k', 'carrera', 'series', 'atletismo', 'trote'] },
+      { codigoHabito: 'ACT-003', idProyecto: 'PRO-001', keywords: ['pmp', 'simulador', 'estudio', 'examen', 'predictivo'] },
+      { codigoHabito: 'ACT-004', idProyecto: 'PRO-001', keywords: ['lectura', 'libro', 'técnica', 'estudio'] },
+      { codigoHabito: 'ACT-005', idProyecto: 'PRO-011', keywords: ['gasto', 'flujo', 'caja', 'conciliación', 'factura', 'ocr'] },
+      { codigoHabito: 'ACT-006', idProyecto: 'PRO-002', keywords: ['inversión', 'portafolio', 'dividendo', 'broker', 'voo', 'qqq'] },
+      { codigoHabito: 'ACT-011', idProyecto: 'PRO-008', keywords: ['pmo', 'ágil', 'gobernanza', 'dashboard', 'delivery', 'alineamiento'] },
+      { codigoHabito: 'ACT-012', idProyecto: 'PRO-003', keywords: ['predial', 'inmueble', 'laredo', 'suministro', 'habilitación'] }
+    ];
+
+    const mapaHabitosPorCodigo = new Map<string, ActividadPersonal>();
+    for (const h of habitos) {
+      if (h.codigo_legado) mapaHabitosPorCodigo.set(h.codigo_legado, h);
+    }
+
+    const tareasActualizadas: TareaRecord[] = [];
+
+    for (const tar of tareas) {
+      // Si la tarea ya tiene habito_id, verificar si es válido
+      if ((tar as any).habito_id || (tar as any).habitoId) continue;
+
+      let habitoAsignado: ActividadPersonal | undefined;
+
+      // Buscar regla de afinidad coincidente
+      for (const regla of reglasAfinidad) {
+        const hab = mapaHabitosPorCodigo.get(regla.codigoHabito);
+        if (!hab) continue;
+
+        // Coincidencia por proyecto
+        if (regla.idProyecto && tar.proyecto_codigo === regla.idProyecto) {
+          habitoAsignado = hab;
+          break;
+        }
+
+        // Coincidencia por palabras clave en nombre de tarea
+        const nombreTarea = (tar.nombre_tarea_actividad || '').toLowerCase();
+        if (regla.keywords.some((kw) => nombreTarea.includes(kw))) {
+          habitoAsignado = hab;
+          break;
+        }
+      }
+
+      // Si no hubo afinidad específica, emparejar por similitud de palabras relevantes
+      if (!habitoAsignado && habitos.length > 0) {
+        const match = habitos.find((h) => {
+          const nomH = (h.nombre_actividad || '').toLowerCase();
+          const nomT = (tar.nombre_tarea_actividad || '').toLowerCase();
+          return nomH.split(' ').some((palabra) => palabra.length > 4 && nomT.includes(palabra));
+        });
+        if (match) habitoAsignado = match;
+      }
+
+      if (habitoAsignado) {
+        (tar as any).habito_id = habitoAsignado.id;
+        (tar as any).habitoId = habitoAsignado.id;
+        (tar as any).habito_codigo = habitoAsignado.codigo_legado;
+        tareasActualizadas.push(tar);
+        tareasVinculadas++;
+      }
+    }
+
+    if (tareasActualizadas.length > 0) {
+      await db.tareas.bulkPut(tareasActualizadas);
+    }
+  } catch (err) {
+    console.warn('[habitosService] Error durante auto-hidratación de vínculos:', err);
+  }
+
+  return { metasPromovidas, tareasVinculadas };
 }

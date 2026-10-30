@@ -228,7 +228,9 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
         return (b.racha_actual || 0) - (a.racha_actual || 0);
       }
       if (modoOrden === 'ALPHA') {
-        return (a.nombre_actividad || '').localeCompare(b.nombre_actividad || '');
+        const nomA = a.nombre_actividad || (a as any).nombre || (a as any).Nombre_Actividad || (a as any).Nombre || (a as any).titulo || '';
+        const nomB = b.nombre_actividad || (b as any).nombre || (b as any).Nombre_Actividad || (b as any).Nombre || (b as any).titulo || '';
+        return nomA.localeCompare(nomB);
       }
       if (modoOrden === 'PRIORITY') {
         const pA = (a as any).prioridad_anual || 0;

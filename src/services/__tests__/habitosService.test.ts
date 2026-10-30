@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { calcularSiguienteFechaCiclo } from '../habitosService';
+import { resolverActividadesDeHabitoNativo } from '../../hooks/useHabitos';
 
 describe('Motor de Hábitos y Recurrencias (habitosService)', () => {
   it('Calcula la siguiente fecha para frecuencia DIARIA sumando +1 día', () => {
@@ -484,6 +485,33 @@ describe('Retención Visual de Hábitos Completados Hoy y Sincronización Calend
       expect(vinculadas.length).toBe(3);
       expect(vinculadas.map(a => a.id)).toEqual(expect.arrayContaining(['act-sec-1', 'act-sec-2', 'act-sec-3']));
       expect(vinculadas.map(a => a.id)).not.toContain('act-otra');
+    });
+
+    it('FIX-HABITOS-DEFAULT-NATIVE-ACTIVITIES-105: resolverActividadesDeHabitoNativo puebla actividades nativamente por afinidad y subtareas sin requerir botones', () => {
+      const habitoGimnasio = {
+        id: 'hab-1',
+        codigo_legado: 'ACT-001',
+        nombre_actividad: 'Entrenamiento de fuerza en gimnasio',
+        categoria_vida: 'SALUD_DEPORTE' as const,
+        meta_macro_nombre: 'Acondicionamiento Físico y Fuerza'
+      };
+
+      const tareas = [
+        { id: 'tar-1', codigo_legado: 'TAR-018', proyecto_codigo: 'PRO-004', nombre_tarea_actividad: 'Realizar análisis bioquímico' },
+        { id: 'tar-2', codigo_legado: 'TAR-020', proyecto_codigo: 'PRO-004', nombre_tarea_actividad: 'Ejecutar series de velocidad' },
+        { id: 'tar-3', codigo_legado: 'TAR-001', proyecto_codigo: 'PRO-001', nombre_tarea_actividad: 'Estudio PMP' }
+      ];
+
+      const subtareas = [
+        { id: 'sub-1', codigo_legado: 'SUB-001', id_padre_vinculado: 'ACT-001', descripcion_paso: 'Calentamiento 10 min', completado: false }
+      ];
+
+      const res = resolverActividadesDeHabitoNativo(habitoGimnasio as any, tareas as any, subtareas as any, []);
+
+      expect(res.length).toBeGreaterThanOrEqual(3);
+      expect(res.some(a => a.nombre_actividad === 'Calentamiento 10 min')).toBe(true);
+      expect(res.some(a => a.nombre_tarea_actividad === 'Realizar análisis bioquímico')).toBe(true);
+      expect(res.some(a => a.nombre_tarea_actividad === 'Ejecutar series de velocidad')).toBe(true);
     });
   });
 });

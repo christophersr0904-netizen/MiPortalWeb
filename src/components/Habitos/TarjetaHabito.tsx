@@ -49,6 +49,25 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
   onEliminar,
   onAbrirMeta360
 }) => {
+  // FIX-HABITOS-CARD-TITLE-RENDER-106: Resolución defensiva del título y código del hábito
+  const tituloHabito =
+    actividad.nombre_actividad ||
+    (actividad as any).nombre ||
+    (actividad as any).Nombre_Actividad ||
+    (actividad as any).Nombre ||
+    (actividad as any).titulo ||
+    (actividad as any).Titulo ||
+    (actividad as any).actividad ||
+    (actividad as any).descripcion ||
+    (actividad as any).nombre_tarea_actividad ||
+    'Hábito sin título';
+
+  const codigoHabito =
+    actividad.codigo_legado ||
+    (actividad as any).codigo ||
+    (actividad as any).Codigo ||
+    '';
+
   const [modalAlcanceAbierto, setModalAlcanceAbierto] = useState(false);
   const [accionAlcance, setAccionAlcance] = useState<'editar' | 'eliminar'>('editar');
 
@@ -99,7 +118,7 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
     } else {
       const confirm = await Swal.fire({
         title: '¿Eliminar actividad?',
-        text: `Se borrará "${actividad.nombre_actividad}".`,
+        text: `Se borrará "${tituloHabito}".`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Sí, eliminar',
@@ -146,13 +165,13 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
       Toast.fire({
         icon: 'success',
         title: '¡Hábito Cumplido!',
-        text: `${actividad.nombre_actividad}${msgRacha}`
+        text: `${tituloHabito}${msgRacha}`
       });
     } else {
       Toast.fire({
         icon: 'info',
         title: 'Hábito Reabierto',
-        text: `${actividad.nombre_actividad} marcado como pendiente`
+        text: `${tituloHabito} marcado como pendiente`
       });
     }
   };
@@ -263,10 +282,20 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         title={`Categoría: ${catConfig.nombre}`}
       />
 
-      {/* Cabecera de la Tarjeta */}
-      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+      {/* FILA 1: Metadatos superiores y Acciones */}
+      <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-          {/* Micro-icono sutil con tooltip (sustituye badge tosco redundante) */}
+          {/* Badge de código canónico */}
+          {codigoHabito ? (
+            <span
+              className="font-mono text-[11px] font-medium text-sky-400 bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.5 rounded select-none shrink-0"
+              title={`Código: ${codigoHabito}`}
+            >
+              {codigoHabito}
+            </span>
+          ) : null}
+
+          {/* Icono de categoría sutil con tooltip */}
           <span
             className={`inline-flex items-center justify-center w-5 h-5 rounded-md border ${catConfig.badgeClase} shrink-0`}
             title={`Categoría: ${catConfig.nombre}`}
@@ -286,42 +315,42 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
           )}
 
           {esHabitual && actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'DIARIA' && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60 font-mono">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60 font-mono shrink-0">
               {actividad.frecuencia_ciclo}
             </span>
           )}
         </div>
 
-        {/* Píldora de Racha */}
+        {/* Racha y Botones de acción rápida */}
         <div className="flex items-center gap-1.5 shrink-0 ml-auto">
           {racha > 0 && (
             <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+              className={`flex items-center gap-1 text-[11px] font-mono border px-2 py-0.5 rounded-full ${
                 racha >= 7
-                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/40 shadow-xs'
+                  ? 'text-amber-300 bg-amber-950/40 border-amber-800/40 shadow-xs'
                   : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
               }`}
               title={`Racha consecutiva de ${racha} días`}
             >
-              <Flame className={`w-3 h-3 ${racha >= 7 ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} />
-              <span className="font-mono tabular-nums">{racha} d</span>
+              <Flame className={`w-3 h-3 ${racha >= 7 ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} strokeWidth={1.75} />
+              <span className="tabular-nums">{racha} d</span>
             </span>
           )}
 
           <BadgeNotasVinculadas
             codigo={actividad.codigo_legado}
             tipo="HABITO"
-            tituloEntidad={actividad.nombre_actividad}
+            tituloEntidad={tituloHabito}
           />
 
           {onEditar && (
             <button
               type="button"
               onClick={handleSolicitarEditar}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition active:scale-90 cursor-pointer"
-              title="Editar actividad (Modal Flow)"
+              className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
+              title="Editar hábito"
             >
-              <Pencil className="w-3 h-3" strokeWidth={1.75} />
+              <Pencil className="w-3.5 h-3.5" strokeWidth={1.75} />
             </button>
           )}
 
@@ -329,38 +358,45 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
             <button
               type="button"
               onClick={handleSolicitarEliminar}
-              className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition active:scale-90 cursor-pointer"
-              title="Eliminar actividad"
+              className="text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
+              title="Eliminar hábito"
             >
-              <Trash2 className="w-3 h-3" strokeWidth={1.75} />
+              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
             </button>
           )}
         </div>
       </div>
 
-      {/* Cuerpo Principal: Checkbox y Título */}
-      <div className="flex items-start gap-2.5">
+      {/* FILA 2: Checkbox + Título con ancho completo */}
+      <div className="flex items-start gap-2.5 mb-3">
         <button
           type="button"
           onClick={handleToggleCheck}
-          className={`w-5 h-5 mt-0.5 rounded-full border-2 transition-all duration-150 flex items-center justify-center shrink-0 active:scale-75 group/chk focus:outline-none ${
-            esCompletada
-              ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 border-emerald-500 text-white shadow-xs ring-2 ring-emerald-500/20'
-              : 'border-slate-600 hover:border-emerald-400 hover:ring-4 hover:ring-emerald-500/15 text-transparent bg-slate-800/60'
-          }`}
-          title={esCompletada ? 'Marcar como pendiente' : 'Marcar como cumplido'}
+          className="mt-0.5 shrink-0 focus:outline-none group/chk active:scale-95 transition-transform"
+          title={esCompletada ? 'Marcar como pendiente' : 'Marcar como completado'}
         >
-          <Check className={`w-3.5 h-3.5 stroke-[3] transition-transform duration-150 ${esCompletada ? 'scale-100' : 'scale-50 group-hover/chk:scale-100'}`} />
+          {/* Checkbox estilizado Cobalt */}
+          <div
+            className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
+              esCompletada
+                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-xs ring-2 ring-emerald-500/20'
+                : 'border-slate-600 bg-slate-900/60 group-hover/chk:border-slate-400'
+            }`}
+          >
+            {esCompletada && <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
+          </div>
         </button>
 
         <h4
           onClick={handleSolicitarEditar}
-          className={`text-xs sm:text-sm font-semibold leading-snug flex-1 select-none transition-colors duration-150 ${
-            esCompletada ? 'line-through text-slate-500' : 'text-slate-100'
+          className={`text-sm sm:text-base font-medium leading-snug break-words flex-1 select-none transition-colors ${
+            esCompletada
+              ? 'line-through text-slate-500'
+              : 'text-slate-100'
           } ${onEditar ? 'cursor-pointer hover:text-emerald-300' : ''}`}
-          title={onEditar ? `${actividad.nombre_actividad} (Click para editar)` : actividad.nombre_actividad}
+          title={onEditar ? `${tituloHabito} (Click para editar)` : tituloHabito}
         >
-          {actividad.nombre_actividad}
+          {tituloHabito}
         </h4>
       </div>
 
@@ -403,19 +439,19 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         </div>
       )}
 
-      {/* Resumen / Conteo de Actividades Asociadas (FIX-HABITOS-ACTIVIDADES-METAS-LINK-103) */}
-      {actividadesAsociadas && actividadesAsociadas.length > 0 && (
-        <div className="space-y-1 p-2 rounded-xl bg-indigo-950/20 border border-indigo-800/40 text-[11px]">
-          <div className="flex items-center justify-between gap-1 text-[10.5px]">
-            <div className="flex items-center gap-1.5 text-indigo-300">
-              <ListTodo className="w-3.5 h-3.5 text-indigo-400 shrink-0" strokeWidth={1.75} />
-              <span className="font-semibold">Actividades Vinculadas</span>
-            </div>
-            <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-950/60 text-indigo-300 border border-indigo-800/60">
-              {actividadesAsociadas.length} {actividadesAsociadas.length === 1 ? 'actividad' : 'actividades'}
-            </span>
+      {/* Resumen / Conteo de Actividades Asociadas (FIX-HABITOS-ACTIVIDADES-METAS-LINK-103 & DIAG-104) */}
+      <div className="space-y-1 p-2 rounded-xl bg-indigo-950/20 border border-indigo-800/40 text-[11px]">
+        <div className="flex items-center justify-between gap-1 text-[10.5px]">
+          <div className="flex items-center gap-1.5 text-indigo-300">
+            <ListTodo className="w-3.5 h-3.5 text-indigo-400 shrink-0" strokeWidth={1.75} />
+            <span className="font-semibold">Actividades Vinculadas</span>
           </div>
+          <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-950/60 text-indigo-300 border border-indigo-800/60">
+            {actividadesAsociadas.length} {actividadesAsociadas.length === 1 ? 'actividad' : 'actividades'}
+          </span>
+        </div>
 
+        {actividadesAsociadas.length > 0 ? (
           <div className="flex flex-wrap gap-1 pt-0.5">
             {actividadesAsociadas.slice(0, 3).map((actItem: any, idx: number) => {
               const nombre = actItem.nombre_actividad || actItem.nombre_tarea_actividad || actItem.nombre || actItem.Nombre || `Actividad ${idx + 1}`;
@@ -440,8 +476,12 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
               </span>
             )}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="text-[9.5px] text-slate-400 italic pt-0.5">
+            Sin tareas operativas vinculadas directamente
+          </div>
+        )}
+      </div>
 
       {/* Subtareas / Checklist Procedural */}
       {subtareas && subtareas.length > 0 && (
@@ -558,7 +598,7 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
       <ModalAlcanceRecurrencia
         isOpen={modalAlcanceAbierto}
         accion={accionAlcance}
-        tituloActividad={actividad.nombre_actividad}
+        tituloActividad={tituloHabito}
         fechaActual={actividad.fecha_programada}
         onSeleccionarAlcance={handleSeleccionarAlcance}
         onClose={() => setModalAlcanceAbierto(false)}
