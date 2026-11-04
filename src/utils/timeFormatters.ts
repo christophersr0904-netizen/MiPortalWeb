@@ -70,3 +70,15 @@ export function convertirHorasDecimalAString(horasDecimal: number | undefined | 
   const m = totalMinutos % 60;
   return `${h}:${m.toString().padStart(2, '0')}`;
 }
+
+/**
+ * Formatea un objeto Date en cadena canónica 'YYYY-MM-DD' en el huso horario local del usuario,
+ * erradicando el desfase nocturno de UTC (como UTC-5 Lima a partir de las 19:00).
+ */
+export function formatFechaIsoLocal(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+

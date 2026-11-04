@@ -13,7 +13,8 @@ import type {
   MetaPlanRecord,
   HitoPlanRecord,
   HabitoMetaVinculo,
-  HabitoLogRecord
+  HabitoLogRecord,
+  TombstoneRecord
 } from '../types';
 import { extraerCodigoCanonico, fusionarRegistrosDuplicados } from '../utils/entityNormalizer';
 import seedPmo from './seedPmo.json';
@@ -39,6 +40,7 @@ export class PMODatabase extends Dexie {
   planes_accion_hitos!: Table<HitoPlanRecord, string>;
   habitos_metas_vinculos!: Table<HabitoMetaVinculo, string>;
   habito_cumplimiento_logs!: Table<HabitoLogRecord, string>;
+  tombstones!: Table<TombstoneRecord, string>;
 
   constructor() {
     super('PMOPersonalModularDB');
@@ -69,6 +71,12 @@ export class PMODatabase extends Dexie {
       planes_accion_hitos: 'id, user_id, codigo_legado, meta_id, estado, sync_status',
       habitos_metas_vinculos: 'id, user_id, habito_id, meta_id, sync_status',
       habito_cumplimiento_logs: 'id, user_id, habito_id, fecha_registro, sync_status, [habito_id+fecha_registro]'
+    });
+    this.version(5).stores({
+      gastos: 'id, user_id, codigo_legado, id_proyecto, id_origen_vinculado, tipo_origen, categoria_gasto, estado_pago, fecha_gasto, sync_status'
+    });
+    this.version(6).stores({
+      tombstones: 'id, tabla, sync_status, deleted_at'
     });
   }
 }
@@ -508,7 +516,8 @@ export async function forzarRecargaSemillaCompleta(): Promise<void> {
     db.metas_planes,
     db.planes_accion_hitos,
     db.habitos_metas_vinculos,
-    db.habito_cumplimiento_logs
+    db.habito_cumplimiento_logs,
+    db.tombstones
   ], async () => {
     await db.actividades_personales.clear();
     await db.subtareas_pasos.clear();
@@ -524,6 +533,7 @@ export async function forzarRecargaSemillaCompleta(): Promise<void> {
     await db.planes_accion_hitos.clear();
     await db.habitos_metas_vinculos.clear();
     await db.habito_cumplimiento_logs.clear();
+    if (db.tombstones) await db.tombstones.clear();
 
     if (initialSeed.actividades_personales) await db.actividades_personales.bulkPut(initialSeed.actividades_personales as ActividadPersonal[]);
     if (initialSeed.subtareas_pasos) await db.subtareas_pasos.bulkPut(initialSeed.subtareas_pasos as SubtareaPaso[]);
@@ -546,5 +556,147 @@ export async function forzarRecargaSemillaCompleta(): Promise<void> {
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
   (window as any).__PMO_DB__ = db;
   (window as any).__FORZAR_RECARGA_SEMILLA__ = forzarRecargaSemillaCompleta;
+}
+
+/**
+ * Registra una lápida (tombstone) en IndexedDB para entidades eliminadas localmente.
+ * Permite replicar el borrado hacia Supabase y prevenir la resurrección en pulls descendentes.
+ */
+export async function registrarTombstone(tabla: string, id: string): Promise<void> {
+  if (!id || !tabla) return;
+  try {
+    if (typeof db !== 'undefined' && db?.tombstones && typeof db.tombstones.put === 'function') {
+      await db.tombstones.put({
+        id: String(id),
+        tabla: String(tabla),
+        deleted_at: new Date().toISOString(),
+        sync_status: 'pending'
+      });
+    }
+  } catch (err) {
+    console.warn('[PMO DB] Error registrando tombstone:', err);
+  }
+}
+
+export interface ResultadoPurgaLocales {
+  tareasPurgadas: number;
+  transaccionesPurgadas: number;
+  tombstonesPurgados: number;
+  totalPurgados: number;
+}
+
+/**
+ * Garbage Collection Local para IndexedDB (Dexie):
+ * Borra físicamente registros antiguos ya sincronizados con Supabase (sync_status === 'synced')
+ * que hayan superado el umbral temporal de retención en días (por defecto 90 días).
+ *
+ * Entidades sujetas a purga:
+ * - Tareas completadas/archivadas ('04_Completado', '05_Archivado')
+ * - Transacciones financieras (gastos, ingresos, cuotas pagadas)
+ * - Lápidas sincronizadas (tombstones con sync_status === 'synced')
+ */
+export async function purgarRegistrosLocalesExpirados(diasRetencion: number = 90): Promise<ResultadoPurgaLocales> {
+  const resultado: ResultadoPurgaLocales = {
+    tareasPurgadas: 0,
+    transaccionesPurgadas: 0,
+    tombstonesPurgados: 0,
+    totalPurgados: 0
+  };
+
+  const umbralMs = Date.now() - diasRetencion * 24 * 60 * 60 * 1000;
+  const esExpirado = (fechaStr?: string | null): boolean => {
+    if (!fechaStr) return false;
+    const t = new Date(fechaStr).getTime();
+    return !isNaN(t) && t < umbralMs;
+  };
+
+  try {
+    // 1. Purgar Tareas completadas o archivadas sincronizadas
+    if (db.tareas && typeof db.tareas.toArray === 'function') {
+      const tareas = await db.tareas.toArray();
+      const idsTareasAEliminar = tareas
+        .filter((t) => {
+          if (t.sync_status !== 'synced') return false;
+          const esTerminal = t.estado_tarea === '04_Completado' || t.estado_tarea === '05_Archivado';
+          if (!esTerminal) return false;
+          return esExpirado(t.updated_at || t.fecha_programada);
+        })
+        .map((t) => t.id);
+
+      if (idsTareasAEliminar.length > 0) {
+        await db.tareas.bulkDelete(idsTareasAEliminar);
+        resultado.tareasPurgadas += idsTareasAEliminar.length;
+      }
+    }
+
+    // 2. Purgar Transacciones Financieras sincronizadas (Gastos, Ingresos, Cuotas)
+    if (db.gastos && typeof db.gastos.toArray === 'function') {
+      const gastos = await db.gastos.toArray();
+      const idsGastos = gastos
+        .filter((g) => g.sync_status === 'synced' && esExpirado(g.fecha_gasto || g.updated_at))
+        .map((g) => g.id);
+      if (idsGastos.length > 0) {
+        await db.gastos.bulkDelete(idsGastos);
+        resultado.transaccionesPurgadas += idsGastos.length;
+      }
+    }
+
+    if (db.ingresos && typeof db.ingresos.toArray === 'function') {
+      const ingresos = await db.ingresos.toArray();
+      const idsIngresos = ingresos
+        .filter((i) => i.sync_status === 'synced' && esExpirado(i.fecha_ingreso || i.updated_at))
+        .map((i) => i.id);
+      if (idsIngresos.length > 0) {
+        await db.ingresos.bulkDelete(idsIngresos);
+        resultado.transaccionesPurgadas += idsIngresos.length;
+      }
+    }
+
+    if (db.cuotas && typeof db.cuotas.toArray === 'function') {
+      const cuotas = await db.cuotas.toArray();
+      const idsCuotas = cuotas
+        .filter((c) => {
+          if (c.sync_status !== 'synced') return false;
+          const esPagada = c.estado_cuota === 'PAGADO';
+          return esPagada && esExpirado(c.fecha_vencimiento || c.updated_at);
+        })
+        .map((c) => c.id);
+      if (idsCuotas.length > 0) {
+        await db.cuotas.bulkDelete(idsCuotas);
+        resultado.transaccionesPurgadas += idsCuotas.length;
+      }
+    }
+
+    // 3. Purgar Lápidas sincronizadas
+    if (db.tombstones && typeof db.tombstones.toArray === 'function') {
+      const tombstones = await db.tombstones.toArray();
+      const idsTombstones = tombstones
+        .filter((tb) => tb.sync_status === 'synced' && esExpirado(tb.deleted_at))
+        .map((tb) => tb.id);
+      if (idsTombstones.length > 0) {
+        await db.tombstones.bulkDelete(idsTombstones);
+        resultado.tombstonesPurgados += idsTombstones.length;
+      }
+    }
+
+    resultado.totalPurgados =
+      resultado.tareasPurgadas +
+      resultado.transaccionesPurgadas +
+      resultado.tombstonesPurgados;
+
+    if (resultado.totalPurgados > 0) {
+      console.info(
+        `[PMO DB] Garbage Collection ejecutado: ${resultado.totalPurgados} registros expirados purgados (> ${diasRetencion} días).`
+      );
+    }
+  } catch (err) {
+    console.warn('[PMO DB] Error en ejecución de Garbage Collection local:', err);
+  }
+
+  return resultado;
+}
+
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
+  (window as any).__PURGAR_REGISTROS_EXPIRADOS__ = purgarRegistrosLocalesExpirados;
 }
 

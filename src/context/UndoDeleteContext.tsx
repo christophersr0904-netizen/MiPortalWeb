@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useEffect, useRef, useState } from 'react';
+import { db } from '../db/db';
 
 export type TipoEntidadUndo =
   | 'PROYECTO'
@@ -113,12 +114,46 @@ export class UndoDeleteManager {
       this.pendingMap.delete(key);
     }
 
+    const commitConTombstone = async () => {
+      try {
+        if (typeof db !== 'undefined' && db?.tombstones && typeof db.tombstones.put === 'function') {
+          const p = db.tombstones.put({
+            id,
+            tabla,
+            deleted_at: new Date().toISOString(),
+            sync_status: 'pending'
+          });
+          if (p && typeof p.catch === 'function') {
+            p.catch((err) => {
+              console.warn('[UndoDeleteManager] Error registrando lápida:', err);
+            });
+          }
+          if (idsSecundarios && idsSecundarios.length > 0) {
+            for (const secId of idsSecundarios) {
+              if (secId) {
+                const sp = db.tombstones.put({
+                  id: secId,
+                  tabla,
+                  deleted_at: new Date().toISOString(),
+                  sync_status: 'pending'
+                });
+                if (sp && typeof sp.catch === 'function') sp.catch(() => {});
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[UndoDeleteManager] Error registrando lápida:', err);
+      }
+      await commit();
+    };
+
     const timeoutId = (setTimeout(async () => {
       this.pendingMap.delete(key);
       this.notify();
 
       try {
-        await commit();
+        await commitConTombstone();
       } catch (err) {
         console.error(`[UndoDeleteManager] Error en commit diferido para ${key}:`, err);
       }
@@ -130,7 +165,7 @@ export class UndoDeleteManager {
       id,
       etiqueta,
       tipo,
-      commit,
+      commit: commitConTombstone,
       timeoutId,
       tiempoRestanteMs: duracionMs,
       creadoEn: Date.now(),

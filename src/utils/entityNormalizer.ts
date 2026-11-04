@@ -1207,5 +1207,73 @@ export function deduplicarVinculosMeta<T extends Record<string, any>>(vinculos: 
   return Array.from(mapa.values());
 }
 
+/**
+ * REQ-SYS-004-NOTAS: Serializa una nota a texto plano limpio para el portapapeles.
+ * Excluye IDs técnicos, UUIDs y metadatos de sincronización.
+ * Parsea título, wishlist formateada, checklist como [x] / [ ], contenido Markdown y etiquetas como #tags.
+ */
+export function serializarNotaATextoPlano(nota: any): string {
+  if (!nota || typeof nota !== 'object') return '';
+  const bloques: string[] = [];
+
+  // 1. Título de la nota
+  const titulo = String(nota.titulo || nota.Titulo || '').trim();
+  if (titulo) bloques.push(titulo);
+
+  // 2. Metadatos de Wishlist si existen
+  const wish = nota.wishlist_json || nota.WishlistMeta;
+  if (wish && typeof wish === 'object' && Number(wish.costoEstimado || 0) > 0) {
+    const moneda = wish.moneda || 'PEN';
+    const costo = Number(wish.costoEstimado || 0).toFixed(2);
+    const estado = wish.estado || (wish.comprado ? 'Conseguido' : 'Pendiente');
+    const lineasWish = [`Costo: ${moneda} ${costo} | Estado: ${estado}`];
+    const enlace = wish.urlReferencia || wish.enlaceReferencia;
+    if (enlace && String(enlace).trim()) {
+      lineasWish.push(`Enlace: ${String(enlace).trim()}`);
+    }
+    bloques.push(lineasWish.join('\n'));
+  }
+
+  // 3. Ítems de Checklist marcados y pendientes
+  const chks: Array<{ texto?: string; completado?: boolean }> = Array.isArray(nota.checklists_json)
+    ? nota.checklists_json
+    : Array.isArray(nota.Checklist)
+    ? nota.Checklist
+    : [];
+  if (chks.length > 0) {
+    const itemsList = chks
+      .filter((c) => c && c.texto && String(c.texto).trim())
+      .map((c) => `${c.completado ? '[x]' : '[ ]'} ${String(c.texto).trim()}`);
+    if (itemsList.length > 0) {
+      bloques.push(itemsList.join('\n'));
+    }
+  }
+
+  // 4. Contenido Markdown o Texto Libre (omitiendo estructuras JSON internas)
+  const contenido = String(nota.contenido_markdown || nota.Contenido || '').trim();
+  if (contenido) {
+    if (!contenido.startsWith('{') || !contenido.includes('"tipoEstructura"')) {
+      bloques.push(contenido);
+    }
+  }
+
+  // 5. Etiquetas formateadas con hashtag
+  const tags: string[] = Array.isArray(nota.etiquetas)
+    ? nota.etiquetas
+    : Array.isArray(nota.Etiquetas)
+    ? nota.Etiquetas
+    : [];
+  if (tags.length > 0) {
+    const tagsLimpios = tags
+      .filter((t) => typeof t === 'string' && t.trim())
+      .map((t) => (t.trim().startsWith('#') ? t.trim() : `#${t.trim()}`));
+    if (tagsLimpios.length > 0) {
+      bloques.push(`Tags: ${tagsLimpios.join(' ')}`);
+    }
+  }
+
+  return bloques.join('\n\n');
+}
+
 
 

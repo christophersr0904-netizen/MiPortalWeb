@@ -48,7 +48,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// 3. Fetch: Interceptación con Stale-While-Revalidate
+// 3. Fetch: Interceptación con Stale-While-Revalidate y Cache-First para fuentes
 self.addEventListener('fetch', (event) => {
   const req = event.request;
 
@@ -57,11 +57,33 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
 
-  // Ignorar llamadas a Supabase, Google Sheets API o servidores externos de datos
+  // Regla específica: Cache-First para Google Fonts (stylesheets y fuentes woff2)
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    event.respondWith(
+      caches.match(req).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(req).then((networkResponse) => {
+          if (
+            networkResponse &&
+            (networkResponse.status === 200 || networkResponse.type === 'opaque')
+          ) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(req, clone);
+            });
+          }
+          return networkResponse;
+        });
+      })
+    );
+    return;
+  }
+
+  // Ignorar llamadas a Supabase o extensiones del navegador
   if (
     url.hostname.includes('supabase.co') ||
-    url.hostname.includes('google.com') ||
-    url.hostname.includes('googleapis.com') ||
     url.protocol.startsWith('chrome-extension')
   ) {
     return;

@@ -24,7 +24,7 @@ import {
   type ModoComputoVinculo
 } from '../../types';
 import { guardarMetaPlanLocal } from '../../services/metasService';
-import Swal from 'sweetalert2';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 interface ModalMetaPlanFlowProps {
   isOpen: boolean;
@@ -217,16 +217,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
     if (!habitoSeleccionadoId) return;
     // Evitar duplicados
     if (vinculos.some((v) => v.habito_id === habitoSeleccionadoId)) {
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'warning',
-        title: 'Este hábito ya se encuentra vinculado a la meta',
-        showConfirmButton: false,
-        timer: 2000,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+      mostrarToastCobalt('Este hábito ya se encuentra vinculado a la meta', 'warning');
       return;
     }
 
@@ -248,14 +239,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
   // Guardado Final Atómico
   const handleGuardar = async () => {
     if (!nombreMeta.trim()) {
-      Swal.fire({
-        title: 'Título requerido',
-        text: 'Por favor asigna un título o nombre descriptivo a la meta.',
-        icon: 'info',
-        confirmButtonText: 'Entendido',
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+      mostrarToastCobalt('Por favor asigna un título descriptivo a la meta.', 'warning');
       setTabActiva('datos');
       return;
     }
@@ -283,28 +267,13 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
         vinculos
       );
 
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: metaParaEditar ? 'Meta actualizada con éxito' : 'Nueva Meta & Plan creados',
-        showConfirmButton: false,
-        timer: 2000,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+      mostrarToastCobalt(metaParaEditar ? 'Meta actualizada con éxito' : 'Nueva Meta & Plan creados', 'success');
 
       if (onGuardado) onGuardado();
       onClose();
     } catch (error) {
       console.error('Error al guardar meta:', error);
-      Swal.fire({
-        title: 'Error de persistencia',
-        text: 'No se pudo guardar la meta en Dexie Local-First.',
-        icon: 'error',
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+      mostrarToastCobalt('No se pudo guardar la meta en Dexie Local-First.', 'error');
     }
   };
 

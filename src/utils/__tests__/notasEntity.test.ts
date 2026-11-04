@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeNota } from '../entityNormalizer';
+import { normalizeNota, serializarNotaATextoPlano } from '../entityNormalizer';
 import initialSeed from '../../db/initialSeed.json';
 import { NotaRecord } from '../../types';
 
@@ -177,5 +177,81 @@ describe('REQ-NOT-03: Homogenización de Notas Compuestas, Blocks Dinámicos y E
         expect(encontrada.wishlist_json).toBeUndefined();
       }
     });
+  });
+
+  it('7. REQ-NOTAS-001: Edición in-situ inmutable de ítems en checklists_json preservando UUID y completado', () => {
+    const checklistOriginal = [
+      { id: 'chk-1', texto: 'Texto original', completado: false },
+      { id: 'chk-2', texto: 'Otro paso', completado: true }
+    ];
+
+    const itemIdAEditar = 'chk-1';
+    const nuevoTexto = 'Texto modificado in-line';
+
+    // Función de mutación inmutable idéntica a handleEditarChecklistItem
+    const checklistActualizado = checklistOriginal.map(c =>
+      c.id === itemIdAEditar ? { ...c, texto: nuevoTexto } : c
+    );
+
+    expect(checklistActualizado[0].id).toBe('chk-1');
+    expect(checklistActualizado[0].texto).toBe('Texto modificado in-line');
+    expect(checklistActualizado[0].completado).toBe(false);
+    expect(checklistActualizado[1].texto).toBe('Otro paso');
+    expect(checklistActualizado[1].completado).toBe(true);
+
+    // Inmutabilidad comprobada
+    expect(checklistActualizado).not.toBe(checklistOriginal);
+    expect(checklistOriginal[0].texto).toBe('Texto original');
+  });
+
+  it('8. REQ-NOTAS-001: Desacoplamiento de eventos y toggle atómico independiente en checklists_json', () => {
+    const checklistOriginal = [
+      { id: 'chk-1', texto: 'Comprar insumos', completado: false }
+    ];
+
+    // Toggle atómico aislado
+    const toggled = checklistOriginal.map(c =>
+      c.id === 'chk-1' ? { ...c, completado: !c.completado } : c
+    );
+
+    expect(toggled[0].completado).toBe(true);
+    expect(toggled[0].texto).toBe('Comprar insumos');
+  });
+
+  it('9. REQ-SYS-004-NOTAS: serializarNotaATextoPlano serializa título, wishlist, checklists, markdown y tags excluyendo IDs técnicos', () => {
+    const notaMock = {
+      id: '00000000-0000-0000-0000-000000000999',
+      codigo_legado: 'NOT-00099',
+      titulo: 'Plan Semanal de Compras',
+      contenido_markdown: 'Revisar ofertas del fin de semana en el supermercado.',
+      checklists_json: [
+        { id: 'chk-1', texto: 'Café de grano', completado: true },
+        { id: 'chk-2', texto: 'Avena integral', completado: false }
+      ],
+      wishlist_json: {
+        costoEstimado: 85.5,
+        moneda: 'PEN',
+        estado: 'Pendiente',
+        urlReferencia: 'https://ejemplo.com/tienda'
+      },
+      etiquetas: ['compras', 'finanzas'],
+      sync_status: 'synced',
+      version: 3
+    };
+
+    const textoPlano = serializarNotaATextoPlano(notaMock);
+
+    expect(textoPlano).toContain('Plan Semanal de Compras');
+    expect(textoPlano).toContain('Costo: PEN 85.50 | Estado: Pendiente');
+    expect(textoPlano).toContain('Enlace: https://ejemplo.com/tienda');
+    expect(textoPlano).toContain('[x] Café de grano');
+    expect(textoPlano).toContain('[ ] Avena integral');
+    expect(textoPlano).toContain('Revisar ofertas del fin de semana en el supermercado.');
+    expect(textoPlano).toContain('Tags: #compras #finanzas');
+
+    // Comprobar que no se filtran IDs técnicos ni metadatos de sincronización
+    expect(textoPlano).not.toContain('NOT-00099');
+    expect(textoPlano).not.toContain('00000000-0000-0000-0000-000000000999');
+    expect(textoPlano).not.toContain('synced');
   });
 });

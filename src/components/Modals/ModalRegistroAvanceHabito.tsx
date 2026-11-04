@@ -1,0 +1,233 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { X, PlusCircle, AlertCircle, Sparkles } from 'lucide-react';
+import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+
+export interface ModalRegistroAvanceHabitoProps {
+  isOpen: boolean;
+  titulo: string;
+  unidadMedida?: string;
+  valorActual?: number;
+  metaTotal?: number;
+  rescateMinimo?: number;
+  onRegistrar: (cantidad: number) => Promise<void>;
+  onClose: () => void;
+}
+
+export const ModalRegistroAvanceHabito: React.FC<ModalRegistroAvanceHabitoProps> = ({
+  isOpen,
+  titulo,
+  unidadMedida = 'unidades',
+  valorActual = 0,
+  metaTotal = 0,
+  rescateMinimo = 0,
+  onRegistrar,
+  onClose
+}) => {
+  useBodyScrollLock(isOpen);
+
+  const [cantidad, setCantidad] = useState<string>('');
+  const [guardando, setGuardando] = useState<boolean>(false);
+  const [errorLocal, setErrorLocal] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setCantidad('');
+      setErrorLocal(null);
+      setGuardando(false);
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    }
+  }, [isOpen]);
+
+  // Listener para atajo Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const val = parseFloat(cantidad);
+    if (isNaN(val) || val <= 0) {
+      setErrorLocal('Ingresa una cantidad numérica mayor a 0');
+      return;
+    }
+
+    try {
+      setGuardando(true);
+      setErrorLocal(null);
+      await onRegistrar(val);
+      onClose();
+    } catch (err: any) {
+      setErrorLocal(err?.message || 'Error al registrar el avance');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const aplicarIncrementoRapido = (inc: number) => {
+    const act = parseFloat(cantidad) || 0;
+    setCantidad(String(act + inc));
+    setErrorLocal(null);
+  };
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-avance-titulo"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-[#0D1526] border border-cyan-500/40 rounded-2xl shadow-[0_10px_35px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(6,182,212,0.15)] overflow-hidden transform transition-all animate-scaleUp"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header Bento */}
+        <div className="flex items-center justify-between p-4 border-b border-slate-800/80 bg-slate-900/40">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-cyan-950/60 border border-cyan-800/60 flex items-center justify-center text-cyan-400">
+              <PlusCircle className="w-4 h-4" strokeWidth={1.75} />
+            </div>
+            <div>
+              <h3 id="modal-avance-titulo" className="text-sm font-bold text-slate-100 truncate max-w-[260px]">
+                Registrar Avance
+              </h3>
+              <p className="text-[11px] text-slate-400 truncate max-w-[260px]">
+                {titulo}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer"
+            title="Cerrar (Escape)"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Cuerpo del Formulario */}
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          {/* Micro-banner de Error */}
+          {errorLocal && (
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorLocal}</span>
+            </div>
+          )}
+
+          {/* Métricas actuales */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
+              <span className="text-[10px] text-slate-400 font-medium block">Acumulado Actual</span>
+              <span className="text-sm font-bold text-cyan-300 font-mono tabular-nums">
+                {valorActual} {unidadMedida}
+              </span>
+              {metaTotal > 0 && (
+                <span className="text-[10px] text-slate-500 block">de {metaTotal} {unidadMedida}</span>
+              )}
+            </div>
+            <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60">
+              <span className="text-[10px] text-slate-400 font-medium block">Rescate Mínimo</span>
+              <span className="text-sm font-bold text-amber-300 font-mono tabular-nums">
+                {rescateMinimo > 0 ? `≥ ${rescateMinimo} ${unidadMedida}` : 'Sin umbral'}
+              </span>
+              <span className="text-[10px] text-slate-500 block">
+                {rescateMinimo > 0 ? 'Salva racha diaria' : 'Suma regular'}
+              </span>
+            </div>
+          </div>
+
+          {/* Campo de Entrada Numérica */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Cantidad a Sumar ({unidadMedida})
+            </label>
+            <div className="relative">
+              <input
+                ref={inputRef}
+                type="number"
+                step="any"
+                min="0.01"
+                value={cantidad}
+                onChange={(e) => {
+                  setCantidad(e.target.value);
+                  setErrorLocal(null);
+                }}
+                placeholder={`0.00 ${unidadMedida}`}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white font-mono tabular-nums text-sm focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 transition-all placeholder:text-slate-600"
+              />
+              <span className="absolute right-3 top-2.5 text-xs font-mono text-slate-500 select-none">
+                {unidadMedida}
+              </span>
+            </div>
+          </div>
+
+          {/* Atajos de Incremento Rápido */}
+          <div>
+            <span className="text-[10.5px] font-medium text-slate-400 block mb-1.5">Incrementos rápidos:</span>
+            <div className="flex items-center gap-2">
+              {[1, 5, 10, 25].map((inc) => (
+                <button
+                  key={inc}
+                  type="button"
+                  onClick={() => aplicarIncrementoRapido(inc)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 text-xs font-mono tabular-nums font-semibold transition active:scale-95 cursor-pointer"
+                >
+                  +{inc}
+                </button>
+              ))}
+              {rescateMinimo > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCantidad(String(rescateMinimo))}
+                  className="ml-auto px-2.5 py-1 rounded-lg bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border border-amber-800/50 text-xs font-mono tabular-nums font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer"
+                  title={`Fijar avance al mínimo de rescate (${rescateMinimo})`}
+                >
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <span>Rescate ({rescateMinimo})</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Acciones */}
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800/80">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={guardando}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={guardando}
+              className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-md shadow-cyan-900/40 transition-all duration-150 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>{guardando ? 'Guardando...' : 'Registrar Avance'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  );
+};
+

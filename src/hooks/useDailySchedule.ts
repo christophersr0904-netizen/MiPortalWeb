@@ -85,6 +85,30 @@ export function formatFechaIsoLocal(d: Date): string {
 }
 
 /**
+ * Normaliza fechas procedentes de Dexie/GAS tanto en formato ISO (YYYY-MM-DD o ISO string)
+ * como en formato tradicional (M/D/YYYY o YYYY/MM/DD con o sin hora).
+ */
+export function normalizarFechaAFechaIso(rawFecha?: string | null): string {
+  if (!rawFecha) return '';
+  const str = String(rawFecha).trim();
+  const partes = str.split(/[\sT]/)[0];
+  if (partes.includes('/')) {
+    const trozos = partes.split('/');
+    if (trozos.length === 3) {
+      if (trozos[0].length === 4) {
+        return `${trozos[0]}-${trozos[1].padStart(2, '0')}-${trozos[2].padStart(2, '0')}`;
+      } else {
+        const [m, d, y] = trozos;
+        if (y && m && d) {
+          return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+      }
+    }
+  }
+  return partes;
+}
+
+/**
  * Obtiene la lista de fechas según el horizonte solicitado
  */
 export function obtenerFechasHorizonte(horizonte: HorizonteAgenda, baseDate: Date = new Date()): string[] {
@@ -135,17 +159,23 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
 
   const fechasSet = useMemo(() => new Set(fechasHorizonte), [fechasHorizonte]);
 
-  // 2. Consulta reactiva unificada a Dexie
+  // 2. Consulta reactiva unificada a Dexie con tolerancia a fallos por tabla
   const datosDexie = useLiveQuery(async () => {
     const [actividades, tareas, gastos, ingresos, cuotas] = await Promise.all([
-      db.actividades_personales.toArray(),
-      db.tareas.toArray(),
-      db.gastos.toArray(),
-      db.ingresos.toArray(),
-      db.cuotas.toArray()
+      db.actividades_personales?.toArray().catch(() => []) ?? [],
+      db.tareas?.toArray().catch(() => []) ?? [],
+      db.gastos?.toArray().catch(() => []) ?? [],
+      db.ingresos?.toArray().catch(() => []) ?? [],
+      db.cuotas?.toArray().catch(() => []) ?? []
     ]);
 
-    return { actividades, tareas, gastos, ingresos, cuotas };
+    return {
+      actividades: actividades || [],
+      tareas: tareas || [],
+      gastos: gastos || [],
+      ingresos: ingresos || [],
+      cuotas: cuotas || []
+    };
   }, []);
 
   // 3. Normalización y Ritmo Dinámico
@@ -154,20 +184,21 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
     const list: DailyScheduleItem[] = [];
 
     // --- A. TAREAS WBS ---
-    for (const t of datosDexie.tareas) {
+    for (const t of (datosDexie.tareas || [])) {
+      if (!t) continue;
       const estadoRaw = String(getProp(t, 'estado_tarea', 'Estado_Tarea', 'estado', 'Estado') ?? '02_Por_Hacer');
       if (estadoRaw === '05_Archivado' || esElementoArchivado(t, 'tareas')) continue;
       const fProgRaw = String(getProp(t, 'fecha_programada', 'Fecha_Programada') ?? '');
-      const fProg = fProgRaw ? fProgRaw.split('T')[0] : '';
+      const fProg = normalizarFechaAFechaIso(fProgRaw);
       if (!fProg) continue;
 
       const completado = estadoRaw === '04_Completado' || estadoRaw.includes('Completad');
       const estaEnMora = fProg < fechaActual && !completado;
-      const fechaCompTarea = String(getProp(t, 'fecha_completado', 'Fecha_Completado') ?? '');
+      const fechaCompTarea = normalizarFechaAFechaIso(String(getProp(t, 'fecha_completado', 'Fecha_Completado') ?? ''));
       const completadoHoy =
         completado &&
         (fProg === fechaActual ||
-          Boolean(fechaCompTarea && fechaCompTarea.startsWith(fechaActual)) ||
+          fechaCompTarea === fechaActual ||
           Boolean(t.updated_at && t.updated_at.startsWith(fechaActual)));
 
       const incluirEnHoy = fechasSet.has(fechaActual) && (fProg === fechaActual || estaEnMora || completadoHoy);
@@ -218,21 +249,32 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
     }
 
     // --- B. ACTIVIDADES PERSONALES / HÁBITOS ---
-    for (const a of datosDexie.actividades) {
-      const estadoAct = String(getProp(a, 'estado', 'Estado') ?? '02_Por_Hacer');
+    for (const a of (datosDexie.actividades || [])) {
+      if (!a) continue;
+      const estadoAct = String(getProp(a, 'estado', 'Estado', 'estado_actividad') ?? '02_Por_Hacer');
       if (estadoAct === '05_Archivado' || esElementoArchivado(a, 'actividades')) continue;
       const fProgRaw = String(getProp(a, 'fecha_programada', 'Fecha_Programada') ?? '');
-      const fProg = fProgRaw ? fProgRaw.split('T')[0] : '';
+      const fProg = normalizarFechaAFechaIso(fProgRaw);
+
+      const freqCiclo = String(getProp(a, 'frecuencia_ciclo', 'Frecuencia_Ciclo') ?? 'DIARIA').toUpperCase().trim();
+      const reglaRep = String(getProp(a, 'regla_repeticion', 'Regla_Repeticion') ?? '').trim();
+      const tipoCompromiso = String(getProp(a, 'tipo_compromiso', 'Tipo_Compromiso') ?? '').toUpperCase().trim();
 
       const tieneRecurrencia = Boolean(
-        (a.frecuencia_ciclo && a.frecuencia_ciclo !== 'NINGUNA') ||
-        (a.regla_repeticion && a.regla_repeticion.trim() !== '')
+        (freqCiclo && freqCiclo !== 'NINGUNA') ||
+        reglaRep !== ''
       );
-      const esRutinaria = a.tipo_compromiso !== 'PUNTUAL' || tieneRecurrencia;
+      const esRutinaria = tipoCompromiso !== 'PUNTUAL' || tieneRecurrencia;
+
+      const ultimaFechaComp = normalizarFechaAFechaIso(String(getProp(a, 'ultima_fecha_completado', 'Ultima_Fecha_Completado') ?? ''));
+      const histFechasRaw = getProp(a, 'historial_fechas', 'Historial_Fechas');
+      const histFechas = Array.isArray(histFechasRaw)
+        ? histFechasRaw.map((h: string) => normalizarFechaAFechaIso(h))
+        : [];
 
       const completadoHoy =
-        a.ultima_fecha_completado === fechaActual ||
-        Boolean(Array.isArray(a.historial_fechas) && a.historial_fechas.includes(fechaActual)) ||
+        ultimaFechaComp === fechaActual ||
+        histFechas.includes(fechaActual) ||
         (estadoAct === '04_Completado' && fProg === fechaActual);
 
       const estaEnMora = Boolean(fProg && fProg < fechaActual && estadoAct !== '04_Completado' && !completadoHoy);
@@ -244,7 +286,7 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
         if (fHorizonte === fechaActual) {
           const aplicaPorRecurrenciaHoy =
             esRutinaria &&
-            calcularProximaFechaValida(fHorizonte, a.frecuencia_ciclo, a.regla_repeticion) === fHorizonte;
+            calcularProximaFechaValida(fHorizonte, freqCiclo as any, reglaRep) === fHorizonte;
 
           if (fProg === fechaActual || estaEnMora || completadoHoy || aplicaPorRecurrenciaHoy) {
             fechasAplicables.push(fHorizonte);
@@ -252,9 +294,9 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
         } else {
           const aplicaPorRecurrenciaFutura =
             esRutinaria &&
-            a.frecuencia_ciclo &&
-            a.frecuencia_ciclo !== 'NINGUNA' &&
-            calcularProximaFechaValida(fHorizonte, a.frecuencia_ciclo, a.regla_repeticion) === fHorizonte;
+            freqCiclo &&
+            freqCiclo !== 'NINGUNA' &&
+            calcularProximaFechaValida(fHorizonte, freqCiclo as any, reglaRep) === fHorizonte;
 
           if (fProg === fHorizonte || aplicaPorRecurrenciaFutura) {
             fechasAplicables.push(fHorizonte);
@@ -270,7 +312,17 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       const horaFin = sumarMinutosAHora(horaIni, durMin);
       const codigoLegado = String(getProp(a, 'codigo_legado', 'ID_Actividad') ?? 'ACT-000');
       const nombreHabito = String(
-        getProp(a, 'nombre_actividad', 'Nombre_Actividad', 'Nombre', 'nombre') ?? 'Hábito Personal'
+        a.nombre_actividad ||
+        (a as any).nombre ||
+        (a as any).Nombre_Actividad ||
+        (a as any).Nombre ||
+        (a as any).titulo ||
+        (a as any).Titulo ||
+        (a as any).actividad ||
+        (a as any).descripcion ||
+        (a as any).nombre_tarea_actividad ||
+        getProp(a, 'nombre_actividad', 'Nombre_Actividad', 'Nombre', 'nombre') ||
+        'Hábito Personal'
       );
       const catVida = String(getProp(a, 'categoria_vida', 'Categoria_Vida') ?? 'SALUD_DEPORTE');
       const catVidaLimpia = catVida.replace(/_/g, ' ');
@@ -279,7 +331,7 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
         const completadoEnFecha =
           estadoAct === '04_Completado' ||
           (fechaItem === fechaActual && completadoHoy) ||
-          Boolean(Array.isArray(a.historial_fechas) && a.historial_fechas.includes(fechaItem));
+          histFechas.includes(fechaItem);
 
         let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
         if (
@@ -311,10 +363,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
     }
 
     // --- C. GASTOS COMPROMETIDOS ---
-    for (const g of datosDexie.gastos) {
-      if (esElementoArchivado(g, 'gastos')) continue;
+    for (const g of (datosDexie.gastos || [])) {
+      if (!g || esElementoArchivado(g, 'gastos')) continue;
       const fGastoRaw = String(getProp(g, 'fecha_gasto', 'Fecha_Gasto', 'fecha_registro', 'Fecha_Registro') ?? '');
-      const fGasto = fGastoRaw ? fGastoRaw.split('T')[0] : '';
+      const fGasto = normalizarFechaAFechaIso(fGastoRaw);
       if (!fGasto) continue;
 
       const estadoRaw = String(
@@ -378,10 +430,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
     }
 
     // --- D. INGRESOS PROGRAMADOS / POR COBRAR ---
-    for (const ing of datosDexie.ingresos) {
-      if (esElementoArchivado(ing, 'ingresos')) continue;
+    for (const ing of (datosDexie.ingresos || [])) {
+      if (!ing || esElementoArchivado(ing, 'ingresos')) continue;
       const fIngRaw = String(getProp(ing, 'fecha_ingreso', 'Fecha_Ingreso', 'fecha_registro', 'Fecha_Registro') ?? '');
-      const fIngreso = fIngRaw ? fIngRaw.split('T')[0] : '';
+      const fIngreso = normalizarFechaAFechaIso(fIngRaw);
       if (!fIngreso) continue;
 
       const estadoRaw = String(
@@ -456,9 +508,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
     }
 
     // --- E. CUOTAS FINANCIERAS ---
-    for (const c of datosDexie.cuotas) {
+    for (const c of (datosDexie.cuotas || [])) {
+      if (!c) continue;
       const fVencRaw = String(getProp(c, 'fecha_vencimiento', 'Fecha_Vencimiento') ?? '');
-      const fVenc = fVencRaw ? fVencRaw.split('T')[0] : '';
+      const fVenc = normalizarFechaAFechaIso(fVencRaw);
       if (!fVenc) continue;
 
       const estadoRaw = String(getProp(c, 'estado_cuota', 'Estado_Cuota', 'estado', 'Estado') ?? 'PENDIENTE').toUpperCase();

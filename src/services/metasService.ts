@@ -1,4 +1,4 @@
-import { db, sanearDuplicadosDexie } from '../db/db';
+import { db, sanearDuplicadosDexie, registrarTombstone } from '../db/db';
 import { deduplicarPorCodigoCanonico, deduplicarMetasPlanes } from '../utils/entityNormalizer';
 import type {
   MetaPlanRecord,
@@ -440,6 +440,7 @@ export async function recalcularProgresoMetaLocal(metaId: string): Promise<numbe
  * Elimina una meta y sus hitos y vínculos asociados
  */
 export async function eliminarMetaPlanLocal(metaId: string): Promise<boolean> {
+  await registrarTombstone('metas_planes', metaId);
   await db.transaction('rw', [db.metas_planes, db.planes_accion_hitos, db.habitos_metas_vinculos], async () => {
     await db.planes_accion_hitos.where('meta_id').equals(metaId).delete();
     await db.habitos_metas_vinculos.where('meta_id').equals(metaId).delete();

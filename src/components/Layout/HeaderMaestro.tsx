@@ -267,14 +267,37 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             className={`group hidden md:inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all duration-300 select-none cursor-pointer shadow-xs ${
               estaSincronizando
                 ? 'border-sky-400/60 bg-white/10 dark:bg-white/[0.08] text-white shadow-[0_0_12px_rgba(56,189,248,0.25)] scale-[1.02]'
+                : syncManagerEstado === 'reconnecting'
+                ? 'border-amber-500/60 bg-amber-950/20 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                : syncManagerEstado === 'error'
+                ? 'border-rose-500/60 bg-rose-950/20 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.25)]'
                 : 'border-slate-800/80 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60 hover:text-slate-100 active:scale-95'
             }`}
-            title="Sincronizar datos y refrescar estados (Presiona R)"
+            title={
+              estaSincronizando
+                ? 'Sincronizando datos...'
+                : syncManagerEstado === 'reconnecting'
+                ? 'Reconectando en tiempo real...'
+                : syncManagerEstado === 'offline'
+                ? 'Modo sin conexión'
+                : syncManagerEstado === 'error'
+                ? 'Error en sincronización (Click para reintentar)'
+                : 'Al día (Sincronizado) - Presiona R para refrescar'
+            }
           >
             {/* Indicador Radar / Spinner Cinemático */}
             <div className="relative flex items-center justify-center w-3.5 h-3.5">
               {estaSincronizando ? (
                 <RotateCw className="w-3.5 h-3.5 text-sky-400 animate-spin transition-transform duration-500" strokeWidth={2} />
+              ) : syncManagerEstado === 'reconnecting' ? (
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-60"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400 shadow-[0_0_12px_#f59e0b]"></span>
+                </span>
+              ) : syncManagerEstado === 'offline' ? (
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500 shadow-[0_0_6px_rgba(100,116,139,0.5)]"></span>
+              ) : syncManagerEstado === 'error' ? (
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"></span>
               ) : (
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60"></span>
@@ -287,34 +310,50 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             <span
               id="sync-status-text"
               className={`font-mono text-[10.5px] tracking-tight transition-colors duration-200 ${
-                estaSincronizando ? 'text-white font-semibold' : 'text-slate-300 group-hover:text-slate-100'
+                estaSincronizando
+                  ? 'text-white font-semibold'
+                  : syncManagerEstado === 'reconnecting'
+                  ? 'text-amber-300 font-semibold'
+                  : syncManagerEstado === 'error'
+                  ? 'text-rose-300 font-semibold'
+                  : syncManagerEstado === 'offline'
+                  ? 'text-slate-400'
+                  : 'text-slate-300 group-hover:text-slate-100'
               }`}
             >
-              {estaSincronizando ? 'Sincronizando...' : 'Al día'}
+              {estaSincronizando
+                ? 'Sincronizando...'
+                : syncManagerEstado === 'reconnecting'
+                ? 'Reconectando...'
+                : syncManagerEstado === 'offline'
+                ? 'Offline'
+                : syncManagerEstado === 'error'
+                ? 'Error sync'
+                : 'Al día'}
             </span>
           </button>
         </div>
 
-        {/* CENTRO: Pestañas Principales Centradas Matemáticamente */}
+        {/* CENTRO: 5 Pestañas Maestras Canónicas Unificadas (Atajos 1 a 5) */}
         <nav className="hidden md:inline-flex items-center p-1.5 bg-slate-100/90 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-inner gap-1 text-xs select-none absolute left-1/2 -translate-x-1/2">
           {/* 1. Kanban */}
           <button
             type="button"
             onClick={() => onCambiarVista('kanban')}
             id="tab-nav-kanban"
-            className={`px-3.5 py-1.5 rounded-xl font-bold transition-all duration-200 ease-out flex items-center gap-2 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out transform-gpu will-change-transform flex items-center gap-2 cursor-pointer active:scale-95 ${
               vistaActiva === 'kanban'
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs dark:shadow-md dark:shadow-slate-950/40 border border-slate-200/90 dark:border-slate-700/80 ring-1 ring-black/5 dark:ring-white/10 active:scale-95'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 border border-transparent'
+                ? 'text-sky-300 bg-sky-950/30 border border-sky-800/40 shadow-xs'
+                : 'text-slate-400 hover:text-sky-300 hover:bg-slate-800/40 border border-transparent'
             }`}
             title="Tablero Kanban de Tareas (Presiona 1)"
           >
-            <Columns className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Tablero</span>
+            <Columns className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+            <span className="hidden lg:inline">Tablero</span>
             {totalKanban > 0 && (
               <span
                 id="badge-header-kanban"
-                className="text-[10px] font-mono font-bold px-1.5 py-0.5 min-w-[18px] h-4 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60 shadow-2xs leading-none flex items-center justify-center"
+                className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 min-w-[18px] h-4 rounded-full bg-sky-950/60 text-sky-300 border border-sky-800/60 shadow-2xs leading-none flex items-center justify-center"
               >
                 {totalKanban}
               </span>
@@ -326,19 +365,19 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             type="button"
             onClick={() => onCambiarVista('portafolio')}
             id="tab-nav-portafolio"
-            className={`px-3.5 py-1.5 rounded-xl font-bold transition-all duration-200 ease-out flex items-center gap-2 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out transform-gpu will-change-transform flex items-center gap-2 cursor-pointer active:scale-95 ${
               vistaActiva === 'portafolio' || vistaActiva === 'detalle'
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs dark:shadow-md dark:shadow-slate-950/40 border border-slate-200/90 dark:border-slate-700/80 ring-1 ring-black/5 dark:ring-white/10 active:scale-95'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 border border-transparent'
+                ? 'text-sky-300 bg-sky-950/30 border border-sky-800/40 shadow-xs'
+                : 'text-slate-400 hover:text-sky-300 hover:bg-slate-800/40 border border-transparent'
             }`}
             title="Portafolio de Proyectos (Presiona 2)"
           >
-            <FolderKanban className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Portafolio</span>
+            <FolderKanban className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+            <span className="hidden lg:inline">Portafolio</span>
             {totalPortafolio > 0 && (
               <span
                 id="badge-header-portafolio"
-                className="text-[10px] font-mono font-bold px-1.5 py-0.5 min-w-[18px] h-4 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 shadow-2xs leading-none flex items-center justify-center"
+                className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 min-w-[18px] h-4 rounded-full bg-rose-950/60 text-rose-300 border border-rose-800/60 shadow-2xs leading-none flex items-center justify-center"
               >
                 {totalPortafolio}
               </span>
@@ -350,15 +389,15 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             type="button"
             onClick={() => onCambiarVista('habitos')}
             id="tab-nav-habitos"
-            className={`px-3.5 py-1.5 rounded-xl font-bold transition-all duration-200 ease-out flex items-center gap-2 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out transform-gpu will-change-transform flex items-center gap-2 cursor-pointer active:scale-95 ${
               vistaActiva === 'habitos'
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs dark:shadow-md dark:shadow-slate-950/40 border border-slate-200/90 dark:border-slate-700/80 ring-1 ring-black/5 dark:ring-white/10 active:scale-95'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 border border-transparent'
+                ? 'text-sky-300 bg-sky-950/30 border border-sky-800/40 shadow-xs'
+                : 'text-slate-400 hover:text-sky-300 hover:bg-slate-800/40 border border-transparent'
             }`}
             title="Hábitos y Gestión de Vida (Presiona 3)"
           >
-            <HeartPulse className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Hábitos</span>
+            <HeartPulse className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+            <span className="hidden lg:inline">Hábitos</span>
           </button>
 
           {/* 4. Finanzas */}
@@ -366,117 +405,114 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             type="button"
             onClick={() => onCambiarVista('financiero')}
             id="tab-nav-financiero"
-            className={`px-3.5 py-1.5 rounded-xl font-bold transition-all duration-200 ease-out flex items-center gap-2 cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out transform-gpu will-change-transform flex items-center gap-2 cursor-pointer active:scale-95 ${
               vistaActiva === 'financiero'
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs dark:shadow-md dark:shadow-slate-950/40 border border-slate-200/90 dark:border-slate-700/80 ring-1 ring-black/5 dark:ring-white/10 active:scale-95'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 border border-transparent'
+                ? 'text-sky-300 bg-sky-950/30 border border-sky-800/40 shadow-xs'
+                : 'text-slate-400 hover:text-sky-300 hover:bg-slate-800/40 border border-transparent'
             }`}
             title="Flujo de Caja y Finanzas (Presiona 4)"
           >
-            <Wallet className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Finanzas</span>
+            <Wallet className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+            <span className="hidden lg:inline">Finanzas</span>
           </button>
         </nav>
 
-        {/* FLANCO DERECHO: Acceso a Notas, Calendar, Archivados y Dock de Utilidades */}
+        {/* FLANCO DERECHO: Notas Inteligentes (Separada Visualmente), Calendar, Archivados y Dock de Utilidades */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* 1. Botón de Notas (#btn-nav-notas): Protagonista con fondo ámbar */}
-          <div className="hidden md:inline-flex">
-            <button
-              type="button"
-              id="btn-nav-notas"
-              onClick={() => onCambiarVista('notas')}
-              className={`relative items-center justify-center w-11 h-9 rounded-2xl border active:scale-95 transition-all duration-200 cursor-pointer select-none shadow-xs flex ${
-                vistaActiva === 'notas'
-                  ? 'bg-amber-500/25 border-amber-400/90 text-amber-300 ring-2 ring-amber-500/30'
-                  : 'bg-amber-500/[0.12] border-amber-500/40 hover:bg-amber-500/20 hover:border-amber-400/70 text-amber-400'
-              }`}
-              title="Notas Inteligentes (Presiona 5)"
-            >
-              <FileText className="w-4 h-4" />
-              {totalNotas > 0 && (
-                <span
-                  id="badge-header-notas"
-                  className="absolute -top-1 -right-1 text-[9px] font-mono tabular-nums font-bold px-1 min-w-[15px] h-3.5 rounded-full bg-amber-500 text-slate-950 border border-amber-300 leading-none flex items-center justify-center shadow-xs"
-                >
-                  {totalNotas}
-                </span>
-              )}
-            </button>
-          </div>
+          {/* 0. Acceso Rápido a Notas Inteligentes (Extremo derecho separado del nav principal, Atajo 5) */}
+          <button
+            type="button"
+            onClick={() => onCambiarVista('notas')}
+            id="tab-nav-notas"
+            data-legacy-id="btn-nav-notas"
+            className={`px-2.5 py-1.5 rounded-xl font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out transform-gpu will-change-transform hidden md:flex items-center gap-1.5 cursor-pointer active:scale-95 mr-1 ${
+              vistaActiva === 'notas'
+                ? 'text-sky-300 bg-sky-950/40 border border-sky-800/60 shadow-xs'
+                : 'text-slate-400 hover:text-sky-300 hover:bg-slate-800/40 border border-slate-800/50'
+            }`}
+            title="Notas Inteligentes y Wishlists (Presiona 5)"
+          >
+            <FileText className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+            <span className="hidden lg:inline text-xs font-semibold">Notas</span>
+            {totalNotas > 0 && (
+              <span
+                id="badge-header-notas"
+                className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 min-w-[16px] h-3.5 rounded-full bg-amber-950/60 text-amber-300 border border-amber-800/60 shadow-2xs leading-none flex items-center justify-center"
+              >
+                {totalNotas}
+              </span>
+            )}
+          </button>
 
-          {/* 2. Botón Calendar */}
+          {/* 1. Botón Calendar */}
           <a
             href="https://calendar.google.com/calendar/r"
             target="_blank"
             rel="noopener noreferrer"
             id="btn-header-calendar"
-            className="h-9 w-9 p-0 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 active:scale-95 transition-all duration-200 cursor-pointer hidden md:flex items-center justify-center select-none"
+            className="h-9 w-9 p-0 rounded-xl text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer hidden md:flex items-center justify-center select-none"
             title="Abrir Google Calendar (Presiona C)"
           >
-            <Calendar className="w-4 h-4" />
+            <Calendar className="w-4 h-4" strokeWidth={1.75} />
           </a>
 
-          {/* 3. Botón de Archivados (#btn-header-archivados) */}
+          {/* 2. Botón de Archivados (#btn-header-archivados) */}
           <button
             type="button"
             id="btn-header-archivados"
             data-legacy-id="btn-header-boveda-archivados"
             onClick={() => setDrawerAbierto(true)}
-            className="relative h-9 w-9 p-0 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 active:scale-95 transition-all duration-200 cursor-pointer hidden md:flex items-center justify-center select-none"
+            className="relative h-9 w-9 p-0 rounded-xl text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer hidden md:flex items-center justify-center select-none"
             title="Bóveda de Archivados (+10 días completados/conciliados)"
           >
-            <Archive className="w-4 h-4" />
+            <Archive className="w-4 h-4" strokeWidth={1.75} />
             {totalArchivados > 0 && (
               <span
                 id="badge-header-archivados"
-                className="absolute -top-1 -right-1 text-[9px] font-mono font-bold px-1 min-w-[15px] h-3.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 leading-none flex items-center justify-center shadow-xs"
+                className="absolute -top-1 -right-1 text-[9px] font-mono tabular-nums font-bold px-1 min-w-[15px] h-3.5 rounded-full bg-slate-800 text-sky-300 border border-slate-700 leading-none flex items-center justify-center shadow-xs"
               >
                 {totalArchivados}
               </span>
             )}
           </button>
-
-
-          {/* 5. Atajos (#btn-toggle-shortcuts-modal): Canónico según legacy L151-166 */}
+          {/* 3. Atajos (#btn-toggle-shortcuts-modal): Canónico según legacy L151-166 */}
           <button
             type="button"
             id="btn-toggle-shortcuts-modal"
             data-legacy-id="btn-shortcuts-config"
             onClick={onAbrirAtajos}
-            className="h-9 w-9 p-0 rounded-xl bg-transparent border border-transparent text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 active:scale-95 transition-all duration-200 cursor-pointer hidden md:flex items-center justify-center select-none"
+            className="h-9 w-9 p-0 rounded-xl bg-transparent border border-transparent text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer hidden md:flex items-center justify-center select-none"
             title="Atajos de Teclado (Presiona ?)"
           >
-            <Keyboard className="w-4 h-4 transition-transform duration-200" />
+            <Keyboard className="w-4 h-4 transition-transform duration-150" strokeWidth={1.75} />
           </button>
 
-          {/* 6. Exportar Ficha PDF (Opcional / Directo) */}
+          {/* 4. Exportar Ficha PDF (Opcional / Directo) */}
           {onAbrirExportarPdf && (
             <button
               type="button"
               id="btn-header-exportar-pdf"
               onClick={onAbrirExportarPdf}
-              className="h-9 w-9 p-0 rounded-xl bg-transparent border border-transparent text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 active:scale-95 transition-all duration-200 cursor-pointer hidden md:flex items-center justify-center select-none"
+              className="h-9 w-9 p-0 rounded-xl bg-transparent border border-transparent text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer hidden md:flex items-center justify-center select-none"
               title="Generar Ficha Resumen (PDF)"
             >
-              <FileText className="w-4 h-4" />
+              <FileText className="w-4 h-4" strokeWidth={1.75} />
             </button>
           )}
 
-
-          {/* 8. Selector de Tema / Paleta */}
+          {/* 5. Selector de Tema / Paleta */}
           <div className="relative" id="container-theme-dropdown">
             <button
               type="button"
               id="btn-theme-dropdown"
               onClick={() => setMenuTemaAbierto(!menuTemaAbierto)}
-              className="h-8 w-8 md:h-9 md:w-9 p-0 rounded-xl bg-transparent text-slate-400 hover:text-slate-100 hover:bg-slate-800/30 flex items-center justify-center active:scale-95 transition-all duration-200 cursor-pointer"
+              className="h-8 w-8 md:h-9 md:w-9 p-0 rounded-xl bg-transparent text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 flex items-center justify-center active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
               title="Tema e Iluminación (Sol / Luna y Paletas)"
             >
               {modoColor === 'light' ? (
-                <Sun className="w-4 h-4 text-amber-500" />
+                <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.75} />
               ) : (
-                <Moon className="w-4 h-4 text-indigo-400" />
+                <Moon className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
               )}
             </button>
 
@@ -488,7 +524,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               >
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
                   <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
                     <span className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                       Apariencia
                     </span>
@@ -498,7 +534,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                     onClick={() => {
                       onCambiarModoColor(modoColor === 'dark' ? 'light' : 'dark');
                     }}
-                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    className="text-[10px] font-bold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
                   >
                     Alternar Modo
                   </button>
@@ -513,13 +549,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                     <button
                       type="button"
                       onClick={() => onCambiarModoColor('light')}
-                      className={`flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer ${
+                      className={`flex items-center gap-2 p-2 rounded-xl border transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer ${
                         modoColor === 'light'
                           ? 'border-amber-400 bg-amber-500/10'
                           : 'border-slate-200 dark:border-slate-800 hover:border-amber-400/50'
                       }`}
                     >
-                      <Sun className="w-4 h-4 text-amber-500 shrink-0" />
+                      <Sun className="w-4 h-4 text-amber-500 shrink-0" strokeWidth={1.75} />
                       <div className="flex flex-col text-left">
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Claro</span>
                         <span className="text-[9px] text-slate-400">Light</span>
@@ -529,13 +565,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                     <button
                       type="button"
                       onClick={() => onCambiarModoColor('dark')}
-                      className={`flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer ${
+                      className={`flex items-center gap-2 p-2 rounded-xl border transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer ${
                         modoColor === 'dark'
-                          ? 'border-indigo-400 bg-indigo-500/10'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-indigo-400/50'
+                          ? 'border-sky-400 bg-sky-500/10'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-sky-400/50'
                       }`}
                     >
-                      <Moon className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <Moon className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
                       <div className="flex flex-col text-left">
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Oscuro</span>
                         <span className="text-[9px] text-slate-400">OLED</span>
@@ -553,18 +589,18 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                     <button
                       type="button"
                       onClick={() => onCambiarSaborTema('slate')}
-                      className={`flex flex-col items-start p-2 rounded-xl border transition-all text-left cursor-pointer ${
+                      className={`flex flex-col items-start p-2 rounded-xl border transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform text-left cursor-pointer ${
                         saborTema === 'slate'
-                          ? 'border-indigo-500 bg-indigo-500/10'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-indigo-400'
+                          ? 'border-sky-500 bg-sky-500/10'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-sky-400'
                       }`}
                     >
                       <div className="flex items-center justify-between w-full mb-1">
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                          <Zap className="w-3.5 h-3.5 text-sky-400" />
+                          <Zap className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
                           <span>Slate</span>
                         </span>
-                        {saborTema === 'slate' && <span className="w-2 h-2 rounded-full bg-indigo-500"></span>}
+                        {saborTema === 'slate' && <span className="w-2 h-2 rounded-full bg-sky-500"></span>}
                       </div>
                       <span className="text-[9px] text-slate-500 dark:text-slate-400 leading-tight">Metálico</span>
                     </button>
@@ -572,7 +608,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                     <button
                       type="button"
                       onClick={() => onCambiarSaborTema('rose')}
-                      className={`flex flex-col items-start p-2 rounded-xl border transition-all text-left cursor-pointer ${
+                      className={`flex flex-col items-start p-2 rounded-xl border transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform text-left cursor-pointer ${
                         saborTema === 'rose'
                           ? 'border-rose-500 bg-rose-500/10'
                           : 'border-slate-200 dark:border-slate-800 hover:border-rose-400'
@@ -580,7 +616,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                     >
                       <div className="flex items-center justify-between w-full mb-1">
                         <span className="text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1">
-                          <Palette className="w-3.5 h-3.5 text-rose-400" />
+                          <Palette className="w-3.5 h-3.5 text-rose-400" strokeWidth={1.75} />
                           <span>Rose</span>
                         </span>
                         {saborTema === 'rose' && <span className="w-2 h-2 rounded-full bg-rose-500"></span>}
@@ -606,22 +642,22 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
 
       <aside
         id="drawer-archivados"
-        className={`fixed inset-y-0 right-0 z-[10005] w-full sm:w-[500px] lg:w-[580px] bg-white/95 dark:bg-[#0D1526]/95 backdrop-blur-2xl shadow-2xl border-l border-slate-200/90 dark:border-slate-800/40 transition-transform duration-300 ease-out flex flex-col min-h-0 select-none ${
+        className={`fixed inset-y-0 right-0 z-[10005] w-full sm:w-[500px] lg:w-[580px] bg-white dark:bg-[#0D1526] shadow-2xl border-l border-slate-200/90 dark:border-slate-800/40 transition-[transform] duration-200 ease-out transform-gpu will-change-transform flex flex-col min-h-0 select-none ${
           isDrawerOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         {/* Encabezado del Drawer */}
-        <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-slate-800/60 flex items-center justify-between shrink-0 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md">
+        <div className="p-4 sm:p-5 border-b border-slate-200/80 dark:border-slate-800/60 flex items-center justify-between shrink-0 bg-white dark:bg-[#0D1526]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center text-lg shadow-md shadow-amber-500/20 ring-1 ring-white/20">
-              <Archive className="w-5 h-5 text-white" />
+              <Archive className="w-5 h-5 text-white" strokeWidth={1.75} />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-black text-slate-900 dark:text-white leading-tight">
                   Bóveda de Archivados
                 </h3>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60">
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 font-mono tabular-nums">
                   +10 días
                 </span>
               </div>
@@ -634,17 +670,17 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
           <button
             type="button"
             onClick={() => setDrawerAbierto(false)}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-150 active:scale-95 cursor-pointer"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform active:scale-95 cursor-pointer"
             title="Cerrar Bóveda (Esc)"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
         {/* Buscador & 5 Pestañas de Filtro (Todos, Kanban, Portafolio, Hábitos, Finanzas) */}
-        <div className="p-4 border-b border-slate-200/80 dark:border-slate-800/60 space-y-3 shrink-0 bg-slate-50/70 dark:bg-slate-900/40">
+        <div className="p-4 border-b border-slate-200/80 dark:border-slate-800/60 space-y-3 shrink-0 bg-slate-50 dark:bg-[#090F1D]">
           <div className="relative">
-            <Search className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 w-4 h-4 top-2.5" />
+            <Search className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 w-4 h-4 top-2.5" strokeWidth={1.75} />
             <input
               type="text"
               id="input-busqueda-drawer-archivados"
@@ -661,7 +697,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
                 title="Limpiar búsqueda"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
             )}
           </div>
@@ -671,13 +707,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               type="button"
               id="tab-drawer-todos"
               onClick={() => setTabArchivados('todos')}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-bold transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 tabArchivados === 'todos'
                   ? 'bg-amber-500 text-white shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800'
               }`}
             >
-              <Globe className="w-3.5 h-3.5" />
+              <Globe className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Todos</span>
               <span id="count-tab-arch-todos" className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-mono tabular-nums font-black">
                 {totalArchivados}
@@ -687,13 +723,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               type="button"
               id="tab-drawer-kanban"
               onClick={() => setTabArchivados('kanban')}
-              className={`px-3 py-1.5 rounded-xl font-medium transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-medium transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 tabArchivados === 'kanban'
                   ? 'bg-amber-500 text-white shadow-2xs font-bold'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800'
               }`}
             >
-              <Columns className="w-3.5 h-3.5" />
+              <Columns className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Kanban</span>
               <span id="count-tab-arch-kanban" className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-mono tabular-nums font-bold">
                 {tareasArchivadas.length}
@@ -703,13 +739,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               type="button"
               id="tab-drawer-portafolio"
               onClick={() => setTabArchivados('portafolio')}
-              className={`px-3 py-1.5 rounded-xl font-medium transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-medium transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 tabArchivados === 'portafolio'
                   ? 'bg-amber-500 text-white shadow-2xs font-bold'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800'
               }`}
             >
-              <Briefcase className="w-3.5 h-3.5" />
+              <Briefcase className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Portafolio</span>
               <span id="count-tab-arch-portafolio" className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-mono tabular-nums font-bold">
                 {proyectosArchivados.length}
@@ -719,13 +755,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               type="button"
               id="tab-drawer-habitos"
               onClick={() => setTabArchivados('habitos')}
-              className={`px-3 py-1.5 rounded-xl font-medium transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-medium transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 tabArchivados === 'habitos'
                   ? 'bg-amber-500 text-white shadow-2xs font-bold'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800'
               }`}
             >
-              <HeartPulse className="w-3.5 h-3.5" />
+              <HeartPulse className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Hábitos</span>
               <span id="count-tab-arch-habitos" className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-mono tabular-nums font-bold">
                 {actividadesArchivadas.length}
@@ -736,13 +772,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               type="button"
               id="tab-drawer-finanzas"
               onClick={() => setTabArchivados('finanzas')}
-              className={`px-3 py-1.5 rounded-xl font-medium transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-medium transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 tabArchivados === 'finanzas'
                   ? 'bg-amber-500 text-white shadow-2xs font-bold'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800'
               }`}
             >
-              <Wallet className="w-3.5 h-3.5" />
+              <Wallet className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Finanzas</span>
               <span id="count-tab-arch-finanzas" className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 font-mono tabular-nums font-bold">
                 {gastosArchivados.length + ingresosArchivados.length}
@@ -764,7 +800,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             archivadosFiltrados.map((item) => (
               <div
                 key={item.id}
-                className="p-3.5 rounded-xl bg-white dark:bg-[#0D1526] border border-slate-200 dark:border-slate-800/60 flex items-center justify-between gap-3 shadow-xs hover:border-amber-400/50 transition-all"
+                className="p-3.5 rounded-xl bg-white dark:bg-[#0D1526] border border-slate-200 dark:border-slate-800/60 flex items-center justify-between gap-3 shadow-xs hover:border-amber-400/50 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -792,10 +828,10 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                       await db.ingresos.update(item.id, { estado_cobro: 'PENDIENTE', updated_at: ahoraIso });
                     }
                   }}
-                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 border border-amber-500/30 flex items-center gap-1 shrink-0 transition-all active:scale-95 cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 border border-amber-500/30 flex items-center gap-1 shrink-0 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform active:scale-95 cursor-pointer"
                   title="Restaurar elemento en caliente"
                 >
-                  <RotateCcw className="w-3 h-3" />
+                  <RotateCcw className="w-3 h-3" strokeWidth={1.75} />
                   <span>Restaurar</span>
                 </button>
               </div>
@@ -804,9 +840,9 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3.5 px-5 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-[#0D1526]/80 backdrop-blur-md flex items-center justify-between shrink-0 text-xs text-slate-500 dark:text-slate-400">
+        <div className="p-3.5 px-5 border-t border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D1526] flex items-center justify-between shrink-0 text-xs text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-1.5">
-            <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
+            <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" strokeWidth={1.75} />
             <span className="text-[11px]">Pulsa <b>'Restaurar'</b> para devolver un elemento al canvas activo.</span>
           </div>
           <span id="lbl-total-archivados-footer" className="font-mono tabular-nums text-[11px] font-bold text-slate-700 dark:text-slate-300">

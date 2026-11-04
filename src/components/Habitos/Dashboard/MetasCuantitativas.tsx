@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { ActividadPersonal, MetaPlanRecord } from '../../../types';
 import { CATEGORIAS_VIDA_MAP } from '../../../types';
 import { Target, Plus, ShieldCheck, ChevronRight, Compass } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { ModalRegistroAvanceHabito } from '../../Modals/ModalRegistroAvanceHabito';
 
 interface MetasCuantitativasProps {
   actividades: ActividadPersonal[];
@@ -24,7 +24,18 @@ interface ItemMetaCuantitativa {
   targetRef: ActividadPersonal | MetaPlanRecord;
 }
 
-export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
+export const resolverNombreMeta = (item: any): string =>
+  item?.nombre_meta ||
+  item?.nombre_actividad ||
+  item?.nombre ||
+  item?.Nombre ||
+  item?.titulo ||
+  item?.Titulo ||
+  item?.descripcion ||
+  item?.actividad ||
+  'Meta sin título';
+
+const MetasCuantitativasComponent: React.FC<MetasCuantitativasProps> = ({
   actividades,
   metas,
   onRegistrarAvance,
@@ -32,33 +43,34 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
   onAbrirMeta360
 }) => {
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [itemParaAvance, setItemParaAvance] = useState<ItemMetaCuantitativa | null>(null);
 
   // Mapear desde metas_planes si existen registros, o fallback transparente a actividades_personales
   const itemsMetas: ItemMetaCuantitativa[] = (metas && metas.length > 0)
     ? metas.map((m) => ({
         id: m.id,
-        nombre: m.nombre_meta,
+        nombre: resolverNombreMeta(m),
         categoria_vida: m.categoria_vida,
         meta_macro_nombre: m.descripcion,
         unidad_medida: m.unidad_medida || 'unidades',
-        valor_acumulado_actual: m.valor_acumulado_actual || 0,
-        meta_objetivo_total: m.meta_objetivo_total || 1,
-        nivel_rescate_minimo: m.nivel_rescate_minimo || 0,
+        valor_acumulado_actual: Number(m.valor_acumulado_actual) || 0,
+        meta_objetivo_total: Math.max(1, Number(m.meta_objetivo_total) || 1),
+        nivel_rescate_minimo: Math.max(0, Number(m.nivel_rescate_minimo) || 0),
         targetRef: m
       }))
     : actividades
         .filter(
-          (a) => a.tipo_compromiso === 'META' || (a.meta_objetivo_total && a.meta_objetivo_total > 0)
+          (a) => a.tipo_compromiso === 'META' || (a.meta_objetivo_total && Number(a.meta_objetivo_total) > 0)
         )
         .map((a) => ({
           id: a.id,
-          nombre: a.nombre_actividad,
+          nombre: resolverNombreMeta(a),
           categoria_vida: a.categoria_vida,
           meta_macro_nombre: a.meta_macro_nombre,
           unidad_medida: a.unidad_medida || 'unidades',
-          valor_acumulado_actual: a.valor_acumulado_actual || 0,
-          meta_objetivo_total: a.meta_objetivo_total || 1,
-          nivel_rescate_minimo: a.nivel_rescate_minimo || 0,
+          valor_acumulado_actual: Number(a.valor_acumulado_actual) || 0,
+          meta_objetivo_total: Math.max(1, Number(a.meta_objetivo_total) || 1),
+          nivel_rescate_minimo: Math.max(0, Number(a.nivel_rescate_minimo) || 0),
           targetRef: a
         }));
 
@@ -68,58 +80,28 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
       const actual = item.valor_acumulado_actual;
       const nuevoTotal = actual + incremento;
       await onRegistrarAvance(item.targetRef, nuevoTotal);
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: `+${incremento} ${item.unidad_medida} registrado`,
-        showConfirmButton: false,
-        timer: 1500,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
     } finally {
       setLoadingId(null);
     }
   };
 
-  const handlePromptAvance = async (item: ItemMetaCuantitativa) => {
-    const { value: cantidad } = await Swal.fire({
-      title: `Registrar avance en ${item.nombre}`,
-      input: 'number',
-      inputLabel: `Cantidad a sumar (${item.unidad_medida})`,
-      inputPlaceholder: 'Ej: 5',
-      showCancelButton: true,
-      confirmButtonText: 'Registrar',
-      cancelButtonText: 'Cancelar',
-      background: '#0D1526',
-      color: '#f8fafc',
-      inputValidator: (v) => {
-        if (!v || isNaN(Number(v)) || Number(v) <= 0) {
-          return 'Ingresa una cantidad numérica válida mayor a 0';
-        }
-        return null;
-      }
-    });
-
-    if (cantidad) {
-      await handleSumarAvance(item, Number(cantidad));
-    }
+  const handlePromptAvance = (item: ItemMetaCuantitativa) => {
+    setItemParaAvance(item);
   };
 
   return (
-    <div className="portal-surface bg-white dark:bg-[#0D1526] p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800/40 shadow-xs flex flex-col justify-between">
+    <div className="portal-surface bg-[#0D1526] p-5 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between">
       {/* CABECERA WIDGET */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/60 mb-4">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-800/60 mb-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/60 flex items-center justify-center text-teal-400">
+          <div className="w-8 h-8 rounded-xl bg-teal-950/60 flex items-center justify-center text-teal-400">
             <Target className="w-4 h-4" strokeWidth={1.75} />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+            <h3 className="text-sm font-bold text-slate-100">
               Monitor de Metas Cuantitativas
             </h3>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+            <p className="text-[11px] text-slate-400 font-medium">
               Progreso acumulativo y umbral de rescate mínimo
             </p>
           </div>
@@ -133,11 +115,11 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
       {/* LISTA DE METAS CUANTITATIVAS */}
       {itemsMetas.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-400 mb-2">
+          <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-slate-400 mb-2">
             <Target className="w-6 h-6" strokeWidth={1.75} />
           </div>
           <p className="text-xs font-bold text-slate-300">No hay metas cuantitativas activas</p>
-          <p className="text-[11px] text-slate-500 max-w-[280px] mt-0.5 mb-3">
+          <p className="text-[11px] text-slate-400 max-w-[280px] mt-0.5 mb-3">
             Registra compromisos numéricos con unidades de medida (ej. Leer 500 páginas, Correr 100 km).
           </p>
           {onCrearMeta && (
@@ -154,20 +136,24 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 flex-1">
           {itemsMetas.map((m) => {
-            const actual = m.valor_acumulado_actual || 0;
-            const total = m.meta_objetivo_total || 1;
-            const unidad = m.unidad_medida || 'unidades';
-            const pct = Math.min(100, Math.round((actual / total) * 100));
+            const actual = Math.max(0, Number(m.valor_acumulado_actual) || 0);
+            const total = Math.max(1, Number(m.meta_objetivo_total) || 1);
+            const unidad = m.unidad_medida?.trim() || 'unidades';
+            const ratio = actual / total;
+            const pct = Number.isFinite(ratio) ? Math.min(100, Math.max(0, Math.round(ratio * 100))) : 0;
             const cfg = CATEGORIAS_VIDA_MAP[m.categoria_vida as keyof typeof CATEGORIAS_VIDA_MAP];
 
             // Porcentaje del nivel de rescate mínimo
-            const rescate = m.nivel_rescate_minimo || 0;
-            const rescatePct = rescate > 0 ? Math.min(100, Math.round((rescate / total) * 100)) : null;
+            const rescate = Math.max(0, Number(m.nivel_rescate_minimo) || 0);
+            const rescateRatio = rescate / total;
+            const rescatePct = (rescate > 0 && Number.isFinite(rescateRatio))
+              ? Math.min(100, Math.max(0, Math.round(rescateRatio * 100)))
+              : null;
 
             return (
               <div
                 key={m.id}
-                className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 flex flex-col justify-between hover:border-teal-500/40 transition-all group"
+                className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-between hover:border-teal-500/40 transition-all group min-h-[145px]"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1">
@@ -175,7 +161,7 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
                       onClick={() => {
                         if (onAbrirMeta360) onAbrirMeta360(m.id);
                       }}
-                      className={`text-xs font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-teal-400 transition-colors ${
+                      className={`text-xs font-bold text-slate-100 truncate group-hover:text-teal-400 transition-colors ${
                         onAbrirMeta360 ? 'cursor-pointer hover:underline' : ''
                       }`}
                       title="Clic para abrir la Vista Detallada 360°"
@@ -278,6 +264,25 @@ export const MetasCuantitativas: React.FC<MetasCuantitativasProps> = ({
           })}
         </div>
       )}
+
+      {/* Modal Declarativo Bento para Avance Cuantitativo (Zero Swal) */}
+      {itemParaAvance && (
+        <ModalRegistroAvanceHabito
+          isOpen={Boolean(itemParaAvance)}
+          titulo={itemParaAvance.nombre}
+          unidadMedida={itemParaAvance.unidad_medida}
+          valorActual={itemParaAvance.valor_acumulado_actual}
+          metaTotal={itemParaAvance.meta_objetivo_total}
+          rescateMinimo={itemParaAvance.nivel_rescate_minimo}
+          onRegistrar={async (cantidad) => {
+            await handleSumarAvance(itemParaAvance, cantidad);
+          }}
+          onClose={() => setItemParaAvance(null)}
+        />
+      )}
     </div>
   );
 };
+
+export const MetasCuantitativas = React.memo(MetasCuantitativasComponent);
+

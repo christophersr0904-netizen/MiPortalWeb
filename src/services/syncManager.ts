@@ -9,10 +9,17 @@ import {
   sanitizarTareaPayload,
   sanitizarNotaPayload,
   sanitizarActividadPayload,
-  sanitizarSubtareaPayload
+  sanitizarSubtareaPayload,
+  sanitizarGastoPayload,
+  sanitizarIngresoPayload,
+  sanitizarCuotaPayload,
+  sanitizarMetaPlanPayload,
+  sanitizarHitoPlanPayload,
+  sanitizarVinculoPayload
 } from './syncPayloadSanitizer';
+import type { TombstoneRecord } from '../types';
 
-export type SyncState = 'synced' | 'syncing' | 'offline' | 'error';
+export type SyncState = 'synced' | 'syncing' | 'offline' | 'error' | 'reconnecting';
 
 export interface SyncResult {
   success: number;
@@ -26,9 +33,38 @@ class SyncManager {
   private listeners: Array<(state: SyncState) => void> = [];
   private currentUserId: string = DEFAULT_USER_ID;
 
+  // Realtime & Anti-Eco (TTL 10s & Debounce 800ms)
+  private recentlyPushedIds = new Map<string, number>();
+  private realtimeChannel: any = null;
+  private realtimeDebounceTimer: any = null;
+  private tablasPendientesRealtime = new Set<string>();
+
   constructor() {
     this.initSupabaseClient();
     this.setupNetworkListeners();
+    this.setupRealtimeSubscriptions();
+  }
+
+  /**
+   * Registra un ID en la caché temporal anti-eco con un TTL de 10 segundos por defecto.
+   */
+  public registrarPushedId(id: string | undefined | null, ttlMs: number = 10000): void {
+    if (!id) return;
+    this.recentlyPushedIds.set(String(id), Date.now() + ttlMs);
+  }
+
+  /**
+   * Evalúa si un ID recibido por WebSocket corresponde a un eco reciente de un push local.
+   */
+  public esEcoLocal(id: string | undefined | null): boolean {
+    if (!id) return false;
+    const expiracion = this.recentlyPushedIds.get(String(id));
+    if (!expiracion) return false;
+    if (Date.now() > expiracion) {
+      this.recentlyPushedIds.delete(String(id));
+      return false;
+    }
+    return true;
   }
 
   public setUserId(userId: string) {
@@ -55,10 +91,16 @@ class SyncManager {
   private setupNetworkListeners() {
     if (typeof window === 'undefined') return;
 
-    window.addEventListener('online', () => {
-      console.log('[SyncManager] Conexión restablecida. Disparando sincronización...');
+    // Reconexión Bidireccional Atómica (Push + Pull)
+    window.addEventListener('online', async () => {
+      console.log('[SyncManager] Conexión restablecida. Disparando sincronización bidireccional...');
       this.setSyncState('syncing');
-      this.syncPendingRecords();
+      try {
+        await this.syncPendingRecords();
+        await this.descargarDatosDescendientes();
+      } catch (err) {
+        console.error('[SyncManager] Error en sincronización de reconexión:', err);
+      }
     });
 
     window.addEventListener('offline', () => {
@@ -67,11 +109,116 @@ class SyncManager {
     });
 
     // Sincronización periódica cada 45 segundos si hay conexión
-    setInterval(() => {
+    setInterval(async () => {
       if (typeof navigator !== 'undefined' && navigator.onLine && !this.isSyncing) {
-        this.syncPendingRecords();
+        try {
+          await this.syncPendingRecords();
+          await this.descargarDatosDescendientes();
+        } catch (err) {
+          console.warn('[SyncManager] Error en intervalo periódico:', err);
+        }
       }
     }, 45000);
+  }
+
+  /**
+   * Configura las suscripciones WebSocket selectivas (Supabase Realtime)
+   * Monitorea únicamente las 5 entidades operativas críticas:
+   * tareas, actividades_personales, gastos, ingresos, proyectos.
+   */
+  public setupRealtimeSubscriptions() {
+    if (!this.supabase || typeof this.supabase.channel !== 'function') return;
+    if (import.meta.env.VITE_SUPABASE_URL?.includes('mock')) return;
+
+    try {
+      const tablasMonitoreadas = ['tareas', 'actividades_personales', 'gastos', 'ingresos', 'proyectos'];
+      let channel: any = this.supabase.channel('pmo-realtime-channel');
+
+      tablasMonitoreadas.forEach((tabla) => {
+        channel = channel.on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: tabla },
+          (payload: any) => {
+            this.handleRealtimeChange(tabla, payload);
+          }
+        );
+      });
+
+      channel.subscribe((status: string) => {
+        this.handleRealtimeStatusChange(status);
+      });
+
+      this.realtimeChannel = channel;
+    } catch (err) {
+      console.warn('[SyncManager] Error al configurar suscripción Realtime:', err);
+    }
+  }
+
+  /**
+   * Manejador de eventos entrantes de Realtime con Filtro Anti-Eco y Trailing-Edge Debounce (800ms)
+   */
+  public handleRealtimeChange(tabla: string, payload: any) {
+    const recordId = payload?.new?.id || payload?.old?.id;
+
+    // 1. Filtro Anti-Eco: si el registro fue empujado recientemente por este cliente, se ignora
+    if (this.esEcoLocal(recordId)) {
+      return;
+    }
+
+    // 2. Acumular la tabla afectada
+    const targetTable = payload?.table || tabla;
+    this.tablasPendientesRealtime.add(targetTable);
+
+    // 3. Trailing-Edge Debounce (800ms) para amortiguar ráfagas concurrentes (Thundering Herd)
+    if (this.realtimeDebounceTimer) {
+      clearTimeout(this.realtimeDebounceTimer);
+    }
+
+    this.realtimeDebounceTimer = setTimeout(async () => {
+      this.realtimeDebounceTimer = null;
+      const tablasParaPull = Array.from(this.tablasPendientesRealtime);
+      this.tablasPendientesRealtime.clear();
+
+      if (tablasParaPull.length > 0) {
+        try {
+          await this.descargarDatosSelectivos(tablasParaPull);
+        } catch (err) {
+          console.error('[SyncManager] Error en pull selectivo Realtime:', err);
+        }
+      }
+    }, 800);
+  }
+
+  /**
+   * Telemetría de conexión WebSocket: actualiza el estado si el canal se degrada o reconecta
+   */
+  public handleRealtimeStatusChange(status: string) {
+    if (status === 'SUBSCRIBED') {
+      if (this.syncState === 'reconnecting' || this.syncState === 'error') {
+        this.setSyncState('synced');
+      }
+    } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED' || status === 'TIMED_OUT') {
+      const isExplicitOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (!this.isSyncing && !isExplicitOffline) {
+        this.setSyncState('reconnecting');
+      }
+    }
+  }
+
+  /**
+   * Limpieza defensiva de suscripciones y timers
+   */
+  public destroyRealtimeSubscriptions() {
+    if (this.realtimeDebounceTimer) {
+      clearTimeout(this.realtimeDebounceTimer);
+      this.realtimeDebounceTimer = null;
+    }
+    if (this.realtimeChannel && typeof this.realtimeChannel.unsubscribe === 'function') {
+      try {
+        this.realtimeChannel.unsubscribe();
+      } catch {}
+      this.realtimeChannel = null;
+    }
   }
 
   public subscribe(listener: (state: SyncState) => void): () => void {
@@ -92,15 +239,154 @@ class SyncManager {
   }
 
   // ============================================================================
-  // MÉTODOS MODULARES DE REPLICACIÓN (REQ-SYNC-02)
+  // HELPERS DE TOLERANCIA Y RESOLUCIÓN LWW (LAST-WRITE-WINS)
   // ============================================================================
 
   /**
-   * Sincroniza proyectos pendientes aplicando sanitización e idempotencia con onConflict: codigo_legado
+   * Resuelve registros en cola de sincronización ('pending' o 'error' para reintentos con backoff).
+   * Compatible con mocks de pruebas unitarias que sólo implementen .equals().
+   */
+  public async obtenerRegistrosPendientes<T>(tableRef: any): Promise<T[]> {
+    try {
+      const w = tableRef.where('sync_status');
+      if (typeof w.anyOf === 'function') {
+        return await w.anyOf(['pending', 'error']).toArray();
+      }
+      if (typeof w.equals === 'function') {
+        return await w.equals('pending').toArray();
+      }
+      return (await tableRef.toArray()).filter(
+        (r: any) => r.sync_status === 'pending' || r.sync_status === 'error'
+      );
+    } catch {
+      try {
+        return await tableRef.where('sync_status').equals('pending').toArray();
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  /**
+   * Conteo seguro de registros pendientes o en error
+   */
+  public async contarPendientes(tableRef: any): Promise<number> {
+    try {
+      const w = tableRef.where('sync_status');
+      if (typeof w.anyOf === 'function') {
+        return await w.anyOf(['pending', 'error']).count();
+      }
+      if (typeof w.equals === 'function') {
+        return await w.equals('pending').count();
+      }
+      return 0;
+    } catch {
+      try {
+        return await tableRef.where('sync_status').equals('pending').count();
+      } catch {
+        return 0;
+      }
+    }
+  }
+
+  /**
+   * Resolución de Conflictos LWW (Last-Write-Wins):
+   * Compara timestamps 'updated_at' entre la réplica remota en Supabase y el registro local.
+   * Si la versión remota es estrictamente más reciente, cancela el push y preserva la remota.
+   */
+  private async esRemotoMasReciente(
+    tabla: string,
+    codigoLegado?: string,
+    updatedAtLocal?: string
+  ): Promise<boolean> {
+    if (!this.supabase || !codigoLegado || !updatedAtLocal) return false;
+    if (import.meta.env.VITE_SUPABASE_URL?.includes('mock')) return false;
+
+    try {
+      const tableQuery = this.supabase.from(tabla);
+      if (typeof tableQuery.select !== 'function') return false;
+
+      const { data: remoto, error } = await tableQuery
+        .select('updated_at')
+        .eq('codigo_legado', codigoLegado)
+        .maybeSingle();
+
+      if (error || !remoto?.updated_at) return false;
+
+      const remoteTime = new Date(remoto.updated_at).getTime();
+      const localTime = new Date(updatedAtLocal).getTime();
+
+      if (!isNaN(remoteTime) && !isNaN(localTime) && remoteTime > localTime) {
+        console.warn(
+          `[SyncManager] LWW Alert: Remote wins for ${tabla} ${codigoLegado} (Remoto: ${remoto.updated_at} > Local: ${updatedAtLocal})`
+        );
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // MÉTODOS MODULARES DE REPLICACIÓN PUSH (13 ENTIDADES OPERATIVAS)
+  // ============================================================================
+
+  /**
+   * 0. Sincroniza lápidas de registros eliminados hacia Supabase (Tombstones Push)
+   * Previene resurrección remota y garantiza la consistencia del borrado físico.
+   */
+  public async sincronizarTombstones(): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    if (!db.tombstones) return result;
+
+    const pending = await this.obtenerRegistrosPendientes<TombstoneRecord>(db.tombstones);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(pending.map((t) => db.tombstones.update(t.id, { sync_status: 'synced' })));
+      result.success = pending.length;
+      return result;
+    }
+
+    for (const tombstone of pending) {
+      try {
+        this.registrarPushedId(tombstone.id);
+        const { error } = await this.supabase
+          .from(tombstone.tabla)
+          .delete()
+          .eq('id', tombstone.id);
+
+        if (error) {
+          console.error(
+            `[SyncManager] Error al sincronizar tombstone en Supabase (${tombstone.tabla}:${tombstone.id}):`,
+            error
+          );
+          await db.tombstones.update(tombstone.id, { sync_status: 'error' });
+          result.failed++;
+        } else {
+          await db.tombstones.update(tombstone.id, { sync_status: 'synced' });
+          result.success++;
+        }
+      } catch (err) {
+        console.error(
+          `[SyncManager] Excepción al sincronizar tombstone (${tombstone.tabla}:${tombstone.id}):`,
+          err
+        );
+        await db.tombstones.update(tombstone.id, { sync_status: 'error' });
+        result.failed++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 1. Sincroniza proyectos pendientes aplicando sanitización, LWW e idempotencia
    */
   public async sincronizarProyectos(): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
-    const pending = await db.proyectos.where('sync_status').equals('pending').toArray();
+    const pending = await this.obtenerRegistrosPendientes<any>(db.proyectos);
     if (pending.length === 0) return result;
 
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
@@ -111,7 +397,14 @@ class SyncManager {
 
     for (const proy of pending) {
       try {
+        if (await this.esRemotoMasReciente('proyectos', proy.codigo_legado, proy.updated_at)) {
+          await db.proyectos.update(proy.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
         const payload = sanitizarProyectoPayload(proy, this.currentUserId);
+        this.registrarPushedId(proy.id);
         const { error } = await this.supabase
           .from('proyectos')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -138,11 +431,11 @@ class SyncManager {
   }
 
   /**
-   * Sincroniza hitos WBS pendientes resolviendo la FK de proyecto_id
+   * 2. Sincroniza hitos WBS pendientes resolviendo la FK de proyecto_id y LWW
    */
   public async sincronizarHitos(proyectoMap?: Map<string, string>): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
-    const pending = await db.hitos_wbs.where('sync_status').equals('pending').toArray();
+    const pending = await this.obtenerRegistrosPendientes<any>(db.hitos_wbs);
     if (pending.length === 0) return result;
 
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
@@ -155,6 +448,12 @@ class SyncManager {
 
     for (const hito of pending) {
       try {
+        if (await this.esRemotoMasReciente('hitos_wbs', hito.codigo_legado, hito.updated_at)) {
+          await db.hitos_wbs.update(hito.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
         const payload = sanitizarHitoPayload(hito, map, this.currentUserId);
         if (!payload.proyecto_id) {
           console.warn('[SyncManager] Hito sin proyecto_id UUID resuelto, omitiendo:', hito.codigo_legado);
@@ -163,6 +462,7 @@ class SyncManager {
           continue;
         }
 
+        this.registrarPushedId(hito.id);
         const { error } = await this.supabase
           .from('hitos_wbs')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -189,14 +489,14 @@ class SyncManager {
   }
 
   /**
-   * Sincroniza tareas WBS pendientes resolviendo FKs de proyecto_id e hito_id
+   * 3. Sincroniza tareas WBS pendientes resolviendo FKs de proyecto_id e hito_id y LWW
    */
   public async sincronizarTareas(
     proyectoMap?: Map<string, string>,
     hitoMap?: Map<string, string>
   ): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
-    const pending = await db.tareas.where('sync_status').equals('pending').toArray();
+    const pending = await this.obtenerRegistrosPendientes<any>(db.tareas);
     if (pending.length === 0) return result;
 
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
@@ -210,6 +510,12 @@ class SyncManager {
 
     for (const tarea of pending) {
       try {
+        if (await this.esRemotoMasReciente('tareas', tarea.codigo_legado, tarea.updated_at)) {
+          await db.tareas.update(tarea.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
         const payload = sanitizarTareaPayload(tarea, pMap, hMap, this.currentUserId);
         if (!payload.proyecto_id || !payload.hito_id) {
           console.warn('[SyncManager] Tarea sin proyecto_id o hito_id UUID resuelto:', tarea.codigo_legado);
@@ -218,6 +524,7 @@ class SyncManager {
           continue;
         }
 
+        this.registrarPushedId(tarea.id);
         const { error } = await this.supabase
           .from('tareas')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -244,53 +551,11 @@ class SyncManager {
   }
 
   /**
-   * Sincroniza notas pendientes asegurando arrays/objetos JSONB sin campos virtuales
-   */
-  public async sincronizarNotas(): Promise<SyncResult> {
-    const result: SyncResult = { success: 0, failed: 0 };
-    const pending = await db.notas.where('sync_status').equals('pending').toArray();
-    if (pending.length === 0) return result;
-
-    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
-      await Promise.all(pending.map((n) => db.notas.update(n.id, { sync_status: 'synced' })));
-      result.success = pending.length;
-      return result;
-    }
-
-    for (const nota of pending) {
-      try {
-        const payload = sanitizarNotaPayload(nota, this.currentUserId);
-        const { error } = await this.supabase
-          .from('notas')
-          .upsert(payload, { onConflict: 'codigo_legado' });
-
-        if (error) {
-          console.error('[SyncManager] Error al sincronizar nota:', nota.codigo_legado, error);
-          await db.notas.update(nota.id, { sync_status: 'error' });
-          result.failed++;
-        } else {
-          await db.notas.update(nota.id, {
-            sync_status: 'synced',
-            updated_at: new Date().toISOString()
-          });
-          result.success++;
-        }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar nota:', nota.codigo_legado, err);
-        await db.notas.update(nota.id, { sync_status: 'error' });
-        result.failed++;
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Sincroniza actividades personales (hábitos y rutinas)
+   * 4. Sincroniza actividades personales (hábitos y rutinas) con LWW
    */
   public async sincronizarActividades(): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
-    const pending = await db.actividades_personales.where('sync_status').equals('pending').toArray();
+    const pending = await this.obtenerRegistrosPendientes<any>(db.actividades_personales);
     if (pending.length === 0) return result;
 
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
@@ -301,7 +566,14 @@ class SyncManager {
 
     for (const act of pending) {
       try {
+        if (await this.esRemotoMasReciente('actividades_personales', act.codigo_legado, act.updated_at)) {
+          await db.actividades_personales.update(act.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
         const payload = sanitizarActividadPayload(act, this.currentUserId);
+        this.registrarPushedId(act.id);
         const { error } = await this.supabase
           .from('actividades_personales')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -328,14 +600,14 @@ class SyncManager {
   }
 
   /**
-   * Sincroniza subtareas y pasos enlazando tarea_id o actividad_id
+   * 5. Sincroniza subtareas y pasos enlazando tarea_id o actividad_id con LWW
    */
   public async sincronizarSubtareas(
     tareaMap?: Map<string, string>,
     actividadMap?: Map<string, string>
   ): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
-    const pending = await db.subtareas_pasos.where('sync_status').equals('pending').toArray();
+    const pending = await this.obtenerRegistrosPendientes<any>(db.subtareas_pasos);
     if (pending.length === 0) return result;
 
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
@@ -349,6 +621,12 @@ class SyncManager {
 
     for (const sub of pending) {
       try {
+        if (await this.esRemotoMasReciente('subtareas_pasos', sub.codigo_legado, sub.updated_at)) {
+          await db.subtareas_pasos.update(sub.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
         const payload = sanitizarSubtareaPayload(sub, tMap, aMap, this.currentUserId);
         if (!payload.tarea_id && !payload.actividad_id) {
           console.warn('[SyncManager] Subtarea sin padre UUID resuelto:', sub.codigo_legado);
@@ -357,6 +635,7 @@ class SyncManager {
           continue;
         }
 
+        this.registrarPushedId(sub.id);
         const { error } = await this.supabase
           .from('subtareas_pasos')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -375,6 +654,365 @@ class SyncManager {
       } catch (err) {
         console.error('[SyncManager] Excepción al sincronizar subtarea:', sub.codigo_legado, err);
         await db.subtareas_pasos.update(sub.id, { sync_status: 'error' });
+        result.failed++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 6. Sincroniza metas y planes cuantitativos/cualitativos con LWW
+   */
+  public async sincronizarMetasPlanes(): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    const pending = await this.obtenerRegistrosPendientes<any>(db.metas_planes);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(pending.map((m) => db.metas_planes.update(m.id, { sync_status: 'synced' })));
+      result.success = pending.length;
+      return result;
+    }
+
+    for (const meta of pending) {
+      try {
+        if (await this.esRemotoMasReciente('metas_planes', meta.codigo_legado, meta.updated_at)) {
+          await db.metas_planes.update(meta.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
+        const payload = sanitizarMetaPlanPayload(meta, this.currentUserId);
+        this.registrarPushedId(meta.id);
+        const { error } = await this.supabase
+          .from('metas_planes')
+          .upsert(payload, { onConflict: 'codigo_legado' });
+
+        if (error) {
+          console.error('[SyncManager] Error al sincronizar meta:', meta.codigo_legado, error);
+          await db.metas_planes.update(meta.id, { sync_status: 'error' });
+          result.failed++;
+        } else {
+          await db.metas_planes.update(meta.id, {
+            sync_status: 'synced',
+            updated_at: new Date().toISOString()
+          });
+          result.success++;
+        }
+      } catch (err) {
+        console.error('[SyncManager] Excepción al sincronizar meta:', meta.codigo_legado, err);
+        await db.metas_planes.update(meta.id, { sync_status: 'error' });
+        result.failed++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 7. Sincroniza hitos del plan de acción secuenciales con LWW
+   */
+  public async sincronizarHitosPlan(metaMap?: Map<string, string>): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    const pending = await this.obtenerRegistrosPendientes<any>(db.planes_accion_hitos);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(pending.map((h) => db.planes_accion_hitos.update(h.id, { sync_status: 'synced' })));
+      result.success = pending.length;
+      return result;
+    }
+
+    const mMap = metaMap || (await this.construirMapaMetas());
+
+    for (const hito of pending) {
+      try {
+        if (await this.esRemotoMasReciente('planes_accion_hitos', hito.codigo_legado, hito.updated_at)) {
+          await db.planes_accion_hitos.update(hito.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
+        const payload = sanitizarHitoPlanPayload(hito, mMap, this.currentUserId);
+        if (!payload.meta_id) {
+          console.warn('[SyncManager] Hito de plan sin meta_id UUID resuelto:', hito.codigo_legado);
+          await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
+          result.failed++;
+          continue;
+        }
+
+        this.registrarPushedId(hito.id);
+        const { error } = await this.supabase
+          .from('planes_accion_hitos')
+          .upsert(payload, { onConflict: 'codigo_legado' });
+
+        if (error) {
+          console.error('[SyncManager] Error al sincronizar hito de plan:', hito.codigo_legado, error);
+          await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
+          result.failed++;
+        } else {
+          await db.planes_accion_hitos.update(hito.id, {
+            sync_status: 'synced',
+            updated_at: new Date().toISOString()
+          });
+          result.success++;
+        }
+      } catch (err) {
+        console.error('[SyncManager] Excepción al sincronizar hito de plan:', hito.codigo_legado, err);
+        await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
+        result.failed++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 8. Sincroniza vínculos N:M entre hábitos y metas
+   */
+  public async sincronizarVinculosMeta(
+    actividadMap?: Map<string, string>,
+    metaMap?: Map<string, string>
+  ): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    const pending = await this.obtenerRegistrosPendientes<any>(db.habitos_metas_vinculos);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(pending.map((v) => db.habitos_metas_vinculos.update(v.id, { sync_status: 'synced' })));
+      result.success = pending.length;
+      return result;
+    }
+
+    const aMap = actividadMap || (await this.construirMapaActividades());
+    const mMap = metaMap || (await this.construirMapaMetas());
+
+    for (const vinculo of pending) {
+      try {
+        const payload = sanitizarVinculoPayload(vinculo, aMap, mMap, this.currentUserId);
+        if (!payload.habito_id || !payload.meta_id) {
+          console.warn('[SyncManager] Vínculo hábito-meta sin UUIDs resueltos:', vinculo.id);
+          await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
+          result.failed++;
+          continue;
+        }
+
+        this.registrarPushedId(vinculo.id);
+        const { error } = await this.supabase
+          .from('habitos_metas_vinculos')
+          .upsert(payload, { onConflict: 'id' });
+
+        if (error) {
+          console.error('[SyncManager] Error al sincronizar vínculo hábito-meta:', vinculo.id, error);
+          await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
+          result.failed++;
+        } else {
+          await db.habitos_metas_vinculos.update(vinculo.id, {
+            sync_status: 'synced',
+            updated_at: new Date().toISOString()
+          });
+          result.success++;
+        }
+      } catch (err) {
+        console.error('[SyncManager] Excepción al sincronizar vínculo hábito-meta:', vinculo.id, err);
+        await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
+        result.failed++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 9. Sincroniza gastos financieros con LWW
+   */
+  public async sincronizarGastos(): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    const pending = await this.obtenerRegistrosPendientes<any>(db.gastos);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(pending.map((g) => db.gastos.update(g.id, { sync_status: 'synced' })));
+      result.success = pending.length;
+      return result;
+    }
+
+    for (const gasto of pending) {
+      try {
+        if (await this.esRemotoMasReciente('gastos', gasto.codigo_legado, gasto.updated_at)) {
+          await db.gastos.update(gasto.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
+        const payload = sanitizarGastoPayload(gasto, this.currentUserId);
+        this.registrarPushedId(gasto.id);
+        const { error } = await this.supabase
+          .from('gastos')
+          .upsert(payload, { onConflict: 'codigo_legado' });
+
+        if (error) {
+          console.error('[SyncManager] Error al sincronizar gasto:', gasto.codigo_legado, error);
+          await db.gastos.update(gasto.id, { sync_status: 'error' });
+          result.failed++;
+        } else {
+          await db.gastos.update(gasto.id, {
+            sync_status: 'synced',
+            updated_at: new Date().toISOString()
+          });
+          result.success++;
+        }
+      } catch (err) {
+        console.error('[SyncManager] Excepción al sincronizar gasto:', gasto.codigo_legado, err);
+        await db.gastos.update(gasto.id, { sync_status: 'error' });
+        result.failed++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 10. Sincroniza ingresos financieros con LWW
+   */
+  public async sincronizarIngresos(): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    const pending = await this.obtenerRegistrosPendientes<any>(db.ingresos);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(pending.map((i) => db.ingresos.update(i.id, { sync_status: 'synced' })));
+      result.success = pending.length;
+      return result;
+    }
+
+    for (const ingreso of pending) {
+      try {
+        if (await this.esRemotoMasReciente('ingresos', ingreso.codigo_legado, ingreso.updated_at)) {
+          await db.ingresos.update(ingreso.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
+        const payload = sanitizarIngresoPayload(ingreso, this.currentUserId);
+        this.registrarPushedId(ingreso.id);
+        const { error } = await this.supabase
+          .from('ingresos')
+          .upsert(payload, { onConflict: 'codigo_legado' });
+
+        if (error) {
+          console.error('[SyncManager] Error al sincronizar ingreso:', ingreso.codigo_legado, error);
+          await db.ingresos.update(ingreso.id, { sync_status: 'error' });
+          result.failed++;
+        } else {
+          await db.ingresos.update(ingreso.id, {
+            sync_status: 'synced',
+            updated_at: new Date().toISOString()
+          });
+          result.success++;
+        }
+      } catch (err) {
+        console.error('[SyncManager] Excepción al sincronizar ingreso:', ingreso.codigo_legado, err);
+        await db.ingresos.update(ingreso.id, { sync_status: 'error' });
+        result.failed++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 11. Sincroniza cuotas y compromisos de financiamiento con LWW
+   */
+  public async sincronizarCuotas(): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    const pending = await this.obtenerRegistrosPendientes<any>(db.cuotas);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(pending.map((c) => db.cuotas.update(c.id, { sync_status: 'synced' })));
+      result.success = pending.length;
+      return result;
+    }
+
+    for (const cuota of pending) {
+      try {
+        if (await this.esRemotoMasReciente('cuotas', cuota.codigo_legado, cuota.updated_at)) {
+          await db.cuotas.update(cuota.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
+        const payload = sanitizarCuotaPayload(cuota, this.currentUserId);
+        this.registrarPushedId(cuota.id);
+        const { error } = await this.supabase
+          .from('cuotas')
+          .upsert(payload, { onConflict: 'codigo_legado' });
+
+        if (error) {
+          console.error('[SyncManager] Error al sincronizar cuota:', cuota.codigo_legado, error);
+          await db.cuotas.update(cuota.id, { sync_status: 'error' });
+          result.failed++;
+        } else {
+          await db.cuotas.update(cuota.id, {
+            sync_status: 'synced',
+            updated_at: new Date().toISOString()
+          });
+          result.success++;
+        }
+      } catch (err) {
+        console.error('[SyncManager] Excepción al sincronizar cuota:', cuota.codigo_legado, err);
+        await db.cuotas.update(cuota.id, { sync_status: 'error' });
+        result.failed++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 12. Sincroniza notas pendientes asegurando arrays/objetos JSONB sin campos virtuales y LWW
+   */
+  public async sincronizarNotas(): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    const pending = await this.obtenerRegistrosPendientes<any>(db.notas);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(pending.map((n) => db.notas.update(n.id, { sync_status: 'synced' })));
+      result.success = pending.length;
+      return result;
+    }
+
+    for (const nota of pending) {
+      try {
+        if (await this.esRemotoMasReciente('notas', nota.codigo_legado, nota.updated_at)) {
+          await db.notas.update(nota.id, { sync_status: 'synced' });
+          result.success++;
+          continue;
+        }
+
+        const payload = sanitizarNotaPayload(nota, this.currentUserId);
+        this.registrarPushedId(nota.id);
+        const { error } = await this.supabase
+          .from('notas')
+          .upsert(payload, { onConflict: 'codigo_legado' });
+
+        if (error) {
+          console.error('[SyncManager] Error al sincronizar nota:', nota.codigo_legado, error);
+          await db.notas.update(nota.id, { sync_status: 'error' });
+          result.failed++;
+        } else {
+          await db.notas.update(nota.id, {
+            sync_status: 'synced',
+            updated_at: new Date().toISOString()
+          });
+          result.success++;
+        }
+      } catch (err) {
+        console.error('[SyncManager] Excepción al sincronizar nota:', nota.codigo_legado, err);
+        await db.notas.update(nota.id, { sync_status: 'error' });
         result.failed++;
       }
     }
@@ -434,18 +1072,36 @@ class SyncManager {
     return map;
   }
 
+  public async construirMapaMetas(): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    const metas = await db.metas_planes.toArray();
+    for (const m of metas) {
+      if (m.codigo_legado && isUuid(m.id)) {
+        map.set(m.codigo_legado, m.id);
+        map.set(m.id, m.id);
+      }
+    }
+    return map;
+  }
+
   // ============================================================================
-  // ORQUESTADOR TOPOLÓGICO CANÓNICO
+  // ORQUESTADOR TOPOLÓGICO CANÓNICO (12 ENTIDADES)
   // ============================================================================
 
   /**
-   * Procesa la cola de registros con sync_status = 'pending' respetando el
+   * Procesa la cola de registros con sync_status 'pending' o 'error' respetando el
    * orden topológico de llaves foráneas para evitar violaciones de integridad referencial:
    * 1. Proyectos (Raíz WBS)
-   * 2. Hitos WBS (Nivel 3 - Paquetes de Trabajo y Marcadores)
-   * 3. Tareas WBS (Nivel 4) & Actividades Personales (Hábitos)
-   * 4. Subtareas / Pasos (Hijos de tareas o actividades)
-   * 5. Notas (Bóveda híbrida desacoplada)
+   * 2. Hitos WBS (depende de Proyectos)
+   * 3. Tareas WBS & Actividades Personales (Hábitos)
+   * 4. Subtareas / Pasos (depende de Tareas y Actividades)
+   * 5. Metas y Planes
+   * 6. Hitos del Plan (depende de Metas)
+   * 7. Vínculos Hábito-Meta (depende de Actividades y Metas)
+   * 8. Gastos Financieros
+   * 9. Ingresos Financieros
+   * 10. Cuotas Bancarias
+   * 11. Notas (Bóveda híbrida desacoplada)
    */
   public async syncPendingRecords(): Promise<void> {
     if (this.isSyncing) return;
@@ -458,45 +1114,49 @@ class SyncManager {
     this.setSyncState('syncing');
 
     try {
-      // 1. Verificar registros pendientes en IndexedDB
-      const [
-        countProy,
-        countHit,
-        countTar,
-        countAct,
-        countSub,
-        countNot
-      ] = await Promise.all([
-        db.proyectos.where('sync_status').equals('pending').count(),
-        db.hitos_wbs.where('sync_status').equals('pending').count(),
-        db.tareas.where('sync_status').equals('pending').count(),
-        db.actividades_personales.where('sync_status').equals('pending').count(),
-        db.subtareas_pasos.where('sync_status').equals('pending').count(),
-        db.notas.where('sync_status').equals('pending').count()
+      // 1. Verificar registros pendientes en IndexedDB a través de las 13 entidades (incluyendo tombstones)
+      const pendingCounts = await Promise.all([
+        this.contarPendientes(db.tombstones),
+        this.contarPendientes(db.proyectos),
+        this.contarPendientes(db.hitos_wbs),
+        this.contarPendientes(db.tareas),
+        this.contarPendientes(db.actividades_personales),
+        this.contarPendientes(db.subtareas_pasos),
+        this.contarPendientes(db.metas_planes),
+        this.contarPendientes(db.planes_accion_hitos),
+        this.contarPendientes(db.habitos_metas_vinculos),
+        this.contarPendientes(db.gastos),
+        this.contarPendientes(db.ingresos),
+        this.contarPendientes(db.cuotas),
+        this.contarPendientes(db.notas)
       ]);
 
-      if (countProy + countHit + countTar + countAct + countSub + countNot === 0) {
+      const totalPendientes = pendingCounts.reduce((acc, c) => acc + c, 0);
+
+      if (totalPendientes === 0) {
         this.setSyncState('synced');
         this.isSyncing = false;
         return;
       }
+
+      // PASO 0: Lápidas (Tombstones) - Borrado prioritario remoto para evitar colisiones
+      const resTomb = await this.sincronizarTombstones();
 
       // 2. Construir mapas topológicos iniciales
       const proyectoMap = await this.construirMapaProyectos();
 
       // PASO 1: Proyectos (Raíz)
       const resProy = await this.sincronizarProyectos();
-      // Actualizar mapa si se sincronizaron nuevos proyectos
       if (resProy.success > 0) {
         const updatedPMap = await this.construirMapaProyectos();
         updatedPMap.forEach((v, k) => proyectoMap.set(k, v));
       }
 
-      // PASO 2: Hitos WBS
+      // PASO 2: Hitos WBS (depende de Proyectos)
       const resHit = await this.sincronizarHitos(proyectoMap);
       const hitoMap = await this.construirMapaHitos();
 
-      // PASO 3: Tareas WBS y Actividades Personales
+      // PASO 3: Tareas WBS y Actividades Personales (Hábitos)
       const [resTar, resAct] = await Promise.all([
         this.sincronizarTareas(proyectoMap, hitoMap),
         this.sincronizarActividades()
@@ -505,18 +1165,44 @@ class SyncManager {
       const tareaMap = await this.construirMapaTareas();
       const actividadMap = await this.construirMapaActividades();
 
-      // PASO 4: Subtareas / Pasos
+      // PASO 4: Subtareas / Pasos (depende de Tareas y Actividades)
       const resSub = await this.sincronizarSubtareas(tareaMap, actividadMap);
 
-      // PASO 5: Notas
+      // PASO 5: Metas y Planes
+      const resMet = await this.sincronizarMetasPlanes();
+      const metaMap = await this.construirMapaMetas();
+
+      // PASO 6: Hitos del Plan (depende de Metas)
+      const resHitPln = await this.sincronizarHitosPlan(metaMap);
+
+      // PASO 7: Vínculos Hábito-Meta (depende de Actividades y Metas)
+      const resVin = await this.sincronizarVinculosMeta(actividadMap, metaMap);
+
+      // PASO 8: Gastos Financieros
+      const resGas = await this.sincronizarGastos();
+
+      // PASO 9: Ingresos Financieros
+      const resIng = await this.sincronizarIngresos();
+
+      // PASO 10: Cuotas Bancarias
+      const resCuo = await this.sincronizarCuotas();
+
+      // PASO 11: Notas
       const resNot = await this.sincronizarNotas();
 
       const totalFallidos =
+        resTomb.failed +
         resProy.failed +
         resHit.failed +
         resTar.failed +
         resAct.failed +
         resSub.failed +
+        resMet.failed +
+        resHitPln.failed +
+        resVin.failed +
+        resGas.failed +
+        resIng.failed +
+        resCuo.failed +
         resNot.failed;
 
       if (totalFallidos > 0) {
@@ -535,13 +1221,34 @@ class SyncManager {
   }
 
   /**
-   * Descarga registros desde Supabase hacia Dexie (Inbound Pull)
-   * preservando y sin sobreescribir datos locales con sync_status === 'pending'.
+   * Descarga selectiva en caliente para eventos Realtime acotados a tablas específicas
    */
-  public async descargarDatosDescendientes(): Promise<{ descargados: number; fallidos: number }> {
+  public async descargarDatosSelectivos(tablas: string[]): Promise<{ descargados: number; fallidos: number }> {
+    return this.descargarDatosDescendientes(tablas);
+  }
+
+  /**
+   * Descarga registros desde Supabase hacia Dexie (Inbound Pull)
+   * preservando y sin sobreescribir datos locales con sync_status 'pending' o 'error'.
+   * Si se especifica `tablasFiltro`, procesa únicamente las entidades indicadas.
+   */
+  public async descargarDatosDescendientes(tablasFiltro?: string[]): Promise<{ descargados: number; fallidos: number }> {
     const summary = { descargados: 0, fallidos: 0 };
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
       return summary;
+    }
+
+    // Pre-cargar en memoria un Set con los IDs de todos los tombstones locales para evitar resurrección
+    const tombstonesLocalesSet = new Set<string>();
+    try {
+      if (db.tombstones && typeof db.tombstones.toArray === 'function') {
+        const todasLapidas = await db.tombstones.toArray();
+        todasLapidas.forEach((t) => {
+          if (t.id) tombstonesLocalesSet.add(String(t.id));
+        });
+      }
+    } catch {
+      // Tolerancia defensiva ante entornos sin IndexedDB
     }
 
     const configuraciones = [
@@ -550,16 +1257,31 @@ class SyncManager {
       { tabla: 'tareas', refDexie: db.tareas },
       { tabla: 'actividades_personales', refDexie: db.actividades_personales },
       { tabla: 'subtareas_pasos', refDexie: db.subtareas_pasos },
+      { tabla: 'metas_planes', refDexie: db.metas_planes },
+      { tabla: 'planes_accion_hitos', refDexie: db.planes_accion_hitos },
+      { tabla: 'habitos_metas_vinculos', refDexie: db.habitos_metas_vinculos },
       { tabla: 'gastos', refDexie: db.gastos },
       { tabla: 'ingresos', refDexie: db.ingresos },
-      { tabla: 'cuotas', refDexie: db.cuotas }
+      { tabla: 'cuotas', refDexie: db.cuotas },
+      { tabla: 'notas', refDexie: db.notas }
     ] as const;
 
-    for (const { tabla, refDexie } of configuraciones) {
+    const configuracionesFiltradas = tablasFiltro && tablasFiltro.length > 0
+      ? configuraciones.filter((c) => tablasFiltro.includes(c.tabla))
+      : configuraciones;
+
+    for (const { tabla, refDexie } of configuracionesFiltradas) {
       try {
-        const { data, error } = await this.supabase
-          .from(tabla)
-          .select('*');
+        let query: any = this.supabase.from(tabla).select('*');
+
+        // Límites de Ingesta (90 días) para tablas de alto volumen
+        const tablasAltoVolumen = ['gastos', 'ingresos', 'habitos_registros', 'habito_cumplimiento_logs'];
+        if (tablasAltoVolumen.includes(tabla) && typeof query?.gte === 'function') {
+          const cutoffIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+          query = query.gte('created_at', cutoffIso);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.warn(`[SyncManager] Aviso al descargar tabla remota ${tabla}:`, error.message);
@@ -569,10 +1291,17 @@ class SyncManager {
 
         if (!data || data.length === 0) continue;
 
-        // Recuperar IDs pendientes en local para proteger cambios sin sincronizar
-        const idsPendientesLocales = new Set(
-          await (refDexie as any).where('sync_status').equals('pending').primaryKeys()
-        );
+        // Recuperar IDs pendientes o en error en local para proteger cambios sin sincronizar
+        const idsPendientesLocales = new Set<string>();
+        try {
+          const w = (refDexie as any).where('sync_status');
+          const keys = typeof w.anyOf === 'function'
+            ? await w.anyOf(['pending', 'error']).primaryKeys()
+            : await w.equals('pending').primaryKeys();
+          keys.forEach((k: any) => idsPendientesLocales.add(String(k)));
+        } catch {
+          // Fallback defensivo
+        }
 
         // Indexar registros locales actuales por código canónico (codigo_legado) para evitar duplicar semillas
         const mapaLocalPorCodigo = new Map<string, any>();
@@ -594,12 +1323,14 @@ class SyncManager {
         const registrosParaActualizar: any[] = [];
 
         for (const item of data) {
-          if (!item || !item.id || idsPendientesLocales.has(item.id)) continue;
+          if (!item || !item.id) continue;
+          const idStr = String(item.id);
+          if (idsPendientesLocales.has(idStr) || tombstonesLocalesSet.has(idStr)) continue;
 
           const codRemoto = extraerCodigoCanonico(item);
           const existentePorCodigo = codRemoto ? mapaLocalPorCodigo.get(codRemoto) : undefined;
 
-          if (existentePorCodigo && existentePorCodigo.sync_status === 'pending') {
+          if (existentePorCodigo && (existentePorCodigo.sync_status === 'pending' || existentePorCodigo.sync_status === 'error')) {
             continue;
           }
 
@@ -745,6 +1476,18 @@ class SyncManager {
 
       const { tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos, metas, hitosPlan, vinculosMeta } = json.data;
 
+      const obtenerKeysPendientes = async (table: any) => {
+        try {
+          const w = table.where('sync_status');
+          const keys = typeof w.anyOf === 'function'
+            ? await w.anyOf(['pending', 'error']).primaryKeys()
+            : await w.equals('pending').primaryKeys();
+          return new Set(keys.map((k: any) => String(k)));
+        } catch {
+          return new Set<string>();
+        }
+      };
+
       await db.transaction('rw', [
         db.tareas,
         db.actividades_personales,
@@ -758,53 +1501,53 @@ class SyncManager {
         db.habitos_metas_vinculos
       ], async () => {
         if (Array.isArray(tareas) && tareas.length > 0) {
-          const pendingIds = new Set(await db.tareas.where('sync_status').equals('pending').primaryKeys());
-          const toPut = tareas.filter((t) => t.id && !pendingIds.has(t.id));
+          const pendingIds = await obtenerKeysPendientes(db.tareas);
+          const toPut = tareas.filter((t) => t.id && !pendingIds.has(String(t.id)));
           if (toPut.length > 0) await db.tareas.bulkPut(toPut);
         }
         if (Array.isArray(actividades) && actividades.length > 0) {
-          const pendingIds = new Set(await db.actividades_personales.where('sync_status').equals('pending').primaryKeys());
-          const toPut = actividades.filter((a) => a.id && !pendingIds.has(a.id));
+          const pendingIds = await obtenerKeysPendientes(db.actividades_personales);
+          const toPut = actividades.filter((a) => a.id && !pendingIds.has(String(a.id)));
           if (toPut.length > 0) await db.actividades_personales.bulkPut(toPut);
         }
         if (Array.isArray(gastos) && gastos.length > 0) {
-          const pendingIds = new Set(await db.gastos.where('sync_status').equals('pending').primaryKeys());
-          const toPut = gastos.filter((g) => g.id && !pendingIds.has(g.id));
+          const pendingIds = await obtenerKeysPendientes(db.gastos);
+          const toPut = gastos.filter((g) => g.id && !pendingIds.has(String(g.id)));
           if (toPut.length > 0) await db.gastos.bulkPut(toPut);
         }
         if (Array.isArray(ingresos) && ingresos.length > 0) {
-          const pendingIds = new Set(await db.ingresos.where('sync_status').equals('pending').primaryKeys());
-          const toPut = ingresos.filter((i) => i.id && !pendingIds.has(i.id));
+          const pendingIds = await obtenerKeysPendientes(db.ingresos);
+          const toPut = ingresos.filter((i) => i.id && !pendingIds.has(String(i.id)));
           if (toPut.length > 0) await db.ingresos.bulkPut(toPut);
         }
         if (Array.isArray(cuotas) && cuotas.length > 0) {
-          const pendingIds = new Set(await db.cuotas.where('sync_status').equals('pending').primaryKeys());
-          const toPut = cuotas.filter((c) => c.id && !pendingIds.has(c.id));
+          const pendingIds = await obtenerKeysPendientes(db.cuotas);
+          const toPut = cuotas.filter((c) => c.id && !pendingIds.has(String(c.id)));
           if (toPut.length > 0) await db.cuotas.bulkPut(toPut);
         }
         if (Array.isArray(proyectos) && proyectos.length > 0) {
-          const pendingIds = new Set(await db.proyectos.where('sync_status').equals('pending').primaryKeys());
-          const toPut = proyectos.filter((p) => p.id && !pendingIds.has(p.id));
+          const pendingIds = await obtenerKeysPendientes(db.proyectos);
+          const toPut = proyectos.filter((p) => p.id && !pendingIds.has(String(p.id)));
           if (toPut.length > 0) await db.proyectos.bulkPut(toPut);
         }
         if (Array.isArray(hitos) && hitos.length > 0) {
-          const pendingIds = new Set(await db.hitos_wbs.where('sync_status').equals('pending').primaryKeys());
-          const toPut = hitos.filter((h) => h.id && !pendingIds.has(h.id));
+          const pendingIds = await obtenerKeysPendientes(db.hitos_wbs);
+          const toPut = hitos.filter((h) => h.id && !pendingIds.has(String(h.id)));
           if (toPut.length > 0) await db.hitos_wbs.bulkPut(toPut);
         }
         if (Array.isArray(metas) && metas.length > 0) {
-          const pendingIds = new Set(await db.metas_planes.where('sync_status').equals('pending').primaryKeys());
-          const toPut = metas.filter((m) => m.id && !pendingIds.has(m.id));
+          const pendingIds = await obtenerKeysPendientes(db.metas_planes);
+          const toPut = metas.filter((m) => m.id && !pendingIds.has(String(m.id)));
           if (toPut.length > 0) await db.metas_planes.bulkPut(toPut);
         }
         if (Array.isArray(hitosPlan) && hitosPlan.length > 0) {
-          const pendingIds = new Set(await db.planes_accion_hitos.where('sync_status').equals('pending').primaryKeys());
-          const toPut = hitosPlan.filter((hp) => hp.id && !pendingIds.has(hp.id));
+          const pendingIds = await obtenerKeysPendientes(db.planes_accion_hitos);
+          const toPut = hitosPlan.filter((hp) => hp.id && !pendingIds.has(String(hp.id)));
           if (toPut.length > 0) await db.planes_accion_hitos.bulkPut(toPut);
         }
         if (Array.isArray(vinculosMeta) && vinculosMeta.length > 0) {
-          const pendingIds = new Set(await db.habitos_metas_vinculos.where('sync_status').equals('pending').primaryKeys());
-          const toPut = vinculosMeta.filter((vm) => vm.id && !pendingIds.has(vm.id));
+          const pendingIds = await obtenerKeysPendientes(db.habitos_metas_vinculos);
+          const toPut = vinculosMeta.filter((vm) => vm.id && !pendingIds.has(String(vm.id)));
           if (toPut.length > 0) await db.habitos_metas_vinculos.bulkPut(toPut);
         }
       });

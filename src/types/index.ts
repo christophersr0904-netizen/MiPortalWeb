@@ -71,6 +71,15 @@ export interface ActividadPersonal {
   sync_status: SyncStatus;
 }
 
+export interface CuadernoMeta {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  icono: string; // Nombre del ícono Lucide (ej. 'BookOpen', 'Briefcase', 'Code', etc.)
+  color?: string;
+  created_at: string;
+}
+
 export interface SubtareaPaso {
   id: string; // UUID primary key
   user_id: string;
@@ -85,6 +94,15 @@ export interface SubtareaPaso {
   updated_at: string;
   version: number;
   sync_status: SyncStatus;
+}
+
+export interface CuadernoMeta {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  icono: string; // Nombre del ícono Lucide (ej. 'BookOpen', 'Briefcase', 'Code', etc.)
+  color?: string;
+  created_at: string;
 }
 
 export interface CategoriaConfig {
@@ -181,6 +199,15 @@ export interface MetaPlanRecord {
   sync_status: SyncStatus;
 }
 
+export interface CuadernoMeta {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  icono: string; // Nombre del ícono Lucide (ej. 'BookOpen', 'Briefcase', 'Code', etc.)
+  color?: string;
+  created_at: string;
+}
+
 export interface HitoPlanRecord {
   id: string; // UUID primary key
   user_id: string;
@@ -196,6 +223,15 @@ export interface HitoPlanRecord {
   updated_at: string;
   version: number;
   sync_status: SyncStatus;
+}
+
+export interface CuadernoMeta {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  icono: string; // Nombre del ícono Lucide (ej. 'BookOpen', 'Briefcase', 'Code', etc.)
+  color?: string;
+  created_at: string;
 }
 
 export type ModoComputoVinculo = 'VOLUMEN_DIRECTO' | 'TASA_CONVERSION' | 'CHECK_BINARIO';
@@ -258,6 +294,15 @@ export interface HitoWbsRecord {
   updated_at: string;
   version: number;
   sync_status: SyncStatus;
+}
+
+export interface CuadernoMeta {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  icono: string; // Nombre del ícono Lucide (ej. 'BookOpen', 'Briefcase', 'Code', etc.)
+  color?: string;
+  created_at: string;
 }
 
 export type TipoNota = 'TEXTO' | 'CHECKLIST' | 'WISHLIST' | 'TABLA' | 'TEXTO_LIBRE';
@@ -329,6 +374,24 @@ export interface NotaRecord {
   updated_at: string;
   version: number;
   sync_status: SyncStatus;
+}
+
+export interface CuadernoMeta {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  icono: string;
+  color?: string;
+  created_at: string;
+}
+
+export interface CuadernoMeta {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  icono: string; // Nombre del ícono Lucide (ej. 'BookOpen', 'Briefcase', 'Code', etc.)
+  color?: string;
+  created_at: string;
 }
 
 // ============================================================================
@@ -501,6 +564,13 @@ export interface CuotaRecord {
   estado_cuota: 'PAGADO' | 'PENDIENTE' | 'VENCIDO' | string;
   updated_at: string;
   sync_status: SyncStatus;
+}
+
+export interface TombstoneRecord {
+  id: string;
+  tabla: string;
+  deleted_at: string;
+  sync_status: 'pending' | 'synced' | 'error';
 }
 
 export interface DesktopWidgetBridge {

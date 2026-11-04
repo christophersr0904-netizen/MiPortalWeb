@@ -16,7 +16,7 @@ import {
   Lightbulb,
   Check
 } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 interface ModalVincularEntidadesProps {
   isOpen: boolean;
@@ -94,15 +94,7 @@ export const ModalVincularEntidades: React.FC<ModalVincularEntidadesProps> = ({
       titulo: tituloEntidad || codigoEntidad
     });
 
-    Swal.fire({
-      icon: 'success',
-      title: 'Nota Vinculada',
-      text: `Se asoció "${nota.titulo}" a ${codigoEntidad}.`,
-      timer: 1500,
-      showConfirmButton: false,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    mostrarToastCobalt(`Nota asociada a ${codigoEntidad}`, 'success');
 
     onClose();
   };
@@ -122,15 +114,7 @@ export const ModalVincularEntidades: React.FC<ModalVincularEntidadesProps> = ({
       }
     );
 
-    Swal.fire({
-      icon: 'success',
-      title: 'Nota Creada y Vinculada',
-      text: `Se creó la nota y se vinculó exitosamente a ${codigoEntidad}.`,
-      timer: 1800,
-      showConfirmButton: false,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    mostrarToastCobalt(`Nota creada y vinculada a ${codigoEntidad}`, 'success');
 
     setModoCrearNueva(false);
     setNuevoTituloNota('');

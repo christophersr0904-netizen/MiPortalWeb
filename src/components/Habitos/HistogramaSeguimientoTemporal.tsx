@@ -15,6 +15,7 @@ import type {
   HabitoLogRecord
 } from '../../types';
 import { CATEGORIAS_VIDA_MAP } from '../../types';
+import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 
 export type GranoTemporalHistograma = 'SEMANA' | 'MES' | 'TRIMESTRE';
 
@@ -54,10 +55,7 @@ const NOMBRES_MESES_LARGOS = [
 const DIAS_SEMANA_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 function toIsoDate(d: Date): string {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return formatFechaIsoLocal(d);
 }
 
 export const HistogramaSeguimientoTemporal: React.FC<HistogramaSeguimientoTemporalProps> = ({

@@ -21,7 +21,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { IdeaRecord } from '../../types';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
-import Swal from 'sweetalert2';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 interface WidgetIdeasBubbleProps {
   onAbrirAsistenteIA?: () => void;
@@ -65,16 +65,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       setFueGrabadoConVoz(true);
     },
     onError: (errorMsg) => {
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'warning',
-        title: errorMsg,
-        showConfirmButton: false,
-        timer: 3000,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+      mostrarToastCobalt(errorMsg, 'warning');
     }
   });
 
@@ -147,16 +138,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
 
   const handleToggleVoz = () => {
     if (!isSupported) {
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'info',
-        title: 'Tu navegador no soporta reconocimiento de voz nativo. Usa Chrome o Edge.',
-        showConfirmButton: false,
-        timer: 3500,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+      mostrarToastCobalt('Tu navegador no soporta reconocimiento de voz nativo. Usa Chrome o Edge.', 'info');
       return;
     }
 
@@ -307,16 +289,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       resetFormulario();
       setPopoverAbierto(false);
 
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: 'Idea capturada en Inbox',
-        showConfirmButton: false,
-        timer: 1500,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+      mostrarToastCobalt('Idea capturada en Inbox', 'success');
     } catch (err) {
       console.error('Error al guardar idea rápida:', err);
     } finally {
@@ -358,16 +331,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       if (onNavegarVista) onNavegarVista('kanban');
     }
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'Idea convertida en Tarea',
-      showConfirmButton: false,
-      timer: 1500,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    mostrarToastCobalt('Idea convertida en Tarea', 'success');
   };
 
   // Convertir idea a Proyecto
@@ -406,16 +370,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       if (onNavegarVista) onNavegarVista('portafolio');
     }
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'Idea convertida en Proyecto',
-      showConfirmButton: false,
-      timer: 1500,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    mostrarToastCobalt('Idea convertida en Proyecto', 'success');
   };
 
   // Convertir idea a Hábito
@@ -456,16 +411,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       if (onNavegarVista) onNavegarVista('habitos');
     }
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'Idea convertida en Hábito',
-      showConfirmButton: false,
-      timer: 1500,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    mostrarToastCobalt('Idea convertida en Hábito', 'success');
   };
 
   // Convertir idea a Nota
@@ -507,16 +453,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       onNavegarVista('notas');
     }
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'Idea convertida en Nota',
-      showConfirmButton: false,
-      timer: 1500,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    mostrarToastCobalt('Idea convertida en Nota', 'success');
   };
 
   // Alternar Incubación
@@ -819,16 +756,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    Swal.fire({
-                      toast: true,
-                      position: 'top-end',
-                      icon: 'info',
-                      title: 'Adjuntos disponibles en notas',
-                      showConfirmButton: false,
-                      timer: 1500,
-                      background: '#0D1526',
-                      color: '#f8fafc'
-                    });
+                    mostrarToastCobalt('Adjuntos disponibles en notas', 'info');
                   }}
                   className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 transition flex items-center gap-1.5 text-xs font-medium cursor-pointer"
                   title="Adjuntar archivo"

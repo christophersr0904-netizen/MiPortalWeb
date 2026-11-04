@@ -18,14 +18,14 @@ import {
   ChevronUp,
   X,
   Gauge,
-  CheckCircle2,
   Zap,
   Flame,
   FolderKanban,
   Wallet,
   TrendingUp,
   TrendingDown,
-  Check
+  Check,
+  Calendar
 } from 'lucide-react';
 import {
   useDailySchedule,
@@ -37,6 +37,62 @@ import { syncManager } from '../../services/syncManager';
 const DRAG_REGION_STYLE: React.CSSProperties = { WebkitAppRegion: 'drag' } as unknown as React.CSSProperties;
 const NO_DRAG_REGION_STYLE: React.CSSProperties = { WebkitAppRegion: 'no-drag' } as unknown as React.CSSProperties;
 
+interface CockpitInternalErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface CockpitInternalErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class CockpitInternalErrorBoundary extends React.Component<
+  CockpitInternalErrorBoundaryProps,
+  CockpitInternalErrorBoundaryState
+> {
+  constructor(props: CockpitInternalErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): CockpitInternalErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[DailyCockpit ErrorBoundary]', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full min-h-[380px] flex flex-col items-center justify-center p-6 bg-[#0B132B]/95 border border-slate-700/60 rounded-2xl text-slate-100 select-none shadow-2xl">
+          <div className="w-12 h-12 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-3">
+            <Gauge className="w-6 h-6" strokeWidth={1.75} />
+          </div>
+          <h4 className="text-sm font-bold font-mono uppercase text-rose-300 mb-1">
+            Cockpit en Recuperación
+          </h4>
+          <p className="text-xs text-slate-400 text-center max-w-xs mb-3">
+            Se aisló una excepción de datos. Los registros locales permanecen seguros.
+          </p>
+          <pre className="p-2.5 rounded-lg bg-black/60 border border-rose-500/20 text-[10px] font-mono text-rose-300 max-w-full overflow-auto mb-4">
+            {this.state.error?.message || 'Error de datos'}
+          </pre>
+          <button
+            type="button"
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-3.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-bold transition-all cursor-pointer"
+          >
+            Reconectar Cockpit
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export interface DailyCockpitProps {
   modoForzadoDesacoplado?: boolean;
   onCerrarDesacoplado?: () => void;
@@ -46,16 +102,13 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   modoForzadoDesacoplado = false,
   onCerrarDesacoplado
 }) => {
-  // Detección de wrapper nativo standalone HUD (?widget=desktop o ?mode=hud o ?mode=cockpit-only)
+  // FIX-COCKPIT-NATIVE-SIGNAL-RESTORE-119: Reconocimiento dual de entorno nativo Electron
   const esWidgetNativo = typeof window !== 'undefined' && (
+    (window as any).IS_DESKTOP_WIDGET === true ||
     new URLSearchParams(window.location.search).get('widget') === 'desktop' ||
     new URLSearchParams(window.location.hash.replace(/^#/, '')).get('widget') === 'desktop' ||
     new URLSearchParams(window.location.search).get('mode') === 'hud' ||
-    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('mode') === 'hud' ||
-    new URLSearchParams(window.location.search).get('mode') === 'cockpit-only' ||
-    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('mode') === 'cockpit-only' ||
-    window.location.hash.includes('cockpit-widget') ||
-    Boolean(window.desktopWidget?.isNative)
+    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('mode') === 'hud'
   );
 
   // Estado de visibilidad y visualización (adaptativo en standalone HUD según altura o parámetro)
@@ -67,14 +120,12 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
       if (getParam('state') === 'open') return true;
       if (getParam('state') === 'rest') return false;
-      if (getParam('mode') === 'cockpit-only' || window.location.hash.includes('cockpit-widget')) {
-        return true; // En modo ventana de Cockpit independiente (420x720) arranca abierto y listo
-      }
-      if (getParam('widget') === 'desktop') {
-        return false; // El widget nativo arranca en reposo (380x100)
-      }
-      if (getParam('mode') === 'hud') {
-        return window.innerHeight > 400;
+      if (
+        (window as any).IS_DESKTOP_WIDGET === true ||
+        getParam('widget') === 'desktop' ||
+        getParam('mode') === 'hud'
+      ) {
+        return true; // En modo widget nativo de escritorio (420x720) arranca en vista táctica completa
       }
     }
     return modoForzadoDesacoplado;
@@ -306,9 +357,10 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
   }, [cockpitAbierto, modoVista, horizonte, cargando]);
 
-  // Filtrado de items según filtro secundario
+  // Filtrado de items según filtro secundario con optional chaining defensivo
   const itemsFiltrados = useMemo(() => {
-    return items.filter((item) => {
+    return (items || []).filter((item) => {
+      if (!item) return false;
       if (filtroTipo === 'TODOS') return true;
       if (filtroTipo === 'TAREAS') return item.tipo === 'TAREA';
       if (filtroTipo === 'HABITOS') return item.tipo === 'HABITO';
@@ -429,29 +481,32 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
   // Motor de posicionamiento proporcional tipo Calendar 24H con distribución en columnas si hay solapamiento horario
   const bloquesCalendarPosicion = useMemo(() => {
-    const parseMinutos = (hm: string): number => {
-      const [hStr, mStr] = (hm || '00:00').split(':');
+    const parseMinutos = (hm?: string | null): number => {
+      if (!hm || typeof hm !== 'string' || !hm.includes(':')) return 0;
+      const [hStr, mStr] = hm.split(':');
       const h = parseInt(hStr, 10) || 0;
       const m = parseInt(mStr, 10) || 0;
       return Math.min(1439, Math.max(0, h * 60 + m));
     };
 
-    const rawBlocks = itemsFiltrados.map((item) => {
-      const startMin = parseMinutos(item.horaInicio);
-      const durMin = Math.max(20, item.duracionMinutos || 30);
-      const endMin = Math.min(1440, startMin + durMin);
-      const topPx = (startMin / 60) * ALTURA_HORA_PX;
-      const heightPx = Math.max(28, (durMin / 60) * ALTURA_HORA_PX - 2);
-      return {
-        item,
-        startMin,
-        endMin,
-        topPx,
-        heightPx,
-        colIndex: 0,
-        totalCols: 1
-      };
-    });
+    const rawBlocks = (itemsFiltrados || [])
+      .filter((item): item is DailyScheduleItem => Boolean(item))
+      .map((item) => {
+        const startMin = parseMinutos(item?.horaInicio);
+        const durMin = Math.max(20, Number(item?.duracionMinutos) || 30);
+        const endMin = Math.min(1440, startMin + durMin);
+        const topPx = (startMin / 60) * ALTURA_HORA_PX;
+        const heightPx = Math.max(28, (durMin / 60) * ALTURA_HORA_PX - 2);
+        return {
+          item,
+          startMin,
+          endMin,
+          topPx,
+          heightPx,
+          colIndex: 0,
+          totalCols: 1
+        };
+      });
 
     // Ordenar por minuto de inicio y luego por mayor duración
     rawBlocks.sort((a, b) => a.startMin - b.startMin || (b.endMin - b.startMin) - (a.endMin - a.startMin));
@@ -504,13 +559,13 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     return rawBlocks;
   }, [itemsFiltrados]);
 
-  // Semáforo dinámico de color según ritmo horario
+  // Semáforo dinámico de color según ritmo horario con optional chaining defensivo
   const colorRitmo = useMemo(() => {
-    const pct = metricas.porcentajeRitmo;
+    const pct = metricas?.porcentajeRitmo ?? 100;
     if (pct >= 80) return 'text-emerald-400 border-emerald-500/30 bg-emerald-950/30';
     if (pct >= 40) return 'text-sky-400 border-sky-500/30 bg-sky-950/30';
     return 'text-rose-400 border-rose-500/30 bg-rose-950/30';
-  }, [metricas.porcentajeRitmo]);
+  }, [metricas?.porcentajeRitmo]);
 
   // Contenido interno del Cockpit
   const cockpitContent = (
@@ -544,7 +599,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
               </span>
             </div>
             <span className="text-[10px] text-slate-400 font-mono">
-              {metricas.completadasTotal} de {metricas.totalItems} cumplidas ({metricas.porcentajeTotal}%)
+              {metricas?.completadasTotal ?? 0} de {metricas?.totalItems ?? 0} cumplidas ({metricas?.porcentajeTotal ?? 0}%)
             </span>
           </div>
         </div>
@@ -556,7 +611,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             title="Porcentaje de avance sobre entidades programadas hasta este momento"
           >
             <Zap className="w-3 h-3" strokeWidth={1.75} />
-            {metricas.porcentajeRitmo}%
+            {metricas?.porcentajeRitmo ?? 100}%
           </div>
 
           {/* Botón Desacople Always-on-Top (disponible si no está desacoplado en PiP ni widget nativo) */}
@@ -678,10 +733,10 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           </div>
 
           {/* Siguiente en turno badge */}
-          {metricas.siguienteItem && (
+          {metricas?.siguienteItem && (
             <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-slate-400 truncate max-w-[200px]">
               <span className="text-sky-400 font-bold shrink-0">Turno:</span>
-              <span className="truncate text-slate-300">{metricas.siguienteItem.titulo}</span>
+              <span className="truncate text-slate-300">{metricas?.siguienteItem?.titulo}</span>
             </div>
           )}
         </div>
@@ -724,15 +779,49 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
              VISTA A: CHECKLIST TÁCTICO DIRECTO (OPACIDAD 40% Y TACHADO)
              ======================================================== */
           itemsFiltrados.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-8 text-slate-500 border border-dashed border-slate-800/80 rounded-2xl">
-              <CheckCircle2 className="w-8 h-8 text-slate-600 mb-2" strokeWidth={1.75} />
-              <span className="text-xs font-semibold text-slate-400">Sin entidades para este horizonte</span>
-              <span className="text-[10px] text-slate-600 mt-0.5">Estás al día o cambia el filtro de vista</span>
+            <div className="flex flex-col items-center justify-center p-8 text-center space-y-3 bg-[#070C18]/60 border border-dashed border-slate-800/80 rounded-2xl my-2">
+              <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                <Calendar className="w-5 h-5" strokeWidth={1.75} />
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs font-semibold text-slate-300 block">
+                  {horizonte === 'HOY'
+                    ? 'Sin actividades programadas para hoy'
+                    : `Sin actividades para el horizonte ${horizonte === 'MANANA' ? 'de mañana' : 'semanal'}`}
+                </span>
+                <span className="text-[11px] text-slate-500 block max-w-[240px]">
+                  {filtroTipo !== 'TODOS'
+                    ? `No hay elementos en el filtro "${filtroTipo}". Prueba cambiando a "Todos".`
+                    : 'Estás al día con tus compromisos agendados.'}
+                </span>
+              </div>
+              {horizonte === 'HOY' ? (
+                <button
+                  type="button"
+                  onClick={() => setHorizonte('SEMANA')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <Calendar className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  <span>Ver Agenda de la Semana</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHorizonte('HOY');
+                    setFiltroTipo('TODOS');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700/60 text-xs font-medium transition-all cursor-pointer"
+                >
+                  <span>Volver a Hoy</span>
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
-              {itemsFiltrados.map((item) => {
-                const estaCompletado = item.completado;
+              {(itemsFiltrados || []).map((item) => {
+                if (!item) return null;
+                const estaCompletado = Boolean(item.completado);
                 const esVencido = item.estadoRitmo === 'VENCIDO_PASADO' && !estaCompletado;
                 const esFocus = item.estadoRitmo === 'FOCUS_ACTUAL' && !estaCompletado;
                 const esHabito = item.tipo === 'HABITO';
@@ -760,7 +849,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
                 return (
                   <div
-                    key={`${item.tipo}-${item.id}`}
+                    key={`${item?.tipo || 'item'}-${item?.id || Math.random()}`}
                     onClick={(e) => handleToggle(item, e)}
                     className={`group relative flex items-start gap-3 pl-3 pr-3 py-2.5 rounded-xl border border-l-4 transition-all transition-opacity duration-200 cursor-pointer overflow-hidden ${bordeIzquierdoClase} ${
                       estaCompletado
@@ -779,7 +868,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                         e.stopPropagation();
                         handleToggle(item, e);
                       }}
-                      aria-label={estaCompletado ? `Desmarcar ${item.titulo}` : `Completar ${item.titulo}`}
+                      aria-label={estaCompletado ? `Desmarcar ${item?.titulo || ''}` : `Completar ${item?.titulo || ''}`}
                       className={`mt-0.5 w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-all duration-200 cursor-pointer ${
                         estaCompletado
                           ? 'bg-emerald-500 border-emerald-400 text-slate-950 shadow-[0_0_10px_rgba(16,185,129,0.45)] scale-100'
@@ -806,7 +895,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                               : 'text-slate-100 group-hover:text-white'
                           }`}
                         >
-                          {item.titulo}
+                          {item?.titulo || 'Sin título'}
                         </span>
 
                         {/* Badge semántico de monto formateado para Gastos/Ingresos/Cuotas */}
@@ -942,10 +1031,30 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
               })}
             </div>
 
+            {/* Banner informativo cuando el Riel no tiene bloques activos */}
+            {bloquesCalendarPosicion.length === 0 && (
+              <div className="absolute top-4 left-20 right-4 z-30 p-3 bg-[#0B132B]/95 border border-slate-700/60 rounded-xl flex items-center justify-between text-xs text-slate-300 shadow-xl backdrop-blur-md">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
+                  <span>Sin bloques en el riel horario para {horizonte === 'HOY' ? 'hoy' : horizonte.toLowerCase()}</span>
+                </div>
+                {horizonte === 'HOY' && (
+                  <button
+                    type="button"
+                    onClick={() => setHorizonte('SEMANA')}
+                    className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-semibold hover:bg-sky-500/30 transition cursor-pointer"
+                  >
+                    Ver Semana
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* 2. Capa de Eventos Proporcionales Tipo Calendar (Posición y Altura según Minutos/Duración) */}
             <div className="absolute top-0 bottom-0 left-16 right-0">
-              {bloquesCalendarPosicion.map(({ item, topPx, heightPx, colIndex, totalCols }) => {
-                const estaCompletado = item.completado;
+              {(bloquesCalendarPosicion || []).map(({ item, topPx, heightPx, colIndex, totalCols }) => {
+                if (!item) return null;
+                const estaCompletado = Boolean(item.completado);
                 const esFocus = item.estadoRitmo === 'FOCUS_ACTUAL' && !estaCompletado;
                 const esHabito = item.tipo === 'HABITO';
                 const esTarea = item.tipo === 'TAREA';
@@ -975,7 +1084,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
                 return (
                   <div
-                    key={`cal-${item.tipo}-${item.id}`}
+                    key={`cal-${item?.tipo || 'item'}-${item?.id || Math.random()}`}
                     onClick={(e) => handleToggle(item, e)}
                     style={{
                       top: `${topPx}px`,
@@ -983,7 +1092,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                       left: `calc(${leftPct}% + 4px)`,
                       width: `calc(${widthPct}% - 8px)`
                     }}
-                    title={`${item.titulo} · ${item.subtitulo} (${item.horaInicio} - ${item.horaFin})`}
+                    title={`${item?.titulo || ''} · ${item?.subtitulo || ''} (${item?.horaInicio || ''} - ${item?.horaFin || ''})`}
                     className={`group absolute rounded-xl border border-l-4 px-2.5 py-1 text-xs cursor-pointer bg-[#0B132B]/90 backdrop-blur-sm border-slate-700/50 hover:scale-[1.01] hover:border-sky-400/60 hover:shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-150 overflow-hidden flex items-start justify-between gap-2 z-10 hover:z-20 ${bordeIzquierdoClase} ${
                       estaCompletado ? 'opacity-40' : ''
                     }`}
@@ -1019,7 +1128,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                               : 'text-slate-100 group-hover:text-white'
                           }`}
                         >
-                          {item.titulo}
+                          {item?.titulo || 'Sin título'}
                         </span>
 
                         {/* Badge de monto formateado para Gastos/Ingresos/Cuotas */}
@@ -1072,7 +1181,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                         e.stopPropagation();
                         handleToggle(item, e);
                       }}
-                      aria-label={estaCompletado ? `Desmarcar ${item.titulo}` : `Completar ${item.titulo}`}
+                      aria-label={estaCompletado ? `Desmarcar ${item?.titulo || ''}` : `Completar ${item?.titulo || ''}`}
                       className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-all duration-200 cursor-pointer ${
                         estaCompletado
                           ? 'bg-emerald-500 border-emerald-400 text-slate-950 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
@@ -1124,7 +1233,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           <span>Fecha: {fechaActual}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span>Ritmo: <strong className="text-white font-mono tabular-nums">{metricas.porcentajeRitmo}%</strong></span>
+          <span>Ritmo: <strong className="text-white font-mono tabular-nums">{metricas?.porcentajeRitmo ?? 100}%</strong></span>
         </div>
       </div>
     </div>
@@ -1167,11 +1276,11 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
               style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
               className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums font-bold border ${colorRitmo}`}
             >
-              {metricas.porcentajeRitmo}%
+              {metricas?.porcentajeRitmo ?? 100}%
             </div>
 
             {/* Siguiente en turno */}
-            {metricas.siguienteItem && (
+            {metricas?.siguienteItem && (
               <div
                 style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
                 className="flex items-center gap-1 max-w-[150px] truncate text-[11px] text-slate-300 font-sans border-l border-slate-800 pl-2"
@@ -1203,7 +1312,9 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
         {pipWindow &&
           createPortal(
             <div className="w-screen h-screen max-w-full max-h-full flex flex-col bg-[#040711] p-2 box-border overflow-hidden">
-              {cockpitContent}
+              <CockpitInternalErrorBoundary>
+                {cockpitContent}
+              </CockpitInternalErrorBoundary>
             </div>,
             pipWindow.document.body
           )}
@@ -1225,7 +1336,9 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             </button>
           </div>
         ) : (
-          cockpitContent
+          <CockpitInternalErrorBoundary>
+            {cockpitContent}
+          </CockpitInternalErrorBoundary>
         )}
       </div>
     );
@@ -1244,7 +1357,9 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       {pipWindow &&
         createPortal(
           <div className="w-screen h-screen max-w-full max-h-full flex flex-col bg-[#040711] p-2 box-border overflow-hidden">
-            {cockpitContent}
+            <CockpitInternalErrorBoundary>
+              {cockpitContent}
+            </CockpitInternalErrorBoundary>
           </div>,
           pipWindow.document.body
         )}
@@ -1282,11 +1397,11 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           <div
             className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums font-bold border ${colorRitmo}`}
           >
-            {metricas.porcentajeRitmo}%
+            {metricas?.porcentajeRitmo ?? 100}%
           </div>
 
           {/* Siguiente en turno (solo si existe y en pantallas sm+) */}
-          {metricas.siguienteItem && (
+          {metricas?.siguienteItem && (
             <div className="hidden md:flex items-center gap-1 max-w-[140px] truncate text-[11px] text-slate-300 font-sans border-l border-slate-800 pl-2">
               <span className="truncate">{metricas.siguienteItem.titulo}</span>
             </div>
@@ -1310,10 +1425,14 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             onClick={() => setCockpitAbierto(false)}
           />
           <div className="w-full md:w-auto transition-transform duration-200 ease-out origin-bottom-right">
-            {cockpitContent}
+            <CockpitInternalErrorBoundary>
+              {cockpitContent}
+            </CockpitInternalErrorBoundary>
           </div>
         </div>
       )}
     </>
   );
 };
+
+export default DailyCockpit;

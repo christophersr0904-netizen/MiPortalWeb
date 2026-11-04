@@ -9,15 +9,12 @@ import {
   Clock,
   Layers,
   Calendar,
-  CheckCircle2,
   RotateCcw,
   Sparkles,
   ChevronDown,
   Milestone,
   Flame,
   ArrowUpDown,
-  HeartPulse,
-  GraduationCap,
   Activity,
   Coffee,
   AlertTriangle,
@@ -31,10 +28,7 @@ import {
   ArrowDownCircle,
   CheckSquare,
   Check,
-  X,
-  Archive,
-  Trash2,
-  CornerDownRight
+  X
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -51,7 +45,8 @@ import {
 } from '../../utils/entityNormalizer';
 import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
-import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
+import { ModalDoDAdvertencia } from '../Modals/ModalDoDAdvertencia';
+import { ColumnaKanban } from '../PMO/ColumnaKanban';
 
 interface ViewKanbanProps {
   onSeleccionarProyecto?: (proyectoId: string) => void;
@@ -95,34 +90,49 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   const [popoverPlazoAbierto, setPopoverPlazoAbierto] = useState(false);
   const [popoverDepAbierto, setPopoverDepAbierto] = useState(false);
 
-  // Hover timers con buffer de delay (280ms) para evitar cierre prematuro al mover el cursor hacia el menú
-  const leaveTimers = useRef<{ [key: string]: NodeJS.Timeout }>({});
+  // Hover timers con buffer de delay (140ms) optimizado para evitar fricción háptica (REQ-SYS-003-KANBAN)
+  const leaveTimers = useRef<Record<string, number | null>>({});
+
+  const closeAllPopoversExcept = (exceptName?: string) => {
+    if (exceptName !== 'tiempo') setDropdownTiempoAbierto(false);
+    if (exceptName !== 'hito') setPopoverHitoAbierto(false);
+    if (exceptName !== 'prio') setPopoverPrioAbierto(false);
+    if (exceptName !== 'energia') setPopoverEnergiaAbierto(false);
+    if (exceptName !== 'plazo') setPopoverPlazoAbierto(false);
+    if (exceptName !== 'dep') setPopoverDepAbierto(false);
+  };
+
+  const closeAllPopovers = () => {
+    closeAllPopoversExcept();
+  };
+
+  const clearAllLeaveTimers = () => {
+    Object.keys(leaveTimers.current).forEach((key) => {
+      const timer = leaveTimers.current[key];
+      if (timer) {
+        window.clearTimeout(timer);
+        leaveTimers.current[key] = null;
+      }
+    });
+  };
 
   const handlePopoverMouseEnter = (name: string, openSetter: React.Dispatch<React.SetStateAction<boolean>>) => {
-    if (leaveTimers.current[name]) {
-      clearTimeout(leaveTimers.current[name]);
-      delete leaveTimers.current[name];
-    }
+    // 1. Limpiar todos los timers activos en vuelo
+    clearAllLeaveTimers();
+    // 2. Cerrar popovers hermanos para evitar superposiciones no deseadas
+    closeAllPopoversExcept(name);
+    // 3. Abrir el popover objetivo
     openSetter(true);
   };
 
   const handlePopoverMouseLeave = (name: string, openSetter: React.Dispatch<React.SetStateAction<boolean>>) => {
     if (leaveTimers.current[name]) {
-      clearTimeout(leaveTimers.current[name]);
+      window.clearTimeout(leaveTimers.current[name]!);
     }
-    leaveTimers.current[name] = setTimeout(() => {
+    leaveTimers.current[name] = window.setTimeout(() => {
       openSetter(false);
-      delete leaveTimers.current[name];
-    }, 280);
-  };
-
-  const closeAllPopovers = () => {
-    setDropdownTiempoAbierto(false);
-    setPopoverHitoAbierto(false);
-    setPopoverPrioAbierto(false);
-    setPopoverEnergiaAbierto(false);
-    setPopoverPlazoAbierto(false);
-    setPopoverDepAbierto(false);
+      leaveTimers.current[name] = null;
+    }, 140);
   };
 
   // Listener global para cerrar popovers al hacer clic fuera o presionar Escape
@@ -143,7 +153,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
-      Object.values(leaveTimers.current).forEach(clearTimeout);
+      clearAllLeaveTimers();
     };
   }, []);
 
@@ -161,6 +171,17 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
   // Modal Canónico de Nuevo Proyecto
   const [modalNuevoProyectoAbierto, setModalNuevoProyectoAbierto] = useState(false);
+
+  // Estados Optimistas para Transición Inmediata de Drag-and-Drop (Zero Latency)
+  const [estadosOptimistas, setEstadosOptimistas] = useState<Map<string, string>>(new Map());
+
+  // Modal Declarativo Bento para Advertencia Definition of Done (DoD)
+  const [dodAdvertencia, setDodAdvertencia] = useState<{
+    tarea: CanonicalTarea;
+    nuevoEstado: string;
+    pendientes: number;
+    total: number;
+  } | null>(null);
 
   const { programarEliminacion, estaOculto } = useUndoDelete();
 
@@ -194,8 +215,38 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     [rawGastosLive, estaOculto]
   );
 
+  // Limpieza automática de estados optimistas cuando Dexie persiste
+  useEffect(() => {
+    if (estadosOptimistas.size === 0) return;
+    setEstadosOptimistas((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      rawTareas.forEach((t: any) => {
+        const persisted = t.estado_tarea || t.estado || t.Estado_Tarea;
+        if (next.has(t.id) && next.get(t.id) === persisted) {
+          next.delete(t.id);
+          changed = true;
+        }
+        if (t.codigo_legado && next.has(t.codigo_legado) && next.get(t.codigo_legado) === persisted) {
+          next.delete(t.codigo_legado);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [rawTareas, estadosOptimistas.size]);
+
   const proyectos: CanonicalProyecto[] = useMemo(() => rawProyectos.map(normalizeProyecto), [rawProyectos]);
-  const tareas: CanonicalTarea[] = useMemo(() => rawTareas.map(normalizeTarea), [rawTareas]);
+  const tareas: CanonicalTarea[] = useMemo(() => {
+    return rawTareas.map((t) => {
+      const normalizada = normalizeTarea(t);
+      const opt = estadosOptimistas.get(normalizada.id) || (normalizada.codigo_legado ? estadosOptimistas.get(normalizada.codigo_legado) : undefined);
+      if (opt && opt !== normalizada.estado) {
+        return { ...normalizada, estado: opt };
+      }
+      return normalizada;
+    });
+  }, [rawTareas, estadosOptimistas]);
 
   // Índices y Mapas de Acceso O(1) canónicos para máximo rendimiento
   const proyectosMap = useMemo(() => {
@@ -253,6 +304,32 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     });
     return map;
   }, [proyectos, rawHitos, rawTareas]);
+
+  // Diccionario de Contadores O(1) por proyecto (REQ-SYS-002-KANBAN)
+  const contadoresTareasPorProyecto = useMemo(() => {
+    const map = new Map<string, { total: number; activas: number; completadas: number }>();
+    const registrar = (key: string, completada: boolean) => {
+      const k = key.trim().toUpperCase();
+      if (!k) return;
+      const curr = map.get(k) || { total: 0, activas: 0, completadas: 0 };
+      map.set(k, {
+        total: curr.total + 1,
+        activas: curr.activas + (completada ? 0 : 1),
+        completadas: curr.completadas + (completada ? 1 : 0),
+      });
+    };
+
+    tareas.forEach((t) => {
+      const completada = t.estado === '04_Completado' || (t as any).estado === '05_Archivado';
+      if (t.proyecto_codigo) registrar(t.proyecto_codigo, completada);
+      const rawPid = t.raw?.proyecto_id || t.raw?.ID_Proyecto || t.raw?.id_proyecto;
+      if (rawPid && String(rawPid).trim().toUpperCase() !== t.proyecto_codigo?.trim().toUpperCase()) {
+        registrar(String(rawPid), completada);
+      }
+    });
+
+    return map;
+  }, [tareas]);
 
   // Telemetría de Alta Precisión (REQ-PERF-02)
   const telemetriaReportadaRef = useRef(false);
@@ -614,7 +691,28 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     }
   ];
 
-  // Transición de estado con validación Definition of Done (DoD)
+  // Ejecución física de mutación en base de datos con rollback ante fallos
+  const ejecutarMoverTarea = async (tarea: CanonicalTarea, nuevoEstado: string) => {
+    // 1. Inyección de Estado Optimista (Cero latencia visual)
+    setEstadosOptimistas((prev) => new Map(prev).set(tarea.id, nuevoEstado));
+
+    try {
+      await db.tareas.update(tarea.id, {
+        estado_tarea: nuevoEstado,
+        updated_at: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Error al persistir estado de tarea en Dexie:', err);
+      // Revertir optimistic UI en caso de error
+      setEstadosOptimistas((prev) => {
+        const next = new Map(prev);
+        next.delete(tarea.id);
+        return next;
+      });
+    }
+  };
+
+  // Transición de estado con validación Definition of Done (DoD) declarativa
   const moverTareaAEstado = async (tarea: CanonicalTarea, nuevoEstado: string) => {
     if (tarea.estado === nuevoEstado) return;
 
@@ -622,17 +720,86 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     if (nuevoEstado === '04_Completado') {
       const dod = validarDoDSubtareas(tarea.codigo_legado, rawSubtareas);
       if (!dod.valido) {
-        const confirmar = window.confirm(
-          `[DoD] Definition of Done:\nEsta tarea tiene ${dod.pendientes} de ${dod.total} subtareas pendientes.\n¿Deseas marcarla como Completada de todos modos?`
-        );
-        if (!confirmar) return;
+        setDodAdvertencia({
+          tarea,
+          nuevoEstado,
+          pendientes: dod.pendientes,
+          total: dod.total
+        });
+        return;
       }
     }
 
-    await db.tareas.update(tarea.id, {
-      estado_tarea: nuevoEstado,
-      updated_at: new Date().toISOString()
+    await ejecutarMoverTarea(tarea, nuevoEstado);
+  };
+
+  const handleDragOverCol = (e: React.DragEvent, colId: string) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    if (dragOverColId !== colId) {
+      setDragOverColId(colId);
+    }
+  };
+
+  const handleDragLeaveCol = (e: React.DragEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX >= rect.right || e.clientY < rect.top || e.clientY >= rect.bottom) {
+      setDragOverColId(null);
+    }
+  };
+
+  const handleDropCol = async (e: React.DragEvent, colId: string) => {
+    e.preventDefault();
+    setDragOverColId(null);
+    const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+    if (!taskId) return;
+    const tareaArrastrada = tareas.find((t) => t.id === taskId);
+    if (tareaArrastrada) {
+      await moverTareaAEstado(tareaArrastrada, colId);
+    }
+  };
+
+  const handleDragStartTask = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('text/plain', taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedTaskId(taskId);
+  };
+
+  const handleDragEndTask = () => {
+    setDraggedTaskId(null);
+    setDragOverColId(null);
+  };
+
+  const handleArchivarTarea = (tar: CanonicalTarea) => {
+    programarEliminacion({
+      tabla: 'tareas',
+      id: tar.id,
+      etiqueta: `Archivar ${tar.codigo_legado} - ${tar.nombre}`,
+      tipo: 'TAREA',
+      commit: async () => {
+        await db.tareas.update(tar.id, {
+          estado_tarea: '05_Archivado',
+          archivado: true,
+          updated_at: new Date().toISOString()
+        });
+      }
     });
+  };
+
+  const handleEliminarTarea = (id: string, nombre: string) => {
+    if (onEliminarTarea) {
+      onEliminarTarea(id, nombre);
+    } else {
+      programarEliminacion({
+        tabla: 'tareas',
+        id,
+        etiqueta: nombre || 'Tarea',
+        tipo: 'TAREA',
+        commit: async () => {
+          await db.tareas.delete(id);
+        }
+      });
+    }
   };
 
 
@@ -675,27 +842,58 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     });
   };
 
+  // Memoización de Tareas Agrupadas por Columna (REQ-SYS-003-KANBAN)
+  // Desacopla la distribución de columnas del renderizado de popovers y chasis Kanban
+  const tareasAgrupadasPorColumna = useMemo<Record<string, CanonicalTarea[]>>(() => {
+    const grupos: Record<string, CanonicalTarea[]> = {
+      '01_Backlog': [],
+      '02_Por_Hacer': [],
+      '03_En_Proceso': [],
+      '04_Completado': []
+    };
+
+    tareasFiltradas.forEach((t) => {
+      if (grupos[t.estado]) {
+        grupos[t.estado].push(t);
+      } else {
+        grupos['01_Backlog'].push(t);
+      }
+    });
+
+    return {
+      '01_Backlog': ordenarTareas(grupos['01_Backlog']),
+      '02_Por_Hacer': ordenarTareas(grupos['02_Por_Hacer']),
+      '03_En_Proceso': ordenarTareas(grupos['03_En_Proceso']),
+      '04_Completado': ordenarTareas(grupos['04_Completado'])
+    };
+  }, [tareasFiltradas, criterioOrden]);
+
   return (
-    <div id="vista-kanban-wrapper" className="flex-1 flex h-full w-full overflow-y-auto md:overflow-hidden">
+    <div
+      id="vista-kanban-wrapper"
+      className={`flex-1 h-full w-full overflow-y-auto md:overflow-hidden grid grid-cols-1 ${
+        sidebarColapsado ? 'md:grid-cols-[64px_1fr]' : 'md:grid-cols-[288px_1fr] lg:grid-cols-[320px_1fr]'
+      } transition-[grid-template-columns] duration-300 ease-out`}
+    >
       {/* =================================================================== */}
       {/* 1. SIDEBAR DE PROYECTOS CANÓNICO                                    */}
       {/* =================================================================== */}
       <aside
         id="sidebar-portafolio"
         className={`${
-          sidebarColapsado ? 'sidebar-collapsed w-16' : 'sidebar-expanded w-72 lg:w-80'
-        } hidden md:flex flex-col bg-slate-900 text-white border-r border-slate-800 shrink-0 h-full z-40 transition-all duration-300`}
+          sidebarColapsado ? 'sidebar-collapsed' : 'sidebar-expanded'
+        } hidden md:flex flex-col bg-[#070C18] text-slate-100 border-r border-slate-800/80 w-full h-full z-40 overflow-hidden select-none transition-colors duration-200`}
       >
         {/* Cabecera del Sidebar */}
-        <div className="p-3 border-b border-slate-800 bg-slate-950/70 shrink-0">
+        <div className="p-3 border-b border-slate-800/80 bg-[#070C18] shrink-0">
           <div className={`flex items-center ${sidebarColapsado ? 'justify-center' : 'justify-between'} gap-2`}>
             {!sidebarColapsado && (
               <div className="flex items-center gap-2 min-w-0">
-                <FolderKanban className="w-4 h-4 text-indigo-400 shrink-0" />
+                <FolderKanban className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
                 <h1 className="text-xs font-black tracking-wider uppercase text-slate-100 truncate">Proyectos</h1>
                 <span
                   id="badge-total-proyectos-sidebar"
-                  className="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0"
+                  className="px-2 py-0.5 text-[10px] font-mono tabular-nums font-bold rounded-full bg-sky-500/10 text-sky-300 border border-sky-500/30 shrink-0"
                 >
                   {proyectosFiltrados.length}
                 </span>
@@ -706,9 +904,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               id="btn-toggle-sidebar-header"
               onClick={() => setSidebarColapsado(!sidebarColapsado)}
               title={sidebarColapsado ? 'Expandir panel lateral' : 'Contraer panel lateral'}
-              className="p-1.5 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-400 hover:text-white hover:bg-slate-800 hover:border-indigo-500/50 hover:shadow-[0_0_10px_rgba(99,102,241,0.25)] shadow-xs transition-all duration-200 shrink-0 flex items-center justify-center cursor-pointer"
+              className="p-1.5 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-400 hover:text-white hover:bg-slate-800 hover:border-sky-500/50 hover:shadow-[0_0_10px_rgba(56,189,248,0.25)] shadow-xs transition-all duration-200 shrink-0 flex items-center justify-center cursor-pointer"
             >
-              {sidebarColapsado ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+              {sidebarColapsado ? <ChevronRight className="w-4 h-4" strokeWidth={1.75} /> : <ChevronLeft className="w-4 h-4" strokeWidth={1.75} />}
             </button>
           </div>
 
@@ -716,14 +914,14 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
             <>
               {/* Buscador de proyectos en vivo */}
               <div className="mt-2.5 relative">
-                <Search className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 w-4 h-4 top-2" />
+                <Search className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 w-4 h-4 top-2" strokeWidth={1.75} />
                 <input
                   type="text"
                   id="sidebar-search-proyectos"
                   value={busquedaProyecto}
                   onChange={(e) => setBusquedaProyecto(e.target.value)}
                   placeholder="Buscar por nombre o PRO-..."
-                  className="w-full bg-slate-900/90 text-slate-100 placeholder-slate-400 text-xs rounded-lg border border-slate-700/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 pl-8 pr-7 py-1.5 transition outline-none"
+                  className="w-full bg-slate-900/90 text-slate-100 placeholder-slate-400 text-xs rounded-lg border border-slate-700/80 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 pl-8 pr-7 py-1.5 transition outline-none"
                 />
                 {busquedaProyecto && (
                   <button
@@ -731,7 +929,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     onClick={() => setBusquedaProyecto('')}
                     className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-200 text-xs font-bold cursor-pointer"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-3.5 h-3.5" strokeWidth={1.75} />
                   </button>
                 )}
               </div>
@@ -745,8 +943,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     onClick={() => setFiltroTipoProyecto(tipo)}
                     className={`text-[10px] px-2 py-0.5 rounded-full font-semibold transition cursor-pointer ${
                       filtroTipoProyecto === tipo
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                        ? 'bg-sky-600 text-white shadow-xs'
+                        : 'bg-slate-800/80 text-slate-400 hover:text-white'
                     }`}
                   >
                     {tipo || 'Todos'}
@@ -762,7 +960,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
           {cargandoDatosIniciales ? (
             <div className="space-y-2 p-1">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="animate-pulse bg-slate-800/40 rounded-xl border border-slate-800/40 h-16 p-2.5 space-y-2">
+                <div key={i} className="animate-pulse bg-[#0D1526]/40 rounded-xl border border-slate-800/40 h-16 p-2.5 space-y-2">
                   <div className="h-3.5 w-3/4 bg-slate-700/60 rounded"></div>
                   <div className="h-2 w-1/2 bg-slate-700/40 rounded"></div>
                 </div>
@@ -775,127 +973,147 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               const pct = avances.avanceReal;
               const metaPct = avances.avanceTotalProyectado;
 
-            // Salud semántica determinista
-            const rawHealth = String(proy.health_status || proy.raw?.Health_Status || 'En Rango');
-            let healthLabel = 'En Rango';
-            let healthBadgeClass = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
-            let healthDot = 'bg-emerald-400';
+              // Acceso O(1) instantáneo a contadores de tareas
+              const contadores =
+                contadoresTareasPorProyecto.get(proy.codigo_legado?.trim().toUpperCase()) ||
+                contadoresTareasPorProyecto.get(proy.id?.trim().toUpperCase()) ||
+                { total: 0, activas: 0, completadas: 0 };
 
-            if (/bloqueado|cr[ií]tico|danger|rojo/i.test(rawHealth)) {
-              healthLabel = 'Bloqueado';
-              healthBadgeClass = 'bg-rose-600/20 text-rose-300 border border-rose-500/60 shadow-[0_0_8px_rgba(244,63,94,0.3)] animate-pulse';
-              healthDot = 'bg-rose-500';
-            } else if (/riesgo|alerta|warning|amarillo/i.test(rawHealth)) {
-              healthLabel = 'En Riesgo';
-              healthBadgeClass = 'bg-amber-500/10 text-amber-400 border border-amber-500/30';
-              healthDot = 'bg-amber-400';
-            }
+              // Salud semántica determinista
+              const rawHealth = String(proy.health_status || proy.raw?.Health_Status || 'En Rango');
+              let healthLabel = 'En Rango';
+              let healthBadgeClass = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
+              let healthDot = 'bg-emerald-400';
 
-            return (
-              <div
-                key={proy.id}
-                onClick={() => {
-                  if (isActivo) {
-                    setProyectoSeleccionadoCodigo(null);
-                  } else {
-                    setProyectoSeleccionadoCodigo(proy.codigo_legado);
-                  }
-                }}
-                title={sidebarColapsado ? `${proy.codigo_legado} · ${proy.nombre} (${healthLabel} - ${pct}%)` : undefined}
-                className={`group relative ${
-                  sidebarColapsado ? 'p-2 flex flex-col items-center justify-center gap-1.5' : 'p-2.5'
-                } rounded-xl border transition-all duration-200 cursor-pointer ${
-                  isActivo
-                    ? 'bg-indigo-950/70 border-indigo-500/80 border-l-4 border-l-indigo-400 shadow-md ring-1 ring-indigo-500/40 text-white'
-                    : 'bg-slate-800/40 hover:bg-slate-800/60 border-slate-800/80 hover:border-slate-700 text-slate-300 hover:translate-x-0.5'
-                }`}
-              >
-                {!sidebarColapsado ? (
-                  <>
-                    {/* 1. Cabecera con código PRO-XXX, píldora de categoría y botón rápido 360° */}
-                    <div className="flex items-center justify-between gap-1 mb-1.5 text-[10px]">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="font-mono font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">
-                          {proy.codigo_legado}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-slate-700/80 text-slate-300 font-semibold text-[9px] truncate">
-                          {proy.tipo_iniciativa || 'General'}
-                        </span>
-                      </div>
+              if (/bloqueado|cr[ií]tico|danger|rojo/i.test(rawHealth)) {
+                healthLabel = 'Bloqueado';
+                healthBadgeClass = 'bg-rose-600/20 text-rose-300 border border-rose-500/60 shadow-[0_0_8px_rgba(244,63,94,0.3)] animate-pulse';
+                healthDot = 'bg-rose-500';
+              } else if (/riesgo|alerta|warning|amarillo/i.test(rawHealth)) {
+                healthLabel = 'En Riesgo';
+                healthBadgeClass = 'bg-amber-500/10 text-amber-400 border border-amber-500/30';
+                healthDot = 'bg-amber-400';
+              }
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const targetId = proy.codigo_legado || proy.id;
-                            if (onVerDetalle360) {
-                              onVerDetalle360(targetId);
-                            } else if (onSeleccionarProyecto) {
-                              onSeleccionarProyecto(targetId);
-                            }
-                          }}
-                          title="Ver Detalle 360°"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-1.5 py-0.5 text-[10px] font-bold rounded bg-indigo-600/90 hover:bg-indigo-500 text-white shadow-xs border border-indigo-400/40 flex items-center gap-1 active:scale-95 cursor-pointer"
-                        >
-                          <Sparkles className="w-3 h-3 text-indigo-200" />
-                          <span>360°</span>
-                        </button>
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${healthBadgeClass}`}>
-                          <span className="relative flex h-2 w-2 shrink-0">
-                            {healthLabel === 'Bloqueado' && (
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                            )}
-                            <span className={`relative inline-flex rounded-full h-2 w-2 ${healthDot}`} />
+              return (
+                <div
+                  key={proy.id}
+                  onClick={() => {
+                    if (isActivo) {
+                      setProyectoSeleccionadoCodigo(null);
+                    } else {
+                      setProyectoSeleccionadoCodigo(proy.codigo_legado);
+                    }
+                  }}
+                  title={sidebarColapsado ? `${proy.codigo_legado} · ${proy.nombre} (${healthLabel} - ${pct}%) · ${contadores.activas}/${contadores.total} tareas` : undefined}
+                  className={`group relative overflow-hidden transition-all duration-200 cursor-pointer ${
+                    sidebarColapsado ? 'p-2 flex flex-col items-center justify-center gap-1.5' : 'p-2.5'
+                  } rounded-xl border ${
+                    isActivo
+                      ? 'bg-[#0A101C] border-sky-500/50 shadow-[0_0_20px_rgba(56,189,248,0.12)] text-white before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-400 before:shadow-[0_0_12px_#38bdf8] before:transition-transform before:scale-y-100 before:rounded-l-xl'
+                      : 'bg-[#0D1526]/50 hover:bg-[#0D1526]/90 border-slate-800/40 hover:border-slate-700/80 text-slate-300 hover:translate-x-0.5 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-transparent before:scale-y-0 before:transition-transform'
+                  }`}
+                >
+                  {!sidebarColapsado ? (
+                    <>
+                      {/* 1. Cabecera con código PRO-XXX, cápsula O(1) de tareas, tipo y botón 360° */}
+                      <div className="flex items-center justify-between gap-1 mb-1.5 text-[10px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-mono font-bold text-slate-300 bg-slate-900/90 px-1.5 py-0.5 rounded border border-slate-800/80 shrink-0">
+                            {proy.codigo_legado}
                           </span>
-                          <span>{healthLabel}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 font-semibold text-[9px] truncate">
+                            {proy.tipo_iniciativa || 'General'}
+                          </span>
+                          {/* Cápsula de conteo O(1) en font-mono tabular-nums */}
+                          <div
+                            className="flex items-center gap-1 font-mono tabular-nums text-[10px] text-slate-400 bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800/80 shrink-0"
+                            title={`${contadores.activas} activas de ${contadores.total} tareas totales (${contadores.completadas} completadas)`}
+                          >
+                            <CheckSquare className="w-2.5 h-2.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                            <span>{contadores.activas}/{contadores.total}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const targetId = proy.codigo_legado || proy.id;
+                              if (onVerDetalle360) {
+                                onVerDetalle360(targetId);
+                              } else if (onSeleccionarProyecto) {
+                                onSeleccionarProyecto(targetId);
+                              }
+                            }}
+                            title="Ver Detalle 360°"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-1.5 py-0.5 text-[10px] font-bold rounded bg-sky-600/90 hover:bg-sky-500 text-white shadow-xs border border-sky-400/40 flex items-center gap-1 active:scale-95 cursor-pointer"
+                          >
+                            <Sparkles className="w-3 h-3 text-sky-200" strokeWidth={1.75} />
+                            <span>360°</span>
+                          </button>
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${healthBadgeClass}`}>
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              {healthLabel === 'Bloqueado' && (
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                              )}
+                              <span className={`relative inline-flex rounded-full h-2 w-2 ${healthDot}`} />
+                            </span>
+                            <span>{healthLabel}</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 2. Título del proyecto */}
+                      <div className="text-sm font-medium text-slate-200 truncate mb-1.5" title={proy.nombre}>
+                        {proy.nombre}
+                      </div>
+
+                      {/* 3. Doble métrica textual de progreso: Avance vs Meta canónica */}
+                      <div className="space-y-1.5 mt-2 pt-1 border-t border-slate-700/40">
+                        <div className="flex justify-between text-[11px] font-mono tabular-nums leading-none">
+                          <span className="text-slate-400">Avance: <b className="text-sky-300 font-bold">{pct}%</b></span>
+                          <span className="text-amber-300/90 font-medium">Meta: {metaPct}%</span>
+                        </div>
+
+                        {/* 4. Barra de progreso horizontal de doble tonalidad */}
+                        <div className="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden relative">
+                          <div
+                            className="bg-sky-400/25 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
+                            style={{ width: `${metaPct}%` }}
+                          />
+                          <div
+                            className="bg-sky-500 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-1.5 py-1">
+                      <FolderKanban className="w-5 h-5 mx-auto text-slate-400 group-hover:text-sky-300 transition-colors duration-150" strokeWidth={1.75} />
+                      <span className="relative flex h-2.5 w-2.5">
+                        {healthLabel === 'Bloqueado' && (
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        )}
+                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${healthDot}`} />
+                      </span>
+                      {contadores.total > 0 && (
+                        <span className="font-mono tabular-nums text-[9px] text-sky-400 bg-sky-950/40 px-1 py-0.2 rounded border border-sky-800/50">
+                          {contadores.activas}
                         </span>
-                      </div>
-                    </div>
-
-                    {/* 2. Título del proyecto */}
-                    <div className="text-sm font-medium text-slate-200 truncate mb-1.5" title={proy.nombre}>
-                      {proy.nombre}
-                    </div>
-
-                    {/* 3. Doble métrica textual de progreso: Avance vs Meta canónica */}
-                    <div className="space-y-1.5 mt-2 pt-1 border-t border-slate-700/40">
-                      <div className="flex justify-between text-[11px] font-mono tabular-nums leading-none">
-                        <span className="text-slate-400">Avance: <b className="text-indigo-300 font-bold">{pct}%</b></span>
-                        <span className="text-amber-300/90 font-medium">Meta: {metaPct}%</span>
-                      </div>
-
-                      {/* 4. Barra de progreso horizontal de doble tonalidad */}
-                      <div className="w-full bg-slate-700/70 h-1.5 rounded-full overflow-hidden relative">
-                        <div
-                          className="bg-indigo-400/40 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
-                          style={{ width: `${metaPct}%` }}
-                        />
-                        <div
-                          className="bg-indigo-500 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center gap-1.5 py-1">
-                    <FolderKanban className="w-5 h-5 mx-auto text-slate-400 group-hover:text-sky-300 transition-colors duration-150" />
-                    <span className="relative flex h-2.5 w-2.5">
-                      {healthLabel === 'Bloqueado' && (
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                       )}
-                      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${healthDot}`} />
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          }))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
 
         {/* Footer Sidebar: Botón Canónico "Nuevo Proyecto" */}
-        <div className="p-2.5 border-t border-slate-800 bg-slate-950/80 shrink-0">
+        <div className="p-2.5 border-t border-slate-800/80 bg-[#070C18] shrink-0">
           <button
             type="button"
             onClick={() => {
@@ -905,10 +1123,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 setModalNuevoProyectoAbierto(true);
               }
             }}
-            className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white text-xs font-bold shadow-md shadow-indigo-900/30 flex items-center justify-center gap-2 transition duration-150 border border-indigo-400/30 cursor-pointer"
+            className="w-full py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white text-xs font-bold shadow-md shadow-sky-950/40 flex items-center justify-center gap-2 transition duration-150 border border-sky-400/30 cursor-pointer"
             title="Crear nuevo proyecto"
           >
-            <Plus className="w-4 h-4 text-indigo-200 shrink-0" />
+            <Plus className="w-4 h-4 text-sky-200 shrink-0" strokeWidth={1.75} />
             {!sidebarColapsado && <span className="whitespace-nowrap font-semibold">Nuevo Proyecto</span>}
           </button>
         </div>
@@ -917,7 +1135,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
       {/* =================================================================== */}
       {/* 2. ÁREA CENTRAL DEL TABLERO KANBAN                                 */}
       {/* =================================================================== */}
-      <main className="flex-1 flex flex-col h-full overflow-y-auto md:overflow-hidden bg-slate-100 dark:bg-slate-950 transition-colors duration-200">
+      <main className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto md:overflow-hidden bg-slate-100 dark:bg-[#040711] transition-colors duration-200">
         {/* ================================================================= */}
         {/* HEADER MULTI-FILA CANÓNICO (L81-546 de View_Kanban.html)          */}
         {/* ================================================================= */}
@@ -1052,39 +1270,41 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
                 </button>
 
-                {dropdownTiempoAbierto && (
-                  <div
-                    id="popover-time-filter"
-                    className="absolute right-0 top-full mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[160px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
-                  >
-                    {[
-                      { id: 'TODO', label: 'Todo', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'HOY', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'SEMANA', label: 'Esta Semana', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'MES', label: 'Este Mes', icon: <CalendarCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} /> }
-                    ].map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => {
-                          setFiltroTemporal(opt.id as TimeFilter);
-                          setDropdownTiempoAbierto(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
-                          filtroTemporal === opt.id
-                            ? 'bg-sky-950/50 text-sky-300 font-bold'
-                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          {opt.icon}
-                          <span>{opt.label}</span>
-                        </span>
-                        {filtroTemporal === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div
+                  id="popover-time-filter"
+                  className={`absolute right-0 top-full mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[160px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                    dropdownTiempoAbierto
+                      ? 'opacity-100 scale-100 pointer-events-auto visible'
+                      : 'opacity-0 scale-95 pointer-events-none invisible'
+                  }`}
+                >
+                  {[
+                    { id: 'TODO', label: 'Todo', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'HOY', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'SEMANA', label: 'Esta Semana', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                    { id: 'MES', label: 'Este Mes', icon: <CalendarCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} /> }
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setFiltroTemporal(opt.id as TimeFilter);
+                        setDropdownTiempoAbierto(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
+                        filtroTemporal === opt.id
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
+                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        {opt.icon}
+                        <span>{opt.label}</span>
+                      </span>
+                      {filtroTemporal === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Bloque de Gasto Acumulado / Presupuesto Global */}
@@ -1123,7 +1343,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
           {/* =============================================================== */}
           {/* FILA 2: BARRA DE FILTROS OPERATIVOS KANBAN                       */}
           {/* =============================================================== */}
-          <div className="portal-surface p-2 rounded-xl flex items-center gap-2 text-xs overflow-visible relative flex-wrap bg-slate-50/70 dark:bg-slate-950/40 border border-slate-200/80 dark:border-slate-800/70">
+          <div className="portal-surface p-2 rounded-xl flex items-center gap-2 text-xs overflow-visible relative flex-wrap bg-slate-50/70 dark:bg-[#080E1C]/90 border border-slate-200/80 dark:border-slate-800/70">
             {/* Buscador de Tareas Compacto */}
             <div className="relative w-36 md:w-44 shrink-0">
               <Search className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 w-3.5 h-3.5 top-2" strokeWidth={1.75} />
@@ -1133,7 +1353,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 value={busquedaTarea}
                 onChange={(e) => setBusquedaTarea(e.target.value)}
                 placeholder="Buscar tarea..."
-                className="w-full bg-white dark:bg-slate-900/70 hover:dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-[11px] rounded-lg border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 pl-7 pr-6 py-1.5 outline-none transition font-medium"
+                className="w-full bg-slate-100 dark:bg-[#0D1526]/60 hover:dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-[11px] rounded-lg border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 pl-7 pr-6 py-1.5 outline-none transition font-medium"
               />
               {busquedaTarea && (
                 <button
@@ -1232,10 +1452,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 onClick={() => proyectoSeleccionadoCodigo && setPopoverHitoAbierto(!popoverHitoAbierto)}
                 className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   !proyectoSeleccionadoCodigo
-                    ? 'opacity-40 cursor-not-allowed border border-slate-300 dark:border-slate-800/40 bg-slate-200/50 dark:bg-slate-900/40 text-slate-400 dark:text-slate-500'
+                    ? 'opacity-40 cursor-not-allowed border border-slate-300 dark:border-slate-800/40 bg-slate-200/50 dark:bg-[#0D1526]/40 text-slate-400 dark:text-slate-500'
                     : filtroHito
                     ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium cursor-pointer'
-                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 cursor-pointer'
+                    : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 cursor-pointer'
                 }`}
                 title={
                   !proyectoSeleccionadoCodigo
@@ -1243,7 +1463,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     : 'Filtrar por Paquete de Trabajo'
                 }
               >
-                <Milestone className={`w-3.5 h-3.5 shrink-0 ${!proyectoSeleccionadoCodigo ? 'text-slate-400 dark:text-slate-600' : filtroHito ? 'text-sky-400' : 'text-purple-400'}`} strokeWidth={1.75} />
+                <Milestone className={`w-3.5 h-3.5 shrink-0 ${!proyectoSeleccionadoCodigo ? 'text-slate-400 dark:text-slate-600' : filtroHito ? 'text-sky-400' : 'text-slate-400'}`} strokeWidth={1.75} />
                 <span className="truncate max-w-[130px]">
                   {!proyectoSeleccionadoCodigo
                     ? 'Paquetes'
@@ -1271,50 +1491,54 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 )}
               </button>
 
-              {proyectoSeleccionadoCodigo && popoverHitoAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[220px] max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
-                  <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase border-b border-slate-800/60 mb-1">
-                    Filtrar por Paquete de Trabajo
-                  </div>
+              <div
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[220px] max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                  proyectoSeleccionadoCodigo && popoverHitoAbierto
+                    ? 'opacity-100 scale-100 pointer-events-auto visible'
+                    : 'opacity-0 scale-95 pointer-events-none invisible'
+                }`}
+              >
+                <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase border-b border-slate-800/60 mb-1">
+                  Filtrar por Paquete de Trabajo
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroHito('');
+                    setPopoverHitoAbierto(false);
+                  }}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
+                    !filtroHito ? 'bg-sky-950/50 text-sky-300 font-bold' : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
+                    <span>Todos los Paquetes</span>
+                  </span>
+                  {!filtroHito && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                </button>
+                {hitosDisponibles.map((h) => (
                   <button
+                    key={h.id}
                     type="button"
                     onClick={() => {
-                      setFiltroHito('');
+                      setFiltroHito(h.codigo_legado);
                       setPopoverHitoAbierto(false);
                     }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
-                      !filtroHito ? 'bg-sky-950/50 text-sky-300 font-bold' : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between truncate transition cursor-pointer text-xs font-medium ${
+                      filtroHito === h.codigo_legado
+                        ? 'bg-sky-950/50 text-sky-300 font-bold'
+                        : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                     }`}
                   >
-                    <span className="flex items-center gap-2">
-                      <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
-                      <span>Todos los Paquetes</span>
+                    <span className="flex items-center gap-2 truncate">
+                      <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} />
+                      <span className="truncate">{h.codigo_legado} · {h.nombre_elemento}</span>
                     </span>
-                    {!filtroHito && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                    {filtroHito === h.codigo_legado && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0 ml-1" strokeWidth={1.75} />}
                   </button>
-                  {hitosDisponibles.map((h) => (
-                    <button
-                      key={h.id}
-                      type="button"
-                      onClick={() => {
-                        setFiltroHito(h.codigo_legado);
-                        setPopoverHitoAbierto(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between truncate transition cursor-pointer text-xs font-medium ${
-                        filtroHito === h.codigo_legado
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} />
-                        <span className="truncate">{h.codigo_legado} · {h.nombre_elemento}</span>
-                      </span>
-                      {filtroHito === h.codigo_legado && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0 ml-1" strokeWidth={1.75} />}
-                    </button>
-                  ))}
-                </div>
-              )}
+                ))}
+              </div>
             </div>
 
             {/* Prioridad Eisenhower */}
@@ -1329,7 +1553,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   filtroPrioridad
                     ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
-                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
+                    : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
                 }`}
               >
                 <Flame className={`w-3.5 h-3.5 shrink-0 ${filtroPrioridad ? 'text-sky-400' : 'text-rose-400'}`} strokeWidth={1.75} />
@@ -1345,37 +1569,41 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
               </button>
 
-              {popoverPrioAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[190px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
-                  {[
-                    { id: '', label: 'Todas', icon: <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: '01_P1_Alta', label: 'P1: Alta', icon: <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
-                    { id: '02_P2_Media', label: 'P2: Media', icon: <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: '03_P3_Baja', label: 'P3: Baja', icon: <ArrowDownCircle className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: '04_P4', label: 'P4: Sin prioridad', icon: <CheckSquare className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        setFiltroPrioridad(p.id);
-                        setPopoverPrioAbierto(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
-                        filtroPrioridad === p.id
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        {p.icon}
-                        <span>{p.label}</span>
-                      </span>
-                      {filtroPrioridad === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                  popoverPrioAbierto
+                    ? 'opacity-100 scale-100 pointer-events-auto visible'
+                    : 'opacity-0 scale-95 pointer-events-none invisible'
+                }`}
+              >
+                {[
+                  { id: '', label: 'Todas', icon: <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: '01_P1_Alta', label: 'P1: Alta', icon: <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
+                  { id: '02_P2_Media', label: 'P2: Media', icon: <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: '03_P3_Baja', label: 'P3: Baja', icon: <ArrowDownCircle className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: '04_P4', label: 'P4: Sin prioridad', icon: <CheckSquare className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setFiltroPrioridad(p.id);
+                      setPopoverPrioAbierto(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
+                      filtroPrioridad === p.id
+                        ? 'bg-sky-950/50 text-sky-300 font-bold'
+                        : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {p.icon}
+                      <span>{p.label}</span>
+                    </span>
+                    {filtroPrioridad === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Nivel de Energía */}
@@ -1390,7 +1618,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   filtroEnergia
                     ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
-                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
+                    : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
                 }`}
               >
                 <Zap className={`w-3.5 h-3.5 shrink-0 ${filtroEnergia ? 'text-sky-400' : 'text-amber-400'}`} strokeWidth={1.75} />
@@ -1406,36 +1634,40 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
               </button>
 
-              {popoverEnergiaAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[180px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
-                  {[
-                    { id: '', label: 'Todos', icon: <Zap className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: 'Alta_DeepWork', label: 'DeepWork', icon: <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: 'Media_Operativa', label: 'Operativa', icon: <Activity className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: 'Baja_Automatica', label: 'Mecánica', icon: <Coffee className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
-                  ].map((e) => (
-                    <button
-                      key={e.id}
-                      type="button"
-                      onClick={() => {
-                        setFiltroEnergia(e.id);
-                        setPopoverEnergiaAbierto(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
-                        filtroEnergia === e.id
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        {e.icon}
-                        <span>{e.label}</span>
-                      </span>
-                      {filtroEnergia === e.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                  popoverEnergiaAbierto
+                    ? 'opacity-100 scale-100 pointer-events-auto visible'
+                    : 'opacity-0 scale-95 pointer-events-none invisible'
+                }`}
+              >
+                {[
+                  { id: '', label: 'Todos', icon: <Zap className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: 'Alta_DeepWork', label: 'DeepWork', icon: <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: 'Media_Operativa', label: 'Operativa', icon: <Activity className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: 'Baja_Automatica', label: 'Mecánica', icon: <Coffee className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
+                ].map((e) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => {
+                      setFiltroEnergia(e.id);
+                      setPopoverEnergiaAbierto(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
+                      filtroEnergia === e.id
+                        ? 'bg-sky-950/50 text-sky-300 font-bold'
+                        : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {e.icon}
+                      <span>{e.label}</span>
+                    </span>
+                    {filtroEnergia === e.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Plazo / Vencimiento */}
@@ -1450,10 +1682,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   filtroPlazo
                     ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
-                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
+                    : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
                 }`}
               >
-                <Calendar className={`w-3.5 h-3.5 shrink-0 ${filtroPlazo ? 'text-sky-400' : 'text-indigo-400'}`} strokeWidth={1.75} />
+                <Calendar className={`w-3.5 h-3.5 shrink-0 ${filtroPlazo ? 'text-sky-400' : 'text-slate-400'}`} strokeWidth={1.75} />
                 <span>
                   {filtroPlazo === 'vencidas'
                     ? 'Vencidas'
@@ -1468,37 +1700,41 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
               </button>
 
-              {popoverPlazoAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[180px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
-                  {[
-                    { id: '', label: 'Cualquier fecha', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: 'vencidas', label: 'Vencidas', icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
-                    { id: 'hoy', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: '7dias', label: 'Próximos 7d', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: 'sin_fecha', label: 'Sin fecha', icon: <CalendarOff className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        setFiltroPlazo(p.id);
-                        setPopoverPlazoAbierto(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
-                        filtroPlazo === p.id
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        {p.icon}
-                        <span>{p.label}</span>
-                      </span>
-                      {filtroPlazo === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                  popoverPlazoAbierto
+                    ? 'opacity-100 scale-100 pointer-events-auto visible'
+                    : 'opacity-0 scale-95 pointer-events-none invisible'
+                }`}
+              >
+                {[
+                  { id: '', label: 'Cualquier fecha', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: 'vencidas', label: 'Vencidas', icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
+                  { id: 'hoy', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: '7dias', label: 'Próximos 7d', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: 'sin_fecha', label: 'Sin fecha', icon: <CalendarOff className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setFiltroPlazo(p.id);
+                      setPopoverPlazoAbierto(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
+                      filtroPlazo === p.id
+                        ? 'bg-sky-950/50 text-sky-300 font-bold'
+                        : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {p.icon}
+                      <span>{p.label}</span>
+                    </span>
+                    {filtroPlazo === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Dependencias / Bloqueos */}
@@ -1513,10 +1749,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${
                   filtroDependencia
                     ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
-                    : 'bg-white dark:bg-slate-900/70 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
+                    : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
                 }`}
               >
-                <Link2 className={`w-3.5 h-3.5 shrink-0 ${filtroDependencia ? 'text-sky-400' : 'text-purple-400'}`} strokeWidth={1.75} />
+                <Link2 className={`w-3.5 h-3.5 shrink-0 ${filtroDependencia ? 'text-sky-400' : 'text-slate-400'}`} strokeWidth={1.75} />
                 <span>
                   {filtroDependencia === 'con_dep'
                     ? 'Bloqueadas'
@@ -1527,35 +1763,39 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
               </button>
 
-              {popoverDepAbierto && (
-                <div className="absolute top-full left-0 mt-1.5 z-50 bg-[#0B1222]/95 backdrop-blur-md border border-slate-800/80 rounded-xl shadow-2xl shadow-black/80 p-1.5 min-w-[190px] space-y-0.5 text-xs before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3">
-                  {[
-                    { id: '', label: 'Todos', icon: <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                    { id: 'con_dep', label: 'Bloqueadas', icon: <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
-                    { id: 'sin_dep', label: 'Libres', icon: <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
-                  ].map((d) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => {
-                        setFiltroDependencia(d.id);
-                        setPopoverDepAbierto(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
-                        filtroDependencia === d.id
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        {d.icon}
-                        <span>{d.label}</span>
-                      </span>
-                      {filtroDependencia === d.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                  popoverDepAbierto
+                    ? 'opacity-100 scale-100 pointer-events-auto visible'
+                    : 'opacity-0 scale-95 pointer-events-none invisible'
+                }`}
+              >
+                {[
+                  { id: '', label: 'Todos', icon: <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                  { id: 'con_dep', label: 'Bloqueadas', icon: <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
+                  { id: 'sin_dep', label: 'Libres', icon: <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
+                ].map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => {
+                      setFiltroDependencia(d.id);
+                      setPopoverDepAbierto(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${
+                      filtroDependencia === d.id
+                        ? 'bg-sky-950/50 text-sky-300 font-bold'
+                        : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {d.icon}
+                      <span>{d.label}</span>
+                    </span>
+                    {filtroDependencia === d.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Indicador reactivo y botón Limpiar Filtros */}
@@ -1586,506 +1826,53 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         {/* ================================================================= */}
         {/* 3. CHASIS DE 4 COLUMNAS KANBAN Y DRAG-AND-DROP NATIVO HTML5       */}
         {/* ================================================================= */}
-        <div className="flex-1 overflow-x-auto p-3 md:p-4 custom-scrollbar">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 min-w-[320px] md:min-w-[1050px] h-full items-start">
+        <div
+          id="board-kanban-container"
+          className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden p-3 md:p-4 custom-scrollbar [&::-webkit-scrollbar]:hidden"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 min-w-[320px] md:min-w-[1050px] h-full min-h-0 items-start">
             {columnas.map((col) => {
-              const tareasColumna = ordenarTareas(tareasFiltradas.filter((t) => t.estado === col.id));
+              const tareasColumna = tareasAgrupadasPorColumna[col.id] || [];
               const isOverThisCol = dragOverColId === col.id;
 
               return (
-                <div
+                <ColumnaKanban
                   key={col.id}
-                  id={col.domId}
-                  data-state={col.id}
-                  className={`kanban-col-container flex flex-col rounded-2xl border p-3.5 h-full max-h-[calc(100vh-175px)] transition-all duration-150 shadow-2xs ${
-                    isOverThisCol
-                      ? 'kanban-dropzone-active bg-indigo-50/40 dark:bg-slate-800/40 border-2 border-dashed border-indigo-400'
-                      : 'portal-surface bg-slate-200/50 dark:bg-[#0D1526]/80 border-slate-300/60 dark:border-slate-800/40'
-                  }`}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-                    setDragOverColId(col.id);
+                  col={col}
+                  tareasColumna={tareasColumna}
+                  isOverThisCol={isOverThisCol}
+                  cargandoDatosIniciales={cargandoDatosIniciales}
+                  draggedTaskId={draggedTaskId}
+                  hoveredTaskId={hoveredTaskId}
+                  predecesorasHover={predecesorasHover}
+                  sucesorasHover={sucesorasHover}
+                  predecesorasOcultas={predecesorasOcultas}
+                  sucesorasOcultas={sucesorasOcultas}
+                  subtareasPorTarea={subtareasPorTarea}
+                  proyectosMap={proyectosMap}
+                  hitosMap={hitosMap}
+                  gastosPorTarea={gastosPorTarea}
+                  onDragOver={handleDragOverCol}
+                  onDragLeave={handleDragLeaveCol}
+                  onDrop={handleDropCol}
+                  onDragStartTask={handleDragStartTask}
+                  onDragEndTask={handleDragEndTask}
+                  onMouseEnterTask={setHoveredTaskId}
+                  onMouseLeaveTask={() => setHoveredTaskId(null)}
+                  onSeleccionarTarea={(id, estado) => {
+                    setTareaSeleccionadaId(id);
+                    setColumnaNuevaTarea(estado);
+                    setModalTareaFlowAbierto(true);
                   }}
-                  onDragLeave={(e) => {
-                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                    if (e.clientX < rect.left || e.clientX >= rect.right || e.clientY < rect.top || e.clientY >= rect.bottom) {
-                      setDragOverColId(null);
-                    }
+                  onMoverTareaAEstado={moverTareaAEstado}
+                  onArchivarTarea={handleArchivarTarea}
+                  onEliminarTarea={handleEliminarTarea}
+                  onAbrirModalNuevaTarea={(colId) => {
+                    setTareaSeleccionadaId(null);
+                    setColumnaNuevaTarea(colId);
+                    setModalTareaFlowAbierto(true);
                   }}
-                  onDrop={async (e) => {
-                    e.preventDefault();
-                    setDragOverColId(null);
-                    const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
-                    if (!taskId) return;
-                    const tareaArrastrada = tareas.find((t) => t.id === taskId);
-                    if (tareaArrastrada) {
-                      await moverTareaAEstado(tareaArrastrada, col.id);
-                    }
-                  }}
-                >
-                  {/* Cabecera de Columna */}
-                  <div className="mb-2.5 space-y-2 shrink-0">
-                    <div className="flex justify-between items-center px-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-semibold ${col.iconoColor}`}>
-                          {col.headerGlow && (
-                            <span className="animate-ping absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 opacity-75"></span>
-                          )}
-                          {col.id === '01_Backlog' && <Layers className="w-3.5 h-3.5 text-slate-300" />}
-                          {col.id === '02_Por_Hacer' && <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />}
-                          {col.id === '03_En_Proceso' && <Zap className="w-3.5 h-3.5 text-amber-400" />}
-                          {col.id === '04_Completado' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
-                        </span>
-                        <span className={`text-xs font-bold uppercase tracking-wider ${col.tituloColor}`}>
-                          {col.titulo}
-                        </span>
-                      </div>
-                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold font-mono tabular-nums ${col.badgeColor}`}>
-                        {cargandoDatosIniciales ? (
-                          <span className="inline-block w-4 h-3 bg-slate-700/60 rounded animate-pulse" />
-                        ) : (
-                          tareasColumna.length
-                        )}
-                      </span>
-                    </div>
-
-                    {/* Botón "+ Añadir Tarea" Canónico */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTareaSeleccionadaId(null);
-                        setColumnaNuevaTarea(col.id);
-                        setModalTareaFlowAbierto(true);
-                      }}
-                      className="w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-indigo-600 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>Añadir Tarea</span>
-                    </button>
-                  </div>
-
-                  {/* Lista de Tarjetas Scrollable */}
-                  <div
-                    id={`body-${col.domId}`}
-                    className="kanban-col-body flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar pb-6"
-                  >
-                    {cargandoDatosIniciales ? (
-                      <div className="space-y-2.5">
-                        <div className="animate-pulse bg-slate-800/40 rounded-xl border border-slate-800/40 h-28 p-3 flex flex-col justify-between">
-                          <div className="space-y-2">
-                            <div className="h-3 w-1/3 bg-slate-700/50 rounded"></div>
-                            <div className="h-4 w-4/5 bg-slate-700/70 rounded"></div>
-                          </div>
-                          <div className="flex justify-between items-center pt-2 border-t border-slate-800/30">
-                            <div className="h-3 w-16 bg-slate-700/40 rounded"></div>
-                            <div className="h-3 w-12 bg-slate-700/40 rounded"></div>
-                          </div>
-                        </div>
-                        <div className="animate-pulse bg-slate-800/40 rounded-xl border border-slate-800/40 h-28 p-3 flex flex-col justify-between">
-                          <div className="space-y-2">
-                            <div className="h-3 w-1/4 bg-slate-700/50 rounded"></div>
-                            <div className="h-4 w-3/4 bg-slate-700/70 rounded"></div>
-                          </div>
-                          <div className="flex justify-between items-center pt-2 border-t border-slate-800/30">
-                            <div className="h-3 w-20 bg-slate-700/40 rounded"></div>
-                            <div className="h-3 w-10 bg-slate-700/40 rounded"></div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : tareasColumna.length === 0 ? (
-                      <div className="text-center py-10 text-xs text-slate-400 dark:text-slate-600 italic">
-                        Columna vacía
-                      </div>
-                    ) : (
-                      tareasColumna.map((tar) => {
-                        // Subtareas asociadas para checklist widget (O(1))
-                        const subsTarea = subtareasPorTarea.get(tar.codigo_legado) || [];
-                        const totalSubs = subsTarea.length;
-                        const completadasSubs = subsTarea.filter((s) => s.completado).length;
-                        const pctSubs = totalSubs > 0 ? Math.round((completadasSubs / totalSubs) * 100) : 0;
-
-                        // 1. Franja lateral continua de prioridad (Canónico legacy_gas/JS_Kanban.html L488-L505 & L780-L782)
-                        let colorBarraPrioridad = 'bg-slate-600';
-                        const prioStr = String(tar.prioridad || tar.raw?.Prioridad_Eisenhower || '').toLowerCase();
-                        if (prioStr.includes('01') || prioStr.includes('p1') || prioStr.includes('alta') || prioStr.includes('urgente')) {
-                          colorBarraPrioridad = 'bg-rose-500';
-                        } else if (prioStr.includes('02') || prioStr.includes('p2') || prioStr.includes('media')) {
-                          colorBarraPrioridad = 'bg-amber-400';
-                        } else if (prioStr.includes('03') || prioStr.includes('p3') || prioStr.includes('baja')) {
-                          colorBarraPrioridad = 'bg-emerald-400';
-                        } else if (prioStr.includes('04') || prioStr.includes('p4')) {
-                          colorBarraPrioridad = 'bg-slate-600';
-                        }
-
-                        // Vencimiento y fecha DD/MM/YYYY
-                        const hoyIso = new Date().toISOString().split('T')[0];
-                        const estaVencida = Boolean(tar.fecha_programada && tar.fecha_programada.split('T')[0] < hoyIso && tar.estado !== '04_Completado');
-                        const formatFechaDDMMYYYY = (fechaIso?: string) => {
-                          if (!fechaIso) return 'Sin fecha';
-                          const clean = fechaIso.split('T')[0];
-                          const partes = clean.split('-');
-                          if (partes.length === 3) {
-                            return `${partes[2]}/${partes[1]}/${partes[0]}`;
-                          }
-                          return clean;
-                        };
-
-                        // Dependencia y Costo PEN (O(1))
-                        const rawDep = String(tar.raw?.id_dependencia || tar.raw?.ID_Dependencia || '').trim();
-                        const tieneDep = Boolean(rawDep && !rawDep.includes('@google.com'));
-
-                        const costoGasto = gastosPorTarea.get(tar.codigo_legado.toUpperCase()) || 0;
-                        const costoTotalPen = costoGasto > 0 ? costoGasto : (tar.costo_real || Number(tar.raw?.costo_real_pen || tar.raw?.Costo_Real_PEN || 0));
-
-                        // Breadcrumb WBS (O(1))
-                        const proyAsoc = tar.proyecto_codigo ? proyectosMap.get(tar.proyecto_codigo) : undefined;
-                        const nombreProyecto = proyAsoc?.nombre || tar.proyecto_codigo || 'General';
-                        const hitoAsoc = tar.hito_codigo ? hitosMap.get(tar.hito_codigo) : undefined;
-                        const nombreHito = (hitoAsoc as any)?.nombre || (hitoAsoc as any)?.nombre_hito || (hitoAsoc as any)?.nombre_elemento || tar.hito_codigo || 'Hito Principal';
-
-                        // Relaciones de dependencias para hover y atenuación
-                        const isHovered = hoveredTaskId === tar.codigo_legado;
-                        const isPredecesora = predecesorasHover.has(tar.codigo_legado.toUpperCase());
-                        const isSucesora = sucesorasHover.has(tar.codigo_legado.toUpperCase());
-                        const isRelacionada = isHovered || isPredecesora || isSucesora;
-                        const atenuar = hoveredTaskId !== null && !isRelacionada;
-
-                        return (
-                          <div
-                            key={tar.id}
-                            id={`kanban-card-${tar.codigo_legado}`}
-                            data-id-tarea={tar.codigo_legado}
-                            data-task-id={tar.id}
-                            draggable={true}
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData('text/plain', tar.id);
-                              e.dataTransfer.effectAllowed = 'move';
-                              setDraggedTaskId(tar.id);
-                            }}
-                            onDragEnd={() => {
-                              setDraggedTaskId(null);
-                              setDragOverColId(null);
-                            }}
-                            onMouseEnter={() => setHoveredTaskId(tar.codigo_legado)}
-                            onMouseLeave={() => setHoveredTaskId(null)}
-                            onClick={() => {
-                              setTareaSeleccionadaId(tar.id);
-                              setColumnaNuevaTarea(tar.estado);
-                              setModalTareaFlowAbierto(true);
-                            }}
-                            className={`kanban-card group relative p-3.5 pl-4 rounded-xl border border-slate-800/80 bg-[#0D1526]/90 hover:bg-[#0D1526] hover:border-slate-700 hover:shadow-[0_8px_25px_rgba(2,6,23,0.7),0_0_15px_rgba(56,189,248,0.08)] hover:-translate-y-0.5 active:scale-[0.985] transition-[transform,box-shadow,border-color,background-color] duration-150 ease-out cursor-grab active:cursor-grabbing select-none text-xs space-y-2.5 overflow-hidden ${
-                              draggedTaskId === tar.id ? 'opacity-30 scale-95 border-dashed border-sky-400/80 ring-1 ring-sky-500/50' : ''
-                            } ${
-                              atenuar ? 'kanban-card-atenuada opacity-60' : ''
-                            } ${
-                              isPredecesora ? 'kanban-card-predecesora' : ''
-                            } ${
-                              isSucesora ? 'kanban-card-sucesora' : ''
-                            }`}
-                          >
-                            {/* Franja lateral izquierda continua de prioridad (Canónico 1:1 legacy_gas/JS_Kanban.html L780-L782) */}
-                            <div 
-                              className={`absolute left-0 top-0 bottom-0 w-1.5 ${colorBarraPrioridad} rounded-l-xl transition-transform duration-150 ease-out origin-left group-hover:scale-x-125 pointer-events-none`} 
-                            />
-
-                            {/* Renderizado de Badges canónicos extraídos literalmente de legacy_gas/JS_Kanban.html */}
-                            {isPredecesora && (
-                              <div className="kanban-etiqueta-relacion flex items-center justify-between text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 bg-amber-500 text-white shadow-xs pointer-events-none transition-all duration-200">
-                                <span className="inline-flex items-center gap-1">
-                                  <Zap className="w-2.5 h-2.5 shrink-0" />
-                                  <span>Predecesora</span>
-                                </span>
-                                <span className="text-[9px] opacity-90 uppercase tracking-wider font-mono tabular-nums">{tar.codigo_legado}</span>
-                              </div>
-                            )}
-                            {isSucesora && (
-                              <div className="kanban-etiqueta-relacion flex items-center justify-between text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 bg-emerald-600 text-white shadow-xs pointer-events-none transition-all duration-200">
-                                <span className="inline-flex items-center gap-1">
-                                  <CornerDownRight className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
-                                  <span>Sucesora</span>
-                                </span>
-                                <span className="text-[9px] opacity-90 uppercase tracking-wider font-mono tabular-nums">{tar.codigo_legado}</span>
-                              </div>
-                            )}
-                            {/* Alerta discreta para Predecesoras o Sucesoras Ocultas por Filtro/Archivo */}
-                            {isHovered && (predecesorasOcultas.length > 0 || sucesorasOcultas.length > 0) && (
-                              <div className="whitespace-normal bg-slate-800/90 text-slate-300 text-[9px] px-2 py-1 rounded-md border border-slate-700 shadow-xs pointer-events-none flex flex-col gap-0.5 animate-fadeIn">
-                                {predecesorasOcultas.length > 0 && (
-                                  <span className="inline-flex items-center gap-1">
-                                    <AlertTriangle className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-                                    <span>Predecesora [{predecesorasOcultas.join(', ')}] oculta por filtros</span>
-                                  </span>
-                                )}
-                                {sucesorasOcultas.length > 0 && (
-                                  <span className="inline-flex items-center gap-1">
-                                    <span>Sucesora [{sucesorasOcultas.join(', ')}] oculta por filtros</span>
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            {/* 2. Cabecera Minimalista Canónica: Código de tarea (TAR-XXX) y Micro-icono compacto sin textos redundantes */}
-                            <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-mono text-xs text-slate-400 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700/60 font-medium shrink-0">
-                                  {tar.codigo_legado}
-                                </span>
-
-                                {/* Micro-icono canónico compacto según Nivel_Energia / Tipo */}
-                                {(() => {
-                                  const eStr = String(tar.nivel_energia || '').toLowerCase();
-                                  const tipoRaw = String(tar.raw?.Tipo_Tarea || tar.raw?.tipo_tarea || (tar as any).tipo || '').toLowerCase();
-                                  const esHabito = tar.codigo_legado.startsWith('ACT-') || tipoRaw.includes('habito') || tipoRaw.includes('rutina') || tipoRaw.includes('personal');
-                                  const esEstudio = tipoRaw.includes('aprendizaje') || tipoRaw.includes('estudio') || /pmp|curso|tesis|cert/i.test(tar.nombre);
-
-                                  if (esHabito) {
-                                    return (
-                                      <span title="Tipo: Personal / Hábito" className="inline-flex items-center text-pink-400 shrink-0">
-                                        <HeartPulse className="w-3.5 h-3.5" />
-                                      </span>
-                                    );
-                                  }
-                                  if (esEstudio) {
-                                    return (
-                                      <span title="Tipo: Aprendizaje / Estudio" className="inline-flex items-center text-indigo-400 shrink-0">
-                                        <GraduationCap className="w-3.5 h-3.5" />
-                                      </span>
-                                    );
-                                  }
-                                  if (eStr.includes('alta') || eStr.includes('deepwork') || eStr.includes('creativa') || eStr.includes('estrategica')) {
-                                    return (
-                                      <span title="Tipo de Trabajo: Alta Cognitiva DeepWork" className="inline-flex items-center text-amber-400 shrink-0">
-                                        <Zap className="w-3.5 h-3.5" />
-                                      </span>
-                                    );
-                                  }
-                                  if (eStr.includes('baja') || eStr.includes('automatica') || eStr.includes('mecanica') || eStr.includes('admin')) {
-                                    return (
-                                      <span title="Tipo de Trabajo: Baja Mecánica" className="inline-flex items-center text-emerald-400 shrink-0">
-                                        <Coffee className="w-3.5 h-3.5" />
-                                      </span>
-                                    );
-                                  }
-                                  return (
-                                    <span title="Tipo de Trabajo: Media Operativa" className="inline-flex items-center text-sky-400 shrink-0">
-                                      <Activity className="w-3.5 h-3.5" />
-                                    </span>
-                                  );
-                                })()}
-
-                                <BadgeNotasVinculadas
-                                  codigo={tar.codigo_legado}
-                                  tipo="TAREA"
-                                  tituloEntidad={tar.nombre}
-                                />
-                              </div>
-
-                              {/* Acciones Fantasma con Transición Fluida */}
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-out shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (window.confirm(`¿Deseas archivar la tarea ${tar.codigo_legado}?`)) {
-                                      db.tareas.update(tar.id, {
-                                        estado_tarea: '05_Archivado',
-                                        archivado: true,
-                                        updated_at: new Date().toISOString()
-                                      });
-                                    }
-                                  }}
-                                  className="p-1 rounded-md text-slate-400 hover:text-sky-300 hover:bg-slate-800/80 transition-colors duration-100 cursor-pointer"
-                                  title="Archivar tarea"
-                                >
-                                  <Archive className="w-3.5 h-3.5" strokeWidth={1.75} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    if (onEliminarTarea) {
-                                      onEliminarTarea(tar.id, tar.nombre);
-                                    } else {
-                                      const targetId = tar.id;
-                                      const etiqueta = tar.nombre || 'Tarea';
-                                      programarEliminacion({
-                                        tabla: 'tareas',
-                                        id: targetId,
-                                        etiqueta,
-                                        tipo: 'TAREA',
-                                        commit: async () => {
-                                          await db.tareas.delete(targetId);
-                                        }
-                                      });
-                                    }
-                                  }}
-                                  className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-colors duration-100 cursor-pointer"
-                                  title="Eliminar tarea"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* 3. Título de la tarea en text-sm font-semibold text-slate-100 line-clamp-2 mt-1 */}
-                            <h4
-                              className={`text-sm font-semibold text-slate-100 line-clamp-2 mt-1 cursor-pointer hover:text-indigo-300 transition ${
-                                tar.estado === '04_Completado' ? 'line-through text-slate-400' : ''
-                              }`}
-                              title={tar.nombre}
-                            >
-                              {tar.nombre}
-                            </h4>
-
-                            {/* 4. Fila de metadatos 1 (Dependencias de alto contraste y Costo) */}
-                            {(tieneDep || costoTotalPen > 0) && (
-                              <div className="flex items-center flex-wrap gap-1.5 pt-0.5">
-                                {tieneDep && (
-                                  <span
-                                    className="px-2 py-0.5 text-[11px] font-mono tabular-nums font-medium rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 shadow-2xs truncate max-w-[150px]"
-                                    title={`Requiere: ${rawDep}`}
-                                  >
-                                    <Lock className="w-3 h-3 text-amber-400 shrink-0" strokeWidth={1.75} />
-                                    <span className="truncate">{rawDep}</span>
-                                  </span>
-                                )}
-                                {costoTotalPen > 0 && (
-                                  <span className="px-2 py-0.5 text-[11px] font-mono tabular-nums font-medium text-emerald-400 bg-emerald-500/10 rounded-md border border-emerald-500/25">
-                                    S/ {costoTotalPen.toFixed(2)}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-
-                            {/* 5. Fila de metadatos 2 (Subtareas y Tiempos con píldoras marcadas) */}
-                            <div className="space-y-1.5 pt-1">
-                              {totalSubs > 0 && (
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-400">
-                                    <span className="flex items-center gap-1">
-                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" strokeWidth={1.75} />
-                                      <span>{completadasSubs}/{totalSubs} pasos ({pctSubs}%)</span>
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
-                                    <div
-                                      className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all"
-                                      style={{ width: `${pctSubs}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-
-                              <div className="flex items-center justify-between gap-1 text-[11px] font-mono tabular-nums pt-0.5 flex-wrap">
-                                <span
-                                  className={`px-2 py-0.5 text-[11px] font-mono tabular-nums rounded-md flex items-center gap-1 border ${
-                                    estaVencida
-                                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-semibold'
-                                      : 'bg-slate-800/70 text-slate-300 border-slate-700/50'
-                                  }`}
-                                  title={estaVencida ? 'Tarea vencida' : 'Fecha límite programada'}
-                                >
-                                  <Calendar className={`w-3 h-3 ${estaVencida ? 'text-rose-400' : 'text-slate-400'}`} strokeWidth={1.75} />
-                                  <span>{formatFechaDDMMYYYY(tar.fecha_programada)}</span>
-                                </span>
-
-                                <span
-                                  className="bg-slate-800/80 text-slate-300 border border-slate-700/60 px-2 py-0.5 rounded-md flex items-center gap-1 font-mono tabular-nums"
-                                  title={`Horas Reales: ${tar.horas_reales ?? 0}h / Horas Estimadas: ${tar.horas_estimadas ?? 0}h`}
-                                >
-                                  <Clock className="w-3 h-3 text-slate-400 shrink-0" strokeWidth={1.75} />
-                                  <span>{tar.horas_reales ?? 0}h / {tar.horas_estimadas ?? 0}h</span>
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* 6. Pie de tarjeta (Breadcrumb WBS) */}
-                            <div
-                              className="text-xs text-slate-400 truncate pt-1.5 border-t border-slate-800/70"
-                              title={`${nombreProyecto} • ${nombreHito}`}
-                            >
-                              {nombreProyecto} • {nombreHito}
-                            </div>
-
-                            {/* 7. Botonera canónica bidireccional al pie */}
-                            <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-                              {col.id === '01_Backlog' && (
-                                <button
-                                  type="button"
-                                  onClick={() => moverTareaAEstado(tar, '02_Por_Hacer')}
-                                  className="w-full py-1.5 px-3 rounded-lg bg-slate-800/80 hover:bg-indigo-950/40 text-indigo-300 border border-slate-700/60 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                                  title="Mover a Por Hacer"
-                                >
-                                  <span className="tracking-wide">A Por Hacer</span>
-                                  <span className="font-bold">→</span>
-                                </button>
-                              )}
-
-                              {col.id === '02_Por_Hacer' && (
-                                <div className="flex items-center justify-between gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => moverTareaAEstado(tar, '01_Backlog')}
-                                    className="h-7 px-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/40 text-xs font-semibold transition shrink-0 flex items-center gap-1 cursor-pointer"
-                                    title="Retroceder a Backlog"
-                                  >
-                                    <span>←</span>
-                                    <span>Backlog</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => moverTareaAEstado(tar, '03_En_Proceso')}
-                                    className="h-7 flex-1 px-2.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                                    title="Iniciar tarea (Mover a En Proceso)"
-                                  >
-                                    <span className="tracking-wide">Iniciar</span>
-                                    <Zap className="w-3 h-3 text-amber-300" />
-                                    <span className="font-bold">→</span>
-                                  </button>
-                                </div>
-                              )}
-
-                              {col.id === '03_En_Proceso' && (
-                                <div className="flex items-center justify-between gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => moverTareaAEstado(tar, '02_Por_Hacer')}
-                                    className="h-7 px-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/40 text-xs font-semibold transition shrink-0 flex items-center gap-1 cursor-pointer"
-                                    title="Retroceder a Por Hacer"
-                                  >
-                                    <span>←</span>
-                                    <span>Por Hacer</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => moverTareaAEstado(tar, '04_Completado')}
-                                    className="h-7 flex-1 px-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                                    title="Finalizar tarea (Mover a Completado)"
-                                  >
-                                    <span className="tracking-wide">Completar</span>
-                                    <Check className="w-3.5 h-3.5 text-emerald-300" />
-                                  </button>
-                                </div>
-                              )}
-
-                              {col.id === '04_Completado' && (
-                                <button
-                                  type="button"
-                                  onClick={() => moverTareaAEstado(tar, '03_En_Proceso')}
-                                  className="w-full h-7 rounded-lg bg-slate-800/30 hover:bg-slate-800/60 text-slate-400 hover:text-amber-300 border border-slate-700/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                                  title="Reabrir tarea a En Proceso"
-                                >
-                                  <RotateCcw className="w-3 h-3 text-slate-500" />
-                                  <span>Reabrir tarea a En Proceso</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
+                />
               );
             })}
           </div>
@@ -2116,6 +1903,23 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         onProyectoCreado={(cod) => {
           setProyectoSeleccionadoCodigo(cod);
         }}
+      />
+      {/* =================================================================== */}
+      {/* 6. MODAL DECLARATIVO BENTO PARA ADVERTENCIA DEFINITION OF DONE (DoD) */}
+      {/* =================================================================== */}
+      <ModalDoDAdvertencia
+        isOpen={Boolean(dodAdvertencia)}
+        onClose={() => setDodAdvertencia(null)}
+        onConfirmar={async () => {
+          if (!dodAdvertencia) return;
+          const { tarea, nuevoEstado } = dodAdvertencia;
+          setDodAdvertencia(null);
+          await ejecutarMoverTarea(tarea, nuevoEstado);
+        }}
+        tareaCodigo={dodAdvertencia?.tarea.codigo_legado || ''}
+        tareaNombre={dodAdvertencia?.tarea.nombre || ''}
+        pendientes={dodAdvertencia?.pendientes || 0}
+        total={dodAdvertencia?.total || 0}
       />
     </div>
   );

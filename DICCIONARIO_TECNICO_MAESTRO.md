@@ -6,6 +6,30 @@
 
 ---
 
+## 🛡️ ZONAS INMUTABLES Y CONTRATOS ESTRICTOS (NO MODIFICAR)
+
+Esta sección define las directrices y contratos defensivos inviolables del sistema para prevenir cualquier regresión entre el cliente Web, el entorno de escritorio (Electron) y la capa de datos reactiva.
+
+1. **REGLA 1 (Arquitectura Dual App.tsx):**
+   La detección del widget DEBE incluir siempre `(window as any).IS_DESKTOP_WIDGET === true` (inyectado de forma aislada por `desktop/preload.js`) combinada con los parámetros de búsqueda de URL (`?widget=desktop` o `?mode=hud`). Prohibido unificar o eliminar esta lectura dual, garantizando que el portal web en navegador normal monte el Layout completo con fondo sólido mientras la ventana nativa de Electron monte exclusivamente el widget flotante transparente (Cockpit).
+
+2. **REGLA 2 (Servidor Loopback Electron):**
+   El micro-servidor local HTTP en `desktop/main.js` (`127.0.0.1:48123`) requiere obligatoriamente el diccionario canónico y estricto de MIME Types (`.js` / `.mjs` $\rightarrow$ `application/javascript`, `.css` $\rightarrow$ `text/css`, `.json` $\rightarrow$ `application/json`, etc.). Prohibido terminantemente hacer fallback a `index.html` (MIME `text/html`) ante peticiones de assets inexistentes con extensión de archivo (debe responder `404 Not Found`), evitando que Chromium bloquee la ejecución por `Strict MIME type checking is enforced`.
+
+3. **REGLA 3 (Polimorfismo de Datos Dexie):**
+   Prohibido acceder rígidamente a propiedades de título (`a.nombre_actividad`). Toda lectura o filtrado de hábitos, actividades y metas debe canalizarse a través de resolutores defensivos polimórficos (`resolverTituloHabito`, `resolverNombreMeta` o `getProp`) para soportar llaves heredadas (`Nombre_Actividad`, `titulo`, `nombre`, `actividad`, `descripcion`) sin arrojar excepciones de tipo `TypeError` ni renderizar celdas en blanco.
+
+4. **REGLA 4 (Matemáticas UI & Barras de Progreso):**
+   Todo cálculo de porcentajes y ratios para barras de progreso, anillos o medidores radiales (Dashboards, Cockpit, Metas Cuantitativas) debe normalizar denominadores (`Math.max(1, total)`) y validar explícitamente con `Number.isFinite()` para prevenir renders de `NaN%` o `Infinity` que colapsen el CSS Grid o estropeen la maquetación.
+
+5. **REGLA 5 (Memoización Atómica y Cero `JSON.stringify` en Reconciliadores):**
+   Prohibido terminantemente ejecutar `JSON.stringify()` dentro de funciones comparadoras de `React.memo` (`arePropsEqual`). La arquitectura Local-First de Dexie garantiza que cualquier mutación actualice `updated_at` (ISO timestamp) e incremente `version`. Los comparadores deben validar estrictamente primitivos (`id`, `updated_at`, `modoVista`), preservando el hilo principal a 60-120 FPS sin bloquear el event loop.
+
+6. **REGLA 6 (Concurrencia en Búsquedas Masivas y Aceleración GPU):**
+   Todo input de búsqueda en tiempo real que filtre cuadrículas masivas (Masonry, Kanban, Portafolio) debe desacoplar el estado de entrada del filtrado pesado mediante `useDeferredValue()`. En cuadrículas densas, está prohibido usar `backdrop-blur-md` y `transition-all` en tarjetas individuales, debiendo implementarse fondos `#0D1526` opacos con aceleración por hardware (`transform-gpu transition-[transform,opacity,border-color] will-change-[transform,opacity]`). Modales de acción por fila deben elevarse a la raíz bajo el patrón *Single Instance Modal*.
+
+---
+
 ## SECCIÓN DE GOBERNANZA LOCAL DE AGENTES & PIPELINE CANÓNICO
 **Rutas Activas de Gobernanza:** `.antigravity/` y `.agents/`  
 **Directriz Maestra:** [AGENTS.md](file:///c:/Users/CHRISTOPHER/Desktop/MiPortalWeb/AGENTS.md)
@@ -27,6 +51,453 @@
 ---
 
 ## CHANGELOG DE ARQUITECTURA
+
+### FASE 4.92 — Aceleración Reactiva: Suscripción WebSocket Supabase Realtime, Filtro Anti-Eco y Debounce Trailing-Edge (REQ-SYS-010-REALTIME)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/services/syncManager.ts`, `src/components/Layout/HeaderMaestro.tsx`, `src/services/__tests__/syncManagerRealtime.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Latencia de Refresco Pasivo (45s Polling):** Las mutaciones colaborativas o concurrentes en Supabase dependían de un sondeo por intervalo de 45 segundos, del evento `window.online` o de recargas manuales (tecla R), provocando desfases temporales en tableros Kanban y métricas.
+- **Vulnerabilidad a Avalanchas por Eventos Concurrentes (Thundering Herd):** Un cliente conectado a WebSocket recibiendo ráfagas de cambios remotos (ej. 10 actualizaciones de tareas en segundos) podía colapsar el hilo principal si disparaba el *inbound pull* completo de las 12 tablas en cada notificación individual.
+- **Riesgo de Bucle Infinito por Auto-Eco:** Al subir cambios locales vía `upsert`, Supabase emite un evento `postgres_changes` de vuelta hacia todos los suscriptores. Sin un discriminador de origen, el cliente que originó la mutación re-descargaba su propio dato, re-escribiendo IndexedDB y disparando re-renders reactivos ociosos.
+- **Opacidad del Estado de Conexión en UI:** `HeaderMaestro.tsx` sólo mostraba estado "Al día" (verde) o "Sincronizando...", ocultando fallas de WebSocket (`CHANNEL_ERROR`, `CLOSED`, `TIMED_OUT`) si las peticiones REST previas habían sido exitosas.
+
+#### Solución Implementada
+- **Suscripción Selectiva Supabase Realtime (`setupRealtimeSubscriptions`):**
+  - Creación del canal unificado `pmo-realtime-channel` en `src/services/syncManager.ts`, escuchando eventos `postgres_changes` exclusivamente sobre las 5 tablas de alta frecuencia operativa: `tareas`, `actividades_personales`, `gastos`, `ingresos` y `proyectos`.
+- **Caché Temporal Anti-Eco con TTL de 10 Segundos (`recentlyPushedIds`):**
+  - Implementación del buffer en memoria `recentlyPushedIds = new Map<string, number>()`.
+  - En la fase de subida de todas las entidades, cada ID se registra de inmediato con un vencimiento de 10 segundos (`registrarPushedId`).
+  - Al ingresar un evento por el WebSocket, si `payload.new.id` o `payload.old.id` reside en la caché y no ha expirado, el evento se descarta en $O(1)$ sin generar llamadas de red ni lecturas I/O.
+- **Amortiguación Trailing-Edge Debounce (800ms) y Pull Selectivo:**
+  - Acumulación de entidades afectadas en `tablasPendientesRealtime`.
+  - Temporizador de 800ms que consolida ráfagas de cambios remotos en una única ejecución del nuevo método `descargarDatosSelectivos(tablas: string[])`, descargando únicamente las tablas impactadas en vez de las 12 tablas completas.
+- **Telemetría y Feedback Visual en `HeaderMaestro.tsx`:**
+  - Extensión de `SyncState` con el estado `'reconnecting'`.
+  - Monitoreo del estado del canal Realtime: ante `CHANNEL_ERROR`, `CLOSED` o `TIMED_OUT`, el indicador se degrada automáticamente a `'reconnecting'`.
+  - Renderizado de Micro-LED ámbar Cobalt Aerodynamic (`bg-amber-400 shadow-[0_0_12px_#f59e0b]`) con tooltip interactivo *"Reconectando en tiempo real..."*, restaurando el verde esmeralda brillante exclusivamente para *"Al día (Sincronizado)"*.
+- **Validación QA:**
+  - `npx tsc --noEmit`: 0 errores.
+  - `npm test`: 25/25 suites pasadas (217/217 tests unitarios e integrados).
+  - `npm run build`: Compilación de producción exitosa en 7.55s.
+
+### FASE 4.91 — Ciclo de Vida de Datos: Orquestación de Tombstones, Anti-Resurrección y Garbage Collection en DexieDB (REQ-SYS-009-DATA-LIFECYCLE)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/types/index.ts`, `src/db/db.ts`, `src/context/UndoDeleteContext.tsx`, `src/services/syncManager.ts`, `src/services/habitosService.ts`, `src/services/metasService.ts`, `src/services/__tests__/dataLifecycleTombstones.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Resurrección Remota por Ausencia de Lápidas (Tombstones):** El flujo anterior ejecutaba borrado físico directo en Dexie (`db[tabla].delete(id)`) al expirar la ventana de 4s de `UndoDeleteContext`. Dado que no se despachaba una mutación destructiva remota hacia Supabase ni se conservaba constancia del borrado, el *inbound pull* periódico o tras reconexión (`descargarDatosDescendientes`) re-descargaba el registro desde la nube vía `bulkPut()`, resucitándolo indefinidamente en la base local.
+- **Ausencia de Garbage Collection / Purga en IndexedDB:** La "Bóveda de Archivados (+10 Días)" operaba únicamente como filtro de renderizado en memoria (`diffDias > 10`), sin existir un mecanismo de limpieza para tareas completadas, transacciones y lápidas obsoletas, lo que generaba un crecimiento sin acotamiento en el almacenamiento local.
+- **Descargas Históricas Irrestrictas en Pull Descendente:** `descargarDatosDescendientes()` realizaba consultas abiertas `.select('*')` sin delimitador temporal en tablas de alto volumen transaccional (`gastos`, `ingresos`, registros de hábitos), saturando la memoria y la red del cliente en dispositivos móviles.
+
+#### Solución Implementada
+- **Esquema e Indexación de Lápidas (Tombstones):**
+  - En `src/types/index.ts`, definición de `TombstoneRecord` (`id`, `tabla`, `deleted_at`, `sync_status`).
+  - En `src/db/db.ts`, migración a `version(6)` incorporando la tabla `tombstones` con índices `'id, tabla, sync_status, deleted_at'`.
+  - Creación del helper `registrarTombstone(tabla, id)` expuesto para servicios de dominio y utilidades de borrado en cascada.
+- **Captura Quirúrgica en el Búfer UndoDelete (4s):**
+  - En `UndoDeleteContext.tsx`, previo a ejecutar el `commit()` atómico diferido, se registra automáticamente la lápida en `db.tombstones` con estado `pending`, soportando también `idsSecundarios` sin retrasar el callback de ejecución síncrona.
+  - Integración en `habitosService.ts` y `metasService.ts` para cubrir eliminaciones en cascada y de series completas.
+- **Push Prioritario de Tombstones hacia Supabase:**
+  - En `syncManager.ts`, incorporación del método `sincronizarTombstones()` despachado como **Paso 0** en `syncPendingRecords()` antes de cualquier sincronización de entidades raíz, emitiendo `.from(tombstone.tabla).delete().eq('id', tombstone.id)`. Al confirmarse en nube, la lápida se actualiza a `sync_status === 'synced'`.
+- **Pull Acotado (Ventana de 90 días) y Barrera Anti-Resurrección:**
+  - En `descargarDatosDescendientes()`, pre-carga en memoria de un `Set` exhaustivo de IDs provenientes de `db.tombstones`. Cualquier entidad remota entrante cuyo identificador coincida con una lápida local es descartada de inmediato, impidiendo su reinserción en IndexedDB.
+  - Inyección de cláusula temporal `.gte('created_at', cutoffIso)` (umbral 90 días) en consultas de tablas de alto volumen (`gastos`, `ingresos`, logs de hábitos).
+- **Rutina de Garbage Collection Local (`purgarRegistrosLocalesExpirados`):**
+  - Implementación en `src/db/db.ts` de `purgarRegistrosLocalesExpirados(diasRetencion = 90)` que barre físicamente tareas completadas/archivadas, transacciones y lápidas con `sync_status === 'synced'` cuya antigüedad supere los 90 días.
+  - Exposición de trigger de mantenimiento en entorno de desarrollo `window.__PURGAR_REGISTROS_EXPIRADOS__`.
+- **Validación QA:**
+  - `npx tsc --noEmit`: 0 errores.
+  - `npm test`: 24/24 suites pasadas (210/210 tests unitarios e integrados).
+  - `npm run build`: Compilación exitosa en 7.62s.
+
+### FASE 4.90 — Consolidación O(1) de Totales Financieros, Purga Definitiva de Tokens Indigo/Legacy y Bento Empty States (REQ-SYS-008-FINANZAS-METAS)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewFinanzas.tsx`, `src/components/Finanzas/TabPresupuestos.tsx`, `src/components/Finanzas/TabControlCuotas.tsx`, `src/components/Finanzas/DashboardFinanciero.tsx`, `src/components/Habitos/Metas/ViewMetasPlanes.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Iteraciones Redundantes en Sumatorias Financieras ($O(8N)$):** `ViewFinanzas.tsx` ejecutaba hasta 5 reducciones y filtrados sucesivos sobre `gastosFiltrados` (`realGastos`, `otrosGastosPendientes`, `gastosHormiga`, `posicionBimonetaria`, `radarCategorias`) y 3 sobre `ingresosFiltrados`. Esto causaba una sobrecarga de CPU evitable ante datasets extensos de tesorería y créditos.
+- **Ruptura de Tokens Cobalt Aerodynamic por Clases Legacy (`indigo-*`, `bg-white`, `border-slate-200`):** `ViewFinanzas.tsx` poseía un chasis `bg-slate-100`, cabecera `bg-white/85`, selector de periodos blanco y selectores de píldora con `text-slate-900`. `TabPresupuestos.tsx` y `DashboardFinanciero.tsx` empleaban acentos `indigo-400`, `indigo-500` y halos `shadow-[0_0_8px_#6366f1]`, infringiendo la directriz A.2.2 de Cobalt Aerodynamic.
+- **Estados Vacíos con Cursivas Abandonadas:** En transacciones, cuotas bancarias, presupuestos de hábitos y proyectos se mostraban etiquetas `<div className="... italic">` planas sin identidad Bento ni llamadas a la acción, degradando la experiencia visual del usuario.
+- **Filtrado Inline en Metas y Planes:** En `ViewMetasPlanes.tsx`, el cálculo de contadores por categoría de vida ejecutaba `metasDetalladas.filter()` inline dentro del render de botones.
+
+#### Solución Implementada
+- **Consolidación de Totales en Un Solo Paso $O(N)$:**
+  - En `ViewFinanzas.tsx`, sustitución de las 5 llamadas independientes por el hook unificado `totalesGastos`, que barre `gastosFiltrados` en un único bucle `for...of` calculando en simultáneo: dinero pagado/real, compromisos pendientes, gastos hormiga, desglose bimonetario y radar de categorías.
+  - Sincronización idéntica en `totalesIngresos` para `realIngresos`, `ingresosPendientes` y posición cambiaria, y consolidación de `cuotasPendientesMes` + `montoCuotasPendientes` en un solo paso.
+- **Purga Estética Integral Cobalt Aerodynamic:**
+  - Chasis de `ViewFinanzas.tsx` migrado a `bg-[#040711]`, cabeceras y superficies elevadas a `#0D1526` con microbordes `border-slate-800/40`.
+  - Erradicación total de clases `indigo-*` en `TabPresupuestos.tsx` y `DashboardFinanciero.tsx`, reemplazándolas por los acentos canónicos `sky-400` y `teal-400`.
+  - Normalización de las barras de progreso bimodal en `ViewMetasPlanes.tsx` a `bg-[#040711]/60 border border-slate-800/40` y pre-cálculo de `conteoMetasPorCategoria` para acceso $O(1)$.
+- **Rediseño de Bento Empty States:**
+  - Reemplazo de todos los textos cursivos por tarjetas estructuradas Bento (`min-h-[120px]`/`min-h-[140px]`, fondo `bg-slate-900/30`, microborde dashed `border-slate-700/50`, glifos temáticos Lucide `Receipt`, `CreditCard`, `Flame`, `Building` y botones CTA donde aplica).
+- **Validación QA:**
+  - `npx tsc --noEmit`: 0 errores.
+  - `npm test`: 23 suites pasadas, 203/203 pruebas en verde (100%).
+  - `npm run build`: compilación de producción limpia y empaquetado exitoso.
+
+---
+
+### FASE 4.89 — Refactor Integral de Service Worker (Cache-First para Google Fonts), Protección de Lazy Loading (ChunkLoadError) y Estandarización PWA Cobalt (REQ-SYS-007-PWA)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `public/sw.js`, `src/main.tsx`, `index.html`, `app.html`, `public/manifest.webmanifest`, `public/manifest.json`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Exclusión Indeseada de Fuentes Google en Service Worker:** En `public/sw.js`, el bloque de exclusiones incluía genéricamente `url.hostname.includes('googleapis.com')`, lo que bloqueaba la interceptación de `fonts.googleapis.com` (hojas de estilo CSS de Google Fonts). Al operar sin conexión por primera vez o ante purgas de caché HTTP, las tipografías Plus Jakarta Sans y JetBrains Mono fallaban al cargarse offline.
+- **Vulnerabilidad de Desincronización de Chunks en Lazy Loading (`ChunkLoadError`):** Dado que el Service Worker opera con auto-actualización inmediata (`skipWaiting()` y `clients.claim()`), los nuevos despliegues de producción purgan los chunks compilados anteriores. Las pestañas abiertas que intentaban importar dinámicamente vistas como `ViewDetalle360` o `ViewFinanzas` mediante `React.lazy()` arrojaban excepciones no controladas de tipo `ChunkLoadError` o `Failed to fetch dynamically imported module`.
+- **Inconsistencia de Tokens de Color en Shell HTML:** `index.html` y `app.html` declaraban `bg-[#020617]` (Slate 950) en las etiquetas `<html>` y `<body>`, provocando una micro-discrepancia visual frente al lienzo canónico Cobalt Aerodynamic (`#040711`) durante el splash screen y precarga del cliente.
+- **Rutas Absolutas en Manifiestos PWA:** En `public/manifest.webmanifest` y `public/manifest.json`, la sección `shortcuts` definía `"url": "/?mode=hud"` e icono `"/icon-192.png"` con barras iniciales absolutas, quebrando la navegación relativa (`base: './'`) al desplegar la suite en subdirectorios o dominios compartidos.
+
+#### Solución Implementada
+- **Estrategia Cache-First para Google Fonts en `public/sw.js`:**
+  - Inyección de una regla prioritaria en el evento `fetch`: para peticiones hacia `fonts.googleapis.com` o `fonts.gstatic.com`, el Service Worker entrega inmediatamente la copia en caché (`caches.match`) y, si no existe, ejecuta el fetch de red, clonando y almacenando en caché la respuesta válida (incluyendo respuestas `opaque` y `cors`).
+  - Eliminación de la exclusión indiscriminada de `googleapis.com` para permitir el almacenamiento persistente de fuentes offline.
+- **Intercepción y Autocorrección de `ChunkLoadError` en `src/main.tsx`:**
+  - Registro de listener global `window.addEventListener('vite:preloadError', (event) => { event.preventDefault(); window.location.reload(); });`. Al detectar un chunk diferido inaccesible debido a un despliegue reciente, previene el crash de la aplicación y ejecuta una recarga limpia y transparente de la página.
+- **Unificación de Tokens Visuales Cobalt Aerodynamic en Shell HTML:**
+  - Sustitución de `bg-[#020617]` por `bg-[#040711]` en `<html>` y `<body>` tanto en `index.html` como en `app.html`, garantizando continuidad cromática 1:1 con el diseño Cobalt desde el milisegundo cero.
+- **Portabilidad Relativa en Manifiestos Web:**
+  - Actualización de los accesos directos en `public/manifest.webmanifest` y `public/manifest.json` hacia rutas relativas puras: `"./?mode=hud"` y `"./icon-192.png"`.
+- **Validación QA:**
+  - `npx tsc --noEmit` completado con 0 errores de tipado.
+  - Suite Vitest con 23 suites y 203/203 pruebas en verde (100%).
+  - Empaquetado de producción exitoso con `npm run build`.
+
+---
+
+### FASE 4.88 — Orquestación Integral de Sincronización (12 Entidades), Estrategia LWW (Last-Write-Wins), Reconexión Atómica y Resiliencia con Backoff (REQ-SYS-006-SYNC)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/services/syncPayloadSanitizer.ts`, `src/services/syncManager.ts`, `src/services/__tests__/syncManager.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Brecha Crítica de Entidades en Cola Push:** `syncPendingRecords` únicamente procesaba 6 entidades (`proyectos`, `hitos_wbs`, `tareas`, `actividades_personales`, `subtareas_pasos`, `notas`). Las entidades de Finanzas (`gastos`, `ingresos`, `cuotas`) y de Metas/Planes (`metas_planes`, `planes_accion_hitos`, `habitos_metas_vinculos`) quedaban atrapadas en Dexie sin replicarse jamás a Supabase.
+- **Ausencia de Estrategia Last-Write-Wins (LWW):** En el proceso Push, el cliente local ejecutaba `.upsert(payload, { onConflict: 'codigo_legado' })` sobreescribiendo ciegamente cualquier mutación remota más reciente hecha por otro dispositivo. En el Pull, los registros pendientes locales ignoraban al remoto sin comparar marcas de tiempo, provocando pérdida inadvertida de datos multi-dispositivo.
+- **Deadlock de Registros en Estado de Error:** Los registros rechazados por errores transitorios de red o llaves foráneas se marcaban con `sync_status = 'error'`. Dado que `syncPendingRecords` consultaba estrictamente `.where('sync_status').equals('pending')`, los registros fallidos quedaban huérfanos indefinidamente sin reintentos automáticos.
+- **Reconexión Unidireccional Asimétrica:** Al restablecerse la conexión a Internet (`window.addEventListener('online')`), el orquestador solo disparaba el Push (`syncPendingRecords`) omitiendo el Pull (`descargarDatosDescendientes`), dejando la base local desactualizada frente a cambios en la nube.
+
+#### Solución Implementada
+- **Orquestación Topológica Integral de 12 Entidades:**
+  - Creación de sanitizadores PostgreSQL puros en `syncPayloadSanitizer.ts`: `sanitizarGastoPayload`, `sanitizarIngresoPayload`, `sanitizarCuotaPayload`, `sanitizarMetaPlanPayload`, `sanitizarHitoPlanPayload` y `sanitizarVinculoPayload`.
+  - Expansión de `syncPendingRecords` para despachar en orden topológico estricto: 1. Proyectos $\rightarrow$ 2. Hitos WBS $\rightarrow$ 3. Tareas & Hábitos $\rightarrow$ 4. Subtareas $\rightarrow$ 5. Metas/Planes $\rightarrow$ 6. Hitos del Plan $\rightarrow$ 7. Vínculos Hábito-Meta $\rightarrow$ 8. Gastos $\rightarrow$ 9. Ingresos $\rightarrow$ 10. Cuotas $\rightarrow$ 11. Notas.
+  - Expansión de `descargarDatosDescendientes` (Pull) para hidratar las 12 entidades protegiendo cambios locales no sincronizados.
+- **Algoritmo LWW (Last-Write-Wins) Pre-Upsert:**
+  - Inyección del método `esRemotoMasReciente(tabla, codigoLegado, updatedAtLocal)` que inspecciona `updated_at` remoto en Supabase antes de ejecutar `.upsert()`. Si la versión remota es estrictamente más reciente (`remoteTime > localTime`), se aborta el push, se marca localmente como `'synced'` y se emite la advertencia estructurada `[SyncManager] LWW Alert: Remote wins`.
+- **Tolerancia a Fallos y Reintentos con Backoff:**
+  - Consulta reactiva de pendientes expandida a `anyOf(['pending', 'error'])` vía helper defensivo `obtenerRegistrosPendientes`, permitiendo que el intervalo periódico (45s) reintente automáticamente la replicación de registros fallidos.
+- **Reconexión Bidireccional Atómica:**
+  - En `setupNetworkListeners()`, el evento `'online'` ahora orquesta una secuencia atómica: `await this.syncPendingRecords()` (Push) seguido de `await this.descargarDatosDescendientes()` (Pull).
+- **Validación QA:**
+  - `npx tsc --noEmit` completado con 0 errores.
+  - Suite Vitest con 23 archivos, 203/203 pruebas aprobadas (100%), incluyendo tests específicos para LWW y sincronización de 12 entidades.
+  - Empaquetado de producción exitoso con `npm run build`.
+
+---
+
+### FASE 4.87 — Memoización O(1) por Categoría en TableroHabitos, Estándar de Zona Horaria Local para Check-ins y Purga Estética Cobalt Aerodynamic (REQ-SYS-005-HABITOS)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Habitos/HistogramaSeguimientoTemporal.tsx`, `src/services/habitosService.ts`, `src/components/Views/ViewHabitos.tsx`, `src/components/Habitos/Dashboard/RadarBalanceVida.tsx`, `src/components/Habitos/Dashboard/TablaRendimiento.tsx`, `src/components/Habitos/Dashboard/BentoMetricasHero.tsx`, `src/components/Habitos/Dashboard/MetasCuantitativas.tsx`, `src/components/Habitos/Metas/ViewMetasPlanes.tsx`, `src/components/Habitos/Metas/ModalDetalleMeta360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Desfase Temporal Nocturno (Bug UTC en Check-in de Hábitos):** `TarjetaHabito.tsx` y `habitosService.ts` evaluaban si un hábito había sido completado hoy contrastando `updated_at.startsWith(hoyStr)`. Dado que `updated_at` en base de datos es una marca temporal ISO UTC (`2026-11-04T01:30:00.000Z`), en husos horarios negativos (Perú UTC-5), a partir de las 19:00 horas locales la cadena cambiaba de fecha (`2026-11-04` vs `2026-11-03`), provocando que los hábitos marcados como hechos se desmarcaran visualmente antes de la medianoche. En `HistogramaSeguimientoTemporal.tsx`, `toIsoDate` convertía marcas temporales usando `getUTCFullYear()` / `getUTCMonth()`, fragmentando la consistencia histórica.
+- **Cuello de Botella de Renderizado en Tablero de Hábitos (18 Filtros Redundantes O(N)):** En `TableroHabitos.tsx`, el renderizado de las 6 columnas canónicas ejecutaba múltiples `.filter()` inline sobre `actividadesProcesadas` (6 veces para segmentar por categoría, y 2 veces más por columna para separar pendientes y completadas con `esCompletadaHoy`), totalizando 18 iteraciones completas sobre el dataset en cada ciclo de render reactivo ante cualquier mutación optimista.
+- **Inestabilidad de Layout (Layout Shifts en Hover de Tarjeta):** En `TarjetaHabito.tsx`, la barra de botones rápidos (`onEditar`, `onEliminar`, `onAbrirAvance`) carecía de reserva de altura y contención CSS, provocando micro-desplazamientos verticales bruscos (CLS) al pasar el cursor sobre la tarjeta.
+- **Vestigios Estéticos Legacy y Ruptura de Tokens Cobalt:** Múltiples componentes del módulo de hábitos arrastraban tokens `indigo-*`, `bg-white dark:bg-[#0D1526]`, bordes claros `border-slate-200/80` y glifos Lucide con grosores inconsistentes, infringiendo las directrices canónicas de diseño Cobalt Aerodynamic (`#040711`, `#0D1526`, microborde `border-slate-800/40`, `sky-*`, Lucide `strokeWidth={1.75}`). En `TableroHabitos.tsx`, los estados vacíos mostraban un texto en cursiva simple en lugar de un Empty State Bento estructurado.
+
+#### Solución Implementada
+- **Estandarización Absoluta de Zona Horaria Local:** Sustitución de `updated_at.startsWith(hoyStr)` por `formatFechaIsoLocal(new Date(actividad.updated_at)) === hoyStr` y evaluación prioritaria de `actividad.ultima_fecha_completado === hoyStr`. En `HistogramaSeguimientoTemporal.tsx`, migración de `toIsoDate` a `formatFechaIsoLocal`. En `habitosService.ts`, sanitización de `(actividad.fecha_programada || '').split(/[\sT]/)[0] < hoyStr`, blindando el ciclo de vida continuo de 24 horas sin desfasajes nocturnos.
+- **Pre-agrupación Memoizada O(1) (`actividadesPorCategoria`):** Inyección de un hook `useMemo` en la raíz de `TableroHabitos.tsx` que barre `actividadesProcesadas` en una sola pasada $O(N)$ y genera un diccionario indexado por `CategoriaVida` con sus sublistas `completadas` y `pendientes`, KPIs y porcentajes precalculados. El renderizado de las columnas pasó a ser acceso directo $O(1)$, eliminando los 18 filtros redundantes.
+- **Estabilización de Layout y Contención CSS en `TarjetaHabito.tsx`:** Contenedor estabilizado con `contain: layout paint`, aceleración `will-change-[transform,opacity]` y botonera de acciones con altura mínima fija `min-h-[24px]` y `shrink-0`, eliminando cualquier Layout Shift en interacción por hover. Checkbox renovado con micro-animación GPU `transform-gpu scale-0` a `scale-100` y `strokeWidth={1.75}`.
+- **Empty State Bento Canónico:** Inyección de tarjetas Bento estructuradas en columnas vacías de hábitos con microborde dashed `border-slate-700/50`, icono canónico del pilar de vida y botón directo de llamada a la acción ("+ Crear primer hábito").
+- **Purga Integral de Tokens Cobalt Aerodynamic:** Erradicación total de referencias residuales a `indigo-*`, fondos `bg-white` y bordes claros en `ViewHabitos.tsx`, `TableroHabitos.tsx`, `RadarBalanceVida.tsx`, `TablaRendimiento.tsx`, `BentoMetricasHero.tsx`, `MetasCuantitativas.tsx`, `ViewMetasPlanes.tsx` y `ModalDetalleMeta360.tsx`, consolidando el lienzo base `#040711`, tarjetas `#0D1526`, bordes `border-slate-800/40` y acentos `sky`.
+- **Validación QA:** `npx tsc --noEmit` completado con 0 errores, pruebas unitarias Vitest aprobadas (100%) y empaquetado de producción exitoso con `npm run build`.
+
+---
+
+### FASE 4.83 — Erradicación Definitiva de SweetAlert2, Toasts Declarativos Cobalt, Motor Real de Techos Presupuestales y Accesibilidad Táctil WCAG (REQ-SYS-001-F8)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/utils/toastCobalt.ts`, `src/components/UI/UndoToastContainer.tsx`, `src/components/Modals/ModalMetaPlanFlow.tsx`, `src/components/Habitos/Metas/ViewMetasPlanes.tsx`, `src/components/Views/ViewDetalle360.tsx`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/components/IA/AsistenteIaModal.tsx`, `src/components/Notas/ModalVincularEntidades.tsx`, `src/components/Notas/PopoverPreviewNotas.tsx`, `src/components/Notas/SeccionNotasVinculadasModal.tsx`, `src/components/Modals/ModalTechosPresupuesto.tsx`, `src/components/Finanzas/TabPresupuestos.tsx`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Layout/BottomNavMobile.tsx`, `src/hooks/useGlobalShortcuts.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Presencia Residual de SweetAlert2 (`Swal.fire`):** A pesar de la arquitectura moderna de toasts, 9 archivos aún importaban y ejecutaban `sweetalert2`, bloqueando el hilo de ejecución mediante popups invasivos, inyectando estilos incompatibles con Cobalt Aerodynamic e introduciendo latencia innecesaria en operaciones cotidianas (captura de ideas, desvinculación de notas, check-ins de proyectos).
+- **Techos Presupuestales Hardcodeados y Sin Persistencia:** En `TabPresupuestos.tsx`, el catálogo `CATEGORIAS_PRESUPUESTO` consistía en un arreglo estático de 6 elementos con consumos simulados. El botón "Configurar Techos" en `ViewFinanzas.tsx` simplemente emitía un mensaje informativo sin abrir modal ni permitir parametrización real por parte del usuario.
+- **Incumplimiento de Touch Targets WCAG y Colisión con Teclado Virtual Móvil:** En `BottomNavMobile.tsx`, los botones de pestañas presentaban alturas inferiores a 48px (`py-1`), y los botones de cierre `X` en los bottom sheets medían apenas 24px (`p-1.5` con icono 16px), violando la recomendación WCAG AAA de 44x44px. Además, al desplegarse el teclado virtual móvil en campos editables (`<input>`, `<textarea>`), la barra inferior flotante se superponía con el teclado tapando el contenido activo.
+- **Atajos Rígidos Sin Respeto de Preferencias en LocalStorage:** El hook `useGlobalShortcuts.ts` no consultaba los parámetros `pmo_shortcuts_enabled` ni `pmo_custom_shortcuts` en `localStorage`, impidiendo la inhabilitación o reasignación personalizada de comandos por parte del usuario.
+
+#### Solución Implementada
+- **Fulminación Definitiva de SweetAlert2 (0 Referencias en `src/`):**
+  - Reescritura integral de `src/utils/toastCobalt.ts` como despachador desacoplado de eventos nativos `pmo:toast` con cero importación de `sweetalert2`.
+  - Ampliación de `src/components/UI/UndoToastContainer.tsx` para suscribirse reactivamente al canal de eventos `pmo:toast`, renderizando tanto el búfer de deshecho (`useUndoDelete`) como los micro-toasts declarativos Cobalt con autocierre (2500ms), barra de progreso fluida y tokens Cobalt Aerodynamic (`#0D1526`, microborde `border-slate-800/80`, glifos Lucide con `strokeWidth={1.75}`).
+  - Purgadas quirúrgicamente todas las llamadas a `Swal.fire` en `ModalMetaPlanFlow.tsx`, `ViewMetasPlanes.tsx`, `ViewDetalle360.tsx`, `WidgetIdeasBubble.tsx`, `AsistenteIaModal.tsx`, `ModalVincularEntidades.tsx`, `PopoverPreviewNotas.tsx` y `SeccionNotasVinculadasModal.tsx`, sustituyéndolas por toasts fluidos y desvinculaciones directas no bloqueantes. Búsqueda global de `sweetalert2` en `src/` certificada en **0 resultados**.
+- **Motor Real y Reactivo de Techos Presupuestales:**
+  - Creación de `src/components/Modals/ModalTechosPresupuesto.tsx` (diseño Bento Cobalt `#0D1526`, totalizador dinámico de techo mensual, adición y eliminación de categorías, restablecimiento por defecto y tipografía numérica estricta `font-mono tabular-nums`). Persistencia atómica en `localStorage ('pmo_techos_presupuesto')` y notificación global `pmo:techos-updated`.
+  - Refactorización de `TabPresupuestos.tsx`: Sustitución del mock hardcodeado por la agregación en tiempo real de gastos desde Dexie (`gastosRaw`) filtrados por el mes en curso (`YYYY-MM`) y contrastados contra los techos activos, calculando consumos y semáforos porcentuales al instante.
+  - Conexión del botón "Configurar Techos" en `ViewFinanzas.tsx` con apertura reactiva de `ModalTechosPresupuesto`.
+- **Accesibilidad Móvil WCAG AAA y Ocultamiento de Teclado:**
+  - Elevación de los touch targets de las pestañas en `BottomNavMobile.tsx` a `min-h-[48px] py-1.5` y botones de cierre `X` en sheets a `min-w-[44px] min-h-[44px] p-2.5`.
+  - Sustitución de `pb-safe` por `.safe-area-bottom` con fallback de inset dinámico `max(0.5rem, env(safe-area-inset-bottom, 0px))`.
+  - Detección de foco en elementos editables (`INPUT`, `TEXTAREA`, `isContentEditable`) ocultando reactivamente la barra con `translate-y-full opacity-0 pointer-events-none` y restaurándola con animación fluida al desenfocar.
+- **Atajos Globales Dinámicos:**
+  - `useGlobalShortcuts.ts` ahora lee `pmo_shortcuts_enabled` y `pmo_custom_shortcuts` desde `localStorage`, permitiendo que el usuario active/desactive atajos y sobrescriba teclas para acciones canónicas con fallback al esquema predeterminado (1..5, C, R, X, ?).
+- **Validación QA:**
+  - `npx tsc --noEmit` completado con 0 errores.
+  - Suite de pruebas unitarias (`npm test`): 23 archivos, 200/200 pruebas aprobadas (100%).
+  - Build de producción (`npm run build`): Empaquetado exitoso sin advertencias de tamaño en chunks principales.
+
+---
+
+### FASE 4.82 — Unificación Canónica del Dock Superior (5 Vistas), Ruteo por Hash, Code-Splitting Total y Estandarización Iconográfica Cobalt (REQ-SYS-001-F7)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/App.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `src/components/Layout/BottomNavMobile.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Inflación del Bundle Inicial (>800 kB):** `App.tsx` importaba síncronamente `ViewKanban`, `ViewPortafolio`, `ViewHabitos` y `ViewNotas` en el hilo principal. Esto cargaba de golpe los motores de drag-and-drop (`@dnd-kit`), parseo Markdown y árboles WBS al arranque, inflando el chunk principal a **800.23 kB** y emitiendo advertencias de bundle en Vite (>500 kB).
+- **Segregación Asimétrica de "Notas" (Ruptura con Atajo 5):** En `HeaderMaestro.tsx`, la barra central de navegación solo agrupaba 4 vistas (`Tablero`, `Portafolio`, `Hábitos`, `Finanzas`). La 5ª vista troncal (`Notas`) estaba aislada en el flanco derecho con un botón ámbar segregado (`#btn-nav-notas`), recargando el clúster de utilidades (9 botones contiguos) y rompiendo la paridad arquitectónica con `useGlobalShortcuts.ts` (atajos 1..5).
+- **Inconsistencia de Tokens Cobalt e Iconografía Sin `strokeWidth={1.75}`:** Más de 20 glifos Lucide omitían el peso canónico `strokeWidth={1.75}` (usando por defecto 2.0 o grosores arbitrarios como `stroke-[2.5]`). Las pestañas activas del header usaban `bg-white dark:bg-slate-800` genérico y `BottomNavMobile` arrastraba clases residuales índigo (`text-indigo-400`, `bg-indigo-600`).
+- **Pérdida de Estado al Recargar (F5) y Caídas de FPS en Drawer:** `vistaActiva` residía solo en memoria local reseteando a `'kanban'` ante cualquier recarga. El panel deslizante de la Bóveda de Archivados ejecutaba `backdrop-blur-2xl` sobre un contenedor animado de 580px sin aceleración por hardware, y múltiples botones utilizaban `transition-all`.
+
+#### Solución Implementada
+- **Code-Splitting Total y Lazy Loading Universal en `App.tsx`:** Migración de `ViewKanban`, `ViewPortafolio`, `ViewHabitos` y `ViewNotas` a `React.lazy()` junto a `ViewDetalle360` y `ViewFinanzas`. Envoltorio del switch de vistas en un único `<Suspense fallback={<VistaCargandoFallback />}>`. Reducción drástica del bundle principal: de **800.23 kB a 394.60 kB** (reducción >50%), eliminando todo warning de Vite.
+- **Ruteo Declarativo por Hash Bidireccional (`window.location.hash`):** Sincronización robusta de `vistaActiva` con el hash de la URL (`#kanban`, `#portafolio`, `#habitos`, `#financiero`, `#detalle`, `#notas`). Detección automática en recarga y soporte nativo para los botones Atrás/Adelante del navegador, con blindaje estricto para no interferir con el modo Electron HUD (`?widget=desktop` o `?mode=hud`).
+- **Unificación de las 5 Vistas Maestras en el Dock Central:** Integración de "Notas" (Atajo 5) dentro del `<nav>` central como 5ª pestaña canónica (`#tab-nav-notas`), suprimiendo el botón segregado del flanco derecho y devolviendo la simetría 1:1 con `useGlobalShortcuts.ts` (1..5).
+- **Modo Compacto Responsivo Anticolisión (`hidden lg:inline`):** En viewports intermedios (`768px` a `1024px`), las etiquetas de texto se colapsan elegantemente mostrando solo el glifo Lucide y su micro-badge numérico (`font-mono tabular-nums`), evitando desbordamientos contra el logo o el dock de herramientas.
+- **Estandarización Iconográfica Universal (`strokeWidth={1.75}`) y Tokens Cobalt:** Estandarización de pestaña activa a `text-sky-300 bg-sky-950/30 border border-sky-800/40 shadow-xs` e inactiva a `text-slate-400 hover:text-sky-300 hover:bg-slate-800/40`. Erradicación de clases índigo en `BottomNavMobile` en favor de la paleta Cobalt (`sky`). Inyección de `strokeWidth={1.75}` en todos los iconos Lucide del layout.
+- **Aceleración GPU en Drawer de Archivados:** Sustitución de `backdrop-blur-2xl` por fondo opaco `#0D1526` con microborde `border-slate-800/40`, inyección de `transform-gpu will-change-transform` y purga de `transition-all` en favor de `transition-[color,background-color,border-color,transform] duration-150`.
+- **Certificación QA:** 23 suites de pruebas unitarias Vitest aprobadas (200/200 tests pasando, 100%), verificación estricta de TypeScript con `npx tsc --noEmit` (0 errores) y empaquetado de producción exitoso con `npm run build` en 8.64s.
+
+---
+
+### FASE 4.81 — Optimización Integral de Hábitos, Tracker Diario, Erradicación del Desfase UTC-5 y Check-in Optimista (0ms) (REQ-SYS-001-F6)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/utils/timeFormatters.ts`, `src/services/habitosService.ts`, `src/components/Modals/ModalRegistroAvanceHabito.tsx`, `src/components/Habitos/Dashboard/HeatmapConsistencia.tsx`, `src/hooks/useHabitos.ts`, `src/components/Habitos/Dashboard/TablaRendimiento.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Habitos/Dashboard/MetasCuantitativas.tsx`, `src/components/Habitos/Metas/ModalDetalleMeta360.tsx`, `src/components/Habitos/__tests__/HabitosTrackerOptimistic.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Desfase Temporal Nocturno (Bug Crítico UTC-5 Lima):** Cuatro componentes clave (`HeatmapConsistencia.tsx`, `useHabitos.ts`, `TarjetaHabito.tsx`, `TablaRendimiento.tsx`) evaluaban la fecha del día con `new Date().toISOString().split('T')[0]`. A partir de las 19:00 horas (hora local de Lima GMT-5), la conversión UTC devolvía el día siguiente (`2026-11-03` en lugar de `2026-11-02`), causando que la celda de hoy en el mapa de calor se desplazara al futuro y que los hábitos completados en la noche no coincidieran con `hoyStr`, cayendo el KPI de completados a cero.
+- **Cuello de Botella en el Heatmap (112 Celdas por Movimiento de Ratón):** Cada milímetro de movimiento del cursor sobre las 112 celdas del mapa de consistencia disparaba `onMouseEnter` con `setHoveredCell`, forzando el re-renderizado reactivo del mapa entero de 16 semanas. El componente además carecía de `React.memo`.
+- **Latencia de 100-300ms en el Check-in:** Al alternar el completado de un hábito, la tarjeta esperaba síncronamente la resolución de múltiples escrituras en Dexie (`actividades_personales`, `habito_cumplimiento_logs`, `syncManager`), percibiendo el usuario un lag molesto en el checkbox.
+- **Multiplicación de Modales en el DOM y Diálogos Legacy (`SweetAlert2`):** Cada `TarjetaHabito` montaba su propia instancia inactiva de `<ModalAlcanceRecurrencia>` (hasta 40 instancias en el árbol). Además, el registro de avance cuantitativo y las confirmaciones de borrado utilizaban `Swal.fire` inyectando inputs HTML con `document.getElementById('swal-inp-avance')`.
+- **Ruido Visual y Falta de Silencio:** Botones secundarios de edición y eliminación siempre visibles, compitiendo con la claridad del check-in diario.
+
+#### Solución Implementada
+- **Normalización Temporal Canónica Local (`formatFechaIsoLocal`):** Inyección transversal de `formatFechaIsoLocal(date = new Date())` en todo el módulo de hábitos. La función extrae `date.getFullYear()`, `date.getMonth() + 1` y `date.getDate()`, garantizando consistencia absoluta en cualquier huso horario sin importar la hora del día.
+- **UI Optimista de Check-in (0ms de Latencia):** Inyección del estado reactivo `optimisticCompletados` (`Record<string, boolean>`) en `TableroHabitos.tsx` y propagado a `TarjetaHabito.tsx`. El checkbox cambia de estado, tacha el título y actualiza su opacidad en 0 milisegundos con blindaje de rollback si falla la escritura en Dexie.
+- **Heatmap Acelerado por GPU y Tooltips Nativos O(1):** Envoltorio de `HeatmapConsistencia` en `React.memo`, sustitución del tooltip flotante por atributos nativos `title` en cada celda (0 re-renders en hover) y estandarización a fondo `#0D1526`.
+- **Modal Declarativo Bento `ModalRegistroAvanceHabito.tsx`:** Creación de un modal Bento Cobalt (`#0D1526`, `border-cyan-500/40`) con `createPortal`, atajo `Escape`, bloqueo de scroll, botones de incremento rápido (+1, +5, +10) y micro-banner inline de validación, eliminando todo rastro de `Swal.fire` y manipulación del DOM.
+- **Single Instance Modal Pattern & Búfer UndoDelete (4s):** Elevación de `ModalAlcanceRecurrencia` a la raíz del tablero. Sustitución de alertas bloqueantes de eliminación por `programarEliminacion` de `useUndoDelete()` con exclusión optimista instantánea vía `estaOculto(act.id)`.
+- **Ley del Silencio Visual:** Ocultamiento de botones de acción rápida secundarios en `TarjetaHabito`, revelados exclusivamente en hover suave (`opacity-0 group-hover:opacity-100`).
+- **Certificación QA:** 23 suites de pruebas unitarias ejecutadas, 200/200 pruebas aprobadas (100%), verificación estricta de TypeScript con `npx tsc --noEmit` y empaquetado de producción exitoso con `vite build` en 8.41s.
+
+---
+
+### FASE 4.80 — Desacoplamiento Arquitectónico de Finanzas, UI Optimista de Conciliación y Optimización Matemática O(N) (REQ-SYS-001-F5)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewFinanzas.tsx`, `src/components/Finanzas/DashboardFinanciero.tsx`, `src/components/Finanzas/TabControlCuotas.tsx`, `src/components/Finanzas/TabPresupuestos.tsx`, `src/components/Modals/ModalNuevoPlanCuotas.tsx`, `src/components/Finanzas/__tests__/DashboardFinanciero.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Monolito Ineficiente de 1,733 Líneas:** `ViewFinanzas.tsx` concentraba en un único componente el Dashboard General, el Explorador de Transacciones, el Monitoreo de Cuotas Bancarias, la Matriz de Presupuestos y los modales, forzando la reconciliación del árbol completo ante cualquier interacción en el buscador o cambio de filtros.
+- **Cuellos de Botella en Cálculos de Cuotas y Presupuestos:** Cálculos matemáticos inline en JSX repetían filtros y reducciones dobles iterativas (`cuotas.filter(...).reduce(...)`), ejecutando recorridos redundantes $O(2N)$ en cada ciclo de render.
+- **Latencia Perceptible en Conciliación de Tesorería:** El marcado de gastos y cuotas como conciliados dependía de la escritura asíncrona en Dexie IndexedDB antes de reflejar el cambio en la interfaz de usuario, rompiendo la sensación de fluidez y respuesta instantánea.
+- **Fuga de Rendimiento en Próximos Vencimientos:** Bucles de filtrado calculaban vencimientos de deudas instanciando objetos `new Date()` repetidamente en cada iteración, provocando presión evitable sobre el Garbage Collector.
+- **Ruido Cognitivo en Tarjetas Bento:** Párrafos descriptivos densos en el Dashboard saturaban visualmente las métricas principales de flujo de caja y balances.
+
+#### Solución Implementada
+- **Desacoplamiento Modular Memoizado (`React.memo`):** Rompimiento del monolito mediante la extracción de tres módulos especializados:
+  - `src/components/Finanzas/DashboardFinanciero.tsx`: Balance consolidado, ingresos, egresos, runway y desglose multimoneda.
+  - `src/components/Finanzas/TabControlCuotas.tsx`: Seguimiento de planes de financiamiento, tarjetas bancarias y cronograma de amortización con acumulador $O(N)$ en una sola pasada.
+  - `src/components/Finanzas/TabPresupuestos.tsx`: Techos de gasto por categoría, inversiones en hábitos y matriz de Burn Rate por proyecto con prevención de división por cero.
+- **Patrón UI Optimista de Conciliación (0ms de Latencia):** Inyección de un diccionario de estado optimista `optimisticConciliados` (`Record<string, boolean>`) en `ViewFinanzas.tsx`. Las transacciones y cuotas alternan su micro-LED (`#10b981` activo / `#f59e0b` pendiente) y sus estados de forma instantánea al click, respaldados por un bloque `try/catch` que revierte la mutación si la escritura en Dexie falla.
+- **Extracción de `ModalNuevoPlanCuotas.tsx`:** Modal Bento Cobalt (`#0D1526`, `border-slate-800/80`) montado mediante `createPortal(..., document.body)` con `useBodyScrollLock`, atajo `Escape`, micro-banner de validación inline accesible y cero dependencias de `sweetalert2`.
+- **Aritmética de Timestamps sin Presión de GC:** Cálculo de próximos vencimientos optimizado con `hoyMs = hoy.getTime()` y `diffDias = Math.ceil((fMs - hoyMs) / 86400000)`, eliminando la instanciación de objetos `Date` dentro de bucles iterativos.
+- **Ley del Silencio Visual en Métricas:** Sustitución de explicaciones en texto por atributos nativos `title` en micro-halos y LEDs orgánicos, manteniendo una interfaz sobria y limpia.
+- **Certificación QA:** 22 suites de pruebas unitarias ejecutadas, 193/193 pruebas aprobadas (100%), verificación estricta de TypeScript con `npx tsc --noEmit` y empaquetado de producción exitoso con `vite build` en 8.56s.
+
+---
+
+### FASE 4.78 — Aceleración GPU, Concurrencia de Búsqueda y Supresión de Cuellos de Botella (HOTFIX-SYS-001)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Notas/TarjetaNota.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/__tests__/TarjetaNotaMemo.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Cuello de Botella Letal en Reconciliación (`arePropsEqual`):** `TarjetaNota.tsx` ejecutaba cuatro llamadas a `JSON.stringify()` por tarjeta en cada ciclo de render. Con 100 notas, cada pulsación de tecla disparaba 800 serializaciones completas de objetos anidados (`checklists_json`, `wishlist_json`, etc.), congelando el hilo principal de JavaScript.
+- **Sobrecarga de Compositor GPU por `backdrop-blur-md`:** Cada tarjeta aplicaba `backdrop-filter: blur(12px)` con `transition-all` en un layout multi-columna CSS (`columns-1 sm:columns-2 ...`), obligando al motor de renderizado a rasterizar múltiples capas de desenfoque gaussiano durante scroll y reflows.
+- **Falta de Concurrencia en Búsqueda:** El input de texto filtraba miles de caracteres de markdown síncronamente en el render loop sin priorización concurrente, causando caídas de caracteres y retraso de input.
+- **Multiplicación de Nodos Modales:** Cada tarjeta con deseo activo montaba su propia instancia de `<ModalConvertirWishlistGasto />` en el árbol React.
+
+#### Solución Implementada
+- **Memoización Atómica de Primitivos:** En `TarjetaNota.tsx`, erradicación total de `JSON.stringify()`. `arePropsEqual` se redujo a la comparación atómica `prev.id === next.id && prev.updated_at === next.updated_at && prev.modoVista === next.modoVista`, apalancando el contrato estricto de Dexie donde toda mutación refresca `updated_at`.
+- **Aceleración por Hardware Directa (Zero Blur Overhead):** Supresión de `backdrop-blur-md` y `transition-all` en las tarjetas. Inyección de fondo sólido `#0D1526` con `transform-gpu transition-[transform,opacity,border-color] duration-150 will-change-[transform,opacity]`. Eliminación de `transition-all` en el contenedor Quick Note.
+- **Concurrencia React 19 (`useDeferredValue`):** En `VisorNotas.tsx`, desacoplamiento del input de búsqueda con `deferredBusqueda`, garantizando que el teclado responda a 60-120 FPS sin bloqueos. Sustitución de `new Date().getTime()` por comparación lexicográfica ISO `(b.updated_at || '').localeCompare(...)`. Memoización estricta de `handleEditar`, `handleEliminarNota`, `handleAbrirConvertirGasto` con `useCallback`.
+- **Single Instance Modal Pattern:** Elevación del modal de conversión de wishlist a la raíz de `VisorNotas.tsx`, reduciendo de N instancias a 1 único nodo condicional en el DOM.
+- **Certificación QA:** 20 suites de pruebas unitarias aprobadas (182/182), TypeScript estricto verificado sin errores y empaquetado de producción en 7.63s.
+
+---
+
+### FASE 4.77 — Optimización Integral de Notas, Wishlist, Ley de Silencio Visual y Eliminación Diferida (REQ-SYS-001-F3)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Notas/TarjetaNota.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Modals/ModalConvertirWishlistGasto.tsx`, `src/components/Notas/__tests__/TarjetaNotaMemo.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Re-renders Ineficientes en Masonry:** `TarjetaNota.tsx` se renderizaba como componente estándar sin memoización. Al teclear en la barra de búsqueda o cambiar filtros, cada tarjeta re-parseaba el árbol AST Markdown con `ReactMarkdown`, provocando degradación de fluidez.
+- **Modales Legacy (`Swal.fire` / `sweetalert2`):** `TarjetaNota.tsx` empleaba `Swal.fire` con diálogos bloqueantes para confirmar la conversión de deseos a transacciones de gastos y para eliminar notas, rompiendo la experiencia de usuario y el diseño Bento Cobalt.
+- **Layout Shifts en la Captura Rápida:** El contenedor expandible tipo Google Keep en `VisorNotas.tsx` carecía de altura mínima reservada y transiciones CSS acotadas, ocasionando saltos visuales bruscos (CLS) en la cuadrícula de notas inferiores.
+- **Sobrecarga Visual en Badges:** La cabecera de las tarjetas mostraba badges sobredimensionados de Checklist y Wishlist (`Checklist (X/Y)` y `Wishlist`), generando ruido cognitivo innecesario.
+
+#### Solución Implementada
+- **Desacoplamiento Memoizado (`React.memo` + `arePropsEqual`):** `TarjetaNota.tsx` fue desacoplado con comparador estricto `arePropsEqual` que audita `id`, `updated_at`, `es_fijada`, `color_tema`, `titulo`, `contenido_markdown`, `modoVista` y las colecciones serializadas (`checklists_json`, `wishlist_json`, `etiquetas`, `enlaces_entidades_json`). El AST Markdown fue envuelto en `useMemo` con dependencias mínimas.
+- **Modal Bento Declarativo de Conversión (`ModalConvertirWishlistGasto`):** Sustitución total de `Swal.fire` por un modal Cobalt `#0D1526` con borde `emerald-500/40`, micro-indicadores numéricos `font-mono tabular-nums`, tipado TypeScript estricto y atajos de teclado (`Escape` para cerrar, `Enter` para confirmar).
+- **Integración con Búfer Temporal UndoDelete (4s):** Se erradicó `Swal.fire` y el borrado síncrono. Ahora `onEliminar(nota.id)` se despacha hacia `programarEliminacion({ tabla: 'notas', id, etiqueta, tipo: 'NOTA', commit })`, permitiendo recuperación inmediata con toast de 4 segundos y exclusión reactiva optimista mediante `estaOculto()`.
+- **Eliminación de Layout Shifts en Quick Note:** Se asignó `min-h-[4rem]` al chasis de creación rápida y `transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]` con `max-h-14` (colapsado) y `max-h-[700px]` (expandido).
+- **Ley del Silencio Visual:** Reemplazo de badges textuales por micro-indicadores compactos con `title` explicativo (`CheckSquare` con conteo numérico y `DollarSign` con porcentaje de meta). Revelación de botones de acción (`Edit3`, `Trash2`) exclusivamente en `hover` con `opacity-0 group-hover:opacity-100 transition-opacity duration-200`. Formateo sutil de menciones contextuales (`@PROY-`, `@TAR-`, `@GAS-`) como micro-píldoras `bg-slate-800/60 border-slate-700/60 text-slate-400 text-xs`.
+- **Certificación QA:** 20 suites de pruebas unitarias ejecutadas, 182/182 pruebas aprobadas (100%), verificación estricta de TypeScript con `npx tsc --noEmit` y empaquetado de producción exitoso con `vite build` en 6.39s.
+
+---
+
+### FASE 4.76 — Optimización Integral de Portafolio, Kanban y Físicas de Fluidez Visual (REQ-SYS-001-F1 & REQ-SYS-001-F2)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewPortafolio.tsx`, `src/components/PMO/TarjetaProyecto.tsx`, `src/components/Views/ViewKanban.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/Modals/ModalDoDAdvertencia.tsx`, `src/components/Subtareas/ListaSubtareas.tsx`
+
+#### Solución Implementada
+- **Portafolio y LEDs Orgánicos:** Erradicación de `Swal.fire` en cascada de proyectos en favor de UndoDelete y modal Bento. Inyección de LEDs hiper-luminosos (`animate-pulse`) según salud del proyecto y consultas indexadas directas en Dexie (`where('id_proyecto').equals(...)`).
+- **Kanban Memoizado y DoD Declarativo:** Extracción de `ColumnaKanban.tsx` y `TarjetaTareaKanban.tsx` envueltos en `React.memo` con dragging optimista libre de layout shifts. Erradicación de `window.confirm` en favor de `ModalDoDAdvertencia.tsx` y purga de SweetAlert2 en `ListaSubtareas.tsx` con micro-banners de error inline.
+
+---
+
+### FASE 4.75 — Blindaje Analítico, Extracción Polimórfica y Reparación del Buscador en Dashboard de Hábitos (FIX-HABITOS-DASHBOARD-SEARCH-EMPTY-SPACES-121)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Habitos/Dashboard/TablaRendimiento.tsx`, `src/components/Habitos/Dashboard/MetasCuantitativas.tsx`, `src/components/Habitos/Dashboard/__tests__/dashboardHabitosHelpers.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Buscador Inoperativo:** En `TablaRendimiento.tsx`, el filtrado evaluaba rígidamente `a.nombre_actividad.toLowerCase()`. Registros en Dexie hidratados desde esquemas variables o migraciones contenían el título bajo `nombre`, `Nombre_Actividad`, `titulo`, `actividad` o `descripcion`. Si `nombre_actividad` era nulo o indefinido, la búsqueda fallaba o lanzaba excepción `TypeError: Cannot read properties of undefined (reading 'toLowerCase')`.
+- **Huecos Vacíos y `NaN%`:**
+  - En `TablaRendimiento.tsx`, la celda del hábito renderizaba `{a.nombre_actividad}` directamente, dejando filas con la primera columna en blanco si la propiedad no estaba poblada.
+  - En `MetasCuantitativas.tsx`, si `meta_objetivo_total` era 0, nulo o indefinido, la división `actual / total` generaba `NaN` o `Infinity`, renderizando `NaN%` y desbordando la barra de progreso. Además, `nombre: a.nombre_actividad` dejaba tarjetas de metas sin título.
+
+#### Solución Implementada
+- **Resolución Canónica Defensiva (`resolverTituloHabito` / `resolverNombreMeta`):** Se inyectaron helpers de resolución en cascada que evalúan secuencialmente `nombre_actividad`, `nombre_meta`, `nombre`, `Nombre_Actividad`, `Nombre`, `titulo`, `Titulo`, `actividad`, `descripcion` y `nombre_tarea_actividad` con fallback seguro (`Hábito sin título` / `Meta sin título`).
+- **Buscador Multi-Atributo Tolerante:** En `TablaRendimiento.tsx`, el término de búsqueda ahora filtra contra el título defensivo resuelto, `meta_macro_nombre`, `codigo_legado` y `descripcion`. La ordenación alfabética por `NOMBRE` utiliza la misma resolución canónica, previniendo excepciones de `localeCompare`.
+- **Blindaje Matemático en `MetasCuantitativas.tsx`:** Uso de `Math.max(1, Number(m.meta_objetivo_total) || 1)` y verificación de `Number.isFinite(ratio)` para erradicar cualquier posibilidad de `NaN%` o `Infinity`. Se asignó altura mínima fija `min-h-[145px]` a las tarjetas en grid para eliminar celdas huérfanas o asimetrías.
+- **Cobertura de Pruebas:** Se incorporaron 8 pruebas unitarias exhaustivas en `dashboardHabitosHelpers.test.ts`, alcanzando 153/153 pruebas unitarias aprobadas (100%).
+
+---
+
+### FASE 4.74 — Reparación de Servidor Loopback y Resolución Estricta de MIME Types en Electron (HOTFIX-ELECTRON-LOOPBACK-MIME-TYPES-121)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `desktop/main.js`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Falla en Electron:** Chromium bloqueaba la carga de los bundles JavaScript y módulos ES (`Strict MIME type checking is enforced`) arrojando el error `Refused to execute script from '...' because its MIME type ('text/html') is not executable`.
+- **Causa:** El microservidor HTTP loopback de Electron (`desktop/main.js` en puerto 48123) poseía un fallback SPA incondicional que, ante cualquier desajuste de ruta o archivo estático no encontrado en `dist/`, servía `dist/index.html` con cabecera `Content-Type: text/html; charset=utf-8`. Cuando Chromium solicitaba módulos `.js` o estilos `.css`, la respuesta HTML provocaba la detención inmediata del motor de ejecución de Chromium, dejando el widget en blanco.
+
+#### Solución Implementada
+- **Diccionario Canónico de MIME Types:** Se formalizó la tabla estricta de mapeos de extensiones:
+  - `.html` -> `text/html`
+  - `.js`, `.mjs` -> `application/javascript`
+  - `.css` -> `text/css`
+  - `.json` -> `application/json`
+  - `.svg` -> `image/svg+xml`
+  - `.png` -> `image/png`
+  - `.jpg`, `.jpeg` -> `image/jpeg`
+  - `.woff` -> `font/woff`, `.woff2` -> `font/woff2`
+  - Soporte adicional para `.ttf`, `.ico`, `.wasm`, `.webmanifest` y `.map`.
+- **Resolución Estricta por Extensión:**
+  - Si la ruta solicitada posee extensión de archivo conocida (`.js`, `.css`, etc.) y el archivo existe en `dist/`, se sirve con su `Content-Type` correspondiente y soporte para métodos `GET` y `HEAD`.
+  - Si el archivo estático con extensión no existe en `dist/`, se responde estrictamente con código `404 Not Found` (`Content-Type: text/plain; charset=utf-8`), impidiendo terminantemente que se retorne `index.html`.
+  - El fallback a `index.html` con `Content-Type: text/html; charset=utf-8` queda confinado única y exclusivamente a rutas de navegación SPA (rutas sin extensión o que terminen explícitamente en `.html`).
+
+---
+
+### FASE 4.73 — Restauración de Señal Nativa para Electron en Cockpit (FIX-COCKPIT-NATIVE-SIGNAL-RESTORE-119)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/App.tsx`, `src/components/Cockpit/DailyCockpit.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Falla en Electron:** La ventana de Electron (420x720 px) se mostraba como un marco rectangular negro colapsado sin renderizar el cuerpo del Cockpit.
+- **Causa:** Para proteger la vista web en `HOTFIX-111`, se habían removido las comprobaciones de variables nativas de Electron (`window.IS_DESKTOP_WIDGET`), limitándose exclusivamente a parámetros de URL (`?widget=desktop`). Cuando Electron cargaba mediante su loopback HTTP SPA sin query params persistentes, `App.tsx` intentaba montar la aplicación web completa en una ventana de 420 px, provocando el colapso del layout.
+
+#### Solución Implementada
+- **Restauración de Detección Nativa Segura:** Se incorporó `(window as any).IS_DESKTOP_WIDGET === true` en `src/App.tsx` (`esModoHud`, `isHud`, `esWidgetNativo`) y en `src/components/Cockpit/DailyCockpit.tsx` (`esWidgetNativo`, `cockpitAbierto`).
+- **Aislamiento Total:** Dado que `window.IS_DESKTOP_WIDGET` es inyectada de forma inmutable y exclusiva por `desktop/preload.js`, ningún navegador estándar (Chrome, Edge) posee esta variable, garantizando que el portal web en `http://localhost:3000` monte el Layout completo con fondo sólido, mientras Electron monta el Cockpit transparente de 420x720 px en vista táctica completa.
+
+---
+
+### FASE 4.72 — Exportación Dual Nombrada y Default en DailyCockpit (HOTFIX-DAILYCOCKPIT-EXPORT-MISMATCH-117)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+- **Falla de Runtime en Vite:** `Uncaught SyntaxError: The requested module '/src/components/Cockpit/DailyCockpit.tsx' does not provide an export named 'DailyCockpit' (at App.tsx:67:10)`.
+- **Causa:** En recargas en caliente o compilación modular Vite, se requería garantizar la coexistencia tanto del export nombrado `export const DailyCockpit` como del export por defecto `export default DailyCockpit`, previniendo desajustes de resolución entre consumidores ES Modules.
+
+#### Solución Implementada
+- Añadido `export default DailyCockpit;` al cierre de `src/components/Cockpit/DailyCockpit.tsx`, asegurando compatibilidad total tanto con `import { DailyCockpit }` como con `import DailyCockpit`.
+
+---
+
+### FASE 4.71 — Reparación de Extracción de Datos y Poblado de Agenda Diaria en Cockpit (FIX-COCKPIT-DAILY-SCHEDULE-POPULATION-115)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/hooks/useDailySchedule.ts`, `src/components/Cockpit/DailyCockpit.tsx`, `src/hooks/__tests__/useDailySchedule.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+1. **Poblado Nulo de Hábitos y Tareas en el Cockpit:**
+   - En `useDailySchedule.ts`, las claves de recurrencia (`frecuencia_ciclo`, `regla_repeticion`, `tipo_compromiso`, `ultima_fecha_completado`) se leían de forma directa en minúsculas sin el helper normalizador `getProp()`. Al almacenar Dexie registros procedentes de Google Sheets/GAS con mayúsculas canónicas (`Frecuencia_Ciclo`, `Regla_Repeticion`), las condiciones evaluaban a `undefined`, desactivando la regla de recurrencia diaria y descartando todos los hábitos activos del horizonte de hoy.
+   - En tareas y finanzas, las fechas en formato tradicional `M/D/YYYY H:mm:ss` fallaban la comparación lexicográfica con fechas ISO (`YYYY-MM-DD`), descartando tareas en mora.
+2. **Estado Vacío Desierto:**
+   - Cuando no había elementos en el filtro o en el horizonte inmediato, el Checklist mostraba un cuadro punteado austero y el Riel Horario renderizaba 1536 px de cuadrícula vacía sin orientación para el usuario.
+
+#### Solución Implementada
+1. **Normalización Universal de Fechas (`normalizarFechaAFechaIso`):**
+   - Implementación de `normalizarFechaAFechaIso()` en `useDailySchedule.ts` con soporte dual para `YYYY-MM-DD`, `ISO strings` y `M/D/YYYY`, homogeneizando la comparación temporal en tareas, gastos, ingresos y cuotas.
+2. **Extracción Resiliente con `getProp()` y Tolerancia a Fallos en Dexie:**
+   - Resolución canónica con `getProp()` para todas las propiedades de hábitos (`frecuencia_ciclo`, `regla_repeticion`, `tipo_compromiso`, `ultima_fecha_completado`, `historial_fechas`).
+   - Aislamiento de consultas con `catch(() => []) ?? []` por tabla en `useLiveQuery` para evitar bloqueos por tablas vacías o no migradas.
+   - Proyección inmediata de los **13 hábitos diarios activos** de la semilla (Entrenamiento, PMP, Lectura, etc.) en la fecha actual.
+3. **Estados Vacíos Resilientes Cobalt:**
+   - En `DailyCockpit.tsx`, nuevo estado vacío en `CHECKLIST` con iconografía Lucide `Calendar`, mensaje contextual explicativo y botón de salto directo a *"Ver Agenda de la Semana"*.
+   - Banner informativo flotante en `RIEL` cuando no existen bloques horarios para el horizonte seleccionado.
+
+---
+
+### FASE 4.70 — Restauración de Pantalla Blanca y Desacoplamiento Estricto de Widget en App.tsx (HOTFIX-REVERT-WHITE-SCREEN-APP-111)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/App.tsx`, `src/components/Cockpit/DailyCockpit.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+1. **Pantalla Blanca con Rectángulo Oscuro en la Vista Web Principal:**
+   - Al iniciar la aplicación web (`npm run dev` en `http://localhost:3000/`), la pantalla quedaba blanca mostrando únicamente un rectángulo oscuro a la derecha (`DailyCockpit` forzado).
+   - **Causa Raíz:** En `src/App.tsx`, las comprobaciones `esModoHud` y `esWidgetNativo` evaluaban flags globales como `Boolean((window as any).desktopWidget)` o `Boolean(window.desktopWidget?.isNative)` expuestas por el preload de Electron o scripts remanentes. Esto disparaba de forma ilegítima la rama de retorno temprano `if (esModoHud || esWidgetNativo) return <DailyCockpit modoForzadoDesacoplado={true} />`, impidiendo el montaje de `HeaderMaestro`, del router y del layout general.
+   - Además, el hook de efecto forzaba `document.body.style.backgroundColor = 'transparent'`, que en navegadores web estándar se renderiza como blanco nativo por el canvas del sistema operativo.
+
+#### Solución Implementada
+1. **Detección Estricta y Exclusiva por Parámetros URL:**
+   - En `src/App.tsx`, `esModoHud` y `esWidgetNativo` se restringieron estrictamente a verificar si la URL contiene de forma explícita `?widget=desktop`, `#widget=desktop`, `?mode=hud` o `#mode=hud`.
+   - Se eliminaron las lecturas permisivas de `window.desktopWidget` o `window.IS_DESKTOP_WIDGET` que contaminaban la ventana web principal.
+2. **Restauración del Background Web:**
+   - En `src/App.tsx`, se añadió la rama `else` en el `useEffect` de fondo para limpiar de inmediato cualquier estilo inline de `backgroundColor = 'transparent'` en `document.documentElement`, `document.body` y `#root` cuando se navega en el portal estándar.
+3. **Auditoría de Rules of Hooks y Calce de Cockpit:**
+   - En `src/components/Cockpit/DailyCockpit.tsx`, `esWidgetNativo` y el estado de arranque `cockpitAbierto` se alinearon a la misma regla canónica, garantizando que el widget embebido en la aplicación web arranque en reposo sin interferir con la retícula principal.
+
+---
+
+### FASE 4.69 — Restauración de Widget Cockpit Electrón y Blindaje Anti-FOUC en Tablero de Hábitos (FIX-COCKPIT-RESTORATION-AND-HABIT-ANTI-FOUC-110)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `src/hooks/useDailySchedule.ts`, `src/hooks/useHabitos.ts`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+1. **Colapso en Blanco de `DailyCockpit.tsx` en Electron:**
+   - La ventana de escritorio nativa (`?widget=desktop` o `?mode=hud`) colapsaba en un lienzo blanco vacío. La inicialización de `cockpitAbierto` evaluaba a `false` en modo widget, esperando renderizar una cápsula pill flotante dentro de una ventana de 420x720 con fondo transparente. Al no capturarse fallos de mapeo sobre propiedades indefinidas (`item.horaInicio`, `metricas.porcentajeRitmo`, etc.), React desmontaba el árbol y Chromium sobre Windows rasterizaba el canvas transparente como un fondo blanco sólido.
+2. **Salto Visual (FOUC) en Tablero de Hábitos:**
+   - `useHabitos.ts` asignaba por defecto un array vacío en `useLiveQuery`, haciendo que la primera renderización interpretara `todasLasActividades.length === 0` sin distinguir estado de carga. Todas las columnas mostraban "Sin hábitos en esta categoría" y, al resolver la base de datos Dexie (~50ms después con 19 registros), las tarjetas se inyectaban en bloque provocando un severo desplazamiento y re-cálculo de layout.
+
+#### Solución Implementada
+1. **Blindaje Defensivo y ErrorBoundary en `DailyCockpit.tsx`:**
+   - Implementación de `CockpitInternalErrorBoundary` con tarjeta de recuperación visual Cobalt Aerodynamic (`#0B132B`, `#040711`, botón de reinicio de estado).
+   - Envoltura de todo retorno y portal PiP con `<CockpitInternalErrorBoundary>`.
+   - Inicialización forzada de `cockpitAbierto = true` cuando se detecta `widget=desktop` o `window.desktopWidget?.isNative`.
+   - Optional chaining exhaustivo (`metricas?.porcentajeRitmo ?? 100`, `metricas?.siguienteItem?.titulo`, `(itemsFiltrados || []).map(...)`).
+   - Normalización robusta en `parseMinutos(hm?: string | null)` protegiendo entradas nulas o malformadas.
+2. **Blindaje Anti-FOUC en `useHabitos.ts` y `TableroHabitos.tsx`:**
+   - Eliminación de defaults vacíos artificiales en `useLiveQuery` de hábitos para distinguir el estado pendiente: `cargando = rawTodasLasActividades === undefined`.
+   - Integración de Skeleton Loader Cobalt en cada columna durante la hidratación inicial (`min-h-[140px] rounded-xl bg-slate-900/40 border border-slate-800/40 p-3 space-y-3 animate-pulse`).
+   - Confinamiento de renderizado con `style={{ contain: 'layout' }}` y `min-h-[140px]` en `TarjetaHabito.tsx`, garantizando paridad dimensional exacta y eliminando reflows tardíos.
+
+---
+
+### FASE 4.68 — Fallback Defensivo del Nombre y Píldora de Categoría Fija en Modal Detalle de Hábitos (FIX-HABITOS-MODAL-DETAIL-TITLE-PILL-109)
+**Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Modals/ModalActividadFlow.tsx`, `src/utils/__tests__/modalActividadFlowHelpers.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Diagnóstico Técnico & Causa Raíz
+1. **Nombre Vacío en Modal de Detalle:**
+   - Al abrir el modal desde ciertas tarjetas de hábitos personales, el título se mostraba en blanco cuando el registro contenía campos alternativos (`nombre`, `titulo`, `actividad`, `descripcion`) sin estar normalizado bajo `nombre_actividad`.
+2. **Selector de Columna/Categoría Editable:**
+   - El selector de categoría se presentaba como un dropdown editable aun en modo visualización/detalle de actividad, permitiendo alteraciones accidentales de la columna asignada a la tarjeta original.
+
+#### Solución Implementada
+1. **Resolución Defensiva del Nombre:**
+   - Helper modular `extraerNombreActividadDefensivo(actividad)` que resuelve en cascada: `nombre_actividad || nombre || Nombre_Actividad || titulo || actividad || descripcion || nombre_tarea_actividad || 'Actividad sin título'`.
+   - Hidratación en inputs de edición y visualización con alto contraste `text-slate-100 font-semibold`.
+2. **Píldora Informativa Fija (Read-Only):**
+   - En modo detalle/visualización y edición acotada, sustitución del dropdown por un badge estático Cobalt Aerodynamic (`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/80 border border-slate-700/60 text-xs font-mono text-slate-300 select-none` con icono `Tag` Lucide 1.75 en `text-sky-400`), blindando la categoría de modificaciones accidentales.
+
+---
 
 ### FASE 4.67 — Modal Global Centrado de Editor de Notas con Portal y Purga Definitiva de Parpadeo (REQ-KANBAN-NOTE-MODAL-PORTAL-102)
 **Fecha:** Octubre 2026 | **Archivos modificados:** `src/components/Notas/BadgeNotasVinculadas.tsx`, `src/components/Notas/PopoverPreviewNotas.tsx`, `src/components/Notas/EditorNotaModal.tsx`, `src/components/Notas/ModalVincularEntidades.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
@@ -6964,7 +7435,7 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 
 #### 2. Resoluciones Quirúrgicas Aplicadas
 - **`BadgeNotasVinculadas.tsx` (Ocultamiento Exterior Estricto):**
-  - Si `notas.length === 0`, el componente retorna estrictamente `null`, erradicando elementos huérfanos o botones residuales en superficies exteriores de tarjetas.
+  - Si `notas.length === 0`, el componente retorna estrictamente    `null`, erradicando elementos huérfanos o botones residuales en superficies exteriores de tarjetas.
   - Si `notas.length > 0`, renderiza el micro-badge compacto Cobalt con icono `FileText` y conteo `font-mono tabular-nums`.
 - **`ViewKanban.tsx` & `TarjetaHabito.tsx` (Reubicación Ergonómica):**
   - En `ViewKanban.tsx`, el micro-badge se reposicionó dentro del contenedor `min-w-0` inmediatamente junto al micro-icono de "Nivel de Energía / Tipo de Trabajo".
@@ -7502,3 +7973,798 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
   - `npx tsc --noEmit`: 0 errores.
   - `npm test -- --run`: 133/133 tests aprobados (12 suites).
   - `npm run build`: Exitoso en 6.69s.
+
+
+### [2026-10-29] - FIX-HABITOS-HIERARCHY-DECOUPLING-108: Jerarquía Estricta y Desacoplamiento de Hábitos Principales
+
+- **ID Requerimiento:** `FIX-HABITOS-HIERARCHY-DECOUPLING-108`
+- **Problema Detectado:** `resolverActividadesDeHabitoNativo()` en `useHabitos.ts` asociaba tareas operativas y actividades principales completas (`ActividadPersonal` con `ACT-XXX`) dentro de tarjetas de hábitos hermanos mediante afinidades heurísticas de proyecto o palabras clave, congestionando las tarjetas con chips ajenos y arriesgando la subordinación artificial de hábitos principales.
+- **Solución Implementada:**
+  1. **Aislamiento de Entidades Principales en `useHabitos.ts`:**
+     - `resolverActividadesDeHabitoNativo()` fue restringido estrictamente a resolver subtareas reales (`db.subtareas_pasos` con `id_padre_vinculado === habito.id` o `codigo_legado`) y pasos definidos en `habito.notas_checklist`.
+     - Se eliminó por completo la absorción de tareas de proyectos y actividades hermanas.
+     - Si el hábito no tiene subtareas ni checklist registrados, `actividadesVinculadas` retorna un arreglo vacío `[]`.
+  2. **Renderizado Condicional en `TarjetaHabito.tsx`:**
+     - El contenedor de "Subtareas / Pasos" ahora está condicionado a `{actividadesAsociadas.length > 0 && (...)}`. Si no hay subtareas, no se renderiza ninguna caja vacía, manteniendo la tarjeta limpia y compacta.
+     - Muestra el conteo de pasos (`X pasos`) y chips de estado cuando existen subtareas reales.
+  3. **Preservación Total en Columnas Kanban (`TableroHabitos.tsx`):**
+     - Se reforzó el filtrado de columnas en `TableroHabitos.tsx` con normalización `String(a.categoria_vida || '').toUpperCase().trim()` y fallback defensivo, garantizando que el 100% de los 19 hábitos figuren en sus respectivas columnas sin omisiones ni absorciones indebidas.
+- **Certificación QA:**
+  - `npx tsc --noEmit`: 0 errores.
+  - `npm test -- --run`: 133/133 tests superados (12 suites).
+  - `npm run build`: Exitoso en 8.44s.
+
+
+### [2026-10-29] - FIX-HABITOS-MODAL-DETAIL-TITLE-PILL-109: Nombre Visible y Píldora de Columna Fija en ModalActividadFlow
+
+- **ID Requerimiento:** `FIX-HABITOS-MODAL-DETAIL-TITLE-PILL-109`
+- **Problemas Detectados:**
+  1. Al abrir la ventana modal de edición/detalle desde la tarjeta de hábito, el input de título aparecía vacío si el registro residía bajo claves duales/heredadas como `nombre`, `Nombre_Actividad`, `titulo`, `actividad` o `descripcion`.
+  2. El badge de categoría de vida en el modal era un selector desplegable interactivo editable que permitía alterar accidentalmente la columna del tablero Kanban.
+- **Soluciones Implementadas:**
+  1. **Resolución y Pintado Defensivo del Nombre:**
+     - En `ModalActividadFlow.tsx`, se implementó y exportó la función canónica `resolverNombreActividadDefensivo` con extracción exhaustiva en cascada: `nombre_actividad`, `nombre`, `Nombre_Actividad`, `Nombre`, `titulo`, `Titulo`, `actividad`, `descripcion`, `nombre_tarea_actividad` o `'Actividad sin título'`.
+     - `titulo` en `useState` se inicializa con `nombreDisplay` y se sincroniza reactivamente en `useEffect`.
+     - En modo visualización/detalle (`soloLectura` o `modo === 'detalle'`), se renderiza en un elemento tipográfico de alto contraste:
+       ```tsx
+       <h2 id="act-flow-titulo-readonly" className="text-lg sm:text-xl font-semibold text-slate-100 py-0.5 leading-snug select-text">
+         {titulo || nombreDisplay || 'Actividad sin título'}
+       </h2>
+       ```
+     - En modo edición, el input de título inicializa con `value={titulo || (actividadEditar ? nombreDisplay : '')}` y tipografía de alto contraste `text-lg sm:text-xl font-semibold text-slate-100`.
+     - En `TarjetaHabito.tsx`, `handleSolicitarEditar` y `handleSeleccionarAlcance` envían `{ ...actividad, nombre_actividad: tituloHabito }`.
+     - En `useHabitos.ts`, `actividadesEnriquecidas` normaliza `nombre_actividad: nomDefensivo`.
+  2. **Píldora Fija Read-Only de Columna/Categoría:**
+     - Si `actividadEditar` está presente (modo detalle/edición), el selector desplegable queda sustituido por una píldora estática solo lectura con diseño Cobalt A.2.2:
+       ```tsx
+       <div id="flow-cat-badge-readonly" className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/80 border border-slate-700/60 text-xs font-mono text-slate-300 select-none shrink-0" title={`Columna fija: ${nombreColumnaCanonico}`}>
+         <Tag className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+         <span>{nombreColumnaCanonico}</span>
+       </div>
+       ```
+     - Se implementó `resolverNombreColumnaCanonico` con normalización insensible a mayúsculas/minúsculas y fallback a `CATEGORIAS_VIDA_MAP` y `CATEGORIAS_FLOW`.
+     - En el commit de guardado, se bloquea la alteración accidental de columna forzando: `categoria_vida: actividadEditar ? (actividadEditar.categoria_vida || categoria) : categoria`.
+     - Si la actividad es nueva, se preserva el selector interactivo para elegir la columna inicial.
+  3. **Suite de Pruebas Unitarias:**
+     - Creado `src/utils/__tests__/modalActividadFlowHelpers.test.ts` con 9 casos de prueba verificando extracción defensiva de nombres en cascada y resolución de columnas fijas.
+- **Certificación QA:**
+  - `npx tsc --noEmit`: 0 errores.
+  - `npm test -- --run`: 142/142 tests superados (13 suites).
+  - `npm run build`: Exitoso en 6.63s.
+
+---
+
+### [REQ-NOTAS-001: Unificación por Bloques Desplegables y Edición In-line de Checklist]
+**Fecha:** Octubre 2026 | **Fase:** 4.70 | **Archivos Modificados:** `src/components/Notas/EditorNotaModal.tsx`, `src/utils/__tests__/notasEntity.test.ts`, `tablas.md`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Fragmentación por Pestañas Disyuntivas:** `EditorNotaModal.tsx` condicionaba la visualización de una nota modular mediante pestañas excluyentes (`tabActiva === 'texto' | 'checklist' | 'wishlist'`). Esto impedía consultar el cuerpo Markdown mientras se editaba una lista de verificación o un presupuesto.
+- **Bloqueo de Edición en Ítems de Checklist:** Cada subtarea del checklist se renderizaba encapsulada dentro de un `<button>` de ancho completo con `onClick={() => handleToggleChecklistItem(chk.id)}`. El texto residía en un `<span>` estático sin controladores `onChange`/`onBlur` ni entrada bidireccional; cualquier clic sobre el texto alternaba el estado completado en lugar de habilitar edición in-situ.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Unificación por Bloques Desplegables Bento (Cobalt Aerodynamic A.2.2):**
+   - Eliminación del estado excluyente `tabActiva` y selector superior de pestañas.
+   - Implementación de 3 bloques Bento colapsables apilados (`<details open className="group ...">`) con fondo `#0D1526`, microborde `border-slate-800/40` e iconografía Lucide con `strokeWidth={1.75}`:
+     - **Bloque 1 (Texto & Markdown):** Textarea responsivo y visor Markdown sanitizado con botón de conmutación de Vista Previa integrado directamente en la cabecera del acordeón.
+     - **Bloque 2 (Checklist):** Barra de adición de ítems, contador dinámico `font-mono tabular-nums` de tareas completadas vs totales en el header y lista scrollable de subtareas.
+     - **Bloque 3 (Wishlist & Presupuesto):** Switch de activación, campos numéricos monetarios normalizados (`PEN`/`USD`) con tipografía `tabular-nums` y badge de costo estimado.
+   - Coexistencia visual continua: los tres bloques pueden permanecer abiertos simultáneamente o colapsarse a discreción del usuario sin destruir el estado de los inputs.
+2. **Desacoplamiento de Eventos y Edición In-Line de Subtareas:**
+   - Desacople del botón de alternancia: el checkbox (`CheckSquare` / `Square`) se aisló en un botón exclusivo a la izquierda, previniendo toggles accidentales.
+   - Estado de edición reactiva `editingChecklistId` (`string | null`) y mutador inmutable `handleEditarChecklistItem(id, nuevoTexto)`.
+   - Activación in-line por **doble clic** (`onDoubleClick={() => setEditingChecklistId(chk.id)}`) renderizando un `<input type="text" autoFocus ... />` estilizado con microborde `border-sky-500/60`.
+   - Guardado automático al perder el foco (`onBlur`) o presionar `Enter`, y cancelación con `Escape`.
+   - Aislamiento estricto de eventos (`e.stopPropagation()`) para evitar el cierre involuntario del modal contenedor gobernado por el listener global de teclado.
+3. **Suite de Pruebas Unitarias Vitest:**
+   - Adición de los casos 7 y 8 en `src/utils/__tests__/notasEntity.test.ts` certificando mutación inmutable de subtareas y desacoplamiento atómico de eventos.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 155/155 pruebas superadas (15 suites en verde).
+
+---
+
+### [REQ-PMO-001: Interactividad ReactBits en Filtros Portafolio sin Dependencias]
+**Fecha:** Noviembre 2026 | **Fase:** 4.71 | **Archivos Creados/Modificados:** `src/components/PMO/FiltrosPortafolio.tsx`, `src/components/Views/ViewPortafolio.tsx`, `src/components/PMO/__tests__/FiltrosPortafolio.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Monolito de Vista de Portafolio:** `ViewPortafolio.tsx` contenía más de 1,280 líneas de código con los controles de filtrado (Estado, Salud, Ordenación) embebidos rígidamente dentro de la barra secundaria.
+- **UI Estática y Carente de Micro-interacciones:** Los dropdowns presentaban transiciones binarias sin animación de entrada, sin feedback táctil ni física elástica. El menú de Estado forzaba un dropdown flotante innecesario para un conjunto acotado de 6 estados.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Desacoplamiento Modular (`src/components/PMO/FiltrosPortafolio.tsx`):**
+   - Extracción de la barra de filtros a un componente autónomo y reutilizable que recibe los estados (`filtroEstado`, `filtroSalud`, `filtroOrden`) y sus respectivos setters.
+   - Eliminación de 128 líneas de marcado acoplado en `ViewPortafolio.tsx`, saneando el estado `openDropdown` en el contenedor padre.
+2. **Patrón A (Sliding Pill - Filtro Estado):**
+   - Riel redondeado en `bg-slate-900/60 border border-slate-800/80` con cápsula activa deslizante (`bg-indigo-600/30 border border-indigo-500/40 shadow-sm`).
+   - Traslación matemática reactiva (`transform: translateX(...)`) sincronizada mediante `itemRefs` y `ResizeObserver` sin librerías de animación externas.
+3. **Patrón B (Animated Popover - Filtro Salud):**
+   - Popover Cobalt (`#0D1526`, `border-slate-800/80`, `backdrop-blur-md`) con entrada elástica (`animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150`).
+   - LED indicador interactivo con micro-pulso sutil (`ring-2 animate-pulse`) sincronizado bidireccionalmente con el semáforo superior de la vista.
+   - Cierre automático al hacer clic exterior mediante listener global `mousedown`.
+4. **Patrón C (Spring-Bite - Filtro Alcance / Orden):**
+   - Disparador con física de resorte in-line (`active:scale-[0.96] hover:scale-[1.02] transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)]`).
+   - Rotación suave de 180° del icono Chevron según el estado del desplegable.
+5. **Suite de Pruebas Unitarias Vitest:**
+   - Creado `src/components/PMO/__tests__/FiltrosPortafolio.test.ts` con 3 pruebas verificando el mapeo de traslación de índices, coherencia de filtrado por salud y preservación de criterios de ordenación.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 158/158 pruebas superadas (16 suites en verde).
+- Cero dependencias adicionales añadidas al proyecto.
+
+---
+
+### [REQ-PMO-002: Refinamiento Estético e Iconografía Semántica en Filtros]
+**Fecha:** Noviembre 2026 | **Fase:** 4.72 | **Archivos Modificados:** `src/components/PMO/FiltrosPortafolio.tsx`, `src/components/PMO/__tests__/FiltrosPortafolio.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Sobrecarga Textual y Riesgo de Desbordamiento Móvil:** En dispositivos móviles (< 640px), las etiquetas de texto completas en el track de estados generaban fricción táctil y scroll horizontal innecesario.
+- **Carencia de Jerarquía Iconográfica:** Los filtros utilizaban puntos cromáticos planos en lugar de iconografía semántica estandarizada y carecían de tooltips nativos de accesibilidad.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Iconografía Semántica Integral (`lucide-react` con `strokeWidth={1.75}`):**
+   - Mapeo semántico en `ESTADOS`: `Layers` (Todos), `Play` (En Curso), `Calendar` (Planif.), `Archive` (Backlog), `Pause` (Pausa), `CheckCircle2` (Cerrado).
+   - Sustitución de texto estático en disparador de Salud por `Activity` y opciones con `CheckCircle2` (Saludable), `AlertTriangle` (En Riesgo) y `XOctagon` (Crítico).
+   - Inyección de íconos en Orden: `TrendingUp` (Mayor/Menor Avance), `Calendar` (Fecha Fin), `DollarSign` (Presupuesto/Gasto AC) y `Layers` (Nombre A-Z).
+2. **Estándar de Colapso Responsivo (Ícono en Móvil + Texto Corto en Desktop):**
+   - Envoltorio de etiquetas en `<span className="hidden sm:inline-block">`, reduciendo el ancho del track en móviles sin alterar los cálculos matemáticos de `ResizeObserver`.
+   - Incorporación de atributos `title={item.tooltip}` en todos los disparadores y opciones para brindar feedback táctil e informativo nativo.
+3. **Gradiente Premium y Feedback Interactivo:**
+   - Aplicación de `bg-gradient-to-r from-indigo-600/40 to-violet-600/40 border border-indigo-400/50 shadow-sm transition-all duration-300 ease-out` en el elemento indicador activo (`pillStyle`).
+   - Iluminación sutil al hover `hover:text-indigo-200` en botones interactivos.
+4. **Suite de Pruebas Unitarias Vitest:**
+   - Ampliado `src/components/PMO/__tests__/FiltrosPortafolio.test.ts` incorporando verificación de cobertura total de tooltips en los 3 filtros (159 pruebas superadas).
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 159/159 pruebas superadas (16 suites en verde).
+
+
+---
+
+### [REQ-NOTAS-002: Refactorización de Sidebar, Cuadernos/Blocks y Accesos Rápidos]
+**Fecha:** Noviembre 2026 | **Fase:** 4.73 | **Archivos Modificados:** `src/types/index.ts`, `src/components/Notas/SidebarCuadernos.tsx`, `src/components/Notas/ModalCrearCuaderno.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/__tests__/SidebarCuadernos.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Acoplamiento Monolítico:** El sidebar desktop y el carrusel móvil residían monolíticamente dentro de `VisorNotas.tsx` (~1,334 líneas), forzando re-renders compartidos y bloqueando la implementación de transiciones dinámicas de ancho.
+- **Ausencia de Colapsabilidad:** El layout desktop mantenía un ancho estático `w-64` sin opción de contraerlo a un riel compacto de íconos.
+- **Creación Rudimentaria vía SweetAlert2:** La captura de nuevos blocks utilizaba un prompt imperativo `Swal.fire({ input: 'text' })` sin soporte de metadatos enriquecidos (ícono temático o descripción multilínea) ni estética Cobalt Aerodynamic.
+- **Accesos Rápidos Estáticos:** La cuadrícula de 4 accesos rápidos carecía de microinteracciones elásticas y de adaptación vertical al colapsar el menú.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Contrato Canónico de Metadatos (`CuadernoMeta`):**
+   - Declaración de la interface `CuadernoMeta { id: string; nombre: string; descripcion: string; icono: string; color?: string; created_at: string }` en `src/types/index.ts`.
+   - Persistencia híbrida en `localStorage` (`'pmo_notas_cuadernos_meta'`) fusionada reactivamente con los nombres de cuaderno en Dexie (`NotaRecord.block_nombre`), asegurando retrocompatibilidad total y fallback automático a ícono `Folder` para bloques huérfanos/legacy.
+2. **Modal Declarativo de Cuadernos (`ModalCrearCuaderno.tsx`):**
+   - Reemplazo completo del `Swal.fire` por un modal React Bento bajo tokens Cobalt Aerodynamic (`#0D1526`, `border-slate-800/60`).
+   - Selector en cuadrícula de 12 íconos semánticos Lucide (`Folder`, `BookOpen`, `Briefcase`, `Code`, `Terminal`, `Sparkles`, `Target`, `Bookmark`, `Compass`, `Heart`, `Coffee`, `Archive`).
+   - Campo de texto para nombre con validación de no duplicidad, textarea de propósito/descripción y blindaje de eventos de teclado (`e.stopPropagation()` en inputs) para preservar el despachador LIFO global.
+3. **Sidebar Desacoplado y Colapsable (`SidebarCuadernos.tsx`):**
+   - Extracción modular con estado reactivo `isCollapsed` persistido en `localStorage` (`'pmo_notas_sidebar_collapsed'`).
+   - Alternancia fluida de ancho: `w-64` (expandido con ícono + nombre + badge tabular `font-mono tabular-nums`) a `w-16` (colapsado con íconos centrados y tooltips accesibles `title`).
+   - Transición matemática suave `transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]`.
+   - Extracción complementaria del carrusel deslizable móvil `CarruselCuadernosMovil` con soporte unificado de íconos dinámicos.
+4. **Físicas Elásticas en Accesos Rápidos:**
+   - Inyección de microinteracciones: `active:scale-[0.96] hover:scale-[1.02] hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-200`.
+   - Transformación de layout reactiva: en estado expandido organiza los filtros (`FIJADAS`, `CHECKLIST`, `WISHLIST`, `VINCULADAS`) en cuadrícula 2x2; en estado colapsado los apila en columna 1x4 centrada con tooltips informativos.
+5. **Certificación de Pruebas Unitarias Vitest:**
+   - Creado `src/components/Notas/__tests__/SidebarCuadernos.test.ts` validando resolución de íconos, fallback resiliente, integridad del catálogo y prevención de duplicados (163/163 pruebas superadas).
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 163/163 pruebas superadas (17 suites en verde).
+- `npm run build`: Compilación y empaquetado de producción exitosos sin regresiones.
+
+
+---
+
+### [REQ-SYS-001-F1: Auditoría Integral - PMO Portafolio y KPIs]
+**Fecha:** Noviembre 2026 | **Fase:** 4.74 | **Archivos Modificados:** `src/db/db.ts`, `src/components/PMO/TarjetaProyecto.tsx`, `src/components/Views/ViewPortafolio.tsx`, `src/components/Modals/ModalNuevoProyecto.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `src/components/PMO/__tests__/TarjetaProyecto.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Modales Bloqueantes Obsoletos:** Presencia de `Swal.fire` en la confirmación de eliminación en cascada de `ViewPortafolio.tsx` y llamadas nativas `alert()` en `ModalNuevoProyecto.tsx` y `ModalTareaFlow.tsx`.
+- **Fuga de Rendimiento por Re-renders Innecesarios:** La tarjeta de proyecto en el Grid residía monolíticamente (~190 líneas de JSX) dentro del bucle `.map()` de `ViewPortafolio.tsx`, ejecutando filtrados de tareas (`tareas.filter(...)`) en cada render. Al no estar aislada en un componente `React.memo`, tipear en el buscador re-evaluaba todas las tarjetas.
+- **Sobrecarga de I/O en Dexie:** La eliminación en cascada leía toda la tabla `db.gastos.toArray()` en lugar de utilizar índices Dexie dedicados para el filtrado de proyectos vinculados.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Erradicación de SweetAlert2 y Alertas Nativos:**
+   - Eliminación de `import Swal from 'sweetalert2'` y sustitución de `Swal.fire` por un modal declarativo Bento (`#0D1526`, `border-rose-500/40`, sombra `shadow-cobalt-2`) con confirmación explícita y margen de 4 segundos de gracia preservado intacto en `programarEliminacion`.
+   - Erradicación de `alert()` en `ModalNuevoProyecto.tsx` y `ModalTareaFlow.tsx`, sustituyéndolos por estados reactivos `errorMsg` y `errorMsgSubtarea` renderizados en micro-alertas inline accesibles.
+2. **Desacoplamiento y Memoización de `TarjetaProyecto`:**
+   - Extracción de la tarjeta a `src/components/PMO/TarjetaProyecto.tsx` envuelta estrictamente en `React.memo`.
+   - Pre-indexación del resumen de tareas (`total` y `completadas`) dentro del `useMemo` de `tareasPorProyecto`, transfiriendo un objeto simple inmutable a cada tarjeta y eliminando cálculos O(N*M) en el render loop.
+   - Robustecimiento de reconciliación DOM con clave defensiva `key={p.id ? 'proy_' + p.id : 'proy_cod_' + p.codigo_legado}` tanto en Grid como en Tabla.
+   - Handlers estabilizados mediante `useCallback`.
+3. **Optimización Dexie IndexedDB (I/O):**
+   - Actualización del esquema Dexie en `src/db/db.ts` a `version(5)`, indexando `gastos: 'id, user_id, codigo_legado, id_proyecto, id_origen_vinculado, ...'`.
+   - Sustitución de `db.gastos.toArray()` por la consulta indexada `db.gastos.where('id_proyecto').equals(pId).toArray()`.
+4. **Certificación QA:**
+   - Suite de pruebas unitarias Vitest ampliada a 18 suites (167/167 tests superados).
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 167/167 pruebas superadas (18 suites en verde).
+- `npm run build`: Compilación y empaquetado de producción exitosos sin advertencias bloqueantes.
+
+---
+
+### [REQ-SYS-001-F1.1: Refinamiento Estético PMO - LEDs Orgánicos y Minimalismo]
+**Fecha:** Noviembre 2026 | **Fase:** 4.75 | **Archivos Modificados:** `src/components/PMO/TarjetaProyecto.tsx`, `src/components/Views/ViewPortafolio.tsx`, `src/components/PMO/FiltrosPortafolio.tsx`, `src/components/PMO/__tests__/TarjetaProyecto.test.ts`, `src/components/PMO/__tests__/FiltrosPortafolio.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Contaminación por Emojis y Doble Glifo:** Los datos heredados o semillas contenían emojis literales en `health_status` (`🔴 Crítico`, `🟡 En Riesgo`, `🟢 Saludable`). Al renderizarse junto al micro-indicador CSS en la tarjeta y en la tabla ejecutiva, generaban duplicidad visual (`● 🔴 Crítico`) e infringían la regla canónica de cero emojis en DOM.
+- **Falso Positivo en Disparador de Filtro de Salud:** Al seleccionar "Todas", el botón disparador aplicaba por defecto `bg-emerald-500 animate-pulse`, emitiendo una falsa señal de salud activa con pulso continuo.
+- **Sobrecarga Cognitiva:** Existencia de íconos estáticos redundantes (`<Activity />`) conviviendo con texto y micro-puntos en el disparador de filtros.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Estándar Canónico: "Ley del Silencio Visual":**
+   - Erradicación de texto visible y emojis literales para el estado de salud en `TarjetaProyecto.tsx` y `ViewPortafolio.tsx` (vista tabla).
+   - Sanitización centralizada: `(p.health_status || 'En Rango').replace(/^[^\p{L}\p{N}]+/u, '').trim()`, canalizando la etiqueta exclusivamente a los atributos de accesibilidad `title` y `aria-label`.
+2. **Estándar Canónico: "Micro-LEDs Orgánicos" Hiper-Luminosos:**
+   - Inyección de micro-LEDs de alta fidelidad: `w-2.5 h-2.5 rounded-full` con halo difuso de 8px según los tokens Cobalt:
+     - Saludable / En Rango: `#10b981` (`shadow-[0_0_8px_#10b981]`).
+     - Alerta / En Riesgo: `#f59e0b` (`shadow-[0_0_8px_#f59e0b]`).
+     - Crítico / Bloqueado: `#f43f5e` (`shadow-[0_0_8px_#f43f5e]`) con `animate-pulse` reactivo continuo.
+3. **Minimalismo Activo en Filtros (`FiltrosPortafolio.tsx`):**
+   - Eliminación del ícono `<Activity />` en el botón disparador de salud.
+   - Estado "Todas": LED neutro gris (`bg-slate-400 shadow-[0_0_4px_#94a3b8]`) sin pulso, erradicando el falso positivo.
+   - Estado activo: micro-LED reactivo del color seleccionado con halo de 8px y `animate-pulse` exclusivo para el estado crítico.
+   - Colapso responsivo de etiqueta (`hidden sm:inline-block`) preservado junto al chevron rotativo.
+4. **Físicas y Pruebas Unitarias:**
+   - Preservación de hundimiento táctil `active:scale-95` y spring-bite `ease-[cubic-bezier(0.34,1.56,0.64,1)]`.
+   - Incorporación de pruebas en `TarjetaProyecto.test.ts` y `FiltrosPortafolio.test.ts`.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: Todas las pruebas unitarias aprobadas.
+- `npm run build`: Compilación y empaquetado de producción exitosos sin regresiones.
+
+---
+
+### [REQ-SYS-001-F2: Auditoría Integral - PMO Kanban, Tareas y Fluidez Visual]
+**Fecha:** Noviembre 2026 | **Fase:** 4.76 | **Archivos Modificados:** `src/components/Views/ViewKanban.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/Subtareas/ListaSubtareas.tsx`, `src/components/Modals/ModalDoDAdvertencia.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `src/components/PMO/__tests__/KanbanOptimisticDoD.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Monolito sin Memoización:** `ViewKanban.tsx` concentraba más de 2,100 líneas con las 4 columnas y más de 100 tarjetas renderizadas en bucles anidados en el cuerpo del chasis. Cualquier hover (`hoveredTaskId`) o arrastre (`dragOverColId`) re-renderizaba todo el tablero y recalculaba dependencias y costos O(N) innecesariamente.
+- **Diálogos Bloqueantes Legacy:** `validarDoDSubtareas` invocaba `window.confirm()` nativo al intentar mover tareas con subtareas pendientes a 'Completado'. La acción de archivar tarea ejecutaba `window.confirm()`, y `ListaSubtareas.tsx` importaba y ejecutaba `Swal.fire` (`sweetalert2`) para secuencias bloqueadas.
+- **Latencia Perceptible en Drag & Drop:** Mover una tarjeta requería resolver `db.tareas.update` en Dexie, esperar la emisión reactiva de `useLiveQuery` y re-evaluar la cartera completa de avances WBS (`avancesPorProyecto`) antes de reposicionar la tarjeta en la columna destino.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Desacoplamiento Memoizado (Columnas y Tarjetas):**
+   - Extracción de la tarjeta a `src/components/PMO/TarjetaTareaKanban.tsx` envuelta estrictamente en `React.memo` con comparación de props shallow y animación de montaje `animate-in fade-in-50 slide-in-from-top-1 duration-150`.
+   - Extracción de la columna a `src/components/PMO/ColumnaKanban.tsx` con `React.memo`, inyectando dropzone ambiental con gradiente Cobalt `bg-indigo-950/20 border-sky-500/40 shadow-[0_0_20px_rgba(56,189,248,0.15)]` y transición fluida `duration-200 ease-out`.
+2. **Motor UI Optimista (Zero Latency & Rollback Resiliente):**
+   - Inyección del estado local `estadosOptimistas` en `ViewKanban.tsx` que reubica la tarjeta de forma instantánea al soltarla (`onDrop`), desacoplando la respuesta visual del ciclo I/O de Dexie.
+   - Protección contra fallos: bloque `try/catch` que revierte el mapa optimista si la base de datos rechaza la operación, con limpieza automática reactiva al sincronizar con Dexie.
+   - Optimización de `avancesPorProyecto` con micro-caché indexado por proyecto, evitando re-evaluar la cartera global ante el movimiento de una sola tarea.
+3. **Erradicación Total de Modales Legacy:**
+   - Creación de `src/components/Modals/ModalDoDAdvertencia.tsx` (Bento `#0D1526`, `border-amber-500/40`, atajos Enter/Escape) para autorizaciones de Definition of Done sin bloqueos del hilo principal.
+   - Purgado definitivo de `sweetalert2` en `ListaSubtareas.tsx`, reemplazado por micro-alertas inline accesibles con auto-cierre.
+   - Sustitución de `window.confirm` en archivado de tareas por la orquestación estándar `programarEliminacion` con búfer de deshacer de 4 segundos.
+4. **Fluidez de Entrada en Modales:**
+   - Inyección de `animate-in fade-in duration-200` en el backdrop de `ModalTareaFlow.tsx` y `animate-in fade-in zoom-in-95 duration-200 ease-out` en el chasis Bento.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 174/174 pruebas superadas (19 suites en verde).
+- `npm run build`: Compilación y empaquetado de producción exitosos sin advertencias bloqueantes.
+
+---
+
+### [REQ-SYS-001-F3: Auditoría Integral - Notas, Wishlist y Cero Ruido Visual]
+**Fecha:** Noviembre 2026 | **Fase:** 4.77 | **Archivos Modificados:** `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/TarjetaNota.tsx`, `src/components/Modals/ModalConvertirWishlistGasto.tsx`, `src/components/Notas/__tests__/TarjetaNotaMemo.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Layout Shifts en Grilla Masonry:** La barra de acciones flotante aparecía empujando elementos adyacentes y alterando la altura de las tarjetas, provocando saltos visuales incómodos al pasar el cursor o seleccionar opciones.
+- **Diálogos Bloqueantes Legacy (`sweetalert2`):** Conversión de deseos de Wishlist a gastos y eliminación masiva utilizaban `Swal.fire` bloqueante.
+- **Sobrecarga Cognitiva:** Etiquetas y badges saturados sin aplicar la "Ley del Silencio Visual".
+
+#### 2. Solución Quirúrgica Implementada
+1. **Estabilización Visual & Silencio:**
+   - Reserva de espacio de 40px para la barra de acciones superior evitando cualquier salto de layout.
+   - Píldoras de categoría con hover sutil y chips compactos de vinculación.
+2. **Erradicación de SweetAlert2:**
+   - Creación de `ModalConvertirWishlistGasto.tsx` Bento Cobalt (`#0D1526`, `border-slate-800/60`).
+   - Integración con `useUndoDelete()` para eliminación con búfer de 4 segundos.
+
+---
+
+### [HOTFIX-SYS-001: Aceleración GPU y Concurrencia React en VisorNotas]
+**Fecha:** Noviembre 2026 | **Fase:** 4.78 | **Archivos Modificados:** `src/components/Notas/TarjetaNota.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/__tests__/TarjetaNotaMemo.test.ts`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Cuello de Botella en Memoización:** `arePropsEqual` ejecutaba 4 llamadas a `JSON.stringify()` por tarjeta, destruyendo el framerate (FPS) durante el scroll o la búsqueda.
+- **Costos CSS:** Reglas `backdrop-blur-md` y `transition-all` sobrecargaban la GPU y el motor de composición de Chrome.
+- **Filtrado Síncrono:** La búsqueda por texto bloqueaba el hilo principal con cada pulsación de tecla.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Memoización Atómica Primitiva:** Reducción de `arePropsEqual` a comparación estricta de `prev.id === next.id && prev.updated_at === next.updated_at && prev.modoVista === next.modoVista`.
+2. **Aceleración GPU Pura:** Supresión de `backdrop-blur-md` y `transition-all` en favor de `transform-gpu` y transiciones dirigidas a `[transform,opacity,border-color]`.
+3. **Concurrencia con `useDeferredValue`:** Desacoplamiento del input de búsqueda con renderizado diferido concurrente.
+4. **Elevación de Modal:** Instancia única elevada de `<ModalConvertirWishlistGasto />` en el chasis `VisorNotas.tsx`.
+
+---
+
+### [REQ-SYS-001-F4: Auditoría Integral - Finanzas y Transacciones]
+**Fecha:** Noviembre 2026 | **Fase:** 4.79 | **Archivos Modificados:** `src/components/Views/ViewFinanzas.tsx`, `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalIngreso.tsx`, `src/components/PMO/TarjetaTransaccion.tsx`, `src/components/PMO/__tests__/TarjetaTransaccion.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Diálogos Bloqueantes Legacy:** `ModalGasto.tsx`, `ModalIngreso.tsx` y `ViewFinanzas.tsx` utilizaban `Swal.fire` (`sweetalert2`) para validaciones, toasts de guardado, saneamiento de cuotas y configuración de techos.
+- **Cuellos de Botella de Rendimiento en Transacciones:**
+  - `lista.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())` instanciaba cientos de objetos `Date` innecesarios por segundo al ordenar transacciones unificadas.
+  - La búsqueda de transacciones era síncrona en el hilo principal sin concurrencia reactiva.
+  - Los filtros de periodo y segmento (`gastosFiltrados` e `ingresosFiltrados`) instanciaban `const hoy = new Date()` dentro del callback iterativo de filtrado $O(N)$.
+- **Ausencia de Memoización en el Listado:** Las tarjetas de transacciones se renderizaban como JSX anónimo no memoizado en `ViewFinanzas.tsx`, re-evaluándose al completo ante cualquier interacción.
+- **Asimetría Tipográfica Monetaria:** Techos presupuestales, monitoreo de cuotas bancarias, radar de categorías y métricas de burn rate carecían del token canónico `tabular-nums`.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Desacoplamiento Canónico Memoizado (`TarjetaTransaccion.tsx`):**
+   - Extracción del componente individual de transacción envuelto en `memo` con comparador atómico `areTrxPropsEqual` (validando `id`, `montoPen`, `esConciliado`, `estado`, `fecha`, `descripcion`, `categoria`, `tipo`).
+   - Aplicación estricta de la "Ley del Silencio Visual": eliminación de textos y badges redundantes en favor de un micro-LED orgánico (`#10b981` para conciliado / `#f59e0b animate-pulse` para pendiente) con tooltip nativo `title` descriptivo.
+   - Acciones secundarias (Editar y Eliminar) discretamente reveladas en hover suave (`group-hover:opacity-100`).
+   - Estilizado Cobalt Aerodynamic: `#0D1526`, microborde `border-slate-800/60`, elevación `shadow-cobalt-1`, aceleración por hardware `transform-gpu hover:translate-y-[-2px]`.
+2. **Optimización Extrema de Concurrencia y Filtrado:**
+   - Inyección de `useDeferredValue(busquedaTrx)` para evitar bloqueos del hilo principal al tipear en el buscador de tesorería.
+   - Sustitución de ordenamiento basado en `new Date().getTime()` por comparación lexicográfica ISO $O(1)$ `(b.fecha || '').localeCompare(a.fecha || '')` que no genera presión en el Garbage Collector.
+   - Elevación (hoisting) de `const hoy = new Date()` y sus componentes de fecha fuera de los bucles iterativos de `gastosFiltrados` e `ingresosFiltrados`.
+3. **Erradicación Absoluta de SweetAlert2:**
+   - Purgado de `import Swal from 'sweetalert2'` en `ModalGasto.tsx`, `ModalIngreso.tsx` y `ViewFinanzas.tsx`.
+   - Inyección de micro-banners accesibles e inline para validación de campos numéricos y descripciones requeridas en modales de gasto e ingreso.
+   - Orquestación de eliminaciones de transacciones mediante `programarEliminacion` de `useUndoDelete()` con búfer de deshacer de 4 segundos.
+   - Reemplazo de alertas informativas por el toast reactivo nativo Cobalt `#0D1526` con micro-LED verde y auto-dismiss de 3 segundos.
+4. **Paridad Monetaria Estricta (`tabular-nums font-mono`):**
+   - Inyección sistemática del token `tabular-nums` en cuotas bancarias, techos presupuestales, radar de categorías críticas, matrix de burn rate por proyecto y compromisos financieros.
+5. **Certificación QA:**
+   - Creación de suite unitaria exhaustiva en `src/components/PMO/__tests__/TarjetaTransaccion.test.ts` (5 tests).
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 187/187 pruebas superadas (21 suites en verde).
+- `npm run build`: Compilación y empaquetado de producción exitosos (8.62s).
+
+---
+
+### [REQ-SYS-001-F5: Auditoría Integral - Finanzas (Dashboard, Conciliación y Cálculos)]
+**Fecha:** Noviembre 2026 | **Fase:** 4.80 | **Archivos Modificados:** `src/components/Views/ViewFinanzas.tsx`, `src/components/Finanzas/DashboardFinanciero.tsx`, `src/components/Finanzas/TabControlCuotas.tsx`, `src/components/Finanzas/TabPresupuestos.tsx`, `src/components/Modals/ModalNuevoPlanCuotas.tsx`, `src/components/Finanzas/__tests__/DashboardFinanciero.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Monolito de ViewFinanzas (1,733 Líneas):** Todo el árbol de vistas (Dashboard, Transacciones, Cuotas, Presupuestos y Modales) residía en un solo archivo JSX. Cada keystroke en la búsqueda de transacciones forzaba la re-evaluación completa de los dashboards y las pestañas inactivas.
+- **Doble Recorrido Inline O(2N):** En la pestaña de Cuotas, las tarjetas de KPI calculaban `cuotas.filter(...).reduce(...)` dos veces seguidas en pleno render JSX para obtener total comprometido y amortizado.
+- **Latencia Perceptible en Conciliación de Tesorería:** Al alternar el estado conciliado de un gasto o cuota bancaria, el usuario experimentaba retraso visual esperando la promesa de mutación de Dexie IndexedDB.
+- **Fuga de Rendimiento por Instanciación de Objetos Date:** El cálculo de próximos vencimientos instanciaba `new Date()` repetidamente en cada iteración del bucle.
+- **Ruido Visual:** Párrafos explicativos extensos en las tarjetas de Balance, Ingresos y Gastos competían con la lectura numérica de los datos.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Desacoplamiento Canónico en Módulos Memoizados:**
+   - `src/components/Finanzas/DashboardFinanciero.tsx`: Componente envuelto en `React.memo` para las métricas de balance consolidado, ingresos, egresos, runway y selector de periodo/segmento.
+   - `src/components/Finanzas/TabControlCuotas.tsx`: Componente memoizado para el monitoreo de planes de financiamiento y cronogramas con acumulador $O(N)$ en una sola pasada.
+   - `src/components/Finanzas/TabPresupuestos.tsx`: Componente memoizado para la matriz de presupuestos por categoría, inversiones en hábitos y burn rate de proyectos.
+   - Reducción del monolito `ViewFinanzas.tsx` de 1,733 líneas a ~1,075 líneas.
+2. **Patrón UI Optimista de Conciliación (0ms de Latencia):**
+   - Estado reactivo instantáneo `optimisticConciliados` (`Record<string, boolean>`) en el componente orquestador.
+   - Los micro-LEDs (`#10b981` activo / `#f59e0b` pendiente) y los badges de estado cambian en 0ms al click del usuario.
+   - Blindaje con rollback en caso de fallo en IndexedDB mediante captura de excepciones y reseteo del estado optimista.
+3. **Modal Bento Declarativo (`ModalNuevoPlanCuotas.tsx`):**
+   - Desacoplamiento de la creación de planes de financiamiento con `createPortal(..., document.body)`.
+   - Soporte de atajo de teclado `Escape` con bloqueo de scroll mediante `useBodyScrollLock`.
+   - Micro-banner inline de validación y estética Cobalt Aerodynamic (`#0D1526`, `border-slate-800/80`).
+4. **Optimización Matemática & Cero Presión de GC:**
+   - Pre-cálculo de fechas base con timestamps en milisegundos (`hoyMs = hoy.getTime()`) y cálculo de días restantes sin instanciar objetos `Date` adicionales en bucles.
+   - Protección contra división por cero en cálculo de runway de meses en `TabPresupuestos.tsx`.
+5. **Silencio Visual:**
+   - Eliminación de textos explicativos pesados reemplazándolos con tooltips nativos en `title` sobre micro-halos y micro-LEDs.
+   - Tipografía canónica `tabular-nums font-mono` en todos los importes, cuotas y métricas financieras.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 193/193 pruebas superadas (22 suites en verde).
+- `npm run build`: Compilación y empaquetado de producción exitosos (8.56s).
+
+---
+
+### [REQ-SYS-001-F6: Auditoría Integral - Hábitos y Tracker Diario]
+**Fecha:** Noviembre 2026 | **Fase:** 4.81 | **Archivos Modificados:** `src/utils/timeFormatters.ts`, `src/services/habitosService.ts`, `src/components/Modals/ModalRegistroAvanceHabito.tsx`, `src/components/Habitos/Dashboard/HeatmapConsistencia.tsx`, `src/hooks/useHabitos.ts`, `src/components/Habitos/Dashboard/TablaRendimiento.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Habitos/Dashboard/MetasCuantitativas.tsx`, `src/components/Habitos/Metas/ModalDetalleMeta360.tsx`, `src/components/Habitos/__tests__/HabitosTrackerOptimistic.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Desfase Temporal Nocturno (Bug Crítico UTC-5 Lima):** Se detectó el uso de `new Date().toISOString().split('T')[0]` en `HeatmapConsistencia.tsx`, `useHabitos.ts`, `TarjetaHabito.tsx` y `TablaRendimiento.tsx`. En horario nocturno local (a partir de las 19:00 horas), la fecha ISO en UTC devolvía el día de mañana, provocando que la celda de hoy en el mapa de consistencia se colocara en el futuro y que los check-ins de hoy se compararan erróneamente contra la fecha del día siguiente.
+- **Congelamientos de Interfaz en el Heatmap:** El mapa de consistencia actualizaba un estado reactivo local `hoveredCell` con cada movimiento de ratón, forzando la reconciliación de las 112 celdas de la cuadrícula continuamente.
+- **Latencia Perceptible en Check-ins:** `handleToggleCompletar` en `TarjetaHabito.tsx` esperaba las transacciones completas de IndexedDB y el despacho a SyncManager antes de reflejar el cambio en la vista, generando una latencia de 100-300ms.
+- **Presencia de Modales Legacy y `SweetAlert2`:** Inyección imperativa de HTML en diálogos `Swal.fire` con `document.getElementById('swal-inp-avance')` para avances numéricos, prompts bloqueantes de eliminación y alertas informativas invasivas.
+- **Multiplicación de Modales en Memoria:** Cada tarjeta individual de hábito montaba su propia instancia de `<ModalAlcanceRecurrencia>` en el árbol React.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Unificación Temporal Local con `formatFechaIsoLocal`:**
+   - Estandarización de `formatFechaIsoLocal(date = new Date()): string` en `src/utils/timeFormatters.ts`.
+   - Erradicación de todas las llamadas a `toISOString().split('T')[0]` en el módulo de Hábitos y Dashboard.
+2. **UI Optimista de Check-in (0ms de Latencia):**
+   - Inyección del diccionario reactivo `optimisticCompletados` en `TableroHabitos.tsx` y propagado como prop a `TarjetaHabito.tsx`.
+   - Respuesta visual instantánea en 0ms para checkbox, tachado de texto y micro-LED de racha con rollback defensivo ante excepciones.
+3. **Heatmap Acelerado por GPU y Tooltips Nativos O(1):**
+   - Envoltorio de `HeatmapConsistencia` en `React.memo`.
+   - Supresión del estado `hoveredCell` en favor de tooltips nativos en el atributo `title` de cada celda, eliminando el 100% de los re-renders al mover el cursor.
+   - Adopción estricta de la paleta Cobalt Aerodynamic (`#0D1526`, `border-slate-800/40`).
+4. **Modal Declarativo Bento `ModalRegistroAvanceHabito.tsx`:**
+   - Componente desacoplado montado mediante `createPortal(..., document.body)` con autofocus, atajos de incremento rápido (+1, +5, +10), umbral de rescate de racha, micro-banner de validación inline accesible y atajo `Escape`.
+   - Erradicación total de `Swal.fire` en `TarjetaHabito.tsx`, `MetasCuantitativas.tsx` y `ModalActividadFlow.tsx`.
+5. **Single Instance Modal Pattern y Eliminación Diferida (UndoDelete 4s):**
+   - Elevación de `ModalAlcanceRecurrencia` a la raíz del tablero.
+   - Orquestación de eliminaciones mediante `programarEliminacion` con ocultamiento optimista reactivo vía `estaOculto(act.id)`.
+6. **Ley del Silencio Visual y Memoización Atómica:**
+   - Ocultamiento de botones de acción rápida en `TarjetaHabito`, revelados únicamente en `hover` suave (`opacity-0 group-hover:opacity-100`).
+   - Memoización de `TarjetaHabito` mediante `areHabitoPropsEqual` que valida exclusivamente propiedades primitivas.
+   - Inyección inquebrantable de `font-mono tabular-nums` en todas las cifras, rachas y porcentajes.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 200/200 pruebas superadas (23 suites en verde).
+- `npm run build`: Compilación y empaquetado de producción exitosos (8.41s).
+
+---
+
+### [REQ-SYS-001-F7: Auditoría Integral - Sidebar y Navegación]
+**Fecha:** Noviembre 2026 | **Fase:** 4.82 | **Archivos Modificados:** `src/App.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `src/components/Layout/SidebarPortafolio.tsx`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Carga Monolítica Inicial (Sin Code Splitting):** Todas las vistas mayores (`ViewKanban`, `ViewPortafolio`, `ViewHabitos`, `ViewNotas`, `ViewFinanzas`, etc.) se importaban síncronamente en el bundle principal de la aplicación.
+- **Ruteo Desincronizado:** La navegación por pestañas dependía únicamente del estado en memoria, sin soporte fluido para enlaces profundos ni historial por hash.
+- **Ruido en Cabecera:** Pestaña "Notas" segregada en el extremo derecho en lugar del `<nav>` unificado central.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Lazy Loading Universal con React.lazy & Suspense:**
+   - Carga diferida de todas las vistas principales con fallback visual Cobalt.
+   - Sincronización bidireccional entre `vistaActiva` y `window.location.hash`.
+2. **Unificación Central y Reducción de Ruido Visual:**
+   - Integración de "Notas" en el `<nav>` maestro central (5ta pestaña canónica).
+   - Colapso responsivo en pantallas medianas con tooltips semánticos y supresión de texto redundante.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores.
+- `npm test`: 200/200 pruebas superadas.
+
+---
+
+### [REQ-SYS-001-F8: Auditoría Integral - Configuración, Techos y UX Global]
+**Fecha:** Noviembre 2026 | **Fase:** 4.83 | **Archivos Modificados:** `src/utils/toastCobalt.ts`, `src/components/Modals/ModalTechosPresupuesto.tsx`, `src/components/Finanzas/TabPresupuestos.tsx`, `src/components/Modals/ModalMetaPlanFlow.tsx`, `src/components/Views/ViewMetasPlanes.tsx`, `src/components/Modals/ViewDetalle360.tsx`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/components/IA/AsistenteIaModal.tsx`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Presencia Residual de SweetAlert2:** Módulos de planes, metas, asistente IA e ideas utilizaban `Swal.fire` bloqueante para confirmaciones y alertas.
+- **Presupuestos con Valores Hardcodeados:** La matriz de techos presupuestales carecía de persistencia reactiva en `localStorage`.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Purga Definitiva de SweetAlert2:**
+   - Erradicación de todas las llamadas residuales a `Swal.fire` sustituyéndolas por `toastCobalt` y el hook `useUndoDelete(4000ms)`.
+2. **Motor Real de Techos Presupuestales:**
+   - Creación del componente Bento Cobalt `ModalTechosPresupuesto.tsx` con inputs tipados en `font-mono tabular-nums`.
+   - Lectura combinada y persistencia en `localStorage` de techos de gasto por categoría en `TabPresupuestos.tsx`.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores.
+- `npm test`: 200/200 pruebas superadas.
+
+---
+
+### [REQ-SYS-002-KANBAN: Optimización Sidebar y UI ReactBits]
+**Fecha:** Noviembre 2026 | **Fase:** 4.84 | **Archivos Modificados:** `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Presión Algorítmica en Renderizado:** El cálculo de tareas activas y totales por proyecto se realizaba mediante barridos lineales iterativos `tareas.filter().length` directamente en el ciclo de mapeo de `proyectosFiltrados`, degradando la tasa de refresco ante colecciones grandes de datos.
+- **Layout Shifts al Colapsar/Expandir:** La animación del panel lateral `#sidebar-portafolio` empleaba transiciones de anchura fija (`w-16` vs `w-72 lg:w-80`) sobre contenedores flexbox, provocando saltos bruscos de maquetación (CLS) y repintados costosos en el área central del Kanban.
+- **Inconsistencias Estéticas:** Uso residual de clases `indigo-*` en botones de cartera y creación de proyectos, bordes toscos `border-l-4` y ausencia de micro-indicadores visuales reactivos tipo ReactBits.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Patrón "Diccionario de Contadores O(1)":**
+   - Inyección de `contadoresTareasPorProyecto` vía `useMemo` con dependencia exclusiva en `tareas`.
+   - Pre-cálculo acumulativo de tareas totales, activas y completadas en un `Map<string, { total, activas, completadas }>` unificando códigos legados (`proyecto_codigo`) e identificadores de base de datos (`id_proyecto`).
+   - Acceso $O(1)$ instantáneo en tiempo constante dentro de la iteración de proyectos en el Sidebar, erradicando por completo los barridos $O(N \cdot M)$.
+2. **Patrón "CSS Grid Transition" para Paneles Laterales (Cero Layout Shifts):**
+   - Conversión de `#vista-kanban-wrapper` a contenedor CSS Grid dinámico: `grid grid-cols-1 md:grid-cols-[288px_1fr] lg:grid-cols-[320px_1fr]` (expandido) vs `md:grid-cols-[64px_1fr]` (colapsado) con `transition-[grid-template-columns] duration-300 ease-out`.
+   - Aside `#sidebar-portafolio` configurado a `w-full h-full overflow-hidden select-none` preservando clases semánticas `sidebar-collapsed` y `sidebar-expanded`.
+   - Inyección de `min-w-0` en el contenedor `<main>` para aislar las columnas del grid y prevenir desbordamientos o tirones visuales.
+3. **Estética ReactBits & Tokens Cobalt Aerodynamic:**
+   - **Micro-LED Activo:** Sustitución del borde izquierdo tosco por un pseudo-elemento vertical radiante `before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-400 before:shadow-[0_0_12px_#38bdf8] before:transition-transform before:scale-y-100 before:rounded-l-xl` sobre fondo `#0A101C` y microborde `border-sky-500/50`.
+   - **Spotlight Tenue en Inactivos:** Micro-interacción al hover con elevación suave `hover:translate-x-0.5`, fondo `#0D1526]/90` y borde `border-slate-700/80`.
+   - **Cápsula de Conteo O(1):** Badge en `font-mono tabular-nums text-[10px]` con `{contadores.activas}/{contadores.total}` y micro-ícono `CheckSquare` (`strokeWidth={1.75}`).
+   - **Doble Barra de Progreso:** Gradiente Cobalt en avance real (`bg-sky-500`) y meta proyectada en `bg-sky-400/25` sobre pista `bg-slate-800/80`.
+   - **Purga de Tokens Legacy:** Reemplazo integral de clases `indigo-*` por tokens Cobalt `sky-*` en filtros de cartera (`bg-sky-600`), badge de total de proyectos (`bg-sky-500/10 text-sky-300`), botón 360° en hover (`bg-sky-600/90 hover:bg-sky-500`) y botón canónico "Nuevo Proyecto" (`bg-sky-600 hover:bg-sky-500 shadow-sky-950/40`).
+   - Iconografía estandarizada en Lucide React con `strokeWidth={1.75}` universal y cero emojis en DOM.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 200/200 pruebas superadas (23 suites en verde).
+- `npm run build`: Compilación y empaquetado de producción exitosos en 7.03s.
+
+---
+
+### [REQ-SYS-003-KANBAN: Optimización y Rediseño de Barra de Filtros]
+**Fecha:** Noviembre 2026 | **Fase:** 4.85 | **Archivos Modificados:** `src/components/Views/ViewKanban.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Re-cálculo Innecesario en Renderizado:** En cada ciclo de render de `ViewKanban`, la distribución y ordenamiento de tareas por columna (`ordenarTareas(tareasFiltradas.filter(...))`) se ejecutaba 4 veces en caliente en el bucle JSX de las columnas, recalculando innecesariamente la matriz de tareas incluso ante simples aperturas o cierres de popovers.
+- **Fricción y Timers Rígidos:** Los temporizadores de mouseleave poseían un delay hardcodeado de 280ms con tipado `NodeJS.Timeout`, generando lentitud en la respuesta háptica y solapamiento accidental entre popovers al desplazar el cursor.
+- **Renderizado Condicional Abrupto:** Los popovers emergentes se montaban y desmontaban con `&&`, impidiendo transiciones fluidas de opacidad y escala aceleradas por GPU.
+- **Contaminación Visual y Scrollbars Clandestinos:** Existencia de clases `overflow-x-auto` redundantes y altura fija `max-h-[calc(100vh-175px)]` en columnas que causaban scrollbars verticales espurios, y presencia de la pestaña "Notas" dentro del bloque de navegación operativa central.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Patrón "Memoización de Columnas":**
+   - Inyección del hook `tareasAgrupadasPorColumna = useMemo<Record<string, CanonicalTarea[]>>(...)` en `ViewKanban.tsx` indexado por `col.id`.
+   - Distribución atómica en una sola pasada $O(N)$ y ordenamiento previo con `ordenarTareas`, reduciendo a $O(1)$ el acceso en el mapeo de `<ColumnaKanban />`.
+2. **Optimización de Timers y Despacho Determinista:**
+   - Reducción del delay de `handlePopoverMouseLeave` de 280ms a `140ms` (latencia óptima).
+   - Tipado determinista de `leaveTimers.current` como `Record<string, number | null>` usando `window.setTimeout`.
+   - Cierre forzoso de popovers hermanos y purga de timers activos al invocar `handlePopoverMouseEnter`.
+3. **Patrón "Popovers Persistentes con Aceleración GPU":**
+   - Eliminación del renderizado condicional abrupto; persistencia de nodos en el DOM con clases:
+     `transition-all duration-150 ease-out transform-gpu origin-top`
+     - Cerrado: `opacity-0 scale-95 pointer-events-none invisible`.
+     - Abierto: `opacity-100 scale-100 pointer-events-auto visible`.
+   - Tokens canónicos Cobalt Aerodynamic: fondo `bg-[#0D1526]`, microborde `border-slate-800/80` y sombra multicapa `shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)]`.
+   - Purga de clases `bg-white`, `text-indigo-400` y `shadow-2xl`.
+4. **Erradicación de Scrollbars Clandestinos & Estandarización de Chasis:**
+   - Asignación de `id="board-kanban-container"` con `overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:hidden`.
+   - Eliminación de alturas fijas en `ColumnaKanban.tsx` adoptando `h-full min-h-0` y ocultamiento de scrollbars espurios con `[&::-webkit-scrollbar]:hidden`.
+5. **Reubicación de Pestaña Notas:**
+   - Desacoplamiento de la pestaña "Notas" del `<nav>` central maestro de `HeaderMaestro.tsx`, reubicándola como botón de acceso rápido independiente en el flanco derecho, separándola visualmente de las 4 vistas maestras operativas (Kanban, Portafolio, Hábitos, Finanzas) y preservando el atajo `5` e identificador `tab-nav-notas`.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test -- --run`: 200/200 pruebas superadas (23 suites en verde).
+- `npm run build`: Compilación y empaquetado de producción exitosos en 6.17s.
+
+---
+
+### [REQ-SYS-004-NOTAS: Refactorización Integral, Copiado y Cuadernos]
+**Fecha:** Noviembre 2026 | **Fase:** 4.86 | **Archivos Modificados:** `src/utils/entityNormalizer.ts`, `src/utils/toastCobalt.ts`, `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/SidebarCuadernos.tsx`, `src/components/Notas/TarjetaNota.tsx`, `src/components/Notas/EditorNotaModal.tsx`, `src/utils/__tests__/notasEntity.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Ausencia de Serializador Omnicanal Canónico:** Las notas modulares compuestas (con wishlist, checklists y markdown simultáneos) carecían de un exportador universal a texto plano puro, provocando que el usuario tuviese que copiar manualmente campos dispersos o que se filtraran IDs técnicos y UUIDs de sincronización.
+- **Persistencia Rígida de Cuadernos y Riesgo de Huérfanos:** No existía mecanismo para eliminar cuadernos personalizados (`blocksLocales`). Si se eliminaban únicamente de `localStorage`, las notas que aún conservaban dicho `block_nombre` en IndexedDB (Dexie) provocaban la resurrección inmediata del cuaderno en el siguiente ciclo reactivo.
+- **Layout Shifts en Sidebar de Cuadernos:** El colapso del menú lateral utilizaba anchos fijos flexbox (`w-64` vs `w-16`) que generaban saltos bruscos de maquetación y desbordamientos en resoluciones intermedias.
+- **Residuos Cromáticos Legacy:** El cuaderno activo y el carrusel móvil utilizaban tokens `indigo-*` (`bg-indigo-500/20 text-indigo-300 border-indigo-500/40`), violando el sistema canónico Cobalt Aerodynamic.
+- **Scroll Infinito en Vista de Lista:** En `modoVista === 'lista'`, `TarjetaNota` evaluaba y renderizaba el AST Markdown completo con `ReactMarkdown`, inflando el alto de cada tarjeta a cientos de píxeles e imposibilitando una visualización condensada estilo tabla.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Serializador Universal Coalescente (`serializarNotaATextoPlano`):**
+   - Implementado y exportado en `src/utils/entityNormalizer.ts`.
+   - Formatea secuencialmente: Título, Metadatos de Wishlist (`Costo: [MONEDA] [MONTO] | Estado: [ESTADO]` y `Enlace: [URL]`), Checklists marcados y pendientes (`[x]` / `[ ]`), Texto Markdown / libre (omitiendo estructuras JSON internas) y Etiquetas (`Tags: #tag1 #tag2`).
+   - Excluye incondicionalmente IDs correlativos, UUIDs primarios y campos de sincronización (`sync_status`, `updated_at`).
+2. **Inyección de Botón Copiar con Feedback Háptico:**
+   - Inyectado en `TarjetaNota.tsx` (tanto en footer de tarjeta masonry como en fila de modo lista) y en la cabecera de `EditorNotaModal.tsx`.
+   - Utiliza ícono `Copy` de Lucide (`strokeWidth={1.75}`), conmuta a `Check` (color emerald) durante 1500ms y despacha micro-notificación nativa `toastCobalt.exito('Nota copiada al portapapeles')`.
+3. **Eliminación Atómica de Cuadernos y Prevención de Resurrección:**
+   - En `VisorNotas.tsx`, implementación de `handleEliminarCuaderno(nombreBlock)`.
+   - Mutación masiva atómica en Dexie: `await db.notas.where('block_nombre').equals(nombreBlock).modify({ block_nombre: '', sync_status: 'pending', updated_at: nowIso })`.
+   - Purga de `blocksLocales` y `cuadernosMeta` en `localStorage`. Si el cuaderno eliminado estaba activo, conmuta de forma segura a `null` (Todas las Notas).
+   - En `SidebarCuadernos.tsx`, inyección de botón `Trash2` visible en hover (`group-hover:flex`) con diálogo de confirmación preventiva antes de ejecutar la acción.
+4. **Físicas CSS Grid y Micro-LED Cobalt:**
+   - En `VisorNotas.tsx`, conversión del chasis principal a CSS Grid dinámico:
+     `grid grid-cols-1 ${isSidebarCollapsed ? 'md:grid-cols-[64px_1fr]' : 'md:grid-cols-[256px_1fr]'} transition-[grid-template-columns] duration-300 ease-out`.
+   - En `SidebarCuadernos.tsx`, sustitución del borde tosco por el Micro-LED radiante canónico:
+     `before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:bg-sky-400 before:rounded-r before:shadow-[0_0_12px_#38bdf8]` con fondo `bg-sky-500/15` y microborde `border-sky-500/40`.
+   - Purga total de clases `indigo-*` en desktop y en `CarruselCuadernosMovil`.
+5. **Fila Bento Compacta para Vista de Lista:**
+   - En `TarjetaNota.tsx`, intercepción inmediata para `modoVista === 'lista'`, retornando una fila horizontal ultra-compacta `h-12 w-full px-3.5 py-1.5 flex items-center justify-between`:
+     * Lado izquierdo: `codigo_legado` (`font-mono text-[10px] text-slate-500 font-bold`), badge de block asignado y título truncado en una sola línea.
+     * Lado derecho: Cápsula de checklist `{completados}/{total}`, badge de wishlist con importe redondeado, fecha relativa y acciones rápidas (`Copy`, `Trash2`).
+     * Supresión completa del AST Markdown en lista, optimizando el rendimiento y garantizando densidad de información.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test`: 201/201 pruebas superadas (23 suites en verde, incluyendo nuevo test unitario de serialización).
+- `npm run build`: Compilación y empaquetado de producción exitosos en 6.16s.
+
+
+
+
+
+---
+
+### [REQ-SYS-011-PORTAFOLIO: Consolidación O(1) y Estética Cobalt en Dashboard]
+**Fecha:** Noviembre 2026 | **Fase:** 4.93 | **Archivos Modificados:** `src/components/Views/ViewPortafolio.tsx`, `src/components/PMO/TarjetaProyecto.tsx`, `src/components/PMO/FiltrosPortafolio.tsx`, `src/components/Habitos/Dashboard/RadarBalanceVida.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Contaminación Cromática por Indigo y Slate-100:** `ViewPortafolio.tsx` contenía 32 instancias de clases `indigo-*` y chasis `bg-slate-100 dark:bg-slate-950`. `TarjetaProyecto.tsx` presentaba botones y acentos indigo con bordes slate-200. `FiltrosPortafolio.tsx` aplicaba gradientes violeta/indigo en pastillas deslizantes y menús popover.
+- **Micro-LEDs Desalineados y Trazo Brillante en Radar:** Los estados de salud en las tarjetas PMO carecían del estándar canónico de micro-LED de anillo difuso (`ring-2 ring-emerald-400/20`), mientras que en `RadarBalanceVida.tsx` los trazos concéntricos utilizaban `stroke-slate-200` causando destellos claros sobre el fondo `#0D1526`.
+- **Layout Shifts (CLS) en Grid/Tabla y Tarjetas:** La alternancia entre cuadrícula y tabla carecía de reserva de altura y contención CSS. En las tarjetas, la presencia o ausencia del texto North Star OKR alteraba la altura de cada tarjeta en la cuadrícula generando alineaciones desparejas.
+- **Empty State Plano sin Elevación:** Al no encontrar proyectos o tener el portafolio en blanco, se renderizaba un contenedor con borde discontinuo plano (`border-dashed border-slate-300 dark:border-slate-800`) sin distinguir entre onboarding de inicio y búsqueda sin coincidencias.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Purga Final de Indigo y Adopción Cobalt Aerodynamic:**
+   - Erradicación del 100% de clases `indigo-*`, `bg-white` y `slate-100` en `ViewPortafolio.tsx`, `TarjetaProyecto.tsx` y `FiltrosPortafolio.tsx`.
+   - Chasis unificado `bg-[#040711] text-slate-100`, superficies flotantes `#0D1526`, microbordes `border-slate-800/40` y acentos `sky-500` / `sky-400` / `teal-400`.
+   - En `RadarBalanceVida.tsx`, reemplazo de `stroke-slate-200` y `stroke-slate-800/80` por `stroke-slate-800/60`.
+2. **Micro-LEDs de Salud Estandarizados:**
+   - En `TarjetaProyecto.tsx`, estandarización de indicadores de salud:
+     * En Rango: `bg-emerald-400 ring-2 ring-emerald-400/20`.
+     * En Riesgo: `bg-amber-400 ring-2 ring-amber-400/20`.
+     * Crítico / Bloqueado / Retrasado: `bg-rose-400 ring-2 ring-rose-400/20 animate-pulse`.
+3. **Contención Geométrica (Cero CLS):**
+   - En `ViewPortafolio.tsx`, inyección de `min-h-[520px] contain-layout [contain:layout]` en el contenedor condicional de cuadrícula (`#grid-proyectos-cards`) y contenedor de tabla (`#table-proyectos-wrapper`).
+   - En `TarjetaProyecto.tsx`, fijación de altura mínima base `min-h-[320px] flex flex-col justify-between` y encapsulación del North Star OKR en contenedor con `min-h-[20px]` para garantizar alineación uniforme.
+4. **Bento Empty State Dual:**
+   - Implementado en `ViewPortafolio.tsx` distinguiendo dos flujos de experiencia de usuario:
+     * **Onboarding (0 proyectos en DB):** Tarjeta Bento elevada `#0D1526` con ícono `FolderKanban` (`strokeWidth={1.75}`) en microcontenedor `bg-sky-950/40 border-sky-800/40 text-sky-400`, mensaje invitando a registrar la primera iniciativa y botón CTA primario `bg-sky-500 hover:bg-sky-400` para abrir `ModalNuevoProyecto`.
+     * **Sin coincidencias de filtro:** Tarjeta Bento elevada `#0D1526` con ícono `SearchX` (`strokeWidth={1.75}`) en microcontenedor `bg-slate-900/80 text-slate-400`, mensaje explicativo y botón ghost `bg-slate-800/80 text-sky-300` para restablecer filtros.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test`: 217/217 pruebas superadas (25 suites en verde, 100% passing).
+- `npm run build`: Compilación y empaquetado de producción exitosos en 8.19s (`vite v6.4.4`).
+
+---
+
+### [REQ-SYS-012-MODALS: Estandarización UI/UX, Tokens Cobalt, Pre-reserva Anti-CLS y Atajo Ctrl+Enter en Modales de Captura]
+**Fecha:** Noviembre 2026 | **Fase:** 4.94 | **Archivos Modificados:** `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalIngreso.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `src/components/Modals/ModalNuevoProyecto.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Residuos de Tokens Obsoletos:** `ModalNuevoProyecto.tsx` (34 instancias de `indigo-*` y 23 de `bg-white`/`border-slate-200`), `ModalTareaFlow.tsx` (9 instancias de `indigo-*`), `ModalGasto.tsx` y `ModalIngreso.tsx` presentaban estilos heredados incompatibles con el estándar Cobalt Aerodynamic.
+- **Layout Shifts (CLS) por Renderizado Condicional de Errores:** En los 4 modales, los mensajes de validación (`errorMsg`, `errorMsgSubtarea`) se montaban condicionalmente en el DOM (`{errorMsg && <p>...}`), empujando el contenido hacia abajo o alargando el modal abruptamente al disparar errores de validación.
+- **Ergonomía de Teclado Incompleta:** Los modales únicamente interceptaban la tecla `Escape` para cerrar la ventana, obligando al usuario a mover las manos al ratón para hacer clic en "Guardar", interrumpiendo el flujo de captura rápida de tareas, proyectos y transacciones.
+- **Inconsistencia de Chasis Flotante:** Ciertas ventanas modales utilizaban clases genéricas (`portal-surface elevation-3`, `bg-white dark:bg-[#0D1526]`) en vez del estándar canónico `bg-[#0D1526] border-slate-800/60 shadow-cobalt-2`.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Atajo Universal de Guardado (`Ctrl+Enter` / `Cmd+Enter`):**
+   - Inyectado en los listeners `keydown` de los 4 modales primarios (`ModalGasto`, `ModalIngreso`, `ModalTareaFlow`, `ModalNuevoProyecto`), permitiendo guardar y confirmar cambios de manera instantánea desde el teclado con `(e.ctrlKey || e.metaKey) && e.key === 'Enter'`.
+2. **Erradicación Total de Tokens Legacy & Adopción Cobalt Aerodynamic:**
+   - 100% de purga de clases `indigo-*`, `bg-white`, `border-slate-200`, `text-slate-900` y `text-black`.
+   - Chasis flotante primario unificado a `bg-[#0D1526] border-slate-800/60 shadow-cobalt-2`, cabeceras integradas `bg-[#0A101D]`, drag handles móviles `bg-slate-700` y backdrops inmersivos `bg-slate-950/80 backdrop-blur-xs`.
+   - Inputs, áreas de texto y selectores estilizados con tokens Cobalt: `bg-slate-900/60 border border-slate-800 text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50`.
+   - Botones primarios de guardado y acción rápida adaptados a `bg-sky-500 hover:bg-sky-400 text-white shadow-md shadow-sky-950/50`.
+3. **Pre-reserva de Altura Vertical Anti-CLS:**
+   - Sustitución de todo render condicional de error por contenedores con altura fija reservada (`min-h-[22px]` o `min-h-[24px]` flex items-center).
+   - El mensaje de error permanece dentro del contenedor con opacidad condicional (`opacity-100` vs `opacity-0 pointer-events-none`) y transición suave (`transition-opacity duration-200`), asegurando cero saltos de maquetación en validaciones.
+4. **Tipografía Numérica Canónica:**
+   - Aplicación estricta de `font-mono tabular-nums` para importes monetarios (PEN/USD/EUR), horas estimadas/reales (H:MM), códigos WBS (`PRO-XXX`, `WP-XXX`, `TAR-XXX`) y contadores de pasos/ítems.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test`: 217/217 pruebas superadas (25 suites en verde, 100% passing).
+- `npm run build`: Compilación y empaquetado de producción exitosos en 6.53s (`vite v6.4.4`).
+
+---
+
+### [REQ-SYS-013-ELECTRON: Redimensionamiento Dinámico de Ventana HUD (Anti-Hitbox Fantasma)]
+**Fecha:** Noviembre 2026 | **Fase:** 4.95 | **Archivos Modificados:** `desktop/main.js`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Hitbox Fantasma por Geometría Estática:** La ventana `BrowserWindow` del HUD de escritorio (`desktop/main.js`) mantenía dimensiones físicas fijas de `420x720px`. Aunque el fondo estuviese configurado como `#00000000` y `transparent: true`, el compositor de ventanas de Windows (DWM) continuaba capturando clics y eventos de rueda en todo el rectángulo transparente.
+- **Bloqueo del Escritorio en Modo Reposo:** Al colapsar el Cockpit en su cápsula mínima ("Floating Pill" de ~40px de alto), los ~600px transparentes inferiores actuaban como una máscara invisible que bloqueaba los clics del usuario sobre ventanas o iconos del escritorio subyacentes.
+- **Restricción de `minHeight` en BrowserWindow:** La configuración inicial definía `minHeight: 500`, lo que impedía que cualquier llamada a `win.setSize` redujera la ventana a la altura real de la cápsula colapsada.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Redimensionamiento Atómico en `widget-collapse`:**
+   - En `desktop/main.js`, actualización del listener IPC `widget-collapse`:
+     ```javascript
+     ipcMain.on('widget-collapse', (event) => {
+       const win = BrowserWindow.fromWebContents(event.sender) || mainWindow || widgetWin;
+       if (win && !win.isDestroyed()) {
+         win.setSize(420, 120, true);
+       }
+     });
+     ```
+   - El alto de `120px` deja margen holgado para las sombras y resplandores del pill, liberando de inmediato todo el espacio de escritorio inferior para interacción transparente sin colisiones.
+2. **Restauración Geométrica en `widget-expand`:**
+   - En `desktop/main.js`, actualización del listener IPC `widget-expand`:
+     ```javascript
+     ipcMain.on('widget-expand', (event) => {
+       const win = BrowserWindow.fromWebContents(event.sender) || mainWindow || widgetWin;
+       if (win && !win.isDestroyed()) {
+         win.setSize(420, 720, true);
+       }
+     });
+     ```
+   - Restaura instantáneamente la superficie táctica completa (720px) cuando el usuario pulsa para expandir el Cockpit diario.
+3. **Desbloqueo de Restricción Mínima (`minHeight: 100`):**
+   - Se ajustó `minHeight: 100` en las opciones de `BrowserWindow`, permitiendo a Electron contraer físicamente la ventana a 120px sin truncamiento.
+4. **Aislamiento y Cero Regresiones Frontend:**
+   - Cero modificaciones a la suite de React en `DailyCockpit.tsx` o `App.tsx`, preservando el contrato con `window.desktopWidget.expand()` y `window.desktopWidget.collapse()`.
+
+#### 3. Certificación QA
+- `node --check desktop/main.js`: Sintaxis JavaScript verificada con código 0.
+- `npx tsc --noEmit`: 0 errores de compilación estricta.
+- `npm test`: 217/217 pruebas superadas (25 suites en verde, 100% passing).
+
+---
+
+### [REQ-SYS-014-DEPLOY: Infraestructura de Empaquetado Binario Windows con Electron-Builder]
+**Fecha:** Noviembre 2026 | **Fase:** 4.96 | **Archivos Modificados:** `package.json`, `package-lock.json`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Carencia de Pipeline de Empaquetado Nativo (.exe):** La suite disponía de scripts para ejecución en caliente (`npm run widget`, `npm run widget:clean`), pero carecía de una herramienta y configuración de empaquetado para distribuir el HUD como instalador (`NSIS`) o binario portable (`.exe`) independiente para Windows.
+- **Ausencia de Configuración `electron-builder`:** Ni la raíz ni `desktop/` declaraban la clave `"build"` en `package.json`, ni existían archivos de configuración (`electron-builder.yml`), dejando sin definir la ruta de salida, los metadatos de aplicación (`appId`), el icono canónico y los archivos a empaquetar (`dist/` y `desktop/`).
+
+#### 2. Solución Quirúrgica Implementada
+1. **Instalación de Dependencia de Construcción:**
+   - Incorporación de `electron-builder` (`^26.18.0`) en `devDependencies` de `package.json`.
+2. **Inyección de Script de Empaquetado:**
+   - En `package.json` $\rightarrow$ `"scripts"`: `"build:desktop": "npm run build && electron-builder --win"`.
+   - Garantiza que cualquier invocación de empaquetado compile previamente los últimos cambios del frontend con TypeScript y Vite hacia `dist/`.
+3. **Configuración Canónica de `electron-builder`:**
+   - Declaración de la clave `"build"` en la raíz de `package.json`:
+     ```json
+     "build": {
+       "appId": "com.miportalweb.hud",
+       "productName": "MiPortalWeb HUD",
+       "directories": {
+         "output": "release"
+       },
+       "files": [
+         "desktop/**/*",
+         "dist/**/*",
+         "package.json"
+       ],
+       "extraMetadata": {
+         "main": "desktop/main.js"
+       },
+       "win": {
+         "target": [
+           "nsis",
+           "portable"
+         ],
+         "icon": "public/icon-512.png"
+       },
+       "nsis": {
+         "oneClick": false,
+         "allowToChangeInstallationDirectory": true
+       }
+     }
+     ```
+   - Directorio de entrega configurado en `release/`.
+   - Generación simultánea de instalador configurable (`NSIS`) y ejecutable directo sin instalación (`Portable`).
+
+#### 3. Certificación QA
+- **Validación JSON de `package.json`:** `node -e "JSON.parse(fs.readFileSync('package.json'))"` $\rightarrow$ **JSON Valid**.
+- **CLI Electron-Builder:** `npx electron-builder --help` $\rightarrow$ CLI operativo y listo para despacho.
+- **TypeScript Compiler:** `npx tsc --noEmit` $\rightarrow$ 0 errores de tipado estricto.
+- **Suite de Pruebas Unitarias Vitest:** `npm test` $\rightarrow$ 217/217 tests aprobados (25 suites).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exitoso en 6.49s (`dist/` regenerado).
+
+---
+
+### [REQ-SYS-015-BUILD: Despacho y Empaquetado Binario de Producción para Windows]
+**Fecha:** Noviembre 2026 | **Fase:** 4.97 | **Archivos Generados:** `release/MiPortalWeb HUD Setup 2.0.0.exe`, `release/MiPortalWeb HUD 2.0.0.exe`, `release/win-unpacked/`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Necesidad de Certificación del Artefacto Final:** Una vez definida la configuración de `electron-builder` en Fase 4.96, era indispensable ejecutar el ciclo de empaquetado binario completo para validar la descarga de dependencias nativas, empaquetado asar, resolución de paths relativos y creación sin errores de los entregables `.exe` en Windows.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Ejecución del Pipeline de Construcción:**
+   - Despacho del script de empaquetado unificado: `npm run build:desktop` (`npm run build && electron-builder --win`).
+   - Compilación exitosa del frontend React 19 + TypeScript + Vite hacia `dist/` en 6.35s (2,495 módulos transformados).
+   - Generación de binarios empaquetados en arquitectura `x64` para Windows 10/11 sin advertencias bloqueantes ni excepciones de ruta.
+2. **Artefactos Verificados en `release/`:**
+   - `MiPortalWeb HUD Setup 2.0.0.exe`: **170.73 MB** (`179,024,125 bytes`) — Instalador interactivo NSIS con soporte para selección de ruta de instalación.
+   - `MiPortalWeb HUD 2.0.0.exe`: **149.41 MB** (`156,672,183 bytes`) — Binario autónomo portable para ejecución inmediata sin instalación.
+   - `release/win-unpacked/`: Binario desempaquetado con `MiPortalWeb HUD.exe` y dependencias asar para validaciones rápidas.
+
+#### 3. Certificación QA
+- **Comando `npm run build:desktop`:** Exit Code 0 (Finalizado con éxito en ~4 minutos).
+- **Integridad de Entregables:** Verificados mediante `Get-ChildItem -Path release`.
+- **Cero Regresiones:** Compatibilidad íntegra con la arquitectura Local-First de Dexie y el servidor loopback local.
+
+---
+
+### [REQ-SYS-017-HOTFIX: Corrección Hitbox DWM en main.js y Recompilación Binaria]
+**Fecha:** Noviembre 2026 | **Fase:** 4.98 | **Archivos Modificados:** `desktop/main.js`, `DICCIONARIO_TECNICO_MAESTRO.md` | **Artefactos Recompilados:** `release/MiPortalWeb HUD Setup 2.0.0.exe`, `release/MiPortalWeb HUD 2.0.0.exe`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Bloqueo de Hit-testing por `resizable: false` en DWM:** En Windows 10/11, cuando un `BrowserWindow` frameless transparente tiene `resizable: false`, el compositor DWM desactiva el recálculo dinámico de la máscara de colisiones tras llamadas programáticas a `setSize()`, preservando el área de intercepción de 720px a pesar del cambio visual.
+- **Latencia de Redimensionamiento Asíncrono:** La invocación de `win.setSize(w, h, true)` con flag de animación provocaba que DWM no aplicara el nuevo viewport de forma instantánea.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Activación de `resizable: true` en `desktop/main.js`:**
+   - Permite que el subsistema Win32 y Chromium procesen los mensajes de cambio de tamaño (`WM_WINDOWPOSCHANGING`) y actualicen de inmediato la región física de captura del ratón.
+2. **Mutación Atómica a `win.setBounds`:**
+   - En `ipcMain.on('widget-collapse')`: `win.setBounds({ width: 420, height: 120 })`.
+   - En `ipcMain.on('widget-expand')`: `win.setBounds({ width: 420, height: 720 })`.
+   - `setBounds` aplica el nuevo tamaño de forma sincrónica y atómica a nivel de la API de ventanas de Electron.
+3. **Recompilación y Re-empaquetado Binario:**
+   - Ejecución de `npm run build:desktop` (`tsc && vite build && electron-builder --win`).
+   - Binarios `.exe` en `release/` sobreescritos con la corrección profunda incorporada.
+
+#### 3. Certificación QA
+- **Sintaxis JavaScript:** `node --check desktop/main.js` $\rightarrow$ 0 errores.
+- **Compilación de Empaquetado:** `npm run build:desktop` $\rightarrow$ Exit Code 0.
+- **Entregables Verificados en `release/`:**
+  * `MiPortalWeb HUD Setup 2.0.0.exe` (170.72 MB).
+  * `MiPortalWeb HUD 2.0.0.exe` (149.42 MB).

@@ -1,4 +1,4 @@
-import { db } from '../db/db';
+import { db, registrarTombstone } from '../db/db';
 import type { ActividadPersonal, SubtareaPaso, FrecuenciaCiclo, TareaRecord } from '../types';
 import { sincronizarActividadCalendar } from './calendarSyncService';
 import { sincronizarMetasInternasHaciaPlanesLocal } from './metasService';
@@ -13,7 +13,7 @@ import { sincronizarMetasInternasHaciaPlanesLocal } from './metasService';
 /**
  * Formatea un objeto Date en cadena 'YYYY-MM-DD'
  */
-export function formatFechaIsoLocal(date: Date): string {
+export function formatFechaIsoLocal(date: Date = new Date()): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
@@ -153,7 +153,8 @@ export async function completarActividadPersonalLocal(
     if (!esRutinaria) {
       nuevaRacha = rachaActual;
     } else {
-      const estaEnMora = actividad.fecha_programada < hoyStr;
+      const fProgLimpia = (actividad.fecha_programada || '').split(/[\sT]/)[0];
+      const estaEnMora = fProgLimpia < hoyStr;
       const ultimaComp = actividad.ultima_fecha_completado;
       if (estaEnMora && (!ultimaComp || ultimaComp < ayerStr)) {
         // Rompe racha por discontinuidad temporal al arrastrar mora
@@ -191,7 +192,7 @@ export async function completarActividadPersonalLocal(
     ultimaFechaCompletado = undefined;
     proximaFecha = undefined;
     nuevoEstado = '02_Por_Hacer';
-    if (esRutinaria && actividad.fecha_programada > hoyStr) {
+    if (esRutinaria && (actividad.fecha_programada || '').split(/[\sT]/)[0] > hoyStr) {
       nuevaFecha = hoyStr;
     }
   }
@@ -406,6 +407,7 @@ export async function eliminarActividadConAlcance(
 
   // Si no es recurrente o el alcance es ALL: eliminar registro por completo
   if (!tieneRecurrencia || alcance === 'ALL') {
+    await registrarTombstone('actividades_personales', id);
     await db.actividades_personales.delete(id);
     if (act.codigo_legado) {
       await db.subtareas_pasos.where('id_padre_vinculado').equals(act.codigo_legado).delete();

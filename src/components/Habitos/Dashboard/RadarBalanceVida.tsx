@@ -52,23 +52,23 @@ export const RadarBalanceVida: React.FC<RadarBalanceVidaProps> = ({ pilarCounts 
   const niveles = [0.25, 0.5, 0.75, 1.0];
 
   return (
-    <div className="portal-surface bg-white dark:bg-[#0D1526] p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800/40 shadow-xs flex flex-col justify-between h-full">
+    <div className="portal-surface bg-[#0D1526] p-5 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between h-full">
       {/* CABECERA WIDGET */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/60 mb-3">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-800/60 mb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-400">
+          <div className="w-8 h-8 rounded-xl bg-sky-950/60 flex items-center justify-center text-sky-400">
             <PieChart className="w-4 h-4" strokeWidth={1.75} />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+            <h3 className="text-sm font-bold text-slate-100">
               Balance de Vida (6 Dimensiones)
             </h3>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+            <p className="text-[11px] text-slate-400 font-medium">
               Distribución holística del desarrollo personal
             </p>
           </div>
         </div>
-        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono tabular-nums">
+        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 font-mono tabular-nums">
           {Object.values(pilarCounts).filter((c) => c > 0).length} / 6 activas
         </span>
       </div>
@@ -96,7 +96,7 @@ export const RadarBalanceVida: React.FC<RadarBalanceVidaProps> = ({ pilarCounts 
                 key={lvl}
                 d={path}
                 fill="none"
-                className="stroke-slate-200 dark:stroke-slate-800/80"
+                className="stroke-slate-800/60"
                 strokeWidth="1"
                 strokeDasharray={lvl === 1.0 ? 'none' : '3,3'}
               />
@@ -113,7 +113,7 @@ export const RadarBalanceVida: React.FC<RadarBalanceVidaProps> = ({ pilarCounts 
                 y1={cy}
                 x2={end.x}
                 y2={end.y}
-                className="stroke-slate-200 dark:stroke-slate-800/80"
+                className="stroke-slate-800/60"
                 strokeWidth="1"
               />
             );
@@ -184,22 +184,22 @@ export const RadarBalanceVida: React.FC<RadarBalanceVidaProps> = ({ pilarCounts 
       </div>
 
       {/* LEYENDA INFERIOR DE 6 PILARES */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800/60 shrink-0">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-3 border-t border-slate-800/60 shrink-0">
         {ORDEN_PILARES.map((cat) => {
           const cfg = CATEGORIAS_VIDA_MAP[cat];
           const count = pilarCounts[cat] || 0;
           return (
             <div
               key={cat}
-              className="flex items-center justify-between px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800/40 text-[10.5px]"
+              className="flex items-center justify-between px-2 py-1 rounded-lg bg-slate-900/60 border border-slate-800/40 text-[10.5px]"
             >
               <div className="flex items-center gap-1.5 truncate">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${cfg ? cfg.colorBarra : 'bg-slate-400'}`} />
-                <span className="text-slate-600 dark:text-slate-300 truncate font-medium">
+                <span className="text-slate-300 truncate font-medium">
                   {cfg ? cfg.nombre : cat}
                 </span>
               </div>
-              <span className="font-mono font-bold text-slate-700 dark:text-slate-200 tabular-nums ml-1">
+              <span className="font-mono font-bold text-slate-200 tabular-nums ml-1">
                 {count}
               </span>
             </div>

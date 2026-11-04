@@ -1,16 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import type { ActividadPersonal, SubtareaPaso, AlcanceRecurrencia, MetaPlanRecord } from '../../types';
 import { CATEGORIAS_VIDA_MAP } from '../../types';
 import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
-import { ModalAlcanceRecurrencia } from '../Modals/ModalAlcanceRecurrencia';
 import {
   Check, Flame, Calendar, Clock, DollarSign, PlusCircle, Pencil, Trash2,
   HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee, AlertTriangle,
   Target, ListTodo, ArrowUpRight
 } from 'lucide-react';
-import Swal from 'sweetalert2';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
-import { recalcularProgresoMetaLocal } from '../../services/metasService';
+import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 
 export const renderIconoCategoriaVida = (icono: string, className = "w-3 h-3") => {
   switch (icono) {
@@ -24,28 +22,33 @@ export const renderIconoCategoriaVida = (icono: string, className = "w-3 h-3") =
   }
 };
 
-interface TarjetaHabitoProps {
+export interface TarjetaHabitoProps {
   actividad: ActividadPersonal;
   subtareas: SubtareaPaso[];
   metaVinculada?: MetaPlanRecord;
   actividadesVinculadas?: any[];
+  optimisticCompletado?: boolean;
   onToggleCompletar: (actividad: ActividadPersonal, completadoDeseado: boolean) => Promise<{ actividadActualizada: ActividadPersonal; esRepetida: boolean; nuevaRacha: number }>;
-  onRegistrarAvance: (actividad: ActividadPersonal, valor: number) => Promise<{ actividadActualizada: ActividadPersonal; rachaRescatada: boolean; metaCompletada: boolean }>;
+  onRegistrarAvance?: (actividad: ActividadPersonal, valor: number) => Promise<{ actividadActualizada: ActividadPersonal; rachaRescatada: boolean; metaCompletada: boolean }>;
+  onAbrirAvance?: (actividad: ActividadPersonal) => void;
   onToggleSubtarea: (idSubtarea: string, deseado?: boolean) => Promise<{ success: boolean; error?: string }>;
   onEditar?: (actividad: ActividadPersonal, alcance?: AlcanceRecurrencia) => void;
+  onVerDetalle?: (actividad: ActividadPersonal) => void;
   onEliminar?: (actividad: ActividadPersonal, alcance?: AlcanceRecurrencia) => void;
   onAbrirMeta360?: (meta: MetaPlanRecord) => void;
 }
 
-export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
+const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
   actividad,
   subtareas,
   metaVinculada,
   actividadesVinculadas,
+  optimisticCompletado,
   onToggleCompletar,
-  onRegistrarAvance,
+  onAbrirAvance,
   onToggleSubtarea,
   onEditar,
+  onVerDetalle,
   onEliminar,
   onAbrirMeta360
 }) => {
@@ -68,11 +71,8 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
     (actividad as any).Codigo ||
     '';
 
-  const [modalAlcanceAbierto, setModalAlcanceAbierto] = useState(false);
-  const [accionAlcance, setAccionAlcance] = useState<'editar' | 'eliminar'>('editar');
-
   const catConfig = CATEGORIAS_VIDA_MAP[actividad.categoria_vida] || CATEGORIAS_VIDA_MAP.SALUD_DEPORTE;
-  const hoyStr = new Date().toISOString().split('T')[0];
+  const hoyStr = formatFechaIsoLocal();
   const tieneRecurrencia = Boolean(
     (actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'NINGUNA') ||
     (actividad.regla_repeticion && actividad.regla_repeticion.trim() !== '')
@@ -91,95 +91,55 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
   };
   const diasMora = diferenciaEnDias(hoyStr, actividad.fecha_programada);
 
+  const updatedLocalStr = actividad.updated_at
+    ? formatFechaIsoLocal(new Date(actividad.updated_at))
+    : '';
+  const fProgLimpia = (actividad.fecha_programada || '').split(/[\sT]/)[0];
+
   const esCumplidoHoy = (diasMora === 0 || actividad.estado === '04_Completado') && (
-    actividad.estado === '04_Completado' || 
+    actividad.estado === '04_Completado' ||
     actividad.ultima_fecha_completado === hoyStr ||
-    (Boolean(actividad.updated_at && actividad.updated_at.startsWith(hoyStr)) && (actividad.racha_actual || 0) > 0 && actividad.fecha_programada >= hoyStr) ||
-    (esRutinaria && actividad.fecha_programada > hoyStr && (actividad.racha_actual || 0) > 0)
+    (updatedLocalStr === hoyStr && (actividad.racha_actual || 0) > 0 && fProgLimpia >= hoyStr) ||
+    (esRutinaria && fProgLimpia > hoyStr && (actividad.racha_actual || 0) > 0)
   );
-  const esCompletada = esCumplidoHoy;
+
+  // UI Optimista de completado (0ms) con fallback a la evaluación calculada
+  const esCompletada = optimisticCompletado !== undefined ? optimisticCompletado : esCumplidoHoy;
   const esHabitual = actividad.tipo_compromiso === 'HABITUAL';
   const racha = actividad.racha_actual || 0;
 
-
-  // Handlers de acción con alcance
+  // Handlers de acción
   const handleSolicitarEditar = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!onEditar) return;
-    onEditar(actividad);
+    const actConTitulo: ActividadPersonal = {
+      ...actividad,
+      nombre_actividad: tituloHabito
+    };
+    if (onEditar) {
+      onEditar(actConTitulo);
+    } else if (onVerDetalle) {
+      onVerDetalle(actConTitulo);
+    }
   };
 
-  const handleSolicitarEliminar = async (e: React.MouseEvent) => {
+  const handleSolicitarEliminar = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onEliminar) return;
-    if (esRutinaria) {
-      setAccionAlcance('eliminar');
-      setModalAlcanceAbierto(true);
-    } else {
-      const confirm = await Swal.fire({
-        title: '¿Eliminar actividad?',
-        text: `Se borrará "${tituloHabito}".`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Sí, eliminar',
-        cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#e11d48',
-        cancelButtonColor: '#475569',
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
-      if (confirm.isConfirmed) {
-        onEliminar(actividad, 'ALL');
-      }
-    }
+    const actConTitulo = { ...actividad, nombre_actividad: tituloHabito };
+    onEliminar(actConTitulo);
   };
 
-  const handleSeleccionarAlcance = (alcance: AlcanceRecurrencia) => {
-    setModalAlcanceAbierto(false);
-    if (accionAlcance === 'eliminar' && onEliminar) {
-      onEliminar(actividad, alcance);
-    }
-  };
-
+  // Toggle de check-in con respuesta reactiva optimista instantánea
   const handleToggleCheck = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const nuevoEstadoDeseado = !esCompletada;
-
-    const res = await onToggleCompletar(actividad, nuevoEstadoDeseado);
-
-    const Toast = Swal.mixin({
-      toast: true,
-      position: 'top-end',
-      showConfirmButton: false,
-      timer: 1600,
-      timerProgressBar: true,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
-
-    if (nuevoEstadoDeseado) {
-      const msgRacha = esHabitual && res.nuevaRacha > 0
-        ? ` · ¡Racha de ${res.nuevaRacha} ${res.nuevaRacha === 1 ? 'día' : 'días'}!`
-        : ' · ¡Objetivo cumplido!';
-
-      Toast.fire({
-        icon: 'success',
-        title: '¡Hábito Cumplido!',
-        text: `${tituloHabito}${msgRacha}`
-      });
-    } else {
-      Toast.fire({
-        icon: 'info',
-        title: 'Hábito Reabierto',
-        text: `${tituloHabito} marcado como pendiente`
-      });
-    }
+    await onToggleCompletar(actividad, nuevoEstadoDeseado);
   };
 
   const metaAsociada = metaVinculada || actividad.metaVinculada;
   const actividadesAsociadas = actividadesVinculadas || actividad.actividadesVinculadas || [];
 
-  // Normalización unificada de meta (REQ-HABITS-METAS-INTEGRATION-14 & FIX-HABITOS-ACTIVIDADES-METAS-LINK-103)
+  // Normalización unificada de meta
   const metaEfectiva = {
     titulo: metaAsociada?.nombre_meta || actividad.meta_macro_nombre || 'Meta Cuantificable',
     total: metaAsociada?.meta_objetivo_total || actividad.meta_objetivo_total || 0,
@@ -190,12 +150,15 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
 
   const progresoMetaCalculado = useMemo(() => {
     if (!metaAsociada) return null;
-    const tot = metaAsociada.meta_objetivo_total || 0;
-    const act = metaAsociada.valor_acumulado_actual || 0;
-    if (tot > 0) {
-      return Math.min(100, Math.round((act / tot) * 100));
+    const pct = (metaAsociada as any).porcentaje_completado;
+    if (typeof pct === 'number') {
+      return pct;
     }
-    if (metaAsociada.estado === '03_Completado' || metaAsociada.estado === 'COMPLETADA') {
+    if (metaAsociada.meta_objetivo_total && metaAsociada.meta_objetivo_total > 0) {
+      const act = metaAsociada.valor_acumulado_actual || (metaAsociada as any).valor_acumulado || 0;
+      return Math.min(100, Math.round((act / metaAsociada.meta_objetivo_total) * 100));
+    }
+    if (metaAsociada.estado === '03_Logrado') {
       return 100;
     }
     return null;
@@ -207,74 +170,20 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
   const rescateMin = metaEfectiva.rescateMin;
   const uMed = metaEfectiva.unidad;
 
-  const handleAbrirAvanceCuantitativo = (e: React.MouseEvent) => {
+  const handleAbrirAvanceModal = (e: React.MouseEvent) => {
     e.stopPropagation();
-
-    const valAcum = metaEfectiva.actual;
-    const metaTot = metaEfectiva.total;
-    const rescMin = metaEfectiva.rescateMin;
-    const metaDia = actividad.meta_diaria_estandar || 0;
-
-    Swal.fire({
-      title: 'Registrar Avance Cuantitativo',
-      background: '#0D1526',
-      color: '#f8fafc',
-      html: `
-        <div class="text-left text-xs space-y-2 mb-3 text-slate-300">
-          <p><strong>Meta:</strong> ${metaEfectiva.titulo}</p>
-          <p><strong>Acumulado actual:</strong> <span class="font-mono font-bold text-cyan-400">${valAcum} ${uMed}</span> ${metaTot > 0 ? `(de ${metaTot})` : ''}</p>
-          ${rescMin > 0 ? `<p class="text-amber-400"><strong>Rescate mínimo de racha:</strong> ≥ ${rescMin} ${uMed}</p>` : ''}
-          ${metaDia > 0 ? `<p class="text-slate-400"><strong>Meta diaria estándar:</strong> ${metaDia} ${uMed}</p>` : ''}
-        </div>
-        <input type="number" step="any" min="0" id="swal-inp-avance" class="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-cyan-400" placeholder="Cantidad de ${uMed}">
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'Registrar',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#0891b2',
-      preConfirm: () => {
-        const input = document.getElementById('swal-inp-avance') as HTMLInputElement | null;
-        const val = input ? parseFloat(input.value) : NaN;
-        if (isNaN(val) || val <= 0) {
-          Swal.showValidationMessage('Ingresa un valor numérico válido mayor a 0');
-          return false;
-        }
-        return val;
-      }
-    }).then(async (result) => {
-      if (result.isConfirmed && typeof result.value === 'number') {
-        const val = result.value;
-        const res = await onRegistrarAvance(actividad, val);
-
-        // Recalcular progreso en la meta padre vinculada si existe
-        if (metaAsociada?.id) {
-          recalcularProgresoMetaLocal(metaAsociada.id).catch((err) =>
-            console.error('[TarjetaHabito] Error al recalcular progreso de meta padre:', err)
-          );
-        }
-
-        if (res.rachaRescatada) {
-          Swal.fire({
-            icon: 'success',
-            title: '¡Racha Rescatada!',
-            text: `Has alcanzado el mínimo requerido (≥ ${rescMin} ${uMed}). Racha actual: ${res.actividadActualizada.racha_actual} días`,
-            timer: 2200,
-            showConfirmButton: false,
-            background: '#0D1526',
-            color: '#f8fafc'
-          });
-        }
-      }
-    });
+    if (onAbrirAvance) {
+      onAbrirAvance(actividad);
+    }
   };
 
   return (
     <div
-      className={`portal-surface p-3 pl-3.5 space-y-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] border rounded-xl relative overflow-hidden ${
-        esCompletada
+      style={{ contain: 'layout paint' }}
+      className={`group portal-surface min-h-[140px] p-3 pl-3.5 space-y-2.5 transition-all duration-150 ease-out border rounded-xl relative overflow-hidden will-change-[transform,opacity] ${esCompletada
           ? 'opacity-65 border-slate-800/40 bg-[#070B14]/90'
-          : 'border-slate-800/40 hover:border-slate-700 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/50 bg-[#0D1526]'
-      }`}
+          : 'border-slate-800/40 hover:border-slate-700/80 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/50 bg-[#0D1526]'
+        }`}
     >
       {/* Micro-franja lateral de acento semántico por categoría */}
       <div
@@ -282,13 +191,13 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         title={`Categoría: ${catConfig.nombre}`}
       />
 
-      {/* FILA 1: Metadatos superiores y Acciones */}
+      {/* FILA 1: Metadatos superiores y Acciones Silenciosas */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           {/* Badge de código canónico */}
           {codigoHabito ? (
             <span
-              className="font-mono text-[11px] font-medium text-sky-400 bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.5 rounded select-none shrink-0"
+              className="font-mono text-[11px] font-medium text-sky-400 bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.5 rounded select-none shrink-0 tabular-nums"
               title={`Código: ${codigoHabito}`}
             >
               {codigoHabito}
@@ -303,7 +212,7 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
             {renderIconoCategoriaVida(catConfig.icono, "w-3 h-3")}
           </span>
 
-          {/* Cápsula compacta de mora sin emojis en DOM */}
+          {/* Cápsula compacta de mora */}
           {diasMora > 0 && !esCompletada && (
             <span
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-mono tabular-nums font-semibold shrink-0"
@@ -321,19 +230,18 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
           )}
         </div>
 
-        {/* Racha y Botones de acción rápida */}
-        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+        {/* Racha y Botones de acción rápida con Ley de Silencio Visual (Hover Suave sin Layout Shifts) */}
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto min-h-[24px]">
           {racha > 0 && (
             <span
-              className={`flex items-center gap-1 text-[11px] font-mono border px-2 py-0.5 rounded-full ${
-                racha >= 7
+              className={`flex items-center gap-1 text-[11px] font-mono border px-2 py-0.5 rounded-full shrink-0 ${racha >= 7
                   ? 'text-amber-300 bg-amber-950/40 border-amber-800/40 shadow-xs'
                   : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
-              }`}
+                }`}
               title={`Racha consecutiva de ${racha} días`}
             >
               <Flame className={`w-3 h-3 ${racha >= 7 ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} strokeWidth={1.75} />
-              <span className="tabular-nums">{racha} d</span>
+              <span className="tabular-nums font-mono">{racha} d</span>
             </span>
           )}
 
@@ -343,64 +251,70 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
             tituloEntidad={tituloHabito}
           />
 
-          {onEditar && (
-            <button
-              type="button"
-              onClick={handleSolicitarEditar}
-              className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
-              title="Editar hábito"
-            >
-              <Pencil className="w-3.5 h-3.5" strokeWidth={1.75} />
-            </button>
-          )}
+          {/* Acciones Secundarias: Reveladas en Hover suave con ancho estable */}
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
+            {onEditar && (
+              <button
+                type="button"
+                onClick={handleSolicitarEditar}
+                className="text-slate-400 hover:text-sky-300 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
+                title="Editar hábito"
+              >
+                <Pencil className="w-3.5 h-3.5" strokeWidth={1.75} />
+              </button>
+            )}
 
-          {onEliminar && (
-            <button
-              type="button"
-              onClick={handleSolicitarEliminar}
-              className="text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
-              title="Eliminar hábito"
-            >
-              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
-            </button>
-          )}
+            {onEliminar && (
+              <button
+                type="button"
+                onClick={handleSolicitarEliminar}
+                className="text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
+                title="Eliminar hábito"
+              >
+                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* FILA 2: Checkbox + Título con ancho completo */}
+      {/* FILA 2: Checkbox Instantáneo (0ms) + Título */}
       <div className="flex items-start gap-2.5 mb-3">
         <button
           type="button"
           onClick={handleToggleCheck}
-          className="mt-0.5 shrink-0 focus:outline-none group/chk active:scale-95 transition-transform"
+          className="mt-0.5 shrink-0 focus:outline-none group/chk active:scale-95 transition-transform cursor-pointer"
           title={esCompletada ? 'Marcar como pendiente' : 'Marcar como completado'}
         >
-          {/* Checkbox estilizado Cobalt */}
+          {/* Checkbox Cobalt Aerodynamic con físicas fluidas GPU y cero layout shifts */}
           <div
-            className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
-              esCompletada
-                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-xs ring-2 ring-emerald-500/20'
+            className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all duration-200 ease-out transform-gpu ${esCompletada
+                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.25)] ring-2 ring-emerald-500/20'
                 : 'border-slate-600 bg-slate-900/60 group-hover/chk:border-slate-400'
-            }`}
+              }`}
           >
-            {esCompletada && <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
+            <Check
+              className={`w-3.5 h-3.5 text-emerald-400 transition-all duration-200 ease-out transform-gpu ${
+                esCompletada ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'
+              }`}
+              strokeWidth={1.75}
+            />
           </div>
         </button>
 
         <h4
           onClick={handleSolicitarEditar}
-          className={`text-sm sm:text-base font-medium leading-snug break-words flex-1 select-none transition-colors ${
-            esCompletada
+          className={`text-sm sm:text-base font-medium leading-snug break-words flex-1 select-none transition-colors ${esCompletada
               ? 'line-through text-slate-500'
               : 'text-slate-100'
-          } ${onEditar ? 'cursor-pointer hover:text-emerald-300' : ''}`}
+            } ${onEditar ? 'cursor-pointer hover:text-emerald-300' : ''}`}
           title={onEditar ? `${tituloHabito} (Click para editar)` : tituloHabito}
         >
           {tituloHabito}
         </h4>
       </div>
 
-      {/* Badge / Indicador de Meta Vinculada (FIX-HABITOS-ACTIVIDADES-METAS-LINK-103) */}
+      {/* Badge / Indicador de Meta Vinculada */}
       {(metaAsociada || (actividad.meta_macro_nombre && actividad.meta_macro_nombre.trim() !== '')) && (
         <div
           onClick={(e) => {
@@ -409,9 +323,8 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
               onAbrirMeta360(metaAsociada);
             }
           }}
-          className={`flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/30 border border-sky-800/40 text-[11px] transition-all duration-150 ${
-            metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:bg-sky-950/50 hover:border-sky-700/60' : ''
-          }`}
+          className={`flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/30 border border-sky-800/40 text-[11px] transition-all duration-150 ${metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:bg-sky-950/50 hover:border-sky-700/60' : ''
+            }`}
           title={metaAsociada ? `Meta: ${metaAsociada.nombre_meta}${onAbrirMeta360 ? ' (Clic para abrir Vista 360°)' : ''}` : `Meta: ${actividad.meta_macro_nombre}`}
         >
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -439,31 +352,30 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         </div>
       )}
 
-      {/* Resumen / Conteo de Actividades Asociadas (FIX-HABITOS-ACTIVIDADES-METAS-LINK-103 & DIAG-104) */}
-      <div className="space-y-1 p-2 rounded-xl bg-indigo-950/20 border border-indigo-800/40 text-[11px]">
-        <div className="flex items-center justify-between gap-1 text-[10.5px]">
-          <div className="flex items-center gap-1.5 text-indigo-300">
-            <ListTodo className="w-3.5 h-3.5 text-indigo-400 shrink-0" strokeWidth={1.75} />
-            <span className="font-semibold">Actividades Vinculadas</span>
+      {/* Resumen / Conteo de Subtareas y Pasos Vinculados */}
+      {actividadesAsociadas.length > 0 && (
+        <div className="space-y-1 p-2 rounded-xl bg-sky-950/20 border border-sky-800/40 text-[11px]">
+          <div className="flex items-center justify-between gap-1 text-[10.5px]">
+            <div className="flex items-center gap-1.5 text-sky-300">
+              <ListTodo className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+              <span className="font-semibold">Subtareas / Pasos</span>
+            </div>
+            <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-sky-950/60 text-sky-300 border border-sky-800/60">
+              {actividadesAsociadas.length} {actividadesAsociadas.length === 1 ? 'paso' : 'pasos'}
+            </span>
           </div>
-          <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-indigo-950/60 text-indigo-300 border border-indigo-800/60">
-            {actividadesAsociadas.length} {actividadesAsociadas.length === 1 ? 'actividad' : 'actividades'}
-          </span>
-        </div>
 
-        {actividadesAsociadas.length > 0 ? (
           <div className="flex flex-wrap gap-1 pt-0.5">
             {actividadesAsociadas.slice(0, 3).map((actItem: any, idx: number) => {
-              const nombre = actItem.nombre_actividad || actItem.nombre_tarea_actividad || actItem.nombre || actItem.Nombre || `Actividad ${idx + 1}`;
-              const completado = actItem.estado === '04_Completado' || actItem.estado_tarea === '04_Completado' || actItem.completado === true;
+              const nombre = actItem.nombre_actividad || actItem.descripcion_paso || actItem.nombre || `Paso ${idx + 1}`;
+              const completado = actItem.estado === '04_Completado' || actItem.completado === true;
               return (
                 <span
                   key={actItem.id || idx}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium border transition-colors ${
-                    completado
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium border transition-colors ${completado
                       ? 'bg-emerald-950/30 text-emerald-300 border-emerald-800/40 line-through opacity-75'
                       : 'bg-slate-900/80 text-slate-300 border-slate-800/80'
-                  }`}
+                    }`}
                   title={nombre}
                 >
                   <span className="truncate max-w-[130px]">{nombre}</span>
@@ -476,12 +388,8 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
               </span>
             )}
           </div>
-        ) : (
-          <div className="text-[9.5px] text-slate-400 italic pt-0.5">
-            Sin tareas operativas vinculadas directamente
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Subtareas / Checklist Procedural */}
       {subtareas && subtareas.length > 0 && (
@@ -492,7 +400,7 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
         />
       )}
 
-      {/* Barra de Avance Cuantitativo (Fase 4.8 / REQ-HABITS-METAS-INTEGRATION-14) */}
+      {/* Barra de Avance Cuantitativo */}
       {(metaTotal > 0 || valorAcum > 0 || actividad.meta_macro_nombre || Boolean(metaAsociada)) && (
         <div className="space-y-1.5 p-2 rounded-xl bg-cyan-950/20 border border-cyan-800/40 text-[11px]">
           <div className="flex items-center justify-between gap-1 flex-wrap font-mono">
@@ -504,9 +412,8 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
                     onAbrirMeta360(metaAsociada);
                   }
                 }}
-                className={`font-bold text-cyan-200 truncate ${
-                  metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:text-sky-300 hover:underline' : ''
-                }`}
+                className={`font-bold text-cyan-200 truncate ${metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:text-sky-300 hover:underline' : ''
+                  }`}
                 title={metaAsociada ? `${metaEfectiva.titulo} (Clic para Vista 360°)` : metaEfectiva.titulo}
               >
                 {metaEfectiva.titulo}
@@ -525,7 +432,7 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
                 </button>
               )}
             </div>
-            <span className="font-bold text-cyan-300 tabular-nums">
+            <span className="font-bold text-cyan-300 font-mono tabular-nums">
               {valorAcum}{metaTotal > 0 ? ` / ${metaTotal}` : ''} {uMed}
             </span>
           </div>
@@ -541,15 +448,15 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
 
           <div className="flex items-center justify-between gap-1 pt-0.5">
             {rescateMin > 0 && (
-              <span className="inline-flex items-center gap-1 text-[9.5px] px-1.5 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 font-semibold">
+              <span className="inline-flex items-center gap-1 text-[9.5px] px-1.5 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 font-semibold font-mono tabular-nums">
                 Rescate: ≥ {rescateMin} {uMed}
               </span>
             )}
 
             <button
               type="button"
-              onClick={handleAbrirAvanceCuantitativo}
-              className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[10px] shadow-xs transition active:scale-95 flex items-center gap-1"
+              onClick={handleAbrirAvanceModal}
+              className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-800/60 font-semibold text-[10px] transition active:scale-95 flex items-center gap-1 cursor-pointer"
               title="Registrar avance cuantitativo"
             >
               <PlusCircle className="w-3 h-3" />
@@ -593,16 +500,26 @@ export const TarjetaHabito: React.FC<TarjetaHabitoProps> = ({
           </span>
         )}
       </div>
-
-      {/* Modal de Alcance de Recurrencia */}
-      <ModalAlcanceRecurrencia
-        isOpen={modalAlcanceAbierto}
-        accion={accionAlcance}
-        tituloActividad={tituloHabito}
-        fechaActual={actividad.fecha_programada}
-        onSeleccionarAlcance={handleSeleccionarAlcance}
-        onClose={() => setModalAlcanceAbierto(false)}
-      />
     </div>
   );
 };
+
+// Comparador atómico de props primitivos (60-120 FPS sin regresiones de reconciliación)
+export const areHabitoPropsEqual = (prev: TarjetaHabitoProps, next: TarjetaHabitoProps): boolean => {
+  return (
+    prev.actividad.id === next.actividad.id &&
+    prev.actividad.updated_at === next.actividad.updated_at &&
+    prev.actividad.estado === next.actividad.estado &&
+    prev.actividad.racha_actual === next.actividad.racha_actual &&
+    prev.actividad.valor_acumulado_actual === next.actividad.valor_acumulado_actual &&
+    prev.actividad.fecha_programada === next.actividad.fecha_programada &&
+    prev.actividad.ultima_fecha_completado === next.actividad.ultima_fecha_completado &&
+    prev.optimisticCompletado === next.optimisticCompletado &&
+    prev.subtareas?.length === next.subtareas?.length &&
+    prev.metaVinculada?.id === next.metaVinculada?.id &&
+    (prev.metaVinculada?.valor_acumulado_actual ?? (prev.metaVinculada as any)?.valor_acumulado) ===
+      (next.metaVinculada?.valor_acumulado_actual ?? (next.metaVinculada as any)?.valor_acumulado)
+  );
+};
+
+export const TarjetaHabito = React.memo(TarjetaHabitoComponent, areHabitoPropsEqual);

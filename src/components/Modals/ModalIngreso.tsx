@@ -21,7 +21,6 @@ import {
   Save,
   Trash2
 } from 'lucide-react';
-import Swal from 'sweetalert2';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 
 export interface ModalIngresoProps {
@@ -39,6 +38,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
 }) => {
   useBodyScrollLock(isOpen);
   const { programarEliminacion } = useUndoDelete();
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Modo Dual: Real vs Programado
   const [modoDual, setModoDual] = useState<'REAL' | 'PROGRAMADO'>('REAL');
@@ -69,6 +69,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
   // Carga o reset
   useEffect(() => {
     if (!isOpen) return;
+    setErrorMsg(null);
 
     if (ingresoEditar) {
       setDescripcion(ingresoEditar.descripcion_ingreso || '');
@@ -105,36 +106,18 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
     }
   };
 
-  // Listener de Escape
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
   if (!isOpen) return null;
 
   const montoNum = parseFloat(montoOriginal) || 0;
   const montoPEN = Number((montoNum * tipoCambio).toFixed(2));
 
-  const handleGuardar = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGuardar = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!descripcion.trim() || montoNum <= 0) {
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'warning',
-        title: 'Ingresa una descripción y monto válido',
-        showConfirmButton: false,
-        timer: 2000,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+      setErrorMsg('Ingresa una descripción y monto válido');
       return;
     }
+    setErrorMsg(null);
 
     const nowIso = new Date().toISOString();
     let codigoLegado = ingresoEditar?.codigo_legado;
@@ -166,20 +149,24 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
 
     await db.ingresos.put(payload);
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: ingresoEditar ? 'Ingreso modificado' : modoDual === 'REAL' ? 'Ingreso registrado en Tesorería' : 'Cobro proyectado guardado',
-      showConfirmButton: false,
-      timer: 2000,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
-
     if (onGuardadoExitoso) onGuardadoExitoso(payload);
     onClose();
   };
+
+  // Listener de Teclado (Escape y Ctrl+Enter / Cmd+Enter)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleGuardar();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, handleGuardar]);
 
   const handleEliminar = () => {
     if (!ingresoEditar) return;
@@ -200,36 +187,37 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
   return createPortal(
     <div
       id="modal-ingreso"
-      className="fixed inset-0 z-[10000] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn"
+      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         id="modal-ingreso-card"
-        className="portal-surface elevation-3 w-full max-w-xl max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xl relative bg-white dark:bg-[#0D1526] text-slate-800 dark:text-slate-100"
+        className="portal-surface elevation-3 w-full max-w-xl max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/60 shadow-cobalt-2 relative bg-[#0D1526] text-slate-100"
       >
         {/* Drag handle móvil */}
-        <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
+        <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
 
         {/* Cabecera */}
         <div
           id="modal-ingreso-header"
-          className="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-emerald-50/50 dark:bg-emerald-950/30 backdrop-blur-xs"
+          className="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-800 flex justify-between items-center bg-[#0D1526]/80 backdrop-blur-xs"
         >
           <div className="flex items-center gap-2">
             <span
               id="badge-ingreso-header-dot"
-              className={`w-3 h-3 rounded-full shadow-xs ${modoDual === 'REAL' ? 'bg-emerald-500' : 'bg-amber-500'
-                }`}
+              className={`w-3 h-3 rounded-full shadow-xs ${
+                modoDual === 'REAL' ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}
             />
             <div>
-              <h3 id="txt-modal-ingreso-titulo" className="font-bold text-sm text-emerald-900 dark:text-emerald-300 leading-tight">
+              <h3 id="txt-modal-ingreso-titulo" className="font-bold text-sm text-emerald-400 leading-tight">
                 {ingresoEditar
                   ? `Modificar Ingreso (${ingresoEditar.codigo_legado})`
                   : modoDual === 'REAL'
-                    ? 'Registrar Ingreso Inmediato'
-                    : 'Registrar Ingreso Programado'}
+                  ? 'Registrar Ingreso Inmediato'
+                  : 'Registrar Ingreso Programado'}
               </h3>
               <span className="text-[10px] text-slate-400">Inyección de liquidez y cobros proyectados</span>
             </div>
@@ -237,17 +225,18 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
           <div className="flex items-center gap-2">
             <span
               id="badge-ingreso-modo"
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${modoDual === 'REAL'
-                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                }`}
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                modoDual === 'REAL'
+                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                  : 'bg-amber-950 text-amber-300 border border-amber-800/60'
+              }`}
             >
               {modoDual === 'REAL' ? 'Real / Inmediato' : 'Programado / Futuro'}
             </span>
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white transition cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
               title="Cerrar (Esc)"
             >
               <X className="w-4 h-4" />
@@ -255,26 +244,46 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
           </div>
         </div>
 
+        {/* Micro-banner de Error de Validación Inline con Altura Reservada Anti-CLS */}
+        <div className="mx-5 min-h-[24px] mt-2 flex items-center">
+          <div
+            className={`w-full px-3 py-1 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center justify-between transition-opacity duration-200 ${
+              errorMsg ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            <span>{errorMsg || ''}</span>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              className="p-0.5 text-rose-400 hover:text-rose-200 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
         {/* Selector Segmentado: Modo Dual */}
-        <div className="px-5 pt-3 pb-2 bg-slate-50/80 dark:bg-slate-850/60 border-b border-slate-200/60 dark:border-slate-800">
-          <div className="grid grid-cols-2 p-1 bg-slate-200/80 dark:bg-slate-900/90 rounded-xl gap-1 text-xs">
+        <div className="px-5 pt-3 pb-2 bg-slate-900/40 border-b border-slate-800">
+          <div className="grid grid-cols-2 p-1 bg-slate-900/90 rounded-xl gap-1 text-xs border border-slate-800/60">
             <button
               type="button"
               onClick={() => setModoDual('REAL')}
-              className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${modoDual === 'REAL'
-                  ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 shadow-xs border border-emerald-200/60 dark:border-emerald-800/50'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'
-                }`}
+              className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                modoDual === 'REAL'
+                  ? 'bg-slate-800 text-emerald-300 shadow-xs border border-emerald-800/50'
+                  : 'text-slate-400 hover:text-emerald-400'
+              }`}
             >
               <span>Movimiento Real / Inmediato</span>
             </button>
             <button
               type="button"
               onClick={() => setModoDual('PROGRAMADO')}
-              className={`py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${modoDual === 'PROGRAMADO'
-                  ? 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 shadow-xs border border-amber-200/60 dark:border-amber-800/50 font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-amber-600'
-                }`}
+              className={`py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                modoDual === 'PROGRAMADO'
+                  ? 'bg-slate-800 text-amber-300 shadow-xs border border-amber-800/50 font-bold'
+                  : 'text-slate-400 hover:text-amber-400'
+              }`}
             >
               <span>Movimiento Programado / Futuro</span>
             </button>
@@ -286,7 +295,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
           <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
             {/* Descripción */}
             <div>
-              <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+              <label className="block font-semibold mb-1 text-slate-300">
                 Descripción / Concepto Comercial
               </label>
               <input
@@ -295,20 +304,20 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                 onChange={(e) => setDescripcion(e.target.value)}
                 required
                 placeholder="Ej. Pago de cliente ABC, Sueldo mensual, Cobro de factura..."
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl p-2.5 outline-none font-medium"
               />
             </div>
 
             {/* Origen y Proyecto */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                <label className="block font-semibold mb-1 text-slate-300">
                   Origen / Fuente
                 </label>
                 <select
                   value={categoriaIngreso}
                   onChange={(e) => setCategoriaIngreso(e.target.value)}
-                  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-medium"
+                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 outline-none font-medium rounded-xl p-2 focus:border-sky-500"
                 >
                   <option value="Sueldo_Nomina">Sueldo / Nómina</option>
                   <option value="Honorarios_Freelance">Honorarios / Freelance</option>
@@ -320,13 +329,13 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                 </select>
               </div>
               <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                <label className="block font-semibold mb-1 text-slate-300">
                   Proyecto Asociado
                 </label>
                 <select
                   value={proyectoAsociado}
                   onChange={(e) => setProyectoAsociado(e.target.value)}
-                  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none font-medium"
+                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 outline-none font-medium rounded-xl p-2 focus:border-sky-500"
                 >
                   <option value="PERSONAL">-- Ingreso Personal / Libre --</option>
                   {listaProyectos.map((p) => (
@@ -341,13 +350,13 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
             {/* Moneda y Monto */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-200">
+                <label className="block font-semibold mb-1 text-slate-200">
                   Moneda
                 </label>
                 <select
                   value={moneda}
                   onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD' | 'EUR')}
-                  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 outline-none font-medium"
+                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 outline-none font-medium rounded-xl p-2 focus:border-sky-500"
                 >
                   <option value="PEN">PEN (S/)</option>
                   <option value="USD">USD ($)</option>
@@ -355,7 +364,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                 </select>
               </div>
               <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                <label className="block font-semibold mb-1 text-slate-300">
                   Monto Original
                 </label>
                 <input
@@ -366,7 +375,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                   value={montoOriginal}
                   onChange={(e) => setMontoOriginal(e.target.value)}
                   placeholder="0.00"
-                  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 font-mono font-bold text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl p-2 font-mono font-bold text-sm outline-none"
                 />
               </div>
             </div>
@@ -374,7 +383,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
             {/* Fecha y TC */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                <label className="block font-semibold mb-1 text-slate-300">
                   {modoDual === 'REAL' ? 'Fecha de Cobro / Depósito' : 'Fecha Prevista de Cobro'}
                 </label>
                 <input
@@ -382,13 +391,13 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                   value={fecha}
                   onChange={(e) => handleFechaChange(e.target.value)}
                   required
-                  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 font-medium outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl p-2"
                 />
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-200">Tipo de Cambio</label>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 flex items-center gap-1 font-mono">
+                  <label className="font-semibold text-slate-200">Tipo de Cambio</label>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/60 flex items-center gap-1 font-mono">
                     TC: {tipoCambio.toFixed(3)}
                   </span>
                 </div>
@@ -398,10 +407,10 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                     step="0.001"
                     value={tipoCambio}
                     readOnly
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 font-mono bg-slate-100 dark:bg-slate-800/80 text-slate-500 select-none outline-none"
+                    className="w-full bg-slate-950/60 border border-slate-800 text-slate-400 rounded-xl p-2 font-mono select-none outline-none"
                   />
                   {moneda !== 'PEN' && (
-                    <span className="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <span className="text-[11px] font-mono font-bold text-emerald-400 shrink-0">
                       ≈ S/ {montoPEN}
                     </span>
                   )}
@@ -413,33 +422,33 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
             {modoDual === 'PROGRAMADO' && (
               <div
                 id="bloque-ingreso-programado"
-                className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 space-y-3 animate-fadeIn"
+                className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-800/60 space-y-3 animate-fadeIn"
               >
-                <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-bold text-xs">
-                  <Clock className="w-4 h-4 text-amber-600" />
+                <div className="flex items-center gap-2 text-amber-200 font-bold text-xs">
+                  <Clock className="w-4 h-4 text-amber-400" />
                   <span>Parámetros de Cobro Proyectado</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    <label className="block font-semibold mb-1 text-slate-300">
                       Hora Prevista de Cobro
                     </label>
                     <input
                       type="time"
                       value={hora}
                       onChange={(e) => setHora(e.target.value)}
-                      className="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-mono text-xs outline-none"
+                      className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 font-mono text-xs outline-none rounded-lg p-2 focus:border-sky-500"
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    <label className="block font-semibold mb-1 text-slate-300">
                       Recurrencia / Frecuencia
                     </label>
                     <select
                       value={frecuencia}
                       onChange={(e) => setFrecuencia(e.target.value as any)}
-                      className="w-full border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs outline-none font-medium"
+                      className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 text-xs outline-none font-medium rounded-lg p-2 focus:border-sky-500"
                     >
                       <option value="UNICA">Única / Puntual</option>
                       <option value="SEMANAL">Semanal</option>
@@ -449,18 +458,18 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                   </div>
                 </div>
 
-                <label className="flex items-center gap-2.5 p-2 rounded-lg bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/50 cursor-pointer select-none">
+                <label className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-900 border border-amber-800/50 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={agendarCalendar}
                     onChange={(e) => setAgendarCalendar(e.target.checked)}
-                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300"
+                    className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 border-slate-700 bg-slate-800"
                   />
                   <div className="min-w-0 flex-1">
-                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 block">
+                    <span className="text-xs font-bold text-slate-100 block">
                       Agendar recordatorio en Google Calendar
                     </span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                    <span className="text-[10px] text-slate-400">
                       Crea el evento en &quot;PMO - Ingresos Programados&quot;
                     </span>
                   </div>
@@ -470,13 +479,13 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
 
             {/* Cuenta Destino */}
             <div>
-              <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+              <label className="block font-semibold mb-1 text-slate-300">
                 {modoDual === 'REAL' ? 'Cuenta Destino (Depositado)' : 'Cuenta Destino Prevista'}
               </label>
               <select
                 value={cuentaDestino}
                 onChange={(e) => setCuentaDestino(e.target.value)}
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium outline-none"
+                className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 font-medium outline-none rounded-xl p-2 focus:border-sky-500"
               >
                 <option value="BCP">BCP</option>
                 <option value="IBK">IBK (Interbank)</option>
@@ -489,12 +498,12 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
           </div>
 
           {/* Footer de Acciones */}
-          <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex items-center justify-between gap-2.5">
+          <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-800 bg-[#0D1526]/90 flex items-center justify-between gap-2.5">
             {ingresoEditar ? (
               <button
                 type="button"
                 onClick={handleEliminar}
-                className="px-3.5 py-2 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl font-bold flex items-center gap-1.5 transition text-xs active:scale-95 cursor-pointer"
+                className="px-3.5 py-2 border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 rounded-xl font-bold flex items-center gap-1.5 transition text-xs active:scale-95 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Eliminar</span>
@@ -506,22 +515,21 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className={`px-4 py-2 text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95 ${modoDual === 'REAL' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
-                  }`}
+                className="px-4 py-2 text-white rounded-xl font-bold text-xs shadow-md shadow-sky-950/50 transition flex items-center gap-1.5 cursor-pointer active:scale-95 bg-sky-500 hover:bg-sky-400"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>
                   {ingresoEditar
                     ? 'Guardar Cambios'
                     : modoDual === 'REAL'
-                      ? 'Registrar Ingreso Real'
-                      : 'Guardar Cobro Programado'}
+                    ? 'Registrar Ingreso Real'
+                    : 'Guardar Cobro Programado'}
                 </span>
               </button>
             </div>

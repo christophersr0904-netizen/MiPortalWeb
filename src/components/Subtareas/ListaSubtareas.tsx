@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import type { SubtareaPaso } from '../../types';
-import { Check, Lock, ChevronDown, ListChecks } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { Check, Lock, ChevronDown, ListChecks, AlertTriangle } from 'lucide-react';
 
 interface ListaSubtareasProps {
   idPadre: string;
@@ -14,6 +13,7 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
   onTogglePaso
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [errorLocal, setErrorLocal] = useState<string | null>(null);
 
   if (!pasos || pasos.length === 0) return null;
 
@@ -37,29 +37,16 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
     if (!p.completado) {
       const idx = pasos.findIndex((item) => item.id === p.id);
       if (idx > 0 && !pasos[idx - 1].completado) {
-        Swal.fire({
-          icon: 'info',
-          title: 'Secuencia Bloqueada',
-          text: `Debes completar primero el Paso ${pasos[idx - 1].numero_paso} ("${pasos[idx - 1].descripcion_paso}")`,
-          confirmButtonColor: '#38bdf8',
-          background: '#0D1526',
-          color: '#f8fafc',
-          timer: 3000
-        });
+        setErrorLocal(`Debes completar primero el Paso ${pasos[idx - 1].numero_paso} ("${pasos[idx - 1].descripcion_paso}")`);
+        setTimeout(() => setErrorLocal(null), 3500);
         return;
       }
     }
 
     const res = await onTogglePaso(p.id, !p.completado);
     if (!res.success && res.error) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Acción no permitida',
-        text: res.error,
-        confirmButtonColor: '#38bdf8',
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+      setErrorLocal(res.error);
+      setTimeout(() => setErrorLocal(null), 3500);
     }
   };
 
@@ -95,6 +82,21 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
       {/* Cajón Procedural Colapsable */}
       {isOpen && (
         <div className="mt-1 bg-slate-900/60 rounded-xl p-1.5 border border-slate-800/80 shadow-xs space-y-1">
+          {errorLocal && (
+            <div className="px-2 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] flex items-center justify-between gap-1.5 animate-in fade-in duration-150">
+              <div className="flex items-center gap-1.5 truncate">
+                <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                <span className="truncate">{errorLocal}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setErrorLocal(null)}
+                className="text-rose-400 hover:text-white text-xs font-bold shrink-0 ml-1 leading-none"
+              >
+                ×
+              </button>
+            </div>
+          )}
           {pasos.map((p, idx) => {
             const isDone = p.completado;
             const prevDone = idx === 0 || pasos[idx - 1].completado;

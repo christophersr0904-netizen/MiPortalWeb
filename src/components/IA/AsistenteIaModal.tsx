@@ -16,7 +16,7 @@ import {
   BookmarkPlus,
   AlertCircle
 } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 interface AsistenteIaModalProps {
   isOpen: boolean;
@@ -106,16 +106,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
       sync_status: 'pending'
     });
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'Guardado en Notas con éxito',
-      showConfirmButton: false,
-      timer: 2500,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    mostrarToastCobalt('Guardado en Notas con éxito', 'success');
   };
 
   // Insertar Paquete de Trabajo en WBS directamente en Dexie
@@ -145,16 +136,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
       sync_status: 'pending'
     });
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'Paquete WBS insertado en el Grafo',
-      showConfirmButton: false,
-      timer: 2500,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    mostrarToastCobalt('Paquete WBS insertado en el Grafo', 'success');
   };
 
   return createPortal(

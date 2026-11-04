@@ -134,6 +134,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
   // Subtareas en memoria (para modo creación o staging)
   const [subtareasLocal, setSubtareasLocal] = useState<Array<{ id: string; descripcion_paso: string; completado: boolean }>>([]);
   const [nuevoPasoTexto, setNuevoPasoTexto] = useState('');
+  const [errorMsgSubtarea, setErrorMsgSubtarea] = useState<string | null>(null);
 
   // Sincronizar datos al abrir o cambiar tareaId
   useEffect(() => {
@@ -262,18 +263,6 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     }
   }, [isOpen, tareaId, tareaExistente, initialColumna, initialProyectoCodigo, initialTitulo, initialNotas, proyectos]);
 
-  // Manejo incondicional de tecla Escape para cerrar
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
   // Lista de subtareas activa (existentes de Dexie si estamos editando, o locales si creando)
   const listaSubtareasActiva = tareaId ? subtareasExistentes : subtareasLocal;
   const totalSubtareas = listaSubtareasActiva.length;
@@ -285,6 +274,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     if (!nuevoPasoTexto.trim()) return;
     const texto = nuevoPasoTexto.trim();
     setNuevoPasoTexto('');
+    setErrorMsgSubtarea(null);
 
     if (tareaId && tareaExistente?.codigo_legado) {
       // Persistencia inmediata en Dexie
@@ -323,7 +313,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
 
     // Si no está completado y está bloqueado por el paso anterior: IMPEDIR
     if (!sub.completado && estaBloqueado) {
-      alert(`Debes completar primero el paso #${idx} antes de avanzar.`);
+      setErrorMsgSubtarea(`Debes completar primero el paso #${idx} antes de avanzar.`);
       return;
     }
 
@@ -334,10 +324,12 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         .some((p) => p.completado);
 
       if (hayPosterioresCompletados) {
-        alert('Para desmarcar este paso, debes desmarcar primero los pasos posteriores completados.');
+        setErrorMsgSubtarea('Para desmarcar este paso, debes desmarcar primero los pasos posteriores completados.');
         return;
       }
     }
+
+    if (errorMsgSubtarea) setErrorMsgSubtarea(null);
 
     if (tareaId && sub.id) {
       await db.subtareas_pasos.update(sub.id, {
@@ -551,6 +543,21 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     onClose();
   };
 
+  // Atajos de teclado: Escape para cerrar, Ctrl+Enter / Cmd+Enter para guardar
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleGuardar();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, handleGuardar]);
+
   if (!isOpen) return null;
 
   const modalContent = (
@@ -559,24 +566,24 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-[10000] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all"
+      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all animate-in fade-in duration-200"
     >
       <div
         id="modal-tarea-flow-card"
-        className="portal-surface elevation-3 w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800/60 bg-white dark:bg-[#0D1526] shadow-2xl relative animate-in fade-in zoom-in-95 duration-150"
+        className="w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/60 bg-[#0D1526] shadow-cobalt-2 relative animate-in fade-in zoom-in-95 duration-200 ease-out"
       >
         {/* DRAG HANDLE MÓVIL */}
-        <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
+        <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
 
         {/* 1. CABECERA INTEGRADA */}
-        <div className="px-5 sm:px-6 py-3 border-b border-slate-200/80 dark:border-slate-800 shrink-0 space-y-2 bg-slate-50/50 dark:bg-slate-950/40">
+        <div className="px-5 sm:px-6 py-3 border-b border-slate-800/80 shrink-0 space-y-2 bg-[#0A101D]">
           {/* Fila 1: ID, Contexto WBS Unificado en 1 Sola Línea con Ticker Marquee, y botón cerrar */}
           <div className="flex items-center justify-between gap-2.5 w-full">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 min-w-0 flex-1">
               {/* ID de Tarea */}
               <span
                 id="task-flow-badge-id"
-                className="text-[11px] font-mono tabular-nums font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 border border-slate-700/60 shadow-2xs shrink-0 select-none"
+                className="text-[11px] font-mono tabular-nums font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700/60 shadow-2xs shrink-0 select-none"
               >
                 {codigoLegado || (tareaId ? (tareaId.startsWith('TAR-') ? tareaId : 'CARGANDO...') : 'NUEVA TAREA')}
               </span>
@@ -672,7 +679,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shrink-0 ml-1"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer shrink-0 ml-1"
               title="Cerrar ventana (Esc)"
             >
               <X className="w-4 h-4" />
@@ -687,7 +694,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Título de la tarea o entregable..."
-              className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 placeholder:text-slate-500 bg-transparent outline-none w-full border-b border-transparent focus:border-indigo-500 transition-colors py-0.5"
+              className="text-lg sm:text-xl font-bold text-slate-100 placeholder:text-slate-500 bg-transparent outline-none w-full border-b border-transparent focus:border-sky-500 transition-colors py-0.5"
               autoFocus
             />
           </div>
@@ -697,7 +704,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar">
           {tareaId !== null && tareaExistente === undefined ? (
             <div className="flex flex-col items-center justify-center p-12 space-y-3 min-h-[300px]">
-              <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
               <span className="text-xs text-slate-400 font-medium font-mono">Cargando detalles de la tarea...</span>
             </div>
           ) : (
@@ -709,7 +716,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                   <div className="bg-[#0D1526] border border-slate-800/80 rounded-xl p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                        <Calendar className="w-3.5 h-3.5 text-sky-400" />
                         <span>Tiempo & Esfuerzo</span>
                       </span>
                     </div>
@@ -835,7 +842,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                         <div className="grid grid-cols-3 gap-1 p-0.5 bg-[#040711] border border-slate-800 rounded-lg">
                           {[
                             { id: 'Alta_DeepWork', label: 'DeepWork', icon: Zap, title: 'Energía Alta: Deep Work', activeClass: 'bg-sky-500/20 border-sky-500/40 text-sky-300' },
-                            { id: 'Media_Operativa', label: 'Operativa', icon: Cpu, title: 'Energía Media: Operativa', activeClass: 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' },
+                            { id: 'Media_Operativa', label: 'Operativa', icon: Cpu, title: 'Energía Media: Operativa', activeClass: 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' },
                             { id: 'Baja_Automatica', label: 'Mecánica', icon: Coffee, title: 'Energía Baja: Mecánica', activeClass: 'bg-amber-500/20 border-amber-500/40 text-amber-300' },
                           ].map((e) => {
                             const IconComp = e.icon;
@@ -1156,7 +1163,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
           <div className="p-3.5 bg-[#0D1526] border border-slate-800/80 rounded-xl space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-black">
+                <span className="p-1.5 bg-sky-500/10 text-sky-400 rounded-lg text-xs font-black">
                   <CheckCircle2 className="w-4 h-4" />
                 </span>
                 <div>
@@ -1176,9 +1183,20 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             {/* Barra de progreso con gradiente */}
             <div className="w-full bg-[#040711] h-1.5 rounded-full overflow-hidden border border-slate-800/40">
               <div
-                className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300"
+                className="bg-gradient-to-r from-sky-500 to-emerald-400 h-full rounded-full transition-all duration-300"
                 style={{ width: `${progresoPct}%` }}
               />
+            </div>
+
+            {/* Contenedor Anti-CLS con altura fija reservada */}
+            <div className="min-h-[22px] flex items-center">
+              <p
+                className={`w-full text-rose-400 text-xs font-semibold py-1 px-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 transition-opacity duration-200 ${
+                  errorMsgSubtarea ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                {errorMsgSubtarea || ''}
+              </p>
             </div>
 
             {/* Lista de pasos */}
@@ -1209,7 +1227,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                             type="checkbox"
                             checked={sub.completado}
                             onChange={() => toggleSubtareaCompletado(sub, idx)}
-                            className="rounded border-slate-700 bg-slate-900 text-indigo-500 focus:ring-indigo-500/20 cursor-pointer"
+                            className="rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500/20 cursor-pointer"
                           />
                         )}
                         <span className="text-[10px] font-mono font-bold text-slate-400 shrink-0">#{idx + 1}</span>
@@ -1258,7 +1276,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
               <button
                 type="button"
                 onClick={agregarSubtarea}
-                className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition cursor-pointer"
+                className="p-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-white transition cursor-pointer shadow-md shadow-sky-950/40"
                 title="Agregar paso"
               >
                 <Plus className="w-4 h-4" />
@@ -1317,7 +1335,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             <button
               type="button"
               onClick={handleGuardar}
-              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md transition cursor-pointer"
+              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-sky-500 hover:bg-sky-400 text-white shadow-md shadow-sky-950/50 transition cursor-pointer"
             >
               {tareaId ? 'Guardar Cambios' : 'Crear Tarea'}
             </button>

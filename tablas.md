@@ -239,6 +239,8 @@
 - **PK:** `ID_Nota` (Formato: `NOT-XXXXX`)
 - **Propósito:** Bóveda universal de conocimiento híbrido: texto Markdown, checklists dinámicos, wishlist (deseos/compras) y enlaces polimórficos de vinculación cruzada.
 - **Arquitectura Híbrida:** `Tipo_Nota` ya NO es columna física; se infiere en runtime según la presencia de `Wishlist_JSON` (`WISHLIST`), `Checklists_JSON` (`CHECKLIST`) o texto plano (`NORMAL`). Una misma nota híbrida puede contener simultáneamente Markdown, Checklists, Wishlist y Vínculos.
+- **Unificación por Bloques Desplegables (REQ-NOTAS-001):** En el modal de edición (`EditorNotaModal.tsx`), se sustituyeron las pestañas disyuntivas por 3 bloques Bento desplegables simultáneos (`Texto & Markdown`, `Checklist`, `Wishlist & Presupuesto`), garantizando coexistencia visual apilada y continua.
+- **Edición In-situ de Checklist (REQ-NOTAS-001):** Los ítems de `Checklists_JSON` admiten edición in-line reactiva mediante doble clic en el texto, confirmando con `onBlur` o tecla `Enter` y cancelando con `Escape` con aislamiento de propagación de eventos y mutación inmutable del estado.
 
 | Col | Encabezado | Tipo | Origen | Definición y Regla de Llenado |
 | :---: | :--- | :--- | :--- | :--- |
@@ -389,6 +391,7 @@ this.version(2).stores({
 1. **Renderizado Seguro con AST:** Reemplazo de expresiones regulares manuales por `react-markdown` + `remark-gfm` + `rehype-sanitize` y estilos `@tailwindcss/typography` (`prose prose-invert prose-sky`).
 2. **Checklists Interactivas:** Sincronización bidireccional inmediata en Dexie al conmutar checkboxes, actualizando tanto `checklists_json` como los tokens `- [ ]` / `- [x]` en `contenido_markdown`.
 3. **Metadatos Wishlist y Vínculos:** Almacenamiento tipado en `wishlist_json` (costo estimado, gasto real, moneda, prioridad) y `enlaces_entidades_json`, eliminando la inyección de strings JSON crudos en el cuerpo de texto.
+4. **Ecosistema de Cuadernos/Blocks Enriquecidos (`CuadernoMeta`):** Contrato canónico tipado `{ id, nombre, descripcion, icono, color?, created_at }` almacenado de forma híbrida en LocalStorage (`pmo_notas_cuadernos_meta`) y fusionado reactivamente con los nombres de cuaderno en Dexie (`NotaRecord.block_nombre`), asegurando retrocompatibilidad total y fallback automático a ícono `Folder` para bloques legacy.
 
 ---
 
@@ -534,7 +537,8 @@ El archivo `src/db/initialSeed.json` consolida íntegramente los 281 registros r
 | `ingresos` | 57 | `id` (UUID) | `ID_Ingreso`, `Descripcion_Ingreso` | `codigo_legado`, `tipo_origen`, `categoria_ingreso`, `monto_pen`, `estado_cobro` |
 | `ideas` | 8 | `id` (UUID) | `ID_Idea`, `Enunciado_Idea` | `codigo_legado`, `enunciado_idea`, `tipo_captura`, `estado`, `fecha_captura` |
 | `cuotas` | 2 | `id` (UUID) | `ID_Cuota`, `Nombre_Plan` | `codigo_legado`, `id_credito_padre`, `entidad_financiera`, `monto_cuota`, `estado_cuota` |
-| **TOTAL** | **283** | — | — | **10 Tablas 100% Hidratadas** |
+| `tombstones` | 0+ | `id` (UUID/PK) | — | `id, tabla, sync_status, deleted_at` (Lápidas de sincronización para borrado físico remoto y barrera anti-resurrección) |
+| **TOTAL** | **283+** | — | — | **15 Tablas Dexie v6 (13 operativas + 1 lápidas + logs)** |
 
 ### 18.2. Adaptador Coalescente Polimórfico (`src/utils/entityNormalizer.ts`)
 - `getProp<T>(obj, ...keys)`: Extracción null-safe tolerante a fallos entre `snake_case`, `PascalCase` y `camelCase`.

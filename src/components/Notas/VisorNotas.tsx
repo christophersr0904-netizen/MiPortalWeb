@@ -1,8 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useDeferredValue, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
-import type { NotaRecord, WishlistMeta } from '../../types';
+import type { NotaRecord, WishlistMeta, CuadernoMeta } from '../../types';
+import { SidebarCuadernos, CarruselCuadernosMovil, type SubFiltroRapido } from './SidebarCuadernos';
+import { ModalCrearCuaderno } from './ModalCrearCuaderno';
+import { ModalConvertirWishlistGasto } from '../Modals/ModalConvertirWishlistGasto';
 import { normalizeNota } from '../../utils/entityNormalizer';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import { TarjetaNota } from './TarjetaNota';
 import { EditorNotaModal } from './EditorNotaModal';
 import {
@@ -16,17 +20,13 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  Link2,
   Check,
   X,
   BookOpen,
-  FolderPlus,
-  Folder,
   Plus
 } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 
-type SubFiltroRapido = '' | 'FIJADAS' | 'ADJUNTOS' | 'VINCULADAS' | 'CHECKLIST' | 'WISHLIST';
 type ModoVista = 'masonry' | 'lista';
 
 const TONOS_16 = [
@@ -67,6 +67,38 @@ export const VisorNotas: React.FC = () => {
     }
   });
 
+  const [cuadernosMeta, setCuadernosMeta] = useState<Record<string, CuadernoMeta>>(() => {
+    try {
+      const saved = localStorage.getItem('pmo_notas_cuadernos_meta');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [modalCrearCuadernoAbierto, setModalCrearCuadernoAbierto] = useState(false);
+
+  // Control de colapso Sidebar Desktop con persistencia
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('pmo_notas_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleSidebar = useCallback(() => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('pmo_notas_sidebar_collapsed', String(next));
+      } catch {
+        // ignore storage error
+      }
+      return next;
+    });
+  }, []);
+
   // Dropdowns UI
   const [dropdownTagsAbierto, setDropdownTagsAbierto] = useState(false);
   const [dropdownColorAbierto, setDropdownColorAbierto] = useState(false);
@@ -96,9 +128,86 @@ export const VisorNotas: React.FC = () => {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [notaEnEdicion, setNotaEnEdicion] = useState<NotaRecord | null>(null);
 
-  // Carga reactiva de notas con normalizador tolerante a fallos
+  // Single Instance Modal para Wishlist
+  const [notaParaConvertirGasto, setNotaParaConvertirGasto] = useState<NotaRecord | null>(null);
+
+  // Concurrencia de Búsqueda React 19 (Zero Frame Drops)
+  const deferredBusqueda = useDeferredValue(busqueda);
+
+  // UndoDelete Integration y Toast Reactivo
+  const { programarEliminacion, estaOculto } = useUndoDelete();
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Carga reactiva de notas con normalizador tolerante a fallos y filtro de exclusión reactiva UndoDelete
   const rawList = useLiveQuery(() => db.notas.toArray(), []) ?? [];
-  const notasRaw = useMemo(() => rawList.map((n) => normalizeNota(n)), [rawList]);
+  const notasRaw = useMemo(() => {
+    return rawList
+      .filter((n) => !estaOculto(n.id) && !estaOculto(n.codigo_legado))
+      .map((n) => normalizeNota(n));
+  }, [rawList, estaOculto]);
+
+  // Callbacks memoizados para erradicar re-evaluación en cascada de tarjetas
+  const handleEditar = useCallback((n: NotaRecord) => {
+    setNotaEnEdicion(n);
+    setModalAbierto(true);
+  }, []);
+
+  const handleEliminarNota = useCallback((id: string) => {
+    const nota = notasRaw.find((n) => n.id === id);
+    const titulo = nota?.titulo || 'Nota';
+    programarEliminacion({
+      tabla: 'notas',
+      id,
+      etiqueta: `Nota: ${titulo}`,
+      tipo: 'NOTA',
+      commit: async () => {
+        await db.notas.delete(id);
+      }
+    });
+  }, [notasRaw, programarEliminacion]);
+
+  const handleAbrirConvertirGasto = useCallback((nota: NotaRecord) => {
+    const costoEstimado = Number(nota.wishlist_json?.costoEstimado || 0);
+    if (!nota.wishlist_json || costoEstimado <= 0) return;
+    setNotaParaConvertirGasto(nota);
+  }, []);
+
+  const handleConfirmarConvertirGasto = useCallback(async () => {
+    if (!notaParaConvertirGasto) return;
+    const costoEstimado = Number(notaParaConvertirGasto.wishlist_json?.costoEstimado || 0);
+    const moneda = notaParaConvertirGasto.wishlist_json?.moneda || 'PEN';
+    const nowIso = new Date().toISOString();
+    const count = await db.gastos.count();
+    const montoPen = moneda === 'USD' ? costoEstimado * 3.75 : costoEstimado;
+
+    await db.gastos.add({
+      id: crypto.randomUUID ? crypto.randomUUID() : `gas_${Date.now()}`,
+      user_id: '00000000-0000-0000-0000-000000000001',
+      codigo_legado: `GAS-${String(count + 1).padStart(3, '0')}`,
+      tipo_origen: 'Personal',
+      categoria_gasto: 'Deseos / Wishlist',
+      fecha_gasto: nowIso.split('T')[0],
+      descripcion_gasto: `Wishlist: ${notaParaConvertirGasto.titulo}`,
+      moneda_original: moneda,
+      monto_original: costoEstimado,
+      tipo_cambio: 3.75,
+      monto_pen: montoPen,
+      estado_pago: 'PAGADO',
+      updated_at: nowIso,
+      sync_status: 'pending'
+    });
+
+    await db.notas.update(notaParaConvertirGasto.id, {
+      wishlist_json: {
+        ...notaParaConvertirGasto.wishlist_json,
+        montoRealGastado: costoEstimado,
+        estado: 'CONSEGUIDO'
+      },
+      updated_at: nowIso
+    });
+
+    setNotaParaConvertirGasto(null);
+  }, [notaParaConvertirGasto]);
 
   // Catálogo unificado de blocks únicos
   const bloquesUnicos = useMemo(() => {
@@ -110,6 +219,23 @@ export const VisorNotas: React.FC = () => {
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [notasRaw, blocksLocales]);
+
+  // Asegurar que cada block único tenga representación en cuadernosMeta con fallback resiliente
+  const catalogoCuadernosMeta = useMemo(() => {
+    const resultado: Record<string, CuadernoMeta> = { ...cuadernosMeta };
+    bloquesUnicos.forEach((block) => {
+      if (!resultado[block]) {
+        resultado[block] = {
+          id: 'cua_legacy_' + encodeURIComponent(block),
+          nombre: block,
+          descripcion: '',
+          icono: 'Folder',
+          created_at: new Date(0).toISOString()
+        };
+      }
+    });
+    return resultado;
+  }, [bloquesUnicos, cuadernosMeta]);
 
   // Conteo reactivo de notas por block
   const conteoPorBlock = useMemo(() => {
@@ -142,41 +268,91 @@ export const VisorNotas: React.FC = () => {
     return Array.from(set).sort();
   }, [notasRaw]);
 
-  // Creación dinámica de nuevo block
-  const handleCrearNuevoBlock = async () => {
-    const res = await Swal.fire({
-      title: 'Nuevo Block / Cuaderno',
-      text: 'Organiza tus notas en un nuevo contenedor temático:',
-      input: 'text',
-      inputPlaceholder: 'Ej. Arquitectura, Finanzas, Personal...',
-      showCancelButton: true,
-      confirmButtonText: 'Crear Block',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#38bdf8',
-      background: '#0D1526',
-      color: '#f8fafc',
-      inputValidator: (value) => {
-        if (!value || !value.trim()) {
-          return 'Ingresa un nombre válido para el Block';
-        }
-        return null;
+  // Creación dinámica de nuevo block mediante modal declarativo
+  const handleGuardarCuaderno = ({
+    nombre,
+    descripcion,
+    icono,
+    color
+  }: {
+    nombre: string;
+    descripcion: string;
+    icono: string;
+    color?: string;
+  }) => {
+    const nuevoMeta: CuadernoMeta = {
+      id: 'cua_' + Date.now().toString(36),
+      nombre,
+      descripcion,
+      icono,
+      color,
+      created_at: new Date().toISOString()
+    };
+    const actualizadosMeta = {
+      ...cuadernosMeta,
+      [nombre]: nuevoMeta
+    };
+    setCuadernosMeta(actualizadosMeta);
+    try {
+      localStorage.setItem('pmo_notas_cuadernos_meta', JSON.stringify(actualizadosMeta));
+    } catch {
+      // ignore storage error
+    }
+    if (!blocksLocales.includes(nombre)) {
+      const actualizados = [...blocksLocales, nombre];
+      setBlocksLocales(actualizados);
+      try {
+        localStorage.setItem('pmo_notas_blocks_custom', JSON.stringify(actualizados));
+      } catch {
+        // ignore storage error
       }
-    });
+    }
+    setBlockActivo(nombre);
+  };
 
-    if (res.isConfirmed && res.value) {
-      const nuevo = res.value.trim();
-      if (!blocksLocales.includes(nuevo)) {
-        const actualizados = [...blocksLocales, nuevo];
-        setBlocksLocales(actualizados);
+  // Eliminación de cuaderno y desvinculación atómica en Dexie para notas huérfanas
+  const handleEliminarCuaderno = useCallback(
+    async (nombreBlock: string) => {
+      try {
+        const nowIso = new Date().toISOString();
+        // 1. Desvincular en Dexie para evitar resurrección de notas huérfanas en bloquesUnicos
+        await db.notas.where('block_nombre').equals(nombreBlock).modify({
+          block_nombre: '',
+          updated_at: nowIso,
+          sync_status: 'pending'
+        });
+
+        // 2. Limpiar de blocksLocales
+        const nuevosBlocks = blocksLocales.filter((b) => b !== nombreBlock);
+        setBlocksLocales(nuevosBlocks);
         try {
-          localStorage.setItem('pmo_notas_blocks_custom', JSON.stringify(actualizados));
+          localStorage.setItem('pmo_notas_blocks_custom', JSON.stringify(nuevosBlocks));
         } catch {
           // ignore storage error
         }
+
+        // 3. Limpiar de cuadernosMeta
+        const nuevosMeta = { ...cuadernosMeta };
+        delete nuevosMeta[nombreBlock];
+        setCuadernosMeta(nuevosMeta);
+        try {
+          localStorage.setItem('pmo_notas_cuadernos_meta', JSON.stringify(nuevosMeta));
+        } catch {
+          // ignore storage error
+        }
+
+        if (blockActivo === nombreBlock) {
+          setBlockActivo(null);
+        }
+
+        mostrarToastCobalt(`Cuaderno "${nombreBlock}" eliminado. Sus notas pasaron a Sueltas.`, 'success');
+      } catch (err) {
+        console.error('Error al eliminar cuaderno:', err);
+        mostrarToastCobalt('Error al eliminar el cuaderno', 'error');
       }
-      setBlockActivo(nuevo);
-    }
-  };
+    },
+    [blocksLocales, cuadernosMeta, blockActivo]
+  );
 
   // Filtrado reactivo de notas
   const { notasFijadas, notasOtras, notasConseguidasWishlist } = useMemo(() => {
@@ -219,9 +395,9 @@ export const VisorNotas: React.FC = () => {
       });
     }
 
-    // 5. Búsqueda en vivo tolerante a nulls
-    if (busqueda.trim()) {
-      const q = busqueda.toLowerCase();
+    // 5. Búsqueda en vivo concurrente tolerante a nulls vinculada a deferredBusqueda
+    if (deferredBusqueda.trim()) {
+      const q = deferredBusqueda.toLowerCase();
       resultado = resultado.filter(
         (n) =>
           (n.titulo || '').toLowerCase().includes(q) ||
@@ -230,8 +406,8 @@ export const VisorNotas: React.FC = () => {
       );
     }
 
-    // 6. Ordenar por updated_at descendente (copia defensiva)
-    resultado.sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+    // 6. Ordenar por updated_at descendente (comparación lexicográfica ISO ultraligera sin new Date)
+    resultado.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
 
     // Separar deseos conseguidos/archivados
     const conseguidos = resultado.filter(
@@ -246,7 +422,7 @@ export const VisorNotas: React.FC = () => {
       notasOtras: activos.filter((n) => !n.es_fijada),
       notasConseguidasWishlist: conseguidos
     };
-  }, [notasRaw, blockActivo, subFiltro, colorFiltro, tagsSeleccionados, busqueda]);
+  }, [notasRaw, blockActivo, subFiltro, colorFiltro, tagsSeleccionados, deferredBusqueda]);
 
   // Manejo de Quick Note (Inyecta blockActivo automáticamente)
   const handleGuardarQuickNota = async () => {
@@ -307,16 +483,10 @@ export const VisorNotas: React.FC = () => {
     setQuickWishlistEnlace('');
     setQuickExpanded(false);
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: 'Nota guardada en ' + (blockAsignado ? `"${blockAsignado}"` : 'Notas'),
-      showConfirmButton: false,
-      timer: 1500,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
+    setToastMsg('Nota guardada en ' + (blockAsignado ? `"${blockAsignado}"` : 'Notas'));
+    setTimeout(() => {
+      setToastMsg(null);
+    }, 2500);
   };
 
   const handleAgregarCheckItem = () => {
@@ -349,167 +519,26 @@ export const VisorNotas: React.FC = () => {
   return (
     <div
       id="visor-notas-main"
-      className="flex flex-col md:flex-row w-full h-full flex-1 min-h-0 bg-[#040711] text-slate-100 relative select-none overflow-hidden"
+      className={`grid grid-cols-1 ${
+        isSidebarCollapsed ? 'md:grid-cols-[64px_1fr]' : 'md:grid-cols-[256px_1fr]'
+      } transition-[grid-template-columns] duration-300 ease-out w-full h-full flex-1 min-h-0 bg-[#040711] text-slate-100 relative select-none overflow-hidden`}
     >
       {/* ===================================================================== */}
       {/* 1. SIDEBAR DE BLOCKS (CUADERNOS) - DESKTOP                           */}
       {/* ===================================================================== */}
-      <aside
-        id="sidebar-blocks-notas"
-        className="hidden md:flex flex-col w-64 shrink-0 bg-[#0D1526]/90 border-r border-slate-800/40 p-4 justify-between overflow-y-auto custom-scrollbar select-none"
-      >
-        <div className="space-y-4">
-          {/* Cabecera de Blocks */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-              <BookOpen className="w-4 h-4 text-sky-400" />
-              <span>Blocks & Cuadernos</span>
-            </div>
-            <button
-              type="button"
-              id="btn-crear-nuevo-block"
-              onClick={handleCrearNuevoBlock}
-              className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700/60 transition cursor-pointer"
-              title="Crear Nuevo Block"
-            >
-              <FolderPlus className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Navegación Principal de Blocks */}
-          <nav className="space-y-1">
-            {/* Todas las Notas */}
-            <button
-              type="button"
-              onClick={() => setBlockActivo(null)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                blockActivo === null
-                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Layers className="w-4 h-4 text-sky-400" />
-                <span>Todas las Notas</span>
-              </div>
-              <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
-                {conteoPorBlock.__todas__}
-              </span>
-            </button>
-
-            {/* Notas Sueltas */}
-            <button
-              type="button"
-              onClick={() => setBlockActivo('__sin_block__')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                blockActivo === '__sin_block__'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <FileText className="w-4 h-4 text-amber-400" />
-                <span>Notas Sueltas</span>
-              </div>
-              <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
-                {conteoPorBlock.__sin_block__ || 0}
-              </span>
-            </button>
-          </nav>
-
-          {/* Lista de Blocks Personalizados del Usuario */}
-          <div className="pt-2 border-t border-slate-800/60 space-y-1">
-            <div className="px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-              <span>Cuadernos Temáticos</span>
-              <span className="font-mono">{bloquesUnicos.length}</span>
-            </div>
-
-            <div className="space-y-0.5 max-h-56 overflow-y-auto custom-scrollbar pr-1">
-              {bloquesUnicos.map((block) => {
-                const activo = blockActivo === block;
-                const total = conteoPorBlock[block] || 0;
-                return (
-                  <button
-                    key={block}
-                    type="button"
-                    onClick={() => setBlockActivo(activo ? null : block)}
-                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer group ${
-                      activo
-                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-xs font-semibold'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <Folder className={`w-3.5 h-3.5 shrink-0 ${activo ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
-                      <span className="truncate">{block}</span>
-                    </div>
-                    <span className="font-mono tabular-nums text-[10.5px] px-1.5 py-0.2 rounded-full bg-slate-900/80 text-slate-400">
-                      {total}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Flanco Inferior del Sidebar: Subfiltros Rápidos */}
-        <div className="pt-4 border-t border-slate-800/60 space-y-2">
-          <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-            Accesos Rápidos
-          </span>
-          <div className="grid grid-cols-2 gap-1.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setSubFiltro(subFiltro === 'FIJADAS' ? '' : 'FIJADAS')}
-              className={`p-2 rounded-xl text-left border transition flex items-center gap-1.5 cursor-pointer ${
-                subFiltro === 'FIJADAS'
-                  ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                  : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Pin className="w-3.5 h-3.5 rotate-45 text-amber-400" />
-              <span>Fijadas</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSubFiltro(subFiltro === 'CHECKLIST' ? '' : 'CHECKLIST')}
-              className={`p-2 rounded-xl text-left border transition flex items-center gap-1.5 cursor-pointer ${
-                subFiltro === 'CHECKLIST'
-                  ? 'bg-sky-500/20 border-sky-500/40 text-sky-300'
-                  : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <CheckSquare className="w-3.5 h-3.5 text-sky-400" />
-              <span>Tareas</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSubFiltro(subFiltro === 'WISHLIST' ? '' : 'WISHLIST')}
-              className={`p-2 rounded-xl text-left border transition flex items-center gap-1.5 cursor-pointer ${
-                subFiltro === 'WISHLIST'
-                  ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
-                  : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <DollarSign className="w-3.5 h-3.5 text-purple-400" />
-              <span>Deseos</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSubFiltro(subFiltro === 'VINCULADAS' ? '' : 'VINCULADAS')}
-              className={`p-2 rounded-xl text-left border transition flex items-center gap-1.5 cursor-pointer ${
-                subFiltro === 'VINCULADAS'
-                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                  : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Link2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Vínculos</span>
-            </button>
-          </div>
-        </div>
-      </aside>
+      <SidebarCuadernos
+        blockActivo={blockActivo}
+        setBlockActivo={setBlockActivo}
+        bloquesUnicos={bloquesUnicos}
+        conteoPorBlock={conteoPorBlock}
+        subFiltro={subFiltro}
+        setSubFiltro={setSubFiltro}
+        cuadernosMeta={catalogoCuadernosMeta}
+        onAbrirModalCrear={() => setModalCrearCuadernoAbierto(true)}
+        onEliminarCuaderno={handleEliminarCuaderno}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={handleToggleSidebar}
+      />
 
       {/* ===================================================================== */}
       {/* 2. ÁREA CENTRAL: CANVAS DE NOTAS, HERRAMIENTAS Y QUICK NOTE           */}
@@ -751,62 +780,22 @@ export const VisorNotas: React.FC = () => {
         </div>
 
         {/* Carrusel Deslizable de Blocks para Móviles (< md) */}
-        <div className="md:hidden shrink-0 bg-[#0D1526] border-b border-slate-800/40 px-3 py-2 flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
-          <button
-            type="button"
-            onClick={() => setBlockActivo(null)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
-              blockActivo === null
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                : 'text-slate-400 bg-slate-900 border border-slate-800'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Todas</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setBlockActivo('__sin_block__')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
-              blockActivo === '__sin_block__'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                : 'text-slate-400 bg-slate-900 border border-slate-800'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Sueltas</span>
-          </button>
-          {bloquesUnicos.map((b) => (
-            <button
-              key={b}
-              type="button"
-              onClick={() => setBlockActivo(blockActivo === b ? null : b)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
-                blockActivo === b
-                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
-                  : 'text-slate-400 bg-slate-900 border border-slate-800'
-              }`}
-            >
-              <Folder className="w-3.5 h-3.5" />
-              <span>{b}</span>
-              <span className="font-mono text-[10px] text-slate-500">({conteoPorBlock[b] || 0})</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={handleCrearNuevoBlock}
-            className="px-2 py-1 rounded-lg text-xs font-bold text-sky-400 bg-sky-950/40 border border-sky-500/30 whitespace-nowrap flex items-center gap-1 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Block</span>
-          </button>
-        </div>
+        <CarruselCuadernosMovil
+          blockActivo={blockActivo}
+          setBlockActivo={setBlockActivo}
+          bloquesUnicos={bloquesUnicos}
+          conteoPorBlock={conteoPorBlock}
+          cuadernosMeta={catalogoCuadernosMeta}
+          onAbrirModalCrear={() => setModalCrearCuadernoAbierto(true)}
+        />
 
         {/* CONTENEDOR EXPANDIBLE DE CREACIÓN RÁPIDA (GOOGLE KEEP STYLE) */}
-        <div className="shrink-0 w-full max-w-2xl mx-auto px-4 pt-3 pb-1 z-10">
+        <div className="shrink-0 w-full max-w-2xl mx-auto px-4 pt-3 pb-1 z-10 min-h-[4rem]">
           <div
             id="quick-note-box"
-            className="bg-[#0D1526] rounded-2xl border border-slate-800/80 shadow-cobalt-1 transition-all duration-300 relative overflow-hidden group"
+            className={`bg-[#0D1526] rounded-2xl border border-slate-800/80 shadow-cobalt-1 relative overflow-hidden group ${
+              quickExpanded ? 'max-h-[700px]' : 'max-h-14'
+            }`}
           >
             {/* ESTADO COLAPSADO */}
             {!quickExpanded ? (
@@ -1185,13 +1174,9 @@ export const VisorNotas: React.FC = () => {
                     key={nota.id}
                     nota={nota}
                     modoVista={modoVista}
-                    onEditar={(n) => {
-                      setNotaEnEdicion(n);
-                      setModalAbierto(true);
-                    }}
-                    onEliminar={async (id) => {
-                      await db.notas.delete(id);
-                    }}
+                    onEditar={handleEditar}
+                    onEliminar={handleEliminarNota}
+                    onConvertirEnGasto={handleAbrirConvertirGasto}
                   />
                 ))}
               </div>
@@ -1224,13 +1209,9 @@ export const VisorNotas: React.FC = () => {
                     key={nota.id}
                     nota={nota}
                     modoVista={modoVista}
-                    onEditar={(n) => {
-                      setNotaEnEdicion(n);
-                      setModalAbierto(true);
-                    }}
-                    onEliminar={async (id) => {
-                      await db.notas.delete(id);
-                    }}
+                    onEditar={handleEditar}
+                    onEliminar={handleEliminarNota}
+                    onConvertirEnGasto={handleAbrirConvertirGasto}
                   />
                 ))}
               </div>
@@ -1277,13 +1258,9 @@ export const VisorNotas: React.FC = () => {
                       key={nota.id}
                       nota={nota}
                       modoVista={modoVista}
-                      onEditar={(n) => {
-                        setNotaEnEdicion(n);
-                        setModalAbierto(true);
-                      }}
-                      onEliminar={async (id) => {
-                        await db.notas.delete(id);
-                      }}
+                      onEditar={handleEditar}
+                      onEliminar={handleEliminarNota}
+                      onConvertirEnGasto={handleAbrirConvertirGasto}
                     />
                   ))}
                 </div>
@@ -1318,6 +1295,18 @@ export const VisorNotas: React.FC = () => {
         </div>
       </div>
 
+      {/* Modal Declarativo Bento Único para Transacción de Deseo (Single Instance) */}
+      {notaParaConvertirGasto && (
+        <ModalConvertirWishlistGasto
+          isOpen={true}
+          onClose={() => setNotaParaConvertirGasto(null)}
+          onConfirmar={handleConfirmarConvertirGasto}
+          notaTitulo={notaParaConvertirGasto.titulo}
+          costoEstimado={Number(notaParaConvertirGasto.wishlist_json?.costoEstimado || 0)}
+          moneda={notaParaConvertirGasto.wishlist_json?.moneda || 'PEN'}
+        />
+      )}
+
       {/* Modal 360° Completo */}
       <EditorNotaModal
         isOpen={modalAbierto}
@@ -1329,6 +1318,26 @@ export const VisorNotas: React.FC = () => {
           setNotaEnEdicion(null);
         }}
       />
+
+      {/* Modal Declarativo de Creación de Cuadernos */}
+      <ModalCrearCuaderno
+        isOpen={modalCrearCuadernoAbierto}
+        onClose={() => setModalCrearCuadernoAbierto(false)}
+        onGuardar={handleGuardarCuaderno}
+        nombresExistentes={bloquesUnicos}
+      />
+
+      {/* Toast Notificación Reactiva Local-First */}
+      {toastMsg && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#0D1526]/95 border border-emerald-500/40 text-emerald-300 text-xs font-semibold shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-200"
+        >
+          <Check className="w-4 h-4 text-emerald-400 shrink-0" strokeWidth={2} />
+          <span>{toastMsg}</span>
+        </div>
+      )}
     </div>
   );
 };

@@ -12,6 +12,36 @@ import { useEffect, useRef } from 'react';
 import type { VistaGlobal } from '../components/Layout/HeaderMaestro';
 import { syncManager } from '../services/syncManager';
 
+export const STORAGE_KEY_SHORTCUTS_ENABLED = 'pmo_shortcuts_enabled';
+export const STORAGE_KEY_CUSTOM_SHORTCUTS = 'pmo_custom_shortcuts';
+
+export function obtenerAtajosHabilitados(propHabilitado: boolean = true): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SHORTCUTS_ENABLED);
+    if (raw !== null) {
+      return raw === 'true';
+    }
+  } catch (e) {
+    console.error('Error al leer pmo_shortcuts_enabled:', e);
+  }
+  return propHabilitado;
+}
+
+export function obtenerAtajosPersonalizados(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CUSTOM_SHORTCUTS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error al leer pmo_custom_shortcuts:', e);
+  }
+  return {};
+}
+
 export interface UseGlobalShortcutsOptions {
   vistaActiva: VistaGlobal;
   onCambiarVista: (vista: VistaGlobal) => void;
@@ -156,8 +186,9 @@ export function useGlobalShortcuts({
         return;
       }
 
-      // 5. Verificación de atajos habilitados
-      if (!stateRef.current.atajosHabilitados) {
+      // 5. Verificación de atajos habilitados (respetando prop y localStorage)
+      const habilitados = obtenerAtajosHabilitados(stateRef.current.atajosHabilitados);
+      if (!habilitados) {
         return;
       }
 
@@ -178,9 +209,50 @@ export function useGlobalShortcuts({
       }
 
       const key = e.key.toLowerCase();
+      const customMap = obtenerAtajosPersonalizados();
+
+      // Si existe un atajo personalizado para esta tecla, despacharlo
+      const accionPersonalizada = customMap[key];
+      if (accionPersonalizada) {
+        e.preventDefault();
+        switch (accionPersonalizada) {
+          case 'kanban':
+            onCambiarVista('kanban');
+            return;
+          case 'portafolio':
+            onCambiarVista('portafolio');
+            return;
+          case 'habitos':
+            onCambiarVista('habitos');
+            return;
+          case 'financiero':
+            onCambiarVista('financiero');
+            return;
+          case 'notas':
+            onCambiarVista('notas');
+            return;
+          case 'calendar':
+            window.open('https://calendar.google.com/calendar/r', '_blank', 'noopener,noreferrer');
+            return;
+          case 'sync':
+            window.dispatchEvent(new CustomEvent('pmo:sync-triggered'));
+            syncManager.sincronizarTodo().catch((err) => {
+              console.warn('[useGlobalShortcuts] Error en sync personalizado:', err);
+            });
+            return;
+          case 'clear-filters':
+            window.dispatchEvent(new CustomEvent('pmo:clear-filters'));
+            return;
+          case 'shortcuts-modal':
+            setModalAtajosAbierto((prev) => !prev);
+            return;
+          default:
+            break;
+        }
+      }
 
       // ======================================================================
-      // 6. ATAJOS NUMÉRICOS DE VISTAS (1 a 5)
+      // 6. ATAJOS NUMÉRICOS DE VISTAS (1 a 5) (ESTÁNDAR CANÓNICO)
       // ======================================================================
       switch (key) {
         case '1':

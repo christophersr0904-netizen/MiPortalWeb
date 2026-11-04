@@ -5,6 +5,8 @@ import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import type { NotaRecord, ChecklistItem, WishlistMeta, VinculoEntidad } from '../../types';
 import { db } from '../../db/db';
+import { serializarNotaATextoPlano } from '../../utils/entityNormalizer';
+import { toastCobalt } from '../../utils/toastCobalt';
 import { ModalVincularEntidades } from './ModalVincularEntidades';
 import {
   X,
@@ -18,7 +20,10 @@ import {
   Square,
   Plus,
   Trash2,
-  Link2
+  Link2,
+  ChevronDown,
+  Copy,
+  Check
 } from 'lucide-react';
 
 interface EditorNotaModalProps {
@@ -29,8 +34,6 @@ interface EditorNotaModalProps {
   blocksDisponibles?: string[];
 }
 
-type TabEditor = 'texto' | 'checklist' | 'wishlist';
-
 export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
   nota,
   isOpen,
@@ -38,7 +41,6 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
   initialBlock,
   blocksDisponibles = []
 }) => {
-  const [tabActiva, setTabActiva] = useState<TabEditor>('texto');
   const [titulo, setTitulo] = useState('');
   const [contenidoMarkdown, setContenidoMarkdown] = useState('');
   const [blockNombre, setBlockNombre] = useState('');
@@ -47,9 +49,10 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
   const [tagsInput, setTagsInput] = useState('');
   const [modoPreview, setModoPreview] = useState(false);
 
-  // Checklists State
+  // Checklists State & Edición In-line
   const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
   const [nuevoItemTexto, setNuevoItemTexto] = useState('');
+  const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
 
   // Wishlist State
   const [tieneWishlist, setTieneWishlist] = useState(false);
@@ -63,6 +66,39 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
   // Enlaces de Entidades State
   const [enlacesEntidades, setEnlacesEntidades] = useState<VinculoEntidad[]>([]);
   const [modalVincularAbierto, setModalVincularAbierto] = useState(false);
+
+  // Copiado omnicanal al portapapeles
+  const [copiado, setCopiado] = useState(false);
+
+  const handleCopiar = () => {
+    const notaParaCopiar: any = {
+      titulo,
+      contenido_markdown: contenidoMarkdown,
+      checklists_json: checklists,
+      wishlist_json: tieneWishlist
+        ? {
+            costoEstimado,
+            montoRealGastado,
+            moneda,
+            prioridad,
+            urlReferencia,
+            tienda
+          }
+        : undefined,
+      etiquetas: tagsInput
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean)
+    };
+
+    const texto = serializarNotaATextoPlano(notaParaCopiar);
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(texto);
+    }
+    setCopiado(true);
+    toastCobalt.exito('Nota copiada al portapapeles');
+    setTimeout(() => setCopiado(false), 1500);
+  };
 
   useEffect(() => {
     if (nota) {
@@ -110,7 +146,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
       setUrlReferencia('');
       setTienda('');
     }
-    setTabActiva('texto');
+    setEditingChecklistId(null);
     setModoPreview(false);
   }, [nota, isOpen, initialBlock]);
 
@@ -148,6 +184,12 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
   const handleToggleChecklistItem = (id: string) => {
     setChecklists(
       checklists.map((c) => (c.id === id ? { ...c, completado: !c.completado } : c))
+    );
+  };
+
+  const handleEditarChecklistItem = (id: string, nuevoTexto: string) => {
+    setChecklists(
+      checklists.map((c) => (c.id === id ? { ...c, texto: nuevoTexto } : c))
     );
   };
 
@@ -259,6 +301,18 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopiar}
+                  className="p-1.5 rounded-lg bg-slate-800/80 text-slate-400 border border-slate-700 hover:text-sky-300 hover:bg-slate-800 transition cursor-pointer"
+                  title="Copiar texto plano al portapapeles"
+                >
+                  {copiado ? (
+                    <Check className="w-4 h-4 text-emerald-400" strokeWidth={1.75} />
+                  ) : (
+                    <Copy className="w-4 h-4" strokeWidth={1.75} />
+                  )}
+                </button>
                 <button
                   type="button"
                   onClick={() => setEsFijada(!esFijada)}
@@ -395,282 +449,300 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
             </button>
           </div>
 
-          {/* Pestañas Modulares del Contenido (Texto + Checklist + Wishlist) */}
-          <div className="border-b border-slate-800 flex items-center justify-between pb-1">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setTabActiva('texto')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  tabActiva === 'texto'
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Texto & Markdown</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTabActiva('checklist')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  tabActiva === 'checklist'
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <CheckSquare className="w-3.5 h-3.5 text-sky-400" />
-                <span>Checklist</span>
-                {checklists.length > 0 && (
-                  <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-sky-300">
-                    {checklists.filter((c) => c.completado).length}/{checklists.length}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTabActiva('wishlist')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                  tabActiva === 'wishlist'
-                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <DollarSign className="w-3.5 h-3.5 text-purple-400" />
-                <span>Wishlist</span>
-                {tieneWishlist && (
-                  <span className="w-2 h-2 rounded-full bg-purple-400" />
-                )}
-              </button>
-            </div>
-
-            {tabActiva === 'texto' && (
-              <button
-                type="button"
-                onClick={() => setModoPreview(!modoPreview)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition flex items-center gap-1 cursor-pointer ${
-                  modoPreview
-                    ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
-                    : 'border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>{modoPreview ? 'Editor' : 'Vista Previa'}</span>
-              </button>
-            )}
-          </div>
-
-          {/* CONTENIDO DE PESTAÑA: 1. TEXTO / MARKDOWN */}
-          {tabActiva === 'texto' && (
-            <div>
-              {!modoPreview ? (
-                <textarea
-                  rows={9}
-                  value={contenidoMarkdown}
-                  onChange={(e) => setContenidoMarkdown(e.target.value)}
-                  placeholder="Redacta en Markdown... usa @PROY-XXX o @TAR-XXX para vincular con proyectos y tareas..."
-                  className="w-full bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 text-slate-200 font-mono text-xs leading-relaxed focus:outline-none focus:border-sky-500/60 resize-none transition-colors custom-scrollbar"
-                />
-              ) : (
-                <div className="min-h-[200px] max-h-[320px] overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-xl p-4 prose prose-invert prose-sky max-w-none text-xs leading-relaxed custom-scrollbar">
-                  {contenidoMarkdown ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
-                      {contenidoMarkdown}
-                    </ReactMarkdown>
-                  ) : (
-                    <span className="text-slate-500 italic">No hay contenido Markdown para previsualizar.</span>
-                  )}
+          {/* Bloques Desplegables Unificados (Texto + Checklist + Wishlist) */}
+          <div className="space-y-3">
+            {/* BLOQUE 1: TEXTO & MARKDOWN */}
+            <details open className="group bg-[#0D1526] border border-slate-800/40 rounded-xl overflow-hidden shadow-sm transition-all">
+              <summary className="flex items-center justify-between p-3 cursor-pointer select-none bg-slate-900/40 hover:bg-slate-900/70 transition-colors list-none [&::-webkit-details-marker]:hidden">
+                <div className="flex items-center gap-2">
+                  <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform duration-200" strokeWidth={1.75} />
+                  <Edit3 className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
+                  <span className="text-xs font-bold text-slate-200">Texto & Markdown</span>
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* CONTENIDO DE PESTAÑA: 2. CHECKLIST */}
-          {tabActiva === 'checklist' && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={nuevoItemTexto}
-                  onChange={(e) => setNuevoItemTexto(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAgregarChecklistItem();
-                    }
-                  }}
-                  placeholder="Nuevo elemento de lista... (Presiona Enter)"
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-                />
                 <button
                   type="button"
-                  onClick={handleAgregarChecklistItem}
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 flex items-center gap-1 transition cursor-pointer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setModoPreview(!modoPreview);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition flex items-center gap-1 cursor-pointer ${
+                    modoPreview
+                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                      : 'border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Agregar</span>
+                  <Eye className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  <span>{modoPreview ? 'Editor' : 'Vista Previa'}</span>
                 </button>
-              </div>
+              </summary>
 
-              <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar pr-1">
-                {checklists.length === 0 ? (
-                  <div className="text-center py-8 text-xs text-slate-500 italic">
-                    No hay subtareas ni pasos en el checklist aún.
-                  </div>
+              <div className="p-3.5 pt-2 border-t border-slate-800/40">
+                {!modoPreview ? (
+                  <textarea
+                    rows={7}
+                    value={contenidoMarkdown}
+                    onChange={(e) => setContenidoMarkdown(e.target.value)}
+                    placeholder="Redacta en Markdown... usa @PROY-XXX o @TAR-XXX para vincular con proyectos y tareas..."
+                    className="w-full bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 text-slate-200 font-mono text-xs leading-relaxed focus:outline-none focus:border-sky-500/60 resize-none transition-colors custom-scrollbar"
+                  />
                 ) : (
-                  checklists.map((chk) => (
-                    <div
-                      key={chk.id}
-                      className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-950/50 border border-slate-800/80 group"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleToggleChecklistItem(chk.id)}
-                        className="flex items-center gap-2.5 text-left flex-1 cursor-pointer"
-                      >
-                        {chk.completado ? (
-                          <CheckSquare className="w-4 h-4 text-emerald-400 fill-emerald-500/20 shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-500 group-hover:text-slate-300 shrink-0" />
-                        )}
-                        <span
-                          className={`text-xs ${
-                            chk.completado ? 'line-through text-slate-500' : 'text-slate-200'
-                          }`}
-                        >
-                          {chk.texto}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleEliminarChecklistItem(chk.id)}
-                        className="text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer"
-                        title="Eliminar ítem"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))
+                  <div className="min-h-[160px] max-h-[280px] overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-xl p-4 prose prose-invert prose-sky max-w-none text-xs leading-relaxed custom-scrollbar">
+                    {contenidoMarkdown ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+                        {contenidoMarkdown}
+                      </ReactMarkdown>
+                    ) : (
+                      <span className="text-slate-500 italic">No hay contenido Markdown para previsualizar.</span>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
-          )}
+            </details>
 
-          {/* CONTENIDO DE PESTAÑA: 3. WISHLIST / PRESUPUESTO */}
-          {tabActiva === 'wishlist' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-purple-950/20 border border-purple-900/40">
+            {/* BLOQUE 2: CHECKLIST */}
+            <details open className="group bg-[#0D1526] border border-slate-800/40 rounded-xl overflow-hidden shadow-sm transition-all">
+              <summary className="flex items-center justify-between p-3 cursor-pointer select-none bg-slate-900/40 hover:bg-slate-900/70 transition-colors list-none [&::-webkit-details-marker]:hidden">
                 <div className="flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-purple-400" />
-                  <div>
-                    <span className="text-xs font-bold text-slate-200 block">
-                      Habilitar módulo de Deseo / Compra
+                  <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform duration-200" strokeWidth={1.75} />
+                  <CheckSquare className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
+                  <span className="text-xs font-bold text-slate-200">Checklist</span>
+                  {checklists.length > 0 && (
+                    <span className="font-mono tabular-nums text-[10px] px-2 py-0.5 rounded-full bg-slate-800/80 text-sky-300 border border-slate-700/50">
+                      {checklists.filter((c) => c.completado).length}/{checklists.length}
                     </span>
-                    <span className="text-[10px] text-slate-400">
-                      Permite presupuestar costo estimado y registrar conversión a gasto financiero.
-                    </span>
-                  </div>
+                  )}
                 </div>
-                <input
-                  type="checkbox"
-                  checked={tieneWishlist}
-                  onChange={(e) => setTieneWishlist(e.target.checked)}
-                  className="w-4 h-4 text-purple-500 rounded border-slate-700 focus:ring-purple-500 cursor-pointer"
-                />
-              </div>
+              </summary>
 
-              {tieneWishlist && (
-                <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-400 block mb-1">
-                        Costo Estimado:
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <select
-                          value={moneda}
-                          onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD')}
-                          className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-100 font-bold"
+              <div className="p-3.5 pt-2 border-t border-slate-800/40 space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={nuevoItemTexto}
+                    onChange={(e) => setNuevoItemTexto(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAgregarChecklistItem();
+                      }
+                    }}
+                    placeholder="Nuevo elemento de lista... (Presiona Enter)"
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAgregarChecklistItem}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    <span>Agregar</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                  {checklists.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-slate-500 italic">
+                      No hay subtareas ni pasos en el checklist aún.
+                    </div>
+                  ) : (
+                    checklists.map((chk) => (
+                      <div
+                        key={chk.id}
+                        className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-950/50 border border-slate-800/80 group/item hover:border-slate-700/80 transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                          {/* Checkbox toggle aislado */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleChecklistItem(chk.id)}
+                            className="text-left shrink-0 cursor-pointer focus:outline-none p-0.5"
+                            title={chk.completado ? 'Marcar como pendiente' : 'Marcar como completado'}
+                          >
+                            {chk.completado ? (
+                              <CheckSquare className="w-4 h-4 text-emerald-400 fill-emerald-500/20" strokeWidth={1.75} />
+                            ) : (
+                              <Square className="w-4 h-4 text-slate-500 hover:text-slate-300" strokeWidth={1.75} />
+                            )}
+                          </button>
+
+                          {/* Edición In-Line del texto */}
+                          {editingChecklistId === chk.id ? (
+                            <input
+                              type="text"
+                              value={chk.texto}
+                              autoFocus
+                              onChange={(e) => handleEditarChecklistItem(chk.id, e.target.value)}
+                              onBlur={() => setEditingChecklistId(null)}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  setEditingChecklistId(null);
+                                } else if (e.key === 'Escape') {
+                                  e.preventDefault();
+                                  setEditingChecklistId(null);
+                                }
+                              }}
+                              className="flex-1 bg-slate-900 border border-sky-500/60 rounded-lg px-2 py-0.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-400 font-sans"
+                            />
+                          ) : (
+                            <span
+                              onDoubleClick={() => setEditingChecklistId(chk.id)}
+                              title="Doble clic para editar ítem"
+                              className={`text-xs cursor-text truncate select-none flex-1 ${
+                                chk.completado ? 'line-through text-slate-500' : 'text-slate-200 hover:text-sky-200'
+                              }`}
+                            >
+                              {chk.texto}
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarChecklistItem(chk.id)}
+                          className="text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer shrink-0"
+                          title="Eliminar ítem"
                         >
-                          <option value="PEN">S/</option>
-                          <option value="USD">$</option>
-                        </select>
+                          <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </details>
+
+            {/* BLOQUE 3: WISHLIST / PRESUPUESTO */}
+            <details open className="group bg-[#0D1526] border border-slate-800/40 rounded-xl overflow-hidden shadow-sm transition-all">
+              <summary className="flex items-center justify-between p-3 cursor-pointer select-none bg-slate-900/40 hover:bg-slate-900/70 transition-colors list-none [&::-webkit-details-marker]:hidden">
+                <div className="flex items-center gap-2">
+                  <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform duration-200" strokeWidth={1.75} />
+                  <DollarSign className="w-4 h-4 text-purple-400" strokeWidth={1.75} />
+                  <span className="text-xs font-bold text-slate-200">Wishlist & Presupuesto</span>
+                  {tieneWishlist && (
+                    <span className="w-2 h-2 rounded-full bg-purple-400" />
+                  )}
+                </div>
+                {tieneWishlist && costoEstimado > 0 && (
+                  <span className="font-mono tabular-nums text-[10px] px-2 py-0.5 rounded-full bg-purple-950/40 text-purple-300 border border-purple-800/40">
+                    {moneda === 'USD' ? '$' : 'S/'} {costoEstimado.toFixed(2)}
+                  </span>
+                )}
+              </summary>
+
+              <div className="p-3.5 pt-2 border-t border-slate-800/40 space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-purple-950/20 border border-purple-900/40">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-purple-400" strokeWidth={1.75} />
+                    <div>
+                      <span className="text-xs font-bold text-slate-200 block">
+                        Habilitar módulo de Deseo / Compra
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Permite presupuestar costo estimado y registrar conversión a gasto financiero.
+                      </span>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={tieneWishlist}
+                    onChange={(e) => setTieneWishlist(e.target.checked)}
+                    className="w-4 h-4 text-purple-500 rounded border-slate-700 focus:ring-purple-500 cursor-pointer"
+                  />
+                </div>
+
+                {tieneWishlist && (
+                  <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                          Costo Estimado:
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={moneda}
+                            onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD')}
+                            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-100 font-bold"
+                          >
+                            <option value="PEN">S/</option>
+                            <option value="USD">$</option>
+                          </select>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={costoEstimado || ''}
+                            onChange={(e) => setCostoEstimado(parseFloat(e.target.value) || 0)}
+                            placeholder="0.00"
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 font-mono tabular-nums"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                          Gasto Real Acumulado:
+                        </label>
                         <input
                           type="number"
                           step="0.01"
                           min="0"
-                          value={costoEstimado || ''}
-                          onChange={(e) => setCostoEstimado(parseFloat(e.target.value) || 0)}
+                          value={montoRealGastado || ''}
+                          onChange={(e) => setMontoRealGastado(parseFloat(e.target.value) || 0)}
                           placeholder="0.00"
-                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 font-mono"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 font-mono tabular-nums"
                         />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                          Prioridad de Compra:
+                        </label>
+                        <select
+                          value={prioridad}
+                          onChange={(e) => setPrioridad(e.target.value as any)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100"
+                        >
+                          <option value="ALTA">Alta Prioridad</option>
+                          <option value="MEDIA">Media</option>
+                          <option value="BAJA">Baja / Opcional</option>
+                        </select>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-400 block mb-1">
-                        Gasto Real Acumulado:
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={montoRealGastado || ''}
-                        onChange={(e) => setMontoRealGastado(parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100 font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-400 block mb-1">
-                        Prioridad de Compra:
-                      </label>
-                      <select
-                        value={prioridad}
-                        onChange={(e) => setPrioridad(e.target.value as any)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100"
-                      >
-                        <option value="ALTA">Alta Prioridad</option>
-                        <option value="MEDIA">Media</option>
-                        <option value="BAJA">Baja / Opcional</option>
-                      </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                          URL de Referencia / Enlace:
+                        </label>
+                        <input
+                          type="url"
+                          value={urlReferencia}
+                          onChange={(e) => setUrlReferencia(e.target.value)}
+                          placeholder="https://..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-400 block mb-1">
+                          Tienda / Proveedor:
+                        </label>
+                        <input
+                          type="text"
+                          value={tienda}
+                          onChange={(e) => setTienda(e.target.value)}
+                          placeholder="Ej. Amazon, MercadoLibre, Falabella..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100"
+                        />
+                      </div>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-400 block mb-1">
-                        URL de Referencia / Enlace:
-                      </label>
-                      <input
-                        type="url"
-                        value={urlReferencia}
-                        onChange={(e) => setUrlReferencia(e.target.value)}
-                        placeholder="https://..."
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-400 block mb-1">
-                        Tienda / Proveedor:
-                      </label>
-                      <input
-                        type="text"
-                        value={tienda}
-                        onChange={(e) => setTienda(e.target.value)}
-                        placeholder="Ej. Amazon, MercadoLibre, Falabella..."
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-100"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            </details>
+          </div>
 
           {/* Etiquetas */}
           <div className="pt-1">

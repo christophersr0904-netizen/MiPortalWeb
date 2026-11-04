@@ -12,11 +12,11 @@ export const ViewHabitos: React.FC = () => {
   const [modalActividadAbierto, setModalActividadAbierto] = useState(false);
 
   return (
-    <div id="vista-habitos-wrapper" className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-100 dark:bg-[#040711]">
+    <div id="vista-habitos-wrapper" className="flex-1 flex flex-col h-full w-full overflow-hidden bg-[#040711]">
       {/* ================================================================= */}
       {/* CABECERA MAESTRA UNIFICADA CON SELECTOR DE SUBPESTAÑAS COBALT     */}
       {/* ================================================================= */}
-      <div className="px-4 lg:px-6 py-3 bg-white dark:bg-[#040711] border-b border-slate-200 dark:border-slate-800/40 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+      <div className="px-4 lg:px-6 py-3 bg-[#0D1526]/80 backdrop-blur-md border-b border-slate-800/40 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-cobalt-1">
         {/* Identidad del Módulo */}
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-gradient-to-tr from-emerald-600 via-teal-600 to-cyan-600 text-white rounded-2xl shadow-md shadow-emerald-500/20 ring-1 ring-white/20 shrink-0">
@@ -24,14 +24,14 @@ export const ViewHabitos: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 leading-tight">
+              <h2 className="text-base sm:text-lg font-black text-slate-100 leading-tight">
                 Hábitos & Vida Modular
               </h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-800/80">
                 SaaS Personal
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            <p className="text-xs text-slate-400 font-medium">
               Gestión integral de hábitos, metas estratégicas y analítica de consistencia
             </p>
           </div>
@@ -43,7 +43,7 @@ export const ViewHabitos: React.FC = () => {
           <div
             role="tablist"
             aria-label="Navegación estratégica del módulo de Hábitos y Vida"
-            className="inline-flex p-1 bg-slate-200/70 dark:bg-[#0D1526] rounded-xl border border-slate-300/70 dark:border-slate-800/40 gap-1 text-xs"
+            className="inline-flex p-1 bg-[#0B132B] rounded-xl border border-slate-800/40 gap-1 text-xs"
           >
             <button
               type="button"

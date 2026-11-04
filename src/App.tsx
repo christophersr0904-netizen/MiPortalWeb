@@ -2,10 +2,6 @@ import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { HeaderMaestro, type VistaGlobal, type ModoColor, type SaborTema } from './components/Layout/HeaderMaestro';
 import { BottomNavMobile } from './components/Layout/BottomNavMobile';
 import { WidgetIdeasBubble } from './components/Ideas/WidgetIdeasBubble';
-import { ViewKanban } from './components/Views/ViewKanban';
-import { ViewPortafolio } from './components/Views/ViewPortafolio';
-import { ViewHabitos } from './components/Views/ViewHabitos';
-import { ViewNotas } from './components/Views/ViewNotas';
 
 // ErrorBoundary para blindar el Cockpit contra pantallas blancas en Electron
 interface ErrorBoundaryState {
@@ -49,13 +45,35 @@ class CockpitErrorBoundary extends React.Component<{ children: React.ReactNode }
   }
 }
 
-// Carga diferida con code-splitting para optimización de bundle (REQ-PROD-002)
+// Carga diferida con code-splitting para optimización drástica de bundle (REQ-SYS-001-F7)
+const ViewKanban = lazy(() =>
+  import('./components/Views/ViewKanban').then((m) => ({ default: m.ViewKanban }))
+);
+const ViewPortafolio = lazy(() =>
+  import('./components/Views/ViewPortafolio').then((m) => ({ default: m.ViewPortafolio }))
+);
+const ViewHabitos = lazy(() =>
+  import('./components/Views/ViewHabitos').then((m) => ({ default: m.ViewHabitos }))
+);
+const ViewNotas = lazy(() =>
+  import('./components/Views/ViewNotas').then((m) => ({ default: m.ViewNotas }))
+);
 const ViewDetalle360 = lazy(() =>
   import('./components/Views/ViewDetalle360').then((m) => ({ default: m.ViewDetalle360 }))
 );
 const ViewFinanzas = lazy(() =>
   import('./components/Views/ViewFinanzas').then((m) => ({ default: m.ViewFinanzas }))
 );
+
+const getVistaDesdeHash = (): VistaGlobal => {
+  if (typeof window === 'undefined') return 'kanban';
+  const rawHash = window.location.hash.replace(/^#/, '').toLowerCase().trim();
+  const vistasValidas: VistaGlobal[] = ['kanban', 'portafolio', 'habitos', 'financiero', 'detalle', 'notas'];
+  if (vistasValidas.includes(rawHash as VistaGlobal)) {
+    return rawHash as VistaGlobal;
+  }
+  return 'kanban';
+};
 
 const VistaCargandoFallback: React.FC = () => (
   <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#040711] min-h-[400px]">
@@ -78,30 +96,59 @@ import { UndoDeleteProvider } from './context/UndoDeleteContext';
 import { UndoToastContainer } from './components/UI/UndoToastContainer';
 
 export const App: React.FC = () => {
-  const [vistaActiva, setVistaActiva] = useState<VistaGlobal>('kanban');
-  const [proyectoSeleccionadoId, setProyectoSeleccionadoId] = useState<string | null>(null);
-  const [asistenteAbierto, setAsistenteAbierto] = useState(false);
-  const [modalAtajosAbierto, setModalAtajosAbierto] = useState(false);
-  const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
-  const [drawerArchivadosAbierto, setDrawerArchivadosAbierto] = useState(false);
+  // FIX-COCKPIT-NATIVE-SIGNAL-RESTORE-119: Reconocimiento dual de entorno nativo Electron
+  // Se detecta tanto por la marca inmutable inyectada en desktop/preload.js (window.IS_DESKTOP_WIDGET)
+  // como por parámetros explícitos de URL (?widget=desktop o ?mode=hud).
+  // En navegador normal (http://localhost:3000/), window.IS_DESKTOP_WIDGET es undefined y monta el Layout completo.
   const [esModoHud, setEsModoHud] = useState(() => {
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       return (
-        searchParams.get('mode') === 'hud' ||
-        hashParams.get('mode') === 'hud' ||
-        searchParams.get('mode') === 'cockpit-only' ||
-        hashParams.get('mode') === 'cockpit-only' ||
-        window.location.hash.includes('cockpit-widget') ||
+        (window as any).IS_DESKTOP_WIDGET === true ||
         searchParams.get('widget') === 'desktop' ||
         hashParams.get('widget') === 'desktop' ||
-        Boolean((window as any).IS_DESKTOP_WIDGET) ||
-        Boolean((window as any).desktopWidget)
+        searchParams.get('mode') === 'hud' ||
+        hashParams.get('mode') === 'hud'
       );
     }
     return false;
   });
+
+  const esWidgetNativo = typeof window !== 'undefined' && (
+    (window as any).IS_DESKTOP_WIDGET === true ||
+    new URLSearchParams(window.location.search).get('widget') === 'desktop' ||
+    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('widget') === 'desktop' ||
+    new URLSearchParams(window.location.search).get('mode') === 'hud' ||
+    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('mode') === 'hud'
+  );
+
+  const [vistaActiva, setVistaActiva] = useState<VistaGlobal>(() => getVistaDesdeHash());
+
+  const handleCambiarVista = (vista: VistaGlobal) => {
+    setVistaActiva(vista);
+    if (typeof window !== 'undefined' && !esModoHud && !esWidgetNativo) {
+      if (window.location.hash.replace(/^#/, '') !== vista) {
+        window.history.replaceState(null, '', `#${vista}`);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (esModoHud || esWidgetNativo) return;
+    const handleHashChange = () => {
+      const vista = getVistaDesdeHash();
+      setVistaActiva(vista);
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [esModoHud, esWidgetNativo]);
+
+  const [proyectoSeleccionadoId, setProyectoSeleccionadoId] = useState<string | null>(null);
+  const [asistenteAbierto, setAsistenteAbierto] = useState(false);
+  const [modalAtajosAbierto, setModalAtajosAbierto] = useState(false);
+  const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
+  const [drawerArchivadosAbierto, setDrawerArchivadosAbierto] = useState(false);
   const [modoColor, setModoColor] = useState<ModoColor>('dark');
   const [saborTema, setSaborTema] = useState<SaborTema>('slate');
   const [modalHabitoGlobalAbierto, setModalHabitoGlobalAbierto] = useState(false);
@@ -118,7 +165,7 @@ export const App: React.FC = () => {
   // Integración centralizada de atajos de teclado y pila LIFO
   useGlobalShortcuts({
     vistaActiva,
-    onCambiarVista: (vista) => setVistaActiva(vista),
+    onCambiarVista: handleCambiarVista,
     modalAtajosAbierto,
     setModalAtajosAbierto,
     modalPdfAbierto,
@@ -135,15 +182,11 @@ export const App: React.FC = () => {
       const searchParams = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
       if (
-        searchParams.get('mode') === 'hud' ||
-        hashParams.get('mode') === 'hud' ||
-        searchParams.get('mode') === 'cockpit-only' ||
-        hashParams.get('mode') === 'cockpit-only' ||
-        window.location.hash.includes('cockpit-widget') ||
+        (window as any).IS_DESKTOP_WIDGET === true ||
         searchParams.get('widget') === 'desktop' ||
         hashParams.get('widget') === 'desktop' ||
-        Boolean((window as any).IS_DESKTOP_WIDGET) ||
-        Boolean((window as any).desktopWidget)
+        searchParams.get('mode') === 'hud' ||
+        hashParams.get('mode') === 'hud'
       ) {
         setEsModoHud(true);
       }
@@ -173,14 +216,11 @@ export const App: React.FC = () => {
     const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
     const hashParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.hash.replace(/^#/, '')) : null;
     const isHud =
-      searchParams?.get('mode') === 'hud' ||
-      hashParams?.get('mode') === 'hud' ||
-      searchParams?.get('mode') === 'cockpit-only' ||
-      hashParams?.get('mode') === 'cockpit-only' ||
-      window.location.hash.includes('cockpit-widget') ||
+      (window as any).IS_DESKTOP_WIDGET === true ||
       searchParams?.get('widget') === 'desktop' ||
       hashParams?.get('widget') === 'desktop' ||
-      Boolean((window as any).desktopWidget);
+      searchParams?.get('mode') === 'hud' ||
+      hashParams?.get('mode') === 'hud';
 
     (async () => {
       try {
@@ -219,7 +259,7 @@ export const App: React.FC = () => {
           setActividadEditarGlobal(act);
           setModalHabitoGlobalAbierto(true);
         } else {
-          setVistaActiva('habitos');
+          handleCambiarVista('habitos');
         }
       } else if (t === 'PROYECTO') {
         const proy = await db.proyectos
@@ -228,12 +268,12 @@ export const App: React.FC = () => {
           .first();
         if (proy) {
           setProyectoSeleccionadoId(proy.id);
-          setVistaActiva('detalle');
+          handleCambiarVista('detalle');
         } else {
-          setVistaActiva('portafolio');
+          handleCambiarVista('portafolio');
         }
       } else if (t === 'GASTO' || t === 'INGRESO' || t === 'FINANZAS') {
-        setVistaActiva('financiero');
+        handleCambiarVista('financiero');
       }
     };
 
@@ -259,15 +299,8 @@ export const App: React.FC = () => {
     document.documentElement.setAttribute('data-theme', sabor);
   };
 
-  const esWidgetNativo = typeof window !== 'undefined' && (
-    Boolean(window.IS_DESKTOP_WIDGET) ||
-    Boolean(window.IS_ELECTRON_COCKPIT) ||
-    Boolean(window.desktopWidget?.isNative) ||
-    new URLSearchParams(window.location.search).get('widget') === 'desktop' ||
-    new URLSearchParams(window.location.hash.replace(/^#/, '')).get('widget') === 'desktop'
-  );
-
   // Garantizar fondo 100% transparente en Electron para widget frameless
+  // Si no está en modo widget, restablecer background de forma segura
   useEffect(() => {
     if (esModoHud || esWidgetNativo) {
       document.documentElement.classList.remove('bg-[#020617]', 'bg-[#040711]', 'bg-slate-50');
@@ -276,6 +309,11 @@ export const App: React.FC = () => {
       document.body.style.backgroundColor = 'transparent';
       const root = document.getElementById('root');
       if (root) root.style.backgroundColor = 'transparent';
+    } else {
+      document.documentElement.style.backgroundColor = '';
+      document.body.style.backgroundColor = '';
+      const root = document.getElementById('root');
+      if (root) root.style.backgroundColor = '';
     }
   }, [esModoHud, esWidgetNativo]);
 
@@ -308,115 +346,111 @@ export const App: React.FC = () => {
       <div className="min-h-screen md:h-full flex flex-col overflow-y-auto md:overflow-hidden bg-slate-50 dark:bg-[#040711] text-slate-800 dark:text-slate-200 antialiased font-sans safe-area-insets">
         {/* 1. Header Maestro Global */}
         <HeaderMaestro
-        vistaActiva={vistaActiva}
-        onCambiarVista={(vista) => setVistaActiva(vista)}
-        onAbrirAsistenteIA={() => setAsistenteAbierto(true)}
-        onAbrirAtajos={() => setModalAtajosAbierto(true)}
-        onAbrirExportarPdf={() => setModalPdfAbierto(true)}
-        drawerArchivadosAbierto={drawerArchivadosAbierto}
-        onToggleDrawerArchivados={setDrawerArchivadosAbierto}
-        modoColor={modoColor}
-        saborTema={saborTema}
-        onCambiarModoColor={handleCambiarModoColor}
-        onCambiarSaborTema={handleCambiarSaborTema}
-      />
-
-      {/* 2. Área Central con Renderizado Condicional de Vistas Canónicas */}
-      <div className="flex-1 flex overflow-y-auto md:overflow-hidden relative pb-20 md:pb-0">
-        {vistaActiva === 'kanban' && (
-          <ViewKanban
-            onSeleccionarProyecto={(id) => {
-              setProyectoSeleccionadoId(id);
-              setVistaActiva('detalle');
-            }}
-            onVerDetalle360={(id) => {
-              setProyectoSeleccionadoId(id);
-              setVistaActiva('detalle');
-            }}
-          />
-        )}
-
-        {vistaActiva === 'portafolio' && (
-          <ViewPortafolio
-            onSeleccionarProyecto={(id) => {
-              setProyectoSeleccionadoId(id);
-              setVistaActiva('detalle');
-            }}
-          />
-        )}
-
-        {vistaActiva === 'habitos' && <ViewHabitos />}
-
-        {vistaActiva === 'financiero' && (
-          <Suspense fallback={<VistaCargandoFallback />}>
-            <ViewFinanzas />
-          </Suspense>
-        )}
-
-        {vistaActiva === 'detalle' && (
-          <Suspense fallback={<VistaCargandoFallback />}>
-            <ViewDetalle360
-              proyectoIdSeleccionado={proyectoSeleccionadoId}
-              onVolverAlPortafolio={() => setVistaActiva('portafolio')}
-            />
-          </Suspense>
-        )}
-
-        {vistaActiva === 'notas' && <ViewNotas />}
-      </div>
-
-      {/* 3. Micro-Botón '+' Expandible Flotante de Ideas */}
-      <WidgetIdeasBubble
-        onAbrirAsistenteIA={() => setAsistenteAbierto(true)}
-        onConvertirATarea={(idea) => {
-          setModalTareaProps({
-            isOpen: true,
-            tareaId: null,
-            initialColumna: '02_Por_Hacer',
-            initialTitulo: idea.enunciado,
-            initialNotas: idea.detalle
-          });
-        }}
-        onConvertirAProyecto={() => {
-          setVistaActiva('portafolio');
-        }}
-        onConvertirAHabito={() => {
-          setVistaActiva('habitos');
-        }}
-        onConvertirANota={() => {
-          setVistaActiva('notas');
-        }}
-        onNavegarVista={(vista) => setVistaActiva(vista)}
-      />
-
-      {/* Modal TareaFlow para conversiones globales */}
-      {modalTareaProps?.isOpen && (
-        <ModalTareaFlow
-          isOpen={modalTareaProps.isOpen}
-          onClose={() => setModalTareaProps(null)}
-          tareaId={modalTareaProps.tareaId}
-          initialColumna={modalTareaProps.initialColumna}
-          initialTitulo={modalTareaProps.initialTitulo}
-          initialNotas={modalTareaProps.initialNotas}
+          vistaActiva={vistaActiva}
+          onCambiarVista={handleCambiarVista}
+          onAbrirAsistenteIA={() => setAsistenteAbierto(true)}
+          onAbrirAtajos={() => setModalAtajosAbierto(true)}
+          onAbrirExportarPdf={() => setModalPdfAbierto(true)}
+          drawerArchivadosAbierto={drawerArchivadosAbierto}
+          onToggleDrawerArchivados={setDrawerArchivadosAbierto}
+          modoColor={modoColor}
+          saborTema={saborTema}
+          onCambiarModoColor={handleCambiarModoColor}
+          onCambiarSaborTema={handleCambiarSaborTema}
         />
-      )}
 
-      {/* 4. Barra Fija Inferior Móvil con Bottom Sheets */}
-      <BottomNavMobile
-        vistaActiva={vistaActiva}
-        onCambiarVista={(vista) => setVistaActiva(vista)}
-        onCrearTareaRapida={() => {
-          setModalTareaProps({
-            isOpen: true,
-            tareaId: null,
-            initialColumna: '01_Backlog'
-          });
-        }}
-        onCrearHabitoRapido={() => setModalHabitoGlobalAbierto(true)}
-        onCrearNotaRapida={() => setVistaActiva('notas')}
-        onCrearGastoRapido={() => setModalGastoGlobalAbierto(true)}
-        onAbrirDrawerArchivados={() => setDrawerArchivadosAbierto(true)}
-      />
+        {/* 2. Área Central con Renderizado Condicional de Vistas Canónicas */}
+        <div className="flex-1 flex overflow-y-auto md:overflow-hidden relative pb-20 md:pb-0">
+          <Suspense fallback={<VistaCargandoFallback />}>
+            {vistaActiva === 'kanban' && (
+              <ViewKanban
+                onSeleccionarProyecto={(id) => {
+                  setProyectoSeleccionadoId(id);
+                  handleCambiarVista('detalle');
+                }}
+                onVerDetalle360={(id) => {
+                  setProyectoSeleccionadoId(id);
+                  handleCambiarVista('detalle');
+                }}
+              />
+            )}
+
+            {vistaActiva === 'portafolio' && (
+              <ViewPortafolio
+                onSeleccionarProyecto={(id) => {
+                  setProyectoSeleccionadoId(id);
+                  handleCambiarVista('detalle');
+                }}
+              />
+            )}
+
+            {vistaActiva === 'habitos' && <ViewHabitos />}
+
+            {vistaActiva === 'financiero' && <ViewFinanzas />}
+
+            {vistaActiva === 'detalle' && (
+              <ViewDetalle360
+                proyectoIdSeleccionado={proyectoSeleccionadoId}
+                onVolverAlPortafolio={() => handleCambiarVista('portafolio')}
+              />
+            )}
+
+            {vistaActiva === 'notas' && <ViewNotas />}
+          </Suspense>
+        </div>
+
+        {/* 3. Micro-Botón '+' Expandible Flotante de Ideas */}
+        <WidgetIdeasBubble
+          onAbrirAsistenteIA={() => setAsistenteAbierto(true)}
+          onConvertirATarea={(idea) => {
+            setModalTareaProps({
+              isOpen: true,
+              tareaId: null,
+              initialColumna: '02_Por_Hacer',
+              initialTitulo: idea.enunciado,
+              initialNotas: idea.detalle
+            });
+          }}
+          onConvertirAProyecto={() => {
+            handleCambiarVista('portafolio');
+          }}
+          onConvertirAHabito={() => {
+            handleCambiarVista('habitos');
+          }}
+          onConvertirANota={() => {
+            handleCambiarVista('notas');
+          }}
+          onNavegarVista={handleCambiarVista}
+        />
+
+        {/* Modal TareaFlow para conversiones globales */}
+        {modalTareaProps?.isOpen && (
+          <ModalTareaFlow
+            isOpen={modalTareaProps.isOpen}
+            onClose={() => setModalTareaProps(null)}
+            tareaId={modalTareaProps.tareaId}
+            initialColumna={modalTareaProps.initialColumna}
+            initialTitulo={modalTareaProps.initialTitulo}
+            initialNotas={modalTareaProps.initialNotas}
+          />
+        )}
+
+        {/* 4. Barra Fija Inferior Móvil con Bottom Sheets */}
+        <BottomNavMobile
+          vistaActiva={vistaActiva}
+          onCambiarVista={handleCambiarVista}
+          onCrearTareaRapida={() => {
+            setModalTareaProps({
+              isOpen: true,
+              tareaId: null,
+              initialColumna: '01_Backlog'
+            });
+          }}
+          onCrearHabitoRapido={() => setModalHabitoGlobalAbierto(true)}
+          onCrearNotaRapida={() => handleCambiarVista('notas')}
+          onCrearGastoRapido={() => setModalGastoGlobalAbierto(true)}
+          onAbrirDrawerArchivados={() => setDrawerArchivadosAbierto(true)}
+        />
 
       {/* Modal Canónico ActividadFlow (Global) */}
       <ModalActividadFlow

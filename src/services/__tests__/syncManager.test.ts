@@ -553,4 +553,93 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
     expect(pushSpy).toHaveBeenCalled();
     expect(pullSpy).toHaveBeenCalled();
   });
+
+  it('aplica resolución Last-Write-Wins (LWW): si remoto es más reciente, omite upsert y marca synced localmente', async () => {
+    const mockProyLocal = {
+      id: '550e8400-e29b-41d4-a716-446655440099',
+      codigo_legado: 'PRO-LWW-01',
+      nombre_proyecto: 'Proyecto Local Desactualizado',
+      tipo_iniciativa: 'Personal',
+      estado_proyecto: '01_Backlog',
+      updated_at: '2026-11-03T10:00:00.000Z',
+      sync_status: 'pending'
+    };
+
+    vi.spyOn(db.proyectos, 'where').mockReturnValue({
+      anyOf: () => ({
+        toArray: async () => [mockProyLocal],
+        count: async () => 1
+      }),
+      equals: () => ({
+        toArray: async () => [mockProyLocal],
+        count: async () => 1
+      })
+    } as any);
+
+    const updateSpy = vi.spyOn(db.proyectos, 'update').mockResolvedValue(1);
+
+    const upsertSpy = vi.fn();
+    const selectSpy = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        maybeSingle: async () => ({
+          // Remoto tiene timestamp posterior al local
+          data: { updated_at: '2026-11-03T14:30:00.000Z' },
+          error: null
+        })
+      })
+    });
+
+    (syncManager as any).supabase = {
+      from: vi.fn().mockReturnValue({
+        select: selectSpy,
+        upsert: upsertSpy
+      })
+    };
+
+    const res = await syncManager.sincronizarProyectos();
+
+    expect(res.success).toBe(1);
+    expect(upsertSpy).not.toHaveBeenCalled();
+    expect(updateSpy).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440099', {
+      sync_status: 'synced'
+    });
+  });
+
+  it('sincroniza entidades de metas, planes y finanzas en la cola de 12 entidades', async () => {
+    const mockMeta = {
+      id: '550e8400-e29b-41d4-a716-446655440077',
+      codigo_legado: 'MET-001',
+      nombre_meta: 'Correr Maratón 42k',
+      categoria_vida: 'SALUD_DEPORTE',
+      meta_objetivo_total: 42,
+      valor_acumulado_actual: 10,
+      nivel_rescate_minimo: 5,
+      peso_hitos_pct: 50,
+      peso_habitos_pct: 50,
+      estado: '02_En_Progreso',
+      updated_at: new Date().toISOString(),
+      version: 1,
+      sync_status: 'pending'
+    };
+
+    vi.spyOn(db.metas_planes, 'where').mockReturnValue({
+      anyOf: () => ({
+        toArray: async () => [mockMeta],
+        count: async () => 1
+      }),
+      equals: () => ({
+        toArray: async () => [mockMeta],
+        count: async () => 1
+      })
+    } as any);
+
+    const updateMetaSpy = vi.spyOn(db.metas_planes, 'update').mockResolvedValue(1);
+    (syncManager as any).supabase = null; // Mock mode
+
+    const resMetas = await syncManager.sincronizarMetasPlanes();
+    expect(resMetas.success).toBe(1);
+    expect(updateMetaSpy).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440077', {
+      sync_status: 'synced'
+    });
+  });
 });

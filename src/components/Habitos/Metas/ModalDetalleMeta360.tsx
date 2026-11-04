@@ -38,7 +38,8 @@ import {
 } from '../../../services/metasService';
 import {
   completarActividadPersonalLocal,
-  registrarAvanceCuantitativoLocal
+  registrarAvanceCuantitativoLocal,
+  formatFechaIsoLocal
 } from '../../../services/habitosService';
 import { db } from '../../../db/db';
 import { syncManager } from '../../../services/syncManager';
@@ -123,7 +124,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const hoyStr = new Date().toISOString().split('T')[0];
+  const hoyStr = formatFechaIsoLocal();
 
   // Cálculo de métricas de Avance Planificado vs Real, Racha y Proyección
   const metricas360 = useMemo(() => {
@@ -463,12 +464,12 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                 Estructura EDT / Cierre
               </span>
-              <Clock className="w-4 h-4 text-indigo-400" strokeWidth={1.75} />
+              <Clock className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
             </div>
 
             <div>
               <div className="flex items-baseline justify-between">
-                <span className="text-lg font-black font-mono tabular-nums text-indigo-300">
+                <span className="text-lg font-black font-mono tabular-nums text-sky-300">
                   {metricas360.hitosCompletados}/{metricas360.totalHitos} Hitos
                 </span>
                 <span className="text-xs font-mono tabular-nums text-emerald-400 font-bold">
@@ -567,7 +568,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
                                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-sky-950/40 text-sky-300 border border-sky-800/40">
                                   {hab?.frecuencia_ciclo || 'DIARIA'}
                                 </span>
-                                <span className="text-[10px] font-mono tabular-nums font-semibold px-2 py-0.5 rounded bg-indigo-950/40 text-indigo-300 border border-indigo-800/40">
+                                <span className="text-[10px] font-mono tabular-nums font-semibold px-2 py-0.5 rounded bg-sky-950/40 text-sky-300 border border-sky-800/40">
                                   Peso: {peso}% · Factor: {factor}x
                                 </span>
                                 <span className="text-[10px] font-mono tabular-nums text-amber-400 font-bold flex items-center gap-0.5">
@@ -691,13 +692,13 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
             <div className="portal-surface bg-[#0D1526] p-4 lg:p-5 rounded-2xl border border-slate-800/40 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800/60">
                 <div className="flex items-center gap-2.5">
-                  <Layers className="w-4 h-4 text-indigo-400" strokeWidth={1.75} />
+                  <Layers className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
                   <div>
                     <h3 className="text-sm font-black text-slate-100 uppercase tracking-wider">
                       EDT Nivel 2 · Hitos del Plan de Acción ({metricas360.hitosCompletados}/{metricas360.totalHitos})
                     </h3>
                     <p className="text-[11px] text-slate-400">
-                      Entregables de control secuencial de la meta (Peso: <span className="font-mono tabular-nums text-indigo-300 font-bold">{meta.peso_hitos_pct}%</span>)
+                      Entregables de control secuencial de la meta (Peso: <span className="font-mono tabular-nums text-sky-300 font-bold">{meta.peso_hitos_pct}%</span>)
                     </p>
                   </div>
                 </div>
@@ -712,7 +713,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
                   {meta.hitos.map((h) => (
                     <div
                       key={h.id}
-                      className="p-3 rounded-xl bg-[#040711]/80 border border-slate-800/60 flex items-center justify-between gap-3 hover:border-indigo-500/40 transition"
+                      className="p-3 rounded-xl bg-[#040711]/80 border border-slate-800/60 flex items-center justify-between gap-3 hover:border-sky-500/40 transition"
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <button
@@ -721,7 +722,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
                           className={`w-4 h-4 rounded-sm flex items-center justify-center shrink-0 cursor-pointer transition ${
                             h.completado
                               ? 'bg-emerald-500 text-white'
-                              : 'border border-slate-600 text-slate-400 hover:border-indigo-400'
+                              : 'border border-slate-600 text-slate-400 hover:border-sky-400'
                           }`}
                         >
                           {h.completado ? (
@@ -730,7 +731,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
                             <Square className="w-3.5 h-3.5" strokeWidth={1.75} />
                           )}
                         </button>
-                        <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-900 text-indigo-300 border border-slate-800 shrink-0">
+                        <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-900 text-sky-300 border border-slate-800 shrink-0">
                           {h.codigo_legado}
                         </span>
                         <span
@@ -773,7 +774,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
                   value={nuevoHitoTitulo}
                   onChange={(e) => setNuevoHitoTitulo(e.target.value)}
                   placeholder="Nuevo hito o entregable del plan..."
-                  className="flex-1 px-3 py-1.5 rounded-xl bg-[#040711] border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="flex-1 px-3 py-1.5 rounded-xl bg-[#040711] border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
                 />
                 <input
                   type="date"
@@ -784,7 +785,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
                 <button
                   type="submit"
                   disabled={!nuevoHitoTitulo.trim()}
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
                   <span>Añadir Hito</span>
@@ -931,7 +932,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
                         setPesoHitosPct(v);
                         setPesoHabitosPct(100 - v);
                       }}
-                      className="w-full px-2.5 py-2 rounded-xl bg-[#040711] border border-slate-800 text-xs font-mono tabular-nums text-indigo-300 focus:outline-none focus:border-sky-500"
+                      className="w-full px-2.5 py-2 rounded-xl bg-[#040711] border border-slate-800 text-xs font-mono tabular-nums text-sky-300 focus:outline-none focus:border-sky-500"
                     />
                   </div>
 

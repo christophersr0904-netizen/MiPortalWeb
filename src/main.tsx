@@ -14,6 +14,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 );
 
+// Prevención de ChunkLoadError por desincronización de caché en lazy loading
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault();
+  window.location.reload();
+});
+
 // Registro de Service Worker PWA forzando actualización inmediata
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker

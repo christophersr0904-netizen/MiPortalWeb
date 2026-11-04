@@ -46,22 +46,22 @@ if (!gotTheLock) {
 }
 
 const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.mjs': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.mjs': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
+  '.ico': 'image/x-icon',
   '.wasm': 'application/wasm',
   '.webmanifest': 'application/manifest+json',
-  '.map': 'application/json; charset=utf-8'
+  '.map': 'application/json'
 };
 
 // Micro-servidor HTTP loopback en 127.0.0.1:48123 para handshake, exclusión mutua y sync local
@@ -70,7 +70,7 @@ if (gotTheLock) {
     statusServer = http.createServer((req, res) => {
       console.log('[Servidor Loopback] Solicitud:', req.method, req.url);
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
       res.setHeader('Access-Control-Allow-Headers', '*');
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.setHeader('Pragma', 'no-cache');
@@ -82,13 +82,16 @@ if (gotTheLock) {
         return;
       }
 
-      if (req.url === '/status') {
+      const parsedUrl = new URL(req.url, 'http://127.0.0.1:48123');
+      const pathname = parsedUrl.pathname;
+
+      if (pathname === '/status') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ desktopWidgetAlive: true, timestamp: Date.now() }));
         return;
       }
 
-      if (req.url === '/api/sync-data' && req.method === 'GET') {
+      if (pathname === '/api/sync-data' && req.method === 'GET') {
         try {
           const storeDir = app.getPath('userData');
           const storePath = path.join(storeDir, 'local_pmo_store.json');
@@ -107,7 +110,7 @@ if (gotTheLock) {
         return;
       }
 
-      if (req.url === '/api/sync-data' && req.method === 'POST') {
+      if (pathname === '/api/sync-data' && req.method === 'POST') {
         let body = '';
         req.on('data', (chunk) => { body += chunk; });
         req.on('end', () => {
@@ -130,10 +133,9 @@ if (gotTheLock) {
       }
 
       // Servir archivos estáticos de dist/ para el HUD si no es un endpoint de API
-      if (req.method === 'GET') {
+      if (req.method === 'GET' || req.method === 'HEAD') {
         try {
-          const parsedUrl = new URL(req.url, 'http://127.0.0.1:48123');
-          let reqPath = parsedUrl.pathname;
+          let reqPath = decodeURIComponent(parsedUrl.pathname);
           if (reqPath === '/' || reqPath === '') {
             reqPath = '/index.html';
           }
@@ -141,19 +143,44 @@ if (gotTheLock) {
           const distDir = path.resolve(__dirname, '../dist');
           const safePath = path.normalize(path.join(distDir, reqPath));
 
-          if (safePath.startsWith(distDir) && fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
-            const ext = path.extname(safePath).toLowerCase();
-            const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-            res.writeHead(200, { 'Content-Type': contentType });
-            fs.createReadStream(safePath).pipe(res);
+          // Verificación de seguridad contra Path Traversal
+          if (!safePath.startsWith(distDir)) {
+            res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Acceso denegado');
             return;
           }
 
-          // Fallback SPA para dist/index.html
+          const ext = path.extname(reqPath).toLowerCase();
+          const fileExists = fs.existsSync(safePath) && fs.statSync(safePath).isFile();
+
+          if (fileExists) {
+            const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+            res.writeHead(200, { 'Content-Type': contentType });
+            if (req.method === 'HEAD') {
+              res.end();
+            } else {
+              fs.createReadStream(safePath).pipe(res);
+            }
+            return;
+          }
+
+          // Si el archivo tiene extensión (.js, .css, etc.) y NO existe, responder 404 estricto.
+          // NUNCA hacer fallback a index.html para assets estáticos con extensión.
+          if (ext && ext !== '.html') {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end(`Asset not found: ${reqPath}`);
+            return;
+          }
+
+          // Fallback SPA para dist/index.html ÚNICAMENTE en rutas de navegación (sin extensión o .html)
           const indexPath = path.join(distDir, 'index.html');
-          if (fs.existsSync(indexPath) && !req.url.startsWith('/api') && req.url !== '/status') {
+          if (fs.existsSync(indexPath) && !pathname.startsWith('/api') && pathname !== '/status') {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            fs.createReadStream(indexPath).pipe(res);
+            if (req.method === 'HEAD') {
+              res.end();
+            } else {
+              fs.createReadStream(indexPath).pipe(res);
+            }
             return;
           }
         } catch (err) {
@@ -218,14 +245,14 @@ function createWindow() {
     x: targetX,
     y: targetY,
     minWidth: 380,
-    minHeight: 500,
+    minHeight: 100,
     maxWidth: 520,
     maxHeight: height - 40,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
     hasShadow: false,
-    resizable: false,
+    resizable: true,
     alwaysOnTop: true,
     skipTaskbar: true, // Reside exclusivamente en System Tray sin ocupar barra de tareas
     show: true, // Visibilidad directa del widget al arrancar
@@ -342,14 +369,18 @@ function createWindow() {
     }
   });
 
-  ipcMain.on('widget-expand', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.setSize(420, 720);
+  ipcMain.on('widget-expand', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow || widgetWin;
+    if (win && !win.isDestroyed()) {
+      win.setBounds({ width: 420, height: 720 });
+    }
   });
 
-  ipcMain.on('widget-collapse', () => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.setSize(420, 720);
+  ipcMain.on('widget-collapse', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || mainWindow || widgetWin;
+    if (win && !win.isDestroyed()) {
+      win.setBounds({ width: 420, height: 120 });
+    }
   });
 }
 

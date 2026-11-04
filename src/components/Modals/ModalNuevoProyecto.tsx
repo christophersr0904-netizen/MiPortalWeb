@@ -86,10 +86,12 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
   const [tareasWiz, setTareasWiz] = useState<TareaWizItem[]>([]);
   const [gastosWiz, setGastosWiz] = useState<GastoWizItem[]>([]);
   const [guardando, setGuardando] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Inicializar o cargar datos del proyecto reactivamente
   useEffect(() => {
     if (abierto) {
+      setErrorMsg(null);
       if (proyectoAEditarId) {
         const cargarProyectoAEditar = async () => {
           let proy = await db.proyectos.get(proyectoAEditarId);
@@ -162,18 +164,6 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
       }
     }
   }, [abierto, proyectoAEditarId]);
-
-  // Manejo incondicional de tecla Escape para cerrar
-  useEffect(() => {
-    if (!abierto) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onCerrar();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [abierto, onCerrar]);
 
   // Generador inteligente de estructura de ejemplo / IA
   const generarPropuestaEstructura = () => {
@@ -314,12 +304,13 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
   const guardarProyecto = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!nombreProyecto.trim()) {
-      alert('Por favor ingresa el nombre del proyecto.');
+      setErrorMsg('Por favor ingresa el nombre del proyecto.');
       setTabActiva('datos');
       return;
     }
 
     setGuardando(true);
+    setErrorMsg(null);
     try {
       const nowIso = new Date().toISOString();
       const presNum = parseFloat(presupuestoTope) || 0;
@@ -461,11 +452,26 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
       onCerrar();
     } catch (err) {
       console.error('Error al guardar proyecto:', err);
-      alert('Error al guardar proyecto en base de datos local.');
+      setErrorMsg('Error al guardar proyecto en base de datos local.');
     } finally {
       setGuardando(false);
     }
   };
+
+  // Atajos de teclado: Escape para cerrar, Ctrl+Enter / Cmd+Enter para guardar
+  useEffect(() => {
+    if (!abierto) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCerrar();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        guardarProyecto();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [abierto, onCerrar, guardarProyecto]);
 
   if (!abierto) return null;
 
@@ -475,34 +481,34 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onCerrar();
       }}
-      className="fixed inset-0 z-[10000] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200"
+      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200"
     >
       <div
         id="modal-proyecto-wizard-card"
-        className="portal-surface elevation-3 w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800/60 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 bg-white dark:bg-[#0D1526] text-slate-100"
+        className="w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-800/60 shadow-cobalt-2 relative animate-in fade-in zoom-in-95 duration-200 bg-[#0D1526] text-slate-100"
       >
         {/* Drag handle móvil */}
-        <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
+        <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
 
         {/* CABECERA PRINCIPAL (STICKY) CON BOTÓN ÚNICO DE IA */}
-        <div className="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap justify-between items-center bg-white/50 dark:bg-slate-900/50 backdrop-blur-xs gap-3">
+        <div className="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-800 flex flex-wrap justify-between items-center bg-[#0A101D] gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-sky-950/40 shrink-0">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-black text-slate-800 dark:text-slate-100 text-sm md:text-base">
+                <h3 className="font-black text-slate-100 text-sm md:text-base">
                   {proyectoAEditarId ? `Editar Proyecto: ${codigoProyecto || ''}` : 'Nuevo Proyecto & Estructura WBS'}
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono tabular-nums font-extrabold bg-sky-500/10 text-sky-400 border border-sky-500/30">
                   {codigoProyecto || 'PRO-XXX'}
                 </span>
-                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80">
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-800/60 text-slate-300 border border-slate-700/60">
                   {proyectoAEditarId ? 'Modo Edición' : 'Asistido por IA'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] text-slate-400">
                 Define los datos clave o genera la estructura completa (Hitos, Tareas y Gastos) con asistencia inteligente
               </p>
             </div>
@@ -512,10 +518,10 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
               type="button"
               id="btn-ia-generar-propuesta"
               onClick={generarPropuestaEstructura}
-              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-900/30 flex items-center gap-1.5 transition active:scale-95 border border-indigo-400/40 cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs shadow-md shadow-sky-950/40 flex items-center gap-1.5 transition active:scale-95 border border-sky-400/40 cursor-pointer"
               title="Generar propuesta WBS automática"
             >
-              <Sparkles className="w-4 h-4 text-indigo-200 shrink-0" />
+              <Sparkles className="w-4 h-4 text-white shrink-0" />
               <span>Generar Estructura con IA</span>
             </button>
             <button
@@ -530,14 +536,14 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
         </div>
 
         {/* NAVEGACIÓN POR PESTAÑAS STICKY */}
-        <div className="sticky top-0 z-20 px-6 py-2 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 shrink-0 overflow-x-auto text-xs font-bold custom-scrollbar">
+        <div className="sticky top-0 z-20 px-6 py-2 bg-[#090E1A] border-b border-slate-800 flex items-center gap-2 shrink-0 overflow-x-auto text-xs font-bold custom-scrollbar">
           <button
             type="button"
             onClick={() => setTabActiva('datos')}
             className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 font-bold shrink-0 cursor-pointer ${
               tabActiva === 'datos'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent'
+                ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-sm shadow-sky-950/50'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
             }`}
           >
             <span>1. Datos Generales</span>
@@ -547,12 +553,12 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             onClick={() => setTabActiva('hitos')}
             className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 font-bold shrink-0 cursor-pointer ${
               tabActiva === 'hitos'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent'
+                ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-sm shadow-sky-950/50'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
             }`}
           >
             <span>2. Hitos</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300">
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono tabular-nums bg-slate-800 text-slate-300">
               {hitosWiz.length}
             </span>
           </button>
@@ -561,12 +567,12 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             onClick={() => setTabActiva('tareas')}
             className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 font-bold shrink-0 cursor-pointer ${
               tabActiva === 'tareas'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent'
+                ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-sm shadow-sky-950/50'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
             }`}
           >
             <span>3. Tareas</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300">
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono tabular-nums bg-slate-800 text-slate-300">
               {tareasWiz.length}
             </span>
           </button>
@@ -575,12 +581,12 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             onClick={() => setTabActiva('gastos')}
             className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 font-bold shrink-0 cursor-pointer ${
               tabActiva === 'gastos'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent'
+                ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-sm shadow-sky-950/50'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
             }`}
           >
             <span>4. Gastos</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300">
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono tabular-nums bg-slate-800 text-slate-300">
               {gastosWiz.length}
             </span>
           </button>
@@ -589,53 +595,53 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
         {/* CUERPO PRINCIPAL CON SCROLL INDEPENDIENTE */}
         <form
           id="form-wizard-proyecto"
-          className="flex-1 overflow-y-auto max-h-[68vh] p-4 md:p-6 custom-scrollbar bg-slate-50/50 dark:bg-slate-950/40 space-y-4 text-xs"
+          className="flex-1 overflow-y-auto max-h-[68vh] p-4 md:p-6 custom-scrollbar bg-[#040711] space-y-4 text-xs"
           onSubmit={guardarProyecto}
         >
           {/* TAB 1: DATOS GENERALES */}
           {tabActiva === 'datos' && (
             <div className="space-y-4">
               {/* BANNER GUÍA DE CREACIÓN Y ESTRUCTURACIÓN */}
-              <div className="p-3.5 bg-gradient-to-r from-slate-100 via-indigo-50/40 to-slate-100/80 dark:from-slate-800/80 dark:via-indigo-950/20 dark:to-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl flex items-center gap-3 shadow-2xs">
-                <Sparkles className="w-5 h-5 text-indigo-500 shrink-0" />
-                <div className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300 flex-1">
-                  <span className="font-bold text-slate-800 dark:text-slate-100">Creación Asistida:</span>{' '}
-                  Ingresa el <strong className="text-indigo-600 dark:text-indigo-400 font-semibold">Nombre</strong> y un resumen en{' '}
-                  <strong className="text-indigo-600 dark:text-indigo-400 font-semibold">Descripción / Alcance</strong>. Haz clic arriba en{' '}
-                  <strong className="text-indigo-600 dark:text-indigo-400 font-semibold">"Generar Estructura con IA"</strong> para desglosar hitos, tareas y presupuesto adaptados a tu sector.
+              <div className="p-3.5 bg-[#0D1526] border border-slate-800/80 rounded-2xl flex items-center gap-3 shadow-2xs">
+                <Sparkles className="w-5 h-5 text-sky-400 shrink-0" />
+                <div className="text-[11px] leading-relaxed text-slate-300 flex-1">
+                  <span className="font-bold text-slate-100">Creación Asistida:</span>{' '}
+                  Ingresa el <strong className="text-sky-400 font-semibold">Nombre</strong> y un resumen en{' '}
+                  <strong className="text-sky-400 font-semibold">Descripción / Alcance</strong>. Haz clic arriba en{' '}
+                  <strong className="text-sky-400 font-semibold">"Generar Estructura con IA"</strong> para desglosar hitos, tareas y presupuesto adaptados a tu sector.
                 </div>
               </div>
 
               {/* BANNER DE CLASIFICACIÓN ADAPTATIVA IA */}
-              <div id="wiz-ia-clasificacion-banner" className="p-3.5 bg-gradient-to-r from-indigo-50 via-purple-50 to-indigo-50 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-slate-900 border border-indigo-200 dark:border-indigo-800/80 rounded-2xl shadow-xs space-y-2">
+              <div id="wiz-ia-clasificacion-banner" className="p-3.5 bg-[#0D1526] border border-slate-800/80 rounded-2xl shadow-xs space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="font-extrabold text-xs text-indigo-900 dark:text-indigo-200">Clasificación Adaptativa IA:</span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span className="font-extrabold text-xs text-slate-200">Clasificación Adaptativa IA:</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span id="wiz-badge-arquetipo-sugerido" className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 dark:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700">
+                    <span id="wiz-badge-arquetipo-sugerido" className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-sky-500/10 text-sky-300 border border-sky-500/30">
                       {arquetipoProyecto}
                     </span>
-                    <span id="wiz-badge-magnitud-sugerida" className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 dark:bg-purple-900/80 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700">
+                    <span id="wiz-badge-magnitud-sugerida" className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-500/10 text-teal-300 border border-teal-500/30">
                       {magnitudComplejidad}
                     </span>
                   </div>
                 </div>
-                <p id="wiz-texto-justificacion-clasificacion" className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300 italic">
+                <p id="wiz-texto-justificacion-clasificacion" className="text-[11px] leading-relaxed text-slate-400 italic">
                   Clasificación adaptativa determinada según el alcance y especificaciones del proyecto.
                 </p>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-4">
+              <div className="bg-[#0D1526] rounded-2xl border border-slate-800/80 p-5 shadow-2xs space-y-4">
                 {/* Código PRO-XXX y Nombre del Proyecto */}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                      <label className="font-bold text-slate-200 flex items-center gap-1.5">
                         <span>Código</span>
                       </label>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60">
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-mono tabular-nums font-bold bg-sky-500/10 text-sky-400 border border-sky-500/30">
                         PRO-XXX
                       </span>
                     </div>
@@ -643,16 +649,16 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                       type="text"
                       readOnly
                       value={codigoProyecto || 'PRO-XXX'}
-                      className="w-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800/60 rounded-xl p-2.5 font-mono font-bold text-xs text-indigo-600 dark:text-indigo-400 outline-none select-all"
+                      className="w-full border border-slate-800 bg-[#040711] rounded-xl p-2.5 font-mono font-bold text-xs text-sky-400 outline-none select-all"
                     />
                   </div>
                   <div className="sm:col-span-3">
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                      <label className="font-bold text-slate-200 flex items-center gap-1.5">
                         <span>Nombre del Proyecto</span>
                         <span className="text-rose-500 font-bold">*</span>
                       </label>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/60">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30">
                         Requerido
                       </span>
                     </div>
@@ -661,37 +667,50 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                       id="wiz-nombreProyecto"
                       required
                       value={nombreProyecto}
-                      onChange={(e) => setNombreProyecto(e.target.value)}
+                      onChange={(e) => {
+                        setNombreProyecto(e.target.value);
+                        if (errorMsg) setErrorMsg(null);
+                      }}
                       placeholder="Ej: Construcción de segundo piso / Lanzamiento de Tienda Online / Certificación PMP"
-                      className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 font-bold outline-none text-slate-800 dark:text-slate-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 font-bold outline-none text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50"
                     />
+                    {/* Contenedor Anti-CLS con altura fija reservada */}
+                    <div className="min-h-[22px] flex items-center mt-1">
+                      <p
+                        className={`text-rose-400 text-xs font-semibold transition-opacity duration-200 ${
+                          errorMsg && tabActiva === 'datos' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                        }`}
+                      >
+                        {errorMsg || ''}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
                 {/* Descripción / Alcance */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="font-bold text-slate-700 dark:text-slate-200">
+                    <label className="font-bold text-slate-200">
                       Descripción / Alcance / Problema a Resolver
                     </label>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800/60 text-slate-300 border border-slate-700/60">
                       Recomendado
                     </span>
                   </div>
 
                   {/* Micro-guía de contexto ideal */}
-                  <div className="mb-2 p-2.5 bg-slate-50 dark:bg-slate-800/60 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                  <div className="mb-2 p-2.5 bg-[#040711] border border-dashed border-slate-800 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-300">
                     <div className="flex items-start gap-1.5">
-                      <span className="text-indigo-600 dark:text-indigo-400 font-bold">1.</span>
-                      <div><strong className="text-slate-800 dark:text-slate-100">Resultado:</strong> Entregable final tangible, obra, producto o servicio concluido.</div>
+                      <span className="text-sky-400 font-bold">1.</span>
+                      <div><strong className="text-slate-100">Resultado:</strong> Entregable final tangible, obra, producto o servicio concluido.</div>
                     </div>
                     <div className="flex items-start gap-1.5">
-                      <span className="text-amber-600 dark:text-amber-400 font-bold">2.</span>
-                      <div><strong className="text-slate-800 dark:text-slate-100">Restricciones:</strong> Plazos límite, presupuesto disponible o trámites externos.</div>
+                      <span className="text-amber-400 font-bold">2.</span>
+                      <div><strong className="text-slate-100">Restricciones:</strong> Plazos límite, presupuesto disponible o trámites externos.</div>
                     </div>
                     <div className="flex items-start gap-1.5">
-                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">3.</span>
-                      <div><strong className="text-slate-800 dark:text-slate-100">Enfoque:</strong> Ejecución propia, con contratistas o colaborativa.</div>
+                      <span className="text-emerald-400 font-bold">3.</span>
+                      <div><strong className="text-slate-100">Enfoque:</strong> Ejecución propia, con contratistas o colaborativa.</div>
                     </div>
                   </div>
 
@@ -701,20 +720,20 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
                     placeholder="Describe el objetivo, entregables esperados, contexto operativo y condiciones clave..."
-                    className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs"
+                    className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 text-slate-100 placeholder-slate-500 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 text-xs"
                   />
                 </div>
 
                 {/* Contexto Operativo de Ejecución */}
-                <div className="p-4 bg-slate-50 dark:bg-slate-900/80 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
-                  <h5 className="font-extrabold text-slate-800 dark:text-slate-100 text-xs">
+                <div className="p-4 bg-[#0A101D] rounded-2xl border border-slate-800/80 space-y-3">
+                  <h5 className="font-extrabold text-slate-100 text-xs">
                     Contexto Operativo de Ejecución
                   </h5>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {/* Estado de partida */}
                     <div>
-                      <label className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] block mb-1">
+                      <label className="font-semibold text-slate-300 text-[11px] block mb-1">
                         1. Estado Actual de Partida
                       </label>
                       <div className="grid grid-cols-2 gap-1.5 text-[11px]">
@@ -730,8 +749,8 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                             onClick={() => setEstadoPartida(opt)}
                             className={`p-2 rounded-xl border text-left transition font-semibold cursor-pointer truncate ${
                               estadoPartida === opt
-                                ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-500/30'
-                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                ? 'border-sky-500 bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/30'
+                                : 'border-slate-800 bg-[#040711] text-slate-300 hover:border-slate-700'
                             }`}
                           >
                             {opt.split(' ')[0]} {opt.split(' ')[1] || ''}
@@ -742,7 +761,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
 
                     {/* Modalidad Ejecutor */}
                     <div>
-                      <label className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] block mb-1">
+                      <label className="font-semibold text-slate-300 text-[11px] block mb-1">
                         2. Modalidad o Rol del Ejecutor
                       </label>
                       <div className="grid grid-cols-2 gap-1.5 text-[11px]">
@@ -758,8 +777,8 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                             onClick={() => setPerfilEjecutor(opt)}
                             className={`p-2 rounded-xl border text-left transition font-semibold cursor-pointer truncate ${
                               perfilEjecutor === opt
-                                ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-500/30'
-                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                ? 'border-sky-500 bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/30'
+                                : 'border-slate-800 bg-[#040711] text-slate-300 hover:border-slate-700'
                             }`}
                           >
                             {opt}
@@ -771,7 +790,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                     <div>
-                      <label className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] block mb-1">
+                      <label className="font-semibold text-slate-300 text-[11px] block mb-1">
                         3. Recursos o Materiales Clave
                       </label>
                       <input
@@ -779,11 +798,11 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                         value={recursosMateriales}
                         onChange={(e) => setRecursosMateriales(e.target.value)}
                         placeholder="Ej. Contratista y ferretería / Notaría / React & Supabase..."
-                        className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2 text-xs text-slate-800 dark:text-slate-100 outline-none"
+                        className="w-full border border-slate-800 bg-[#040711] rounded-xl p-2 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-sky-500"
                       />
                     </div>
                     <div>
-                      <label className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] block mb-1">
+                      <label className="font-semibold text-slate-300 text-[11px] block mb-1">
                         4. Restricciones Críticas & Trámites
                       </label>
                       <input
@@ -791,7 +810,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                         value={restricciones}
                         onChange={(e) => setRestricciones(e.target.value)}
                         placeholder="Ej: Licencia municipal / Presupuesto tope estricto..."
-                        className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl p-2 text-xs text-slate-800 dark:text-slate-100 outline-none"
+                        className="w-full border border-slate-800 bg-[#040711] rounded-xl p-2 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-sky-500"
                       />
                     </div>
                   </div>
@@ -800,10 +819,10 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 {/* Metodología / Enfoque de Ejecución */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <label className="font-semibold text-slate-300 flex items-center gap-1.5">
                       <span>Metodología / Enfoque de Ejecución</span>
                     </label>
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-300 border border-slate-700">
                       Inferencia Automática
                     </span>
                   </div>
@@ -820,8 +839,8 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                         onClick={() => setMetodologia(m.id)}
                         className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 active:scale-98 ${
                           metodologia === m.id
-                            ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-500/30 font-bold'
-                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                            ? 'border-sky-500 bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/30 font-bold'
+                            : 'border-slate-800 bg-[#040711] text-slate-300 hover:border-slate-700'
                         }`}
                       >
                         <span>{m.label}</span>
@@ -832,7 +851,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
 
                 {/* Tipo de Iniciativa */}
                 <div>
-                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  <label className="font-semibold text-slate-300 block mb-1.5">
                     Tipo de Iniciativa
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
@@ -852,8 +871,8 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                         onClick={() => setTipoIniciativa(opt)}
                         className={`p-2 rounded-xl border text-left transition font-semibold cursor-pointer truncate ${
                           tipoIniciativa === opt
-                            ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-500/30'
-                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-500'
+                            ? 'border-sky-500 bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/30'
+                            : 'border-slate-800 bg-[#040711] text-slate-300 hover:border-slate-700'
                         }`}
                       >
                         {opt}
@@ -865,13 +884,13 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 {/* Magnitud / T-Shirt & Arquetipo & Estado */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    <label className="font-semibold text-slate-300 block mb-1.5">
                       Magnitud (T-Shirt)
                     </label>
                     <select
                       value={magnitudComplejidad}
                       onChange={(e) => setMagnitudComplejidad(e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 font-bold text-slate-800 dark:text-slate-100 text-xs outline-none"
+                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 font-bold text-slate-100 text-xs outline-none focus:border-sky-500"
                     >
                       <option value="Light">Light (S - Corta duración / Ligero)</option>
                       <option value="Medium">Medium (M - Estándar / 30-90 días)</option>
@@ -880,13 +899,13 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   </div>
 
                   <div>
-                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    <label className="font-semibold text-slate-300 block mb-1.5">
                       Arquetipo de Proyecto
                     </label>
                     <select
                       value={arquetipoProyecto}
                       onChange={(e) => setArquetipoProyecto(e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 font-bold text-slate-800 dark:text-slate-100 text-xs outline-none"
+                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 font-bold text-slate-100 text-xs outline-none focus:border-sky-500"
                     >
                       <option value="1_Infraestructura">1_Infraestructura (Obras, HW)</option>
                       <option value="2_Venture">2_Venture (Software, Startups)</option>
@@ -897,13 +916,13 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   </div>
 
                   <div>
-                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    <label className="font-semibold text-slate-300 block mb-1.5">
                       Estado del Proyecto
                     </label>
                     <select
                       value={estadoProyecto}
                       onChange={(e) => setEstadoProyecto(e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 font-bold text-slate-800 dark:text-slate-100 text-xs outline-none"
+                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 font-bold text-slate-100 text-xs outline-none focus:border-sky-500"
                     >
                       <option value="01_Backlog">01_Backlog</option>
                       <option value="02_Planificado">02_Planificado</option>
@@ -918,7 +937,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 {/* Moneda y Presupuesto */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    <label className="font-semibold text-slate-300 block mb-1.5">
                       Moneda Base
                     </label>
                     <div className="grid grid-cols-3 gap-1.5 text-xs">
@@ -929,8 +948,8 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                           onClick={() => setMonedaBase(mon)}
                           className={`py-2 px-2 rounded-xl border text-center font-bold cursor-pointer transition ${
                             monedaBase === mon
-                              ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 ring-1 ring-indigo-500/30'
-                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                              ? 'border-sky-500 bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/30'
+                              : 'border-slate-800 bg-[#040711] text-slate-300 hover:border-slate-700'
                           }`}
                         >
                           {mon}
@@ -940,7 +959,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   </div>
 
                   <div>
-                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    <label className="font-semibold text-slate-300 block mb-1.5">
                       Presupuesto Estimado / Tope (BAC)
                     </label>
                     <div className="relative">
@@ -953,7 +972,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                         value={presupuestoTope}
                         onChange={(e) => setPresupuestoTope(e.target.value)}
                         placeholder="0.00"
-                        className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl py-2 pl-9 pr-3 font-mono text-slate-800 dark:text-slate-100 font-bold text-xs outline-none"
+                        className="w-full border border-slate-800 bg-slate-900/60 rounded-xl py-2 pl-9 pr-3 font-mono tabular-nums text-slate-100 font-bold text-xs outline-none focus:border-sky-500"
                       />
                     </div>
                   </div>
@@ -962,37 +981,37 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 {/* Fechas Planificadas */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    <label className="font-semibold text-slate-300 block mb-1.5">
                       Fecha Inicio Plan
                     </label>
                     <input
                       type="date"
                       value={fechaInicioPlan}
                       onChange={(e) => setFechaInicioPlan(e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 font-medium text-xs outline-none"
+                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 text-slate-100 font-mono font-medium text-xs outline-none focus:border-sky-500"
                     />
                   </div>
                   <div>
-                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    <label className="font-semibold text-slate-300 block mb-1.5">
                       Fecha Fin Estimada
                     </label>
                     <input
                       type="date"
                       value={fechaFinPlan}
                       onChange={(e) => setFechaFinPlan(e.target.value)}
-                      className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 font-medium text-xs outline-none"
+                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 text-slate-100 font-mono font-medium text-xs outline-none focus:border-sky-500"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Gobernanza & Metas */}
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-3.5">
-                <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+              <div className="bg-[#0D1526] rounded-2xl border border-slate-800/80 p-5 shadow-2xs space-y-3.5">
+                <h4 className="font-bold text-slate-200 text-xs">
                   Gobernanza & Criterios de Aceptación
                 </h4>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block font-semibold text-slate-300 mb-1">
                     North Star OKR (Objetivo Estratégico)
                   </label>
                   <input
@@ -1000,11 +1019,11 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                     value={northStarOKR}
                     onChange={(e) => setNorthStarOKR(e.target.value)}
                     placeholder="Lograr la implementación exitosa en tiempo y forma..."
-                    className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 outline-none"
+                    className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 text-slate-100 placeholder-slate-500 outline-none focus:border-sky-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block font-semibold text-slate-300 mb-1">
                     Entregable Tangible / Objeto Final
                   </label>
                   <input
@@ -1012,11 +1031,11 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                     value={entregableTangible}
                     onChange={(e) => setEntregableTangible(e.target.value)}
                     placeholder="Documento, obra física o producto funcional verificable..."
-                    className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 outline-none"
+                    className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 text-slate-100 placeholder-slate-500 outline-none focus:border-sky-500"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block font-semibold text-slate-300 mb-1">
                     Criterios de Aceptación (Definition of Done - DoD)
                   </label>
                   <textarea
@@ -1024,7 +1043,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                     value={criteriosDoD}
                     onChange={(e) => setCriteriosDoD(e.target.value)}
                     placeholder="1. Pruebas superadas. 2. Repositorio en Drive. 3. Balance financiero cuadrado."
-                    className="w-full border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl p-2.5 text-slate-800 dark:text-slate-100 outline-none"
+                    className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 text-slate-100 placeholder-slate-500 outline-none focus:border-sky-500"
                   />
                 </div>
               </div>
@@ -1034,10 +1053,10 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
           {/* TAB 2: HITOS */}
           {tabActiva === 'hitos' && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#0D1526] rounded-xl border border-slate-800 shadow-2xs">
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-semibold text-slate-400">Total Hitos:</span>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono tabular-nums font-bold bg-slate-800 text-slate-300 border border-slate-700">
                     {hitosWiz.length}
                   </span>
                 </div>
@@ -1045,7 +1064,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   <button
                     type="button"
                     onClick={() => agregarHito('PAQUETE_TRABAJO')}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow transition flex items-center gap-1.5 cursor-pointer"
+                    className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white rounded-lg font-bold text-xs shadow-md shadow-sky-950/40 transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>+ Paquete de Trabajo (WP)</span>
@@ -1053,7 +1072,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   <button
                     type="button"
                     onClick={() => agregarHito('HITO_MARCADOR')}
-                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-xs shadow transition flex items-center gap-1.5 cursor-pointer"
+                    className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold text-xs shadow-md shadow-cyan-950/40 transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <Flag className="w-3.5 h-3.5" />
                     <span>+ Hito Marcador (HIT)</span>
@@ -1062,7 +1081,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
               </div>
 
               {hitosWiz.length === 0 ? (
-                <div className="text-center py-10 bg-slate-900/40 rounded-xl border border-slate-800 text-slate-400">
+                <div className="text-center py-10 bg-[#0D1526]/40 rounded-xl border border-slate-800 text-slate-400">
                   <p className="font-bold">No hay hitos agregados aún.</p>
                   <p className="text-[11px] text-slate-500 mt-1">
                     Agrega un paquete de trabajo o genera la estructura completa con IA.
@@ -1073,10 +1092,10 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   {hitosWiz.map((h, idx) => (
                     <div
                       key={h.id}
-                      className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap"
+                      className="p-3 bg-[#0D1526] rounded-xl border border-slate-800/80 flex items-center justify-between gap-3 flex-wrap"
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
+                        <span className="font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
                           {h.codigo}
                         </span>
                         <input
@@ -1087,7 +1106,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                             copy[idx].nombre = e.target.value;
                             setHitosWiz(copy);
                           }}
-                          className="font-bold text-slate-200 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-indigo-500 outline-none flex-1 min-w-[140px] text-xs"
+                          className="font-bold text-slate-200 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-sky-500 outline-none flex-1 min-w-[140px] text-xs"
                         />
                       </div>
                       <div className="flex items-center gap-2">
@@ -1100,7 +1119,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                             copy[idx].pesoPct = Number(e.target.value);
                             setHitosWiz(copy);
                           }}
-                          className="w-16 p-1 rounded bg-slate-800 text-center font-mono font-bold text-xs outline-none"
+                          className="w-16 p-1 rounded bg-[#040711] border border-slate-800 text-center font-mono tabular-nums font-bold text-xs text-slate-100 outline-none focus:border-sky-500"
                         />
                         <button
                           type="button"
@@ -1120,17 +1139,17 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
           {/* TAB 3: TAREAS */}
           {tabActiva === 'tareas' && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#0D1526] rounded-xl border border-slate-800 shadow-2xs">
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-semibold text-slate-400">Total Tareas:</span>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono tabular-nums font-bold bg-slate-800 text-slate-300 border border-slate-700">
                     {tareasWiz.length}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={agregarTarea}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white rounded-lg font-bold text-xs shadow-md shadow-sky-950/40 transition flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ Añadir Tarea</span>
@@ -1138,7 +1157,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
               </div>
 
               {tareasWiz.length === 0 ? (
-                <div className="text-center py-10 bg-slate-900/40 rounded-xl border border-slate-800 text-slate-400">
+                <div className="text-center py-10 bg-[#0D1526]/40 rounded-xl border border-slate-800 text-slate-400">
                   <p className="font-bold">No hay tareas agregadas aún.</p>
                   <p className="text-[11px] text-slate-500 mt-1">
                     Crea tareas accionables vinculadas a tus hitos o deja que la IA las genere.
@@ -1149,10 +1168,10 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   {tareasWiz.map((t, idx) => (
                     <div
                       key={t.id}
-                      className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap"
+                      className="p-3 bg-[#0D1526] rounded-xl border border-slate-800/80 flex items-center justify-between gap-3 flex-wrap"
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
+                        <span className="font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
                           {t.codigo}
                         </span>
                         <input
@@ -1163,7 +1182,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                             copy[idx].nombre = e.target.value;
                             setTareasWiz(copy);
                           }}
-                          className="font-semibold text-slate-200 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-indigo-500 outline-none flex-1 min-w-[140px] text-xs"
+                          className="font-semibold text-slate-200 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-sky-500 outline-none flex-1 min-w-[140px] text-xs"
                         />
                       </div>
                       <div className="flex items-center gap-2">
@@ -1176,7 +1195,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                             copy[idx].horasEstimadas = Number(e.target.value);
                             setTareasWiz(copy);
                           }}
-                          className="w-14 p-1 rounded bg-slate-800 text-center font-mono font-bold text-xs outline-none"
+                          className="w-14 p-1 rounded bg-[#040711] border border-slate-800 text-center font-mono tabular-nums font-bold text-xs text-slate-100 outline-none focus:border-sky-500"
                         />
                         <button
                           type="button"
@@ -1196,17 +1215,17 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
           {/* TAB 4: GASTOS */}
           {tabActiva === 'gastos' && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#0D1526] rounded-xl border border-slate-800 shadow-2xs">
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-semibold text-slate-400">Partidas Planificadas:</span>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono tabular-nums font-bold bg-slate-800 text-slate-300 border border-slate-700">
                     {gastosWiz.length}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={agregarGasto}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs shadow-md shadow-emerald-950/40 transition flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ Añadir Partida de Gasto</span>
@@ -1214,7 +1233,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
               </div>
 
               {gastosWiz.length === 0 ? (
-                <div className="text-center py-10 bg-slate-900/40 rounded-xl border border-slate-800 text-slate-400">
+                <div className="text-center py-10 bg-[#0D1526]/40 rounded-xl border border-slate-800 text-slate-400">
                   <p className="font-bold">No hay gastos planificados aún.</p>
                   <p className="text-[11px] text-slate-500 mt-1">
                     Puedes presupuestar materiales, honorarios o trámites.
@@ -1225,10 +1244,10 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   {gastosWiz.map((g, idx) => (
                     <div
                       key={g.id}
-                      className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap"
+                      className="p-3 bg-[#0D1526] rounded-xl border border-slate-800/80 flex items-center justify-between gap-3 flex-wrap"
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
+                        <span className="font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
                           {g.codigo}
                         </span>
                         <input
@@ -1239,7 +1258,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                             copy[idx].concepto = e.target.value;
                             setGastosWiz(copy);
                           }}
-                          className="font-semibold text-slate-200 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-indigo-500 outline-none flex-1 min-w-[140px] text-xs"
+                          className="font-semibold text-slate-200 bg-transparent border-b border-transparent hover:border-slate-600 focus:border-sky-500 outline-none flex-1 min-w-[140px] text-xs"
                         />
                       </div>
                       <div className="flex items-center gap-2">
@@ -1252,7 +1271,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                             copy[idx].monto = Number(e.target.value);
                             setGastosWiz(copy);
                           }}
-                          className="w-20 p-1 rounded bg-slate-800 text-center font-mono font-bold text-xs outline-none"
+                          className="w-20 p-1 rounded bg-[#040711] border border-slate-800 text-center font-mono tabular-nums font-bold text-xs text-slate-100 outline-none focus:border-sky-500"
                         />
                         <button
                           type="button"
@@ -1271,20 +1290,32 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
         </form>
 
         {/* PIE DEL MODAL (STICKY) */}
-        <div className="sticky bottom-0 z-20 px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 shrink-0 gap-3">
-          <button
-            type="button"
-            onClick={onCerrar}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-          >
-            Cancelar
-          </button>
+        <div className="sticky bottom-0 z-20 px-6 py-3.5 border-t border-slate-800 flex items-center justify-between bg-[#0A101D] shrink-0 gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onCerrar}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800/60 transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+            {/* Contenedor Anti-CLS con altura fija reservada */}
+            <div className="min-h-[22px] flex items-center">
+              <p
+                className={`text-rose-400 text-xs font-semibold transition-opacity duration-200 ${
+                  errorMsg ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                {errorMsg || ''}
+              </p>
+            </div>
+          </div>
 
           <button
             type="button"
             onClick={() => guardarProyecto()}
             disabled={guardando}
-            className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-900/30 flex items-center gap-2 transition cursor-pointer disabled:opacity-50"
+            className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold shadow-md shadow-sky-950/50 flex items-center gap-2 transition cursor-pointer disabled:opacity-50"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>{guardando ? 'Guardando...' : proyectoAEditarId ? 'Guardar Cambios' : 'Guardar Proyecto'}</span>

@@ -11,7 +11,7 @@ import {
   BookOpen,
   X
 } from 'lucide-react';
-import Swal from 'sweetalert2';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 interface PopoverPreviewNotasProps {
   codigoEntidad: string;
@@ -61,24 +61,10 @@ export const PopoverPreviewNotas: React.FC<PopoverPreviewNotasProps> = ({
 
   const handleDesvincular = async (e: React.MouseEvent, nota: NotaRecord) => {
     e.stopPropagation();
-    const confirm = await Swal.fire({
-      title: '¿Desvincular nota?',
-      text: `Se removerá el enlace entre "${nota.titulo}" y "${codigoEntidad}". La nota no se eliminará.`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, desvincular',
-      cancelButtonText: 'Cancelar',
-      background: '#0D1526',
-      color: '#f8fafc',
-      confirmButtonColor: '#f43f5e',
-      cancelButtonColor: '#334155'
-    });
-
-    if (confirm.isConfirmed) {
-      await desvincularNotaDeEntidad(nota.id, codigoEntidad);
-      if (notas.length <= 1) {
-        onCerrar();
-      }
+    await desvincularNotaDeEntidad(nota.id, codigoEntidad);
+    mostrarToastCobalt(`Nota desvinculada de ${codigoEntidad}`, 'info');
+    if (notas.length <= 1) {
+      onCerrar();
     }
   };
 

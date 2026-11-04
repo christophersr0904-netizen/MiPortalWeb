@@ -42,7 +42,6 @@ import { ModalNuevoHito } from '../Modals/ModalNuevoHito';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import { deduplicarPorCodigoCanonico } from '../../utils/entityNormalizer';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
-import Swal from 'sweetalert2';
 import type { GastoRecord, TareaRecord, HitoWbsRecord, SubtareaPaso } from '../../types';
 
 interface ViewDetalle360Props {
@@ -561,14 +560,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
     await db.proyectos.update(proyectoActivo.id, {
       ultima_revision: hoyStr
     } as any);
-    Swal.fire({
-      icon: 'success',
-      title: 'Check-in de Control Registrado',
-      text: `Se actualizó la fecha de auditoría de ${proyectoActivo.codigo_legado} a ${hoyStr}.`,
-      background: '#0D1526',
-      color: '#f8fafc',
-      confirmButtonColor: '#4f46e5'
-    });
+    mostrarToastCobalt(`Check-in registrado para ${proyectoActivo.codigo_legado} (${hoyStr})`, 'success');
   };
 
   // Guardar Decisión de Trade-off
@@ -607,14 +599,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
     };
 
     setHistorialTradeOff([nuevaDecision, ...historialTradeOff]);
-    Swal.fire({
-      icon: 'success',
-      title: 'Decisión Aprobada y Guardada',
-      text: `Alternativa recomendada: ${ganador} (Score: ${scoreGanador.toFixed(2)}/5.00)`,
-      background: '#0D1526',
-      color: '#f8fafc',
-      confirmButtonColor: '#4f46e5'
-    });
+    mostrarToastCobalt(`Decisión guardada: ${ganador} (Score: ${scoreGanador.toFixed(2)}/5.00)`, 'success');
   };
 
   return (
@@ -1246,13 +1231,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                       <button
                                         type="button"
                                         onClick={() =>
-                                          Swal.fire({
-                                            title: 'Asistente WBS IA',
-                                            text: `Desglosando tareas atómicas para ${nomElem}...`,
-                                            icon: 'info',
-                                            background: '#0D1526',
-                                            color: '#f8fafc'
-                                          })
+                                          mostrarToastCobalt(`Asistente WBS IA: Desglosando tareas para ${nomElem}...`, 'info')
                                         }
                                         className="px-2 py-1 rounded-lg bg-indigo-950/40 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer active:scale-95"
                                         title="Desglosar tareas con IA"

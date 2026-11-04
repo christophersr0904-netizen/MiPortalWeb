@@ -487,13 +487,14 @@ describe('Retención Visual de Hábitos Completados Hoy y Sincronización Calend
       expect(vinculadas.map(a => a.id)).not.toContain('act-otra');
     });
 
-    it('FIX-HABITOS-DEFAULT-NATIVE-ACTIVITIES-105: resolverActividadesDeHabitoNativo puebla actividades nativamente por afinidad y subtareas sin requerir botones', () => {
+    it('FIX-HABITOS-HIERARCHY-DECOUPLING-108: resolverActividadesDeHabitoNativo desacopla actividades principales y resuelve exclusivamente subtareas reales y pasos de checklist', () => {
       const habitoGimnasio = {
         id: 'hab-1',
         codigo_legado: 'ACT-001',
         nombre_actividad: 'Entrenamiento de fuerza en gimnasio',
         categoria_vida: 'SALUD_DEPORTE' as const,
-        meta_macro_nombre: 'Acondicionamiento Físico y Fuerza'
+        meta_macro_nombre: 'Acondicionamiento Físico y Fuerza',
+        notas_checklist: '- [ ] Hidratación previa 500ml\n- [x] Estiramiento dinámico'
       };
 
       const tareas = [
@@ -503,15 +504,31 @@ describe('Retención Visual de Hábitos Completados Hoy y Sincronización Calend
       ];
 
       const subtareas = [
-        { id: 'sub-1', codigo_legado: 'SUB-001', id_padre_vinculado: 'ACT-001', descripcion_paso: 'Calentamiento 10 min', completado: false }
+        { id: 'sub-1', codigo_legado: 'SUB-001', id_padre_vinculado: 'ACT-001', descripcion_paso: 'Calentamiento 10 min', completado: false },
+        { id: 'sub-2', codigo_legado: 'SUB-002', id_padre_vinculado: 'ACT-002', descripcion_paso: 'Otra subtarea ajena', completado: false }
       ];
 
-      const res = resolverActividadesDeHabitoNativo(habitoGimnasio as any, tareas as any, subtareas as any, []);
+      const otrasActividades = [
+        { id: 'hab-2', codigo_legado: 'ACT-002', nombre_actividad: 'Carrera 10K', categoria_vida: 'SALUD_DEPORTE' }
+      ];
 
-      expect(res.length).toBeGreaterThanOrEqual(3);
+      const res = resolverActividadesDeHabitoNativo(habitoGimnasio as any, tareas as any, subtareas as any, otrasActividades as any);
+
+      // Subtarea real + 2 pasos de checklist = 3 items
+      expect(res.length).toBe(3);
       expect(res.some(a => a.nombre_actividad === 'Calentamiento 10 min')).toBe(true);
-      expect(res.some(a => a.nombre_tarea_actividad === 'Realizar análisis bioquímico')).toBe(true);
-      expect(res.some(a => a.nombre_tarea_actividad === 'Ejecutar series de velocidad')).toBe(true);
+      expect(res.some(a => a.nombre_actividad === 'Hidratación previa 500ml')).toBe(true);
+      expect(res.some(a => a.nombre_actividad === 'Estiramiento dinámico')).toBe(true);
+
+      // Ninguna tarea principal ni actividad hermana absorbida
+      expect(res.some(a => a.codigo_legado === 'TAR-018')).toBe(false);
+      expect(res.some(a => a.codigo_legado === 'ACT-002')).toBe(false);
+      expect(res.some(a => a.nombre_actividad === 'Otra subtarea ajena')).toBe(false);
+
+      // Si el hábito no tiene subtareas ni checklist, debe retornar arreglo vacío []
+      const habitoLimpio = { id: 'hab-99', codigo_legado: 'ACT-099', nombre_actividad: 'Hábito sin pasos', categoria_vida: 'SALUD_DEPORTE' as const };
+      const resVacio = resolverActividadesDeHabitoNativo(habitoLimpio as any, tareas as any, subtareas as any, otrasActividades as any);
+      expect(resVacio).toEqual([]);
     });
   });
 });

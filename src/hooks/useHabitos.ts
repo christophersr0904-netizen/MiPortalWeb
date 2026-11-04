@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import type { ActividadPersonal, SubtareaPaso, CategoriaVida, MetaPlanRecord, HabitoMetaVinculo, TareaRecord } from '../types';
+import type { ActividadPersonal, SubtareaPaso, CategoriaVida, MetaPlanRecord, TareaRecord } from '../types';
 import {
   deduplicarPorCodigoCanonico,
   deduplicarMetasPlanes,
@@ -13,25 +13,23 @@ import {
   toggleSubtareaSecuencialLocal,
   eliminarActividadConAlcance,
   editarActividadConAlcance,
-  autoHidratarVinculosHabitosActividades
+  autoHidratarVinculosHabitosActividades,
+  formatFechaIsoLocal
 } from '../services/habitosService';
 import { syncManager, type SyncState } from '../services/syncManager';
 
 /**
- * FIX-HABITOS-DEFAULT-NATIVE-ACTIVITIES-105: Resuelve las actividades asociadas a un hábito
- * mediante coincidencia natural multivariable garantizando que nunca quede vacío si hay tareas o subtareas en la DB.
+ * FIX-HABITOS-HIERARCHY-DECOUPLING-108: Resuelve exclusivamente subtareas reales o pasos procedurales
+ * vinculados a un hábito. NUNCA subyuga ni absorbe otras ActividadPersonal ni tareas principales completas.
  */
 export function resolverActividadesDeHabitoNativo(
   habito: ActividadPersonal,
-  todasLasTareas: TareaRecord[] = [],
+  _todasLasTareas: TareaRecord[] = [],
   todasLasSubtareas: SubtareaPaso[] = [],
-  todasLasActividades: ActividadPersonal[] = []
-): Array<ActividadPersonal | TareaRecord | any> {
+  _todasLasActividades: ActividadPersonal[] = []
+): Array<SubtareaPaso | any> {
   const hId = String(habito.id || '').trim();
   const hCod = String(habito.codigo_legado || '').trim();
-  const nomHabito = String(habito.nombre_actividad || '').toLowerCase();
-  const catHabito = String(habito.categoria_vida || '').toUpperCase();
-  const metaHabito = String(habito.meta_macro_nombre || '').toLowerCase();
 
   const resultado: Array<any> = [];
   const idsVistos = new Set<string>();
@@ -45,37 +43,7 @@ export function resolverActividadesDeHabitoNativo(
     }
   };
 
-  // 1. Tareas o actividades con enlace explícito (habito_id, habitoId, habito_codigo, id_habito)
-  for (const tar of todasLasTareas) {
-    const tHabId = String((tar as any).habito_id || (tar as any).habitoId || (tar as any).id_habito || '').trim();
-    const tHabCod = String((tar as any).habito_codigo || (tar as any).habitoCodigo || '').trim();
-    if ((hId && tHabId === hId) || (hCod && tHabId === hCod) || (hCod && tHabCod === hCod)) {
-      agregar(tar);
-    }
-  }
-
-  for (const act of todasLasActividades) {
-    if (String(act.id) === hId || String(act.codigo_legado) === hCod) continue;
-    const aHabId = String((act as any).habito_id || (act as any).habitoId || (act as any).id_habito || (act as any).actividad_padre_id || '').trim();
-    const aHabCod = String((act as any).habito_codigo || (act as any).habitoCodigo || '').trim();
-    if ((hId && aHabId === hId) || (hCod && aHabId === hCod) || (hCod && aHabCod === hCod)) {
-      agregar(act);
-    }
-  }
-
-  // Lista explícita en el hábito (actividadIds / tareaIds)
-  const listaIds = (habito as any).actividadIds || (habito as any).actividad_ids || (habito as any).tareaIds;
-  if (Array.isArray(listaIds) && listaIds.length > 0) {
-    const setIds = new Set(listaIds.map((x: any) => String(x).trim()));
-    for (const tar of todasLasTareas) {
-      if (setIds.has(String(tar.id)) || setIds.has(String(tar.codigo_legado))) agregar(tar);
-    }
-    for (const act of todasLasActividades) {
-      if (setIds.has(String(act.id)) || setIds.has(String(act.codigo_legado))) agregar(act);
-    }
-  }
-
-  // 2. Subtareas asociadas en db.subtareas_pasos al ID o código del hábito
+  // 1. Subtareas reales asociadas en db.subtareas_pasos al ID o código del hábito
   for (const sub of todasLasSubtareas) {
     const padreId = String(sub.id_padre_vinculado || (sub as any).actividad_id || '').trim();
     if ((hId && padreId === hId) || (hCod && padreId === hCod)) {
@@ -84,6 +52,7 @@ export function resolverActividadesDeHabitoNativo(
         user_id: sub.user_id,
         codigo_legado: sub.codigo_legado,
         nombre_actividad: sub.descripcion_paso,
+        descripcion_paso: sub.descripcion_paso,
         tipo_compromiso: 'PUNTUAL',
         categoria_vida: habito.categoria_vida,
         estado: sub.completado ? '04_Completado' : '02_Por_Hacer',
@@ -94,7 +63,7 @@ export function resolverActividadesDeHabitoNativo(
     }
   }
 
-  // 3. Pasos definidos en notas_checklist del propio hábito
+  // 2. Pasos definidos en notas_checklist del propio hábito
   if (habito.notas_checklist && habito.notas_checklist.trim().length > 0) {
     const lineas = habito.notas_checklist.split('\n');
     let pasoIdx = 1;
@@ -104,9 +73,10 @@ export function resolverActividadesDeHabitoNativo(
         const completado = match[1].toLowerCase() === 'x';
         const desc = match[2].trim();
         agregar({
-          id: `${hId}-paso-${pasoIdx++}`,
+          id: `${hId}-paso-${pasoIdx}`,
           codigo_legado: `${hCod}-P${pasoIdx}`,
           nombre_actividad: desc,
+          descripcion_paso: desc,
           tipo_compromiso: 'PUNTUAL',
           categoria_vida: habito.categoria_vida,
           estado: completado ? '04_Completado' : '02_Por_Hacer',
@@ -114,74 +84,12 @@ export function resolverActividadesDeHabitoNativo(
           es_paso_subtarea: true,
           duracion_horas: 0.25
         });
+        pasoIdx++;
       }
     }
   }
 
-  // 4. Coincidencia por afinidad de Proyecto o Prefijo
-  const mapaPrefijos: Record<string, string[]> = {
-    'ACT-001': ['PRO-004'],
-    'ACT-002': ['PRO-004'],
-    'ACT-003': ['PRO-001'],
-    'ACT-004': ['PRO-001', 'PRO-009'],
-    'ACT-005': ['PRO-011'],
-    'ACT-006': ['PRO-002'],
-    'ACT-007': ['PRO-012'],
-    'ACT-008': ['PRO-005'],
-    'ACT-009': ['PRO-004', 'PRO-005'],
-    'ACT-010': ['PRO-001'],
-    'ACT-011': ['PRO-008', 'PRO-009'],
-    'ACT-012': ['PRO-003'],
-    'ACT-013': ['PRO-004']
-  };
-
-  const proysAfines = mapaPrefijos[hCod] || [];
-  for (const tar of todasLasTareas) {
-    if (tar.proyecto_codigo && proysAfines.includes(tar.proyecto_codigo)) {
-      agregar(tar);
-    }
-  }
-
-  // 5. Coincidencia textual de palabras clave significativas (>= 4 letras)
-  const palabrasHabito = [
-    ...nomHabito.split(/[^a-záéíóúüñ0-9]+/i),
-    ...metaHabito.split(/[^a-záéíóúüñ0-9]+/i)
-  ].filter((p) => p.length >= 4 && !['para', 'como', 'cada', 'este', 'esta', 'todo', 'toda'].includes(p));
-
-  if (palabrasHabito.length > 0) {
-    for (const tar of todasLasTareas) {
-      const nomTar = String(tar.nombre_tarea_actividad || '').toLowerCase();
-      if (palabrasHabito.some((palabra) => nomTar.includes(palabra))) {
-        agregar(tar);
-      }
-    }
-  }
-
-  // 6. Si todavía el resultado está vacío y hay tareas en la DB:
-  // Tomar tareas afines a la categoría de vida
-  if (resultado.length === 0 && todasLasTareas.length > 0) {
-    const mapaCatAProyectos: Record<string, string[]> = {
-      SALUD_DEPORTE: ['PRO-004'],
-      DESARROLLO_ESTUDIO: ['PRO-001', 'PRO-009'],
-      FINANZAS_TRAMITES: ['PRO-002', 'PRO-003', 'PRO-011'],
-      LABORAL_HONORARIO: ['PRO-008', 'PRO-006', 'PRO-007'],
-      SOCIAL_FAMILIA: ['PRO-012'],
-      PERSONAL_DESCANSO: ['PRO-005']
-    };
-    const proysCat = mapaCatAProyectos[catHabito] || [];
-    for (const tar of todasLasTareas) {
-      if (tar.proyecto_codigo && proysCat.includes(tar.proyecto_codigo)) {
-        agregar(tar);
-      }
-    }
-  }
-
-  // 7. Si aún así está vacío y hay tareas disponibles: asignar muestra de tareas afines
-  if (resultado.length === 0 && todasLasTareas.length > 0) {
-    agregar(todasLasTareas[0]);
-    if (todasLasTareas[1]) agregar(todasLasTareas[1]);
-  }
-
+  // Si no existen subtareas reales o pasos de checklist, retorna []
   return resultado;
 }
 
@@ -195,59 +103,54 @@ export function useHabitos() {
   }, []);
 
   // Consultas reactivas en vivo a Dexie (IndexedDB) con latencia 0 ms
+  // Consultas reactivas en vivo a Dexie (IndexedDB)
   const rawTodasLasActividades = useLiveQuery(
     () => db.actividades_personales.toArray(),
-    [],
-    [] as ActividadPersonal[]
+    []
   );
 
   const rawTodasLasSubtareas = useLiveQuery(
     () => db.subtareas_pasos.toArray(),
-    [],
-    [] as SubtareaPaso[]
+    []
   );
 
   const rawVinculos = useLiveQuery(
     () => db.habitos_metas_vinculos.toArray(),
-    [],
-    [] as HabitoMetaVinculo[]
+    []
   );
 
   const rawMetasPlanes = useLiveQuery(
     () => db.metas_planes.toArray(),
-    [],
-    [] as MetaPlanRecord[]
+    []
   );
 
   const rawTodasLasTareas = useLiveQuery(
     () => db.tareas.toArray(),
-    [],
-    [] as TareaRecord[]
+    []
   );
 
+  // Bandera de carga precisa: true mientras Dexie no haya completado la hidratación inicial
+  const cargando = rawTodasLasActividades === undefined;
+  const loading = cargando;
+
   const todasLasActividades = useMemo(
-    () => deduplicarPorCodigoCanonico(rawTodasLasActividades),
+    () => deduplicarPorCodigoCanonico(rawTodasLasActividades || []),
     [rawTodasLasActividades]
   );
 
   const todasLasSubtareas = useMemo(
-    () => deduplicarPorCodigoCanonico(rawTodasLasSubtareas),
+    () => deduplicarPorCodigoCanonico(rawTodasLasSubtareas || []),
     [rawTodasLasSubtareas]
   );
 
   const metasPlanes = useMemo(
-    () => deduplicarMetasPlanes(rawMetasPlanes),
+    () => deduplicarMetasPlanes(rawMetasPlanes || []),
     [rawMetasPlanes]
   );
 
   const vinculos = useMemo(
-    () => deduplicarVinculosMeta(rawVinculos),
+    () => deduplicarVinculosMeta(rawVinculos || []),
     [rawVinculos]
-  );
-
-  const todasLasTareas = useMemo(
-    () => deduplicarPorCodigoCanonico(rawTodasLasTareas),
-    [rawTodasLasTareas]
   );
 
   // Mapeo O(1) de MetaPlanRecord por habito_id / id / codigo_legado
@@ -345,16 +248,16 @@ export function useHabitos() {
     return mapa;
   }, [vinculos, metasPlanes, todasLasActividades]);
 
-  // FIX-HABITOS-DEFAULT-NATIVE-ACTIVITIES-105: Motor nativo de resolución automática de actividades asociadas
+  // FIX-HABITOS-HIERARCHY-DECOUPLING-108: Resolución estricta de subtareas reales/checklist por hábito
   const actividadesPorHabitoId = useMemo(() => {
-    const map = new Map<string, Array<ActividadPersonal | TareaRecord | any>>();
+    const map = new Map<string, Array<SubtareaPaso | any>>();
 
     for (const h of todasLasActividades) {
       const actAsociadas = resolverActividadesDeHabitoNativo(
         h,
-        todasLasTareas,
+        [],
         todasLasSubtareas,
-        todasLasActividades
+        []
       );
 
       const hId = String(h.id || '').trim();
@@ -365,7 +268,7 @@ export function useHabitos() {
     }
 
     return map;
-  }, [todasLasActividades, todasLasTareas, todasLasSubtareas]);
+  }, [todasLasActividades, todasLasSubtareas]);
 
   // Selector seguro para obtener actividades vinculadas por ID o código
   const obtenerActividadesDeHabito = (habitoId: string | number): Array<ActividadPersonal | TareaRecord | any> => {
@@ -409,7 +312,7 @@ export function useHabitos() {
 
   // Cálculo acumulativo en un solo pase O(N) de KPIs Bento
   const kpis = useMemo(() => {
-    const hoyStr = new Date().toISOString().split('T')[0];
+    const hoyStr = formatFechaIsoLocal();
     const res = {
       total: todasLasActividades.length,
       countHabitual: 0,
@@ -497,19 +400,32 @@ export function useHabitos() {
       const v2 = aCod ? actividadesPorHabitoId.get(aCod) : undefined;
       let actVinc = (v1 && v1.length > 0) ? v1 : (v2 && v2.length > 0) ? v2 : undefined;
 
-      // Garantía absoluta FIX-HABITOS-DEFAULT-NATIVE-ACTIVITIES-105: Si no vino del mapa, resolver nativamente
+      // Si no vino del mapa, resolver subtareas nativamente
       if (!actVinc || actVinc.length === 0) {
-        actVinc = resolverActividadesDeHabitoNativo(a, todasLasTareas, todasLasSubtareas, todasLasActividades);
+        actVinc = resolverActividadesDeHabitoNativo(a, [], todasLasSubtareas, []);
       }
+
+      const nomDefensivo =
+        a.nombre_actividad ||
+        (a as any).nombre ||
+        (a as any).Nombre_Actividad ||
+        (a as any).Nombre ||
+        (a as any).titulo ||
+        (a as any).Titulo ||
+        (a as any).actividad ||
+        (a as any).descripcion ||
+        (a as any).nombre_tarea_actividad ||
+        'Hábito sin título';
 
       const metaVinc = (aId ? metasPorHabitoId.get(aId) : undefined) || (aCod ? metasPorHabitoId.get(aCod) : undefined);
       return {
         ...a,
+        nombre_actividad: nomDefensivo,
         actividadesVinculadas: actVinc || [],
         metaVinculada: metaVinc
       };
     });
-  }, [actividadesFiltradas, actividadesPorHabitoId, metasPorHabitoId, todasLasTareas, todasLasSubtareas, todasLasActividades]);
+  }, [actividadesFiltradas, actividadesPorHabitoId, metasPorHabitoId, todasLasSubtareas]);
 
   // Auto-hidratación inicial al montar para poblar relaciones si IndexedDB está vacía
   useEffect(() => {
@@ -546,6 +462,8 @@ export function useHabitos() {
     registrarAvance,
     toggleSubtarea,
     eliminarConAlcance,
-    editarConAlcance
+    editarConAlcance,
+    cargando,
+    loading
   };
 }

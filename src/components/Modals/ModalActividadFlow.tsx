@@ -27,13 +27,14 @@ import {
 } from '../../services/metasService';
 import { ModalAlcanceRecurrencia } from './ModalAlcanceRecurrencia';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
-import type {
-  ActividadPersonal,
-  CategoriaVida,
-  TipoCompromiso,
-  FrecuenciaCiclo,
-  SubtareaPaso,
-  AlcanceRecurrencia
+import {
+  CATEGORIAS_VIDA_MAP,
+  type ActividadPersonal,
+  type CategoriaVida,
+  type TipoCompromiso,
+  type FrecuenciaCiclo,
+  type SubtareaPaso,
+  type AlcanceRecurrencia
 } from '../../types';
 import {
   X,
@@ -55,9 +56,10 @@ import {
   ListOrdered,
   Link2,
   Flame,
-  Clock
+  Clock,
+  Tag,
+  AlertTriangle
 } from 'lucide-react';
-import Swal from 'sweetalert2';
 import {
   formatearDuracionLegible,
   convertirStringToHorasDecimal,
@@ -77,9 +79,12 @@ export interface ModalActividadFlowProps {
   isOpen: boolean;
   onClose: () => void;
   actividadEditar?: ActividadPersonal | null;
+  actividad?: ActividadPersonal | null; // Compatibilidad defensiva
   categoriaInicial?: CategoriaVida;
   alcanceEdicion?: AlcanceRecurrencia;
   onGuardadoExitoso?: (actividad: ActividadPersonal) => void;
+  modo?: 'detalle' | 'edicion' | 'creacion';
+  soloLectura?: boolean;
 }
 
 interface CategoriaConfigItem {
@@ -135,18 +140,64 @@ const CATEGORIAS_FLOW: CategoriaConfigItem[] = [
   }
 ];
 
+/**
+ * FIX-HABITOS-MODAL-DETAIL-TITLE-PILL-109: Extracción defensiva del nombre
+ * Resolviendo el nombre en cascada sobre todas las claves posibles
+ */
+export function resolverNombreActividadDefensivo(actividad?: Partial<ActividadPersonal> | null): string {
+  if (!actividad) return '';
+  return (
+    actividad.nombre_actividad ||
+    (actividad as any).nombre ||
+    (actividad as any).Nombre_Actividad ||
+    (actividad as any).Nombre ||
+    (actividad as any).titulo ||
+    (actividad as any).Titulo ||
+    (actividad as any).actividad ||
+    (actividad as any).descripcion ||
+    (actividad as any).nombre_tarea_actividad ||
+    'Actividad sin título'
+  );
+}
+
+/**
+ * FIX-HABITOS-MODAL-DETAIL-TITLE-PILL-109: Resolución de nombre de columna canónica fija
+ */
+export function resolverNombreColumnaCanonico(
+  categoriaVida?: string | null,
+  categoriaFallback: CategoriaVida = 'SALUD_DEPORTE'
+): string {
+  const catKeyUpper = String(categoriaVida || categoriaFallback).toUpperCase().trim();
+  return (
+    CATEGORIAS_VIDA_MAP[catKeyUpper as CategoriaVida]?.nombre ||
+    CATEGORIAS_FLOW.find((c) => c.clave === catKeyUpper)?.nombre ||
+    'Salud & Deporte'
+  );
+}
+
 export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   isOpen,
   onClose,
-  actividadEditar,
+  actividadEditar: actividadEditarProp,
+  actividad: actividadProp,
   categoriaInicial = 'SALUD_DEPORTE',
   alcanceEdicion,
-  onGuardadoExitoso
+  onGuardadoExitoso,
+  modo,
+  soloLectura = false
 }) => {
   useBodyScrollLock(isOpen);
 
+  // Unificación defensiva del objeto de actividad objetivo
+  const actividadEditar = actividadEditarProp || actividadProp || null;
+  const esModoDetalle = soloLectura || modo === 'detalle';
+  const esEdicionODetalle = Boolean(actividadEditar);
+
+  // FIX-HABITOS-MODAL-DETAIL-TITLE-PILL-109: Extracción defensiva del nombre para detalle y edición
+  const nombreDisplay = resolverNombreActividadDefensivo(actividadEditar);
+
   // Estados base del formulario
-  const [titulo, setTitulo] = useState('');
+  const [titulo, setTitulo] = useState(nombreDisplay);
   const [categoria, setCategoria] = useState<CategoriaVida>(categoriaInicial);
   const [menuCategoriaAbierto, setMenuCategoriaAbierto] = useState(false);
   const [tipoCompromiso, setTipoCompromiso] = useState<TipoCompromiso>('HABITUAL');
@@ -199,13 +250,14 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   // Estados para selector de alcance diferido al guardar
   const [mostrarModalAlcance, setMostrarModalAlcance] = useState(false);
   const [payloadPendiente, setPayloadPendiente] = useState<ActividadPersonal | null>(null);
+  const [errorLocal, setErrorLocal] = useState<string | null>(null);
 
   // Cargar datos en edición o resetear en nuevo
   useEffect(() => {
     if (!isOpen) return;
 
     if (actividadEditar) {
-      setTitulo(actividadEditar.nombre_actividad || '');
+      setTitulo(nombreDisplay);
       setCategoria(actividadEditar.categoria_vida || categoriaInicial);
       setTipoCompromiso(actividadEditar.tipo_compromiso || 'HABITUAL');
       setCalendarSync(actividadEditar.agendado_calendar || 'Sí');
@@ -393,7 +445,19 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
   if (!isOpen) return null;
 
-  const categoriaActual = CATEGORIAS_FLOW.find((c) => c.clave === categoria) || CATEGORIAS_FLOW[0];
+  const catClaveNormalizada = String(
+    actividadEditar?.categoria_vida || categoria || categoriaInicial || 'SALUD_DEPORTE'
+  ).toUpperCase().trim();
+
+  const categoriaActual =
+    CATEGORIAS_FLOW.find((c) => c.clave === catClaveNormalizada) ||
+    CATEGORIAS_FLOW.find((c) => c.clave === categoria) ||
+    CATEGORIAS_FLOW[0];
+
+  const nombreColumnaCanonico = resolverNombreColumnaCanonico(
+    actividadEditar?.categoria_vida || categoria,
+    categoriaInicial
+  );
 
   // Gestión de pasos
   const agregarPaso = () => {
@@ -467,7 +531,19 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   const verificarSiHayCambios = (payload: ActividadPersonal): boolean => {
     if (!actividadEditar) return true;
 
-    const nombreCambio = payload.nombre_actividad.trim() !== (actividadEditar.nombre_actividad || '').trim();
+    const nombreInicial = (
+      actividadEditar.nombre_actividad ||
+      (actividadEditar as any).nombre ||
+      (actividadEditar as any).Nombre_Actividad ||
+      (actividadEditar as any).Nombre ||
+      (actividadEditar as any).titulo ||
+      (actividadEditar as any).Titulo ||
+      (actividadEditar as any).actividad ||
+      (actividadEditar as any).descripcion ||
+      (actividadEditar as any).nombre_tarea_actividad ||
+      ''
+    ).trim();
+    const nombreCambio = payload.nombre_actividad.trim() !== nombreInicial;
     const catCambio = payload.categoria_vida !== actividadEditar.categoria_vida;
     const tipoCambio = payload.tipo_compromiso !== actividadEditar.tipo_compromiso;
     const fechaCambio = payload.fecha_programada !== (actividadEditar.fecha_programada || '');
@@ -638,17 +714,6 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       }
     }
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'success',
-      title: actividadEditar ? 'Hábito actualizado con éxito' : 'Hábito registrado en Life OS',
-      showConfirmButton: false,
-      timer: 2000,
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
-
     if (onGuardadoExitoso) onGuardadoExitoso(payloadAguardar);
     setPayloadPendiente(null);
     onClose();
@@ -657,19 +722,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   // Guardar en Dexie con Dirty Checking y confirmación diferida de alcance
   const handleGuardar = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!titulo.trim()) {
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'warning',
-        title: 'El título de la actividad es requerido',
-        showConfirmButton: false,
-        timer: 2000,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
+    const tituloFinal = titulo.trim() || nombreDisplay.trim();
+    if (!tituloFinal) {
+      setErrorLocal('El título de la actividad es requerido');
       return;
     }
+    setErrorLocal(null);
 
     const nowIso = new Date().toISOString();
     let codigoLegado = actividadEditar?.codigo_legado;
@@ -736,9 +794,9 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       id: idActividad!,
       user_id: '00000000-0000-0000-0000-000000000001',
       codigo_legado: codigoLegado!,
-      nombre_actividad: titulo.trim(),
+      nombre_actividad: tituloFinal,
       tipo_compromiso: tipoCompromisoFinal,
-      categoria_vida: categoria,
+      categoria_vida: actividadEditar ? (actividadEditar.categoria_vida || categoria) : categoria,
       meta_macro_nombre: metaMacroNombre || undefined,
       unidad_medida: unidadMedida.trim() || undefined,
       meta_objetivo_total: parseFloat(metaTotal) || undefined,
@@ -767,16 +825,6 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       // 1. Detección de cambios reales (Dirty Checking)
       const isDirty = verificarSiHayCambios(payload);
       if (!isDirty) {
-        Swal.fire({
-          toast: true,
-          position: 'top-end',
-          icon: 'info',
-          title: 'Sin cambios detectados',
-          showConfirmButton: false,
-          timer: 1600,
-          background: '#0D1526',
-          color: '#f8fafc'
-        });
         onClose();
         return;
       }
@@ -814,37 +862,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   // Eliminar actividad
   const handleEliminar = async () => {
     if (!actividadEditar) return;
-    const result = await Swal.fire({
-      title: '¿Eliminar actividad?',
-      text: `Se borrará "${actividadEditar.nombre_actividad}" y sus pasos procedurales.`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
-      cancelButtonText: 'Cancelar',
-      confirmButtonColor: '#e11d48',
-      cancelButtonColor: '#475569',
-      background: '#0D1526',
-      color: '#f8fafc'
-    });
-
-    if (result.isConfirmed) {
-      await eliminarActividadConAlcance(
-        actividadEditar.id,
-        alcanceEdicion || 'ALL',
-        actividadEditar.fecha_programada
-      );
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: 'Actividad eliminada',
-        showConfirmButton: false,
-        timer: 2000,
-        background: '#0D1526',
-        color: '#f8fafc'
-      });
-      onClose();
-    }
+    await eliminarActividadConAlcance(
+      actividadEditar.id,
+      alcanceEdicion || 'ALL',
+      actividadEditar.fecha_programada
+    );
+    onClose();
   };
 
   return createPortal(
@@ -875,49 +898,60 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                 {actividadEditar?.codigo_legado || 'NUEVA ACTIVIDAD'}
               </span>
 
-              {/* Selector compacto de Categoría de Vida con micro-punto semántico */}
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  id="flow-cat-badge-btn"
-                  onClick={() => setMenuCategoriaAbierto(!menuCategoriaAbierto)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-bold border transition cursor-pointer ${categoriaActual.badgeClase}`}
-                  title="Cambiar Categoría de Vida"
+              {/* Píldora de Columna/Categoría Fija (Read-Only) - FIX-HABITOS-MODAL-DETAIL-TITLE-PILL-109 */}
+              {esEdicionODetalle ? (
+                <div
+                  id="flow-cat-badge-readonly"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900/80 border border-slate-700/60 text-xs font-mono text-slate-300 select-none shrink-0"
+                  title={`Columna fija: ${nombreColumnaCanonico}`}
                 >
-                  <span className={`w-2 h-2 rounded-full ${categoriaActual.dotColor} shrink-0`} />
-                  <span>{categoriaActual.nombre}</span>
-                  <ChevronDown className="w-3 h-3 opacity-60" />
-                </button>
-
-                {menuCategoriaAbierto && (
-                  <div
-                    id="flow-cat-dropdown"
-                    className="absolute left-0 top-full mt-2 w-64 bg-white dark:bg-[#0D1526] rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-2 z-50 space-y-1 animate-in fade-in zoom-in-95"
+                  <Tag className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+                  <span>{nombreColumnaCanonico}</span>
+                </div>
+              ) : (
+                /* Selector de Categoría para Nueva Actividad */
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    id="flow-cat-badge-btn"
+                    onClick={() => setMenuCategoriaAbierto(!menuCategoriaAbierto)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-bold border transition cursor-pointer ${categoriaActual.badgeClase}`}
+                    title="Seleccionar Categoría de Vida"
                   >
-                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 py-1 uppercase tracking-wider">
-                      Categoría de Vida:
-                    </p>
-                    {CATEGORIAS_FLOW.map((cat) => (
-                      <button
-                        key={cat.clave}
-                        type="button"
-                        onClick={() => {
-                          setCategoria(cat.clave);
-                          setMenuCategoriaAbierto(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2.5 transition cursor-pointer ${
-                          categoria === cat.clave
-                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
-                            : 'hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        <span className={`w-2 h-2 rounded-full ${cat.dotColor}`} />
-                        <span>{cat.nombre}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                    <span className={`w-2 h-2 rounded-full ${categoriaActual.dotColor} shrink-0`} />
+                    <span>{categoriaActual.nombre}</span>
+                    <ChevronDown className="w-3 h-3 opacity-60" />
+                  </button>
+
+                  {menuCategoriaAbierto && (
+                    <div
+                      id="flow-cat-dropdown"
+                      className="absolute left-0 top-full mt-2 w-64 bg-white dark:bg-[#0D1526] rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-2 z-50 space-y-1 animate-in fade-in zoom-in-95"
+                    >
+                      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 py-1 uppercase tracking-wider">
+                        Categoría de Vida:
+                      </p>
+                      {CATEGORIAS_FLOW.map((cat) => (
+                        <button
+                          key={cat.clave}
+                          type="button"
+                          onClick={() => {
+                            setCategoria(cat.clave);
+                            setMenuCategoriaAbierto(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2.5 transition cursor-pointer ${categoria === cat.clave
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-300'
+                            }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${cat.dotColor}`} />
+                          <span>{cat.nombre}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <span className="text-slate-600 select-none shrink-0">|</span>
 
@@ -931,16 +965,16 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                   {tipoRecurrencia === 'NINGUNA'
                     ? 'No se repite'
                     : tipoRecurrencia === 'DIARIA'
-                    ? 'Diario'
-                    : tipoRecurrencia === 'DIARIA_LABORAL'
-                    ? 'Lun a Vie'
-                    : tipoRecurrencia === 'FIN_SEMANA'
-                    ? 'Fines de semana'
-                    : tipoRecurrencia === 'SEMANAL'
-                    ? 'Semanal'
-                    : tipoRecurrencia === 'MENSUAL'
-                    ? 'Mensual'
-                    : 'Personalizado'}
+                      ? 'Diario'
+                      : tipoRecurrencia === 'DIARIA_LABORAL'
+                        ? 'Lun a Vie'
+                        : tipoRecurrencia === 'FIN_SEMANA'
+                          ? 'Fines de semana'
+                          : tipoRecurrencia === 'SEMANAL'
+                            ? 'Semanal'
+                            : tipoRecurrencia === 'MENSUAL'
+                              ? 'Mensual'
+                              : 'Personalizado'}
                 </span>
               </span>
 
@@ -963,22 +997,37 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
             </button>
           </div>
 
-          {/* Fila 2: Título Editable Prominente */}
+          {/* Fila 2: Título en Alto Contraste (Input en edición o Elemento en Detalle) */}
           <div className="pt-0.5">
-            <input
-              type="text"
-              id="act-flow-titulo"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-              placeholder="Nombre del hábito o actividad personal..."
-              className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 placeholder:text-slate-500 bg-transparent outline-none w-full border-b border-transparent focus:border-indigo-500 transition-colors py-0.5"
-              autoFocus
-            />
+            {esModoDetalle ? (
+              <h2
+                id="act-flow-titulo-readonly"
+                className="text-lg sm:text-xl font-semibold text-slate-100 py-0.5 leading-snug select-text"
+              >
+                {titulo || nombreDisplay || 'Actividad sin título'}
+              </h2>
+            ) : (
+              <input
+                type="text"
+                id="act-flow-titulo"
+                value={titulo || (actividadEditar ? nombreDisplay : '')}
+                onChange={(e) => setTitulo(e.target.value)}
+                placeholder="Nombre del hábito o actividad personal..."
+                className="text-lg sm:text-xl font-semibold text-slate-100 placeholder:text-slate-500 bg-transparent outline-none w-full border-b border-transparent focus:border-sky-500 transition-colors py-0.5 leading-snug"
+                autoFocus
+              />
+            )}
           </div>
         </div>
 
         {/* 2. CUERPO DE CONTENIDO CON SCROLL */}
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar text-xs">
+          {errorLocal && (
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>{errorLocal}</span>
+            </div>
+          )}
 
           {/* BENTO GRID DE 2 TARJETAS */}
           <div className="bg-[#040711] border border-slate-800/80 rounded-xl p-3 sm:p-3.5">
@@ -1076,11 +1125,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                                   setDiasSemana([...diasSemana, id]);
                                 }
                               }}
-                              className={`w-7 h-7 rounded-full text-xs font-mono font-bold transition flex items-center justify-center cursor-pointer ${
-                                activo
+                              className={`w-7 h-7 rounded-full text-xs font-mono font-bold transition flex items-center justify-center cursor-pointer ${activo
                                   ? 'bg-sky-500 text-slate-950 font-black shadow-[0_0_8px_rgba(14,165,233,0.4)]'
                                   : 'bg-[#040711] text-slate-400 border border-slate-800 hover:border-slate-700 hover:text-slate-200'
-                              }`}
+                                }`}
                               title={id}
                             >
                               {label}
@@ -1165,11 +1213,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           setDuracionHoras(0);
                           setDuracionStr('0:00');
                         }}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
-                          duracionHoras === 0
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${duracionHoras === 0
                             ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
                             : 'bg-[#040711] text-slate-400 border border-slate-800 hover:text-slate-200'
-                        }`}
+                          }`}
                       >
                         <Zap className="w-3 h-3 text-amber-400" />
                         <span>Micro-Acción (0min)</span>
@@ -1213,11 +1260,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                               setDuracionHoras(p.horas);
                               setDuracionStr(convertirHorasDecimalAString(p.horas));
                             }}
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-mono tabular-nums font-bold transition cursor-pointer ${
-                              activo
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-mono tabular-nums font-bold transition cursor-pointer ${activo
                                 ? 'bg-sky-600 text-white shadow-xs'
                                 : 'bg-[#040711] text-slate-400 border border-slate-800 hover:text-slate-200'
-                            }`}
+                              }`}
                           >
                             {p.label}
                           </button>
@@ -1232,11 +1278,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     <button
                       type="button"
                       onClick={() => setCalendarSync(calendarSync === 'Sí' ? 'No' : 'Sí')}
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
-                        calendarSync === 'Sí'
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${calendarSync === 'Sí'
                           ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                           : 'bg-[#040711] border border-slate-800 text-slate-500 hover:text-slate-300'
-                      }`}
+                        }`}
                     >
                       {calendarSync === 'Sí' && <Check className="w-3 h-3" />}
                       <span>{calendarSync === 'Sí' ? 'Sí' : 'No'}</span>
@@ -1272,11 +1317,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                             key={p.id}
                             type="button"
                             onClick={() => setPrioridad(p.id)}
-                            className={`py-1 rounded-md text-[10px] font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                              activo
+                            className={`py-1 rounded-md text-[10px] font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 ${activo
                                 ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
                                 : 'text-slate-400 hover:text-slate-200'
-                            }`}
+                              }`}
                           >
                             <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />
                             <span>{p.label}</span>
@@ -1408,9 +1452,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                   <span className="text-[11px] text-slate-400 font-normal">Sin gastos vinculados</span>
                 )}
                 <ChevronDown
-                  className={`w-4 h-4 text-emerald-400 transition-transform duration-200 ${
-                    mostrarGasto ? 'rotate-180' : ''
-                  }`}
+                  className={`w-4 h-4 text-emerald-400 transition-transform duration-200 ${mostrarGasto ? 'rotate-180' : ''
+                    }`}
                 />
               </div>
             </button>
@@ -1426,11 +1469,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     <button
                       type="button"
                       onClick={() => setTabGasto('NUEVO')}
-                      className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                        tabGasto === 'NUEVO'
+                      className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer flex items-center gap-1.5 ${tabGasto === 'NUEVO'
                           ? 'bg-emerald-600 text-white shadow-xs'
                           : 'text-slate-400 hover:text-slate-200'
-                      }`}
+                        }`}
                     >
                       <Plus className="w-3 h-3" />
                       <span>Nuevo Gasto</span>
@@ -1438,11 +1480,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     <button
                       type="button"
                       onClick={() => setTabGasto('VINCULAR')}
-                      className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer flex items-center gap-1.5 ${
-                        tabGasto === 'VINCULAR'
+                      className={`px-2.5 py-1 rounded-md font-semibold transition cursor-pointer flex items-center gap-1.5 ${tabGasto === 'VINCULAR'
                           ? 'bg-emerald-600 text-white shadow-xs'
                           : 'text-slate-400 hover:text-slate-200'
-                      }`}
+                        }`}
                     >
                       <Link2 className="w-3 h-3" />
                       <span>Vincular Existente</span>
@@ -1463,9 +1504,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                               key={m}
                               type="button"
                               onClick={() => setGastoMoneda(m)}
-                              className={`flex-1 py-1.5 rounded-md text-xs font-mono font-bold transition-all cursor-pointer ${
-                                gastoMoneda === m ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
-                              }`}
+                              className={`flex-1 py-1.5 rounded-md text-xs font-mono font-bold transition-all cursor-pointer ${gastoMoneda === m ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                                }`}
                             >
                               {m}
                             </button>
@@ -1566,11 +1606,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                                   setGastoConcepto(g.descripcion_gasto || '');
                                 }
                               }}
-                              className={`p-2.5 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition-all ${
-                                isSelected
+                              className={`p-2.5 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition-all ${isSelected
                                   ? 'bg-emerald-950/40 border-emerald-500/80 shadow-xs'
                                   : 'bg-[#040711] border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/40'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
@@ -1654,19 +1693,17 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                       <button
                         type="button"
                         onClick={() => togglePasoCompletado(paso.id)}
-                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition cursor-pointer ${
-                          paso.completado
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition cursor-pointer ${paso.completado
                             ? 'bg-emerald-500 border-emerald-500 text-white'
                             : 'border-slate-700 bg-slate-900/60 hover:border-slate-500'
-                        }`}
+                          }`}
                       >
                         {paso.completado && <Check className="w-3 h-3 stroke-[3]" />}
                       </button>
                       <span className="text-[10px] font-mono font-bold text-slate-500 shrink-0">#{paso.numero}</span>
                       <span
-                        className={`truncate ${
-                          paso.completado ? 'line-through text-slate-500' : 'text-slate-200'
-                        }`}
+                        className={`truncate ${paso.completado ? 'line-through text-slate-500' : 'text-slate-200'
+                          }`}
                       >
                         {paso.descripcion}
                       </span>
@@ -1729,7 +1766,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
           <SeccionNotasVinculadasModal
             codigoEntidad={actividadEditar?.codigo_legado || ''}
             tipoEntidad="HABITO"
-            tituloEntidad={titulo || actividadEditar?.nombre_actividad || 'Actividad'}
+            tituloEntidad={titulo || nombreDisplay || 'Actividad'}
           />
         </div>
 
@@ -1780,7 +1817,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
         <ModalAlcanceRecurrencia
           isOpen={mostrarModalAlcance}
           accion="editar"
-          tituloActividad={actividadEditar.nombre_actividad}
+          tituloActividad={titulo || nombreDisplay || 'Actividad'}
           fechaActual={actividadEditar.fecha_programada}
           onSeleccionarAlcance={handleConfirmarAlcance}
           onClose={() => {

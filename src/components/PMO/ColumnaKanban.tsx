@@ -1,0 +1,208 @@
+import React, { memo } from 'react';
+import type { CanonicalTarea } from '../../utils/entityNormalizer';
+import type { SubtareaPaso } from '../../types';
+import { TarjetaTareaKanban } from './TarjetaTareaKanban';
+import { Layers, CheckCircle2, Zap, Plus } from 'lucide-react';
+
+export interface ColumnaConfig {
+  id: string;
+  domId: string;
+  titulo: string;
+  iconoColor: string;
+  tituloColor: string;
+  badgeColor: string;
+  headerGlow?: boolean;
+}
+
+export interface ColumnaKanbanProps {
+  col: ColumnaConfig;
+  tareasColumna: CanonicalTarea[];
+  isOverThisCol: boolean;
+  cargandoDatosIniciales: boolean;
+  draggedTaskId: string | null;
+  hoveredTaskId: string | null;
+  predecesorasHover: Set<string>;
+  sucesorasHover: Set<string>;
+  predecesorasOcultas: string[];
+  sucesorasOcultas: string[];
+  subtareasPorTarea: Map<string, SubtareaPaso[]>;
+  proyectosMap: Map<string, any>;
+  hitosMap: Map<string, any>;
+  gastosPorTarea: Map<string, number>;
+  onDragOver: (e: React.DragEvent, colId: string) => void;
+  onDragLeave: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent, colId: string) => void;
+  onDragStartTask: (e: React.DragEvent, taskId: string) => void;
+  onDragEndTask: () => void;
+  onMouseEnterTask: (codigo: string) => void;
+  onMouseLeaveTask: () => void;
+  onSeleccionarTarea: (id: string, estado: string) => void;
+  onMoverTareaAEstado: (tar: CanonicalTarea, nuevoEstado: string) => void;
+  onArchivarTarea: (tar: CanonicalTarea) => void;
+  onEliminarTarea: (id: string, nombre: string) => void;
+  onAbrirModalNuevaTarea: (colId: string) => void;
+}
+
+const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
+  col,
+  tareasColumna,
+  isOverThisCol,
+  cargandoDatosIniciales,
+  draggedTaskId,
+  hoveredTaskId,
+  predecesorasHover,
+  sucesorasHover,
+  predecesorasOcultas,
+  sucesorasOcultas,
+  subtareasPorTarea,
+  proyectosMap,
+  hitosMap,
+  gastosPorTarea,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragStartTask,
+  onDragEndTask,
+  onMouseEnterTask,
+  onMouseLeaveTask,
+  onSeleccionarTarea,
+  onMoverTareaAEstado,
+  onArchivarTarea,
+  onEliminarTarea,
+  onAbrirModalNuevaTarea
+}) => {
+  return (
+    <div
+      id={col.domId}
+      data-state={col.id}
+      className={`kanban-col-container flex flex-col rounded-2xl border p-3.5 h-full min-h-0 transition-all duration-200 ease-out shadow-2xs select-none ${
+        isOverThisCol
+          ? 'kanban-dropzone-active bg-sky-950/20 border-sky-500/40 shadow-[0_0_20px_rgba(56,189,248,0.15)] ring-1 ring-sky-400/30'
+          : 'portal-surface bg-slate-200/50 dark:bg-[#0D1526]/80 border-slate-300/60 dark:border-slate-800/40'
+      }`}
+      onDragOver={(e) => onDragOver(e, col.id)}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => onDrop(e, col.id)}
+    >
+      {/* Cabecera de Columna */}
+      <div className="mb-2.5 space-y-2 shrink-0">
+        <div className="flex justify-between items-center px-1">
+          <div className="flex items-center gap-2">
+            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-semibold ${col.iconoColor} relative`}>
+              {col.headerGlow && (
+                <span className="animate-ping absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 opacity-75"></span>
+              )}
+              {col.id === '01_Backlog' && <Layers className="w-3.5 h-3.5 text-slate-300" strokeWidth={1.75} />}
+              {col.id === '02_Por_Hacer' && <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />}
+              {col.id === '03_En_Proceso' && <Zap className="w-3.5 h-3.5 text-amber-400" strokeWidth={1.75} />}
+              {col.id === '04_Completado' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" strokeWidth={1.75} />}
+            </span>
+            <span className={`text-xs font-bold uppercase tracking-wider ${col.tituloColor}`}>
+              {col.titulo}
+            </span>
+          </div>
+          <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold font-mono tabular-nums ${col.badgeColor}`}>
+            {cargandoDatosIniciales ? (
+              <span className="inline-block w-4 h-3 bg-slate-700/60 rounded animate-pulse" />
+            ) : (
+              tareasColumna.length
+            )}
+          </span>
+        </div>
+
+        {/* Botón "+ Añadir Tarea" */}
+        <button
+          type="button"
+          onClick={() => onAbrirModalNuevaTarea(col.id)}
+          className="w-full py-1.5 px-3 border border-dashed border-slate-300 dark:border-slate-700/80 hover:border-sky-500/50 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-sky-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+        >
+          <Plus className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+          <span>Añadir Tarea</span>
+        </button>
+      </div>
+
+      {/* Lista de Tarjetas Scrollable */}
+      <div
+        id={`body-${col.domId}`}
+        className="kanban-col-body flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar pb-6 [&::-webkit-scrollbar]:hidden"
+      >
+        {cargandoDatosIniciales ? (
+          <div className="space-y-2.5">
+            <div className="animate-pulse bg-slate-800/40 rounded-xl border border-slate-800/40 h-28 p-3 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="h-3 w-1/3 bg-slate-700/50 rounded"></div>
+                <div className="h-4 w-4/5 bg-slate-700/70 rounded"></div>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-slate-800/30">
+                <div className="h-3 w-16 bg-slate-700/40 rounded"></div>
+                <div className="h-3 w-12 bg-slate-700/40 rounded"></div>
+              </div>
+            </div>
+            <div className="animate-pulse bg-slate-800/40 rounded-xl border border-slate-800/40 h-28 p-3 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="h-3 w-1/4 bg-slate-700/50 rounded"></div>
+                <div className="h-4 w-3/4 bg-slate-700/70 rounded"></div>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-slate-800/30">
+                <div className="h-3 w-20 bg-slate-700/40 rounded"></div>
+                <div className="h-3 w-10 bg-slate-700/40 rounded"></div>
+              </div>
+            </div>
+          </div>
+        ) : tareasColumna.length === 0 ? (
+          <div className="text-center py-10 text-xs text-slate-400 dark:text-slate-600 italic">
+            Columna vacía
+          </div>
+        ) : (
+          tareasColumna.map((tar) => {
+            const subsTarea = subtareasPorTarea.get(tar.codigo_legado) || [];
+            const proyAsoc = tar.proyecto_codigo ? proyectosMap.get(tar.proyecto_codigo) : undefined;
+            const nombreProyecto = proyAsoc?.nombre || tar.proyecto_codigo || 'General';
+            const hitoAsoc = tar.hito_codigo ? hitosMap.get(tar.hito_codigo) : undefined;
+            const nombreHito = (hitoAsoc as any)?.nombre || (hitoAsoc as any)?.nombre_hito || (hitoAsoc as any)?.nombre_elemento || tar.hito_codigo || 'Hito Principal';
+
+            const isHovered = hoveredTaskId === tar.codigo_legado;
+            const isPredecesora = predecesorasHover.has(tar.codigo_legado.toUpperCase());
+            const isSucesora = sucesorasHover.has(tar.codigo_legado.toUpperCase());
+            const isRelacionada = isHovered || isPredecesora || isSucesora;
+            const atenuar = hoveredTaskId !== null && !isRelacionada;
+
+            const predOcultas = isHovered ? predecesorasOcultas : [];
+            const sucOcultas = isHovered ? sucesorasOcultas : [];
+
+            const costoGasto = gastosPorTarea.get(tar.codigo_legado.toUpperCase()) || 0;
+
+            return (
+              <TarjetaTareaKanban
+                key={tar.id}
+                tar={tar}
+                colId={col.id}
+                isDragged={draggedTaskId === tar.id}
+                isHovered={isHovered}
+                isPredecesora={isPredecesora}
+                isSucesora={isSucesora}
+                atenuar={atenuar}
+                predecesorasOcultas={predOcultas}
+                sucesorasOcultas={sucOcultas}
+                subsTarea={subsTarea}
+                nombreProyecto={nombreProyecto}
+                nombreHito={nombreHito}
+                costoGasto={costoGasto}
+                onDragStart={onDragStartTask}
+                onDragEnd={onDragEndTask}
+                onMouseEnter={onMouseEnterTask}
+                onMouseLeave={onMouseLeaveTask}
+                onClick={onSeleccionarTarea}
+                onMoverTareaAEstado={onMoverTareaAEstado}
+                onArchivarTarea={onArchivarTarea}
+                onEliminarTarea={onEliminarTarea}
+              />
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const ColumnaKanban = memo(ColumnaKanbanComponent);

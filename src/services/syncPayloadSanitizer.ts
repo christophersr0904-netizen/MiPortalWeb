@@ -16,7 +16,13 @@ import type {
   TareaRecord,
   NotaRecord,
   ActividadPersonal,
-  SubtareaPaso
+  SubtareaPaso,
+  GastoRecord,
+  IngresoRecord,
+  CuotaRecord,
+  MetaPlanRecord,
+  HitoPlanRecord,
+  HabitoMetaVinculo
 } from '../types';
 
 export const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
@@ -381,6 +387,181 @@ export function sanitizarSubtareaPayload(
     descripcion_paso: raw.descripcion_paso || 'Paso sin descripción',
     completado: Boolean(raw.completado),
     fecha_completado: sanitizeTimestamp(raw.fecha_completado),
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+// ============================================================================
+// 7. SANITIZADOR DE GASTOS
+// ============================================================================
+
+export function sanitizarGastoPayload(raw: GastoRecord, userId: string = DEFAULT_USER_ID) {
+  return {
+    id: isUuid(raw.id) ? raw.id : undefined,
+    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    codigo_legado: raw.codigo_legado,
+    tipo_origen: raw.tipo_origen || 'PERSONAL',
+    id_origen_vinculado: raw.id_origen_vinculado || null,
+    categoria_gasto: raw.categoria_gasto || 'General',
+    fecha_gasto: sanitizeDate(raw.fecha_gasto) || new Date().toISOString().split('T')[0],
+    descripcion_gasto: raw.descripcion_gasto?.trim() || 'Gasto sin descripción',
+    moneda_original: raw.moneda_original || 'PEN',
+    monto_original: Math.max(0, Number(raw.monto_original) || 0),
+    tipo_cambio: Number(raw.tipo_cambio) || 1.0,
+    monto_pen: Math.max(0, Number(raw.monto_pen) || 0),
+    modalidad: raw.modalidad || 'CONTADO',
+    metodo_pago: raw.metodo_pago || 'EFECTIVO',
+    estado_pago: raw.estado_pago || 'PAGADO',
+    comprobante_url: raw.comprobante_url || null,
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+// ============================================================================
+// 8. SANITIZADOR DE INGRESOS
+// ============================================================================
+
+export function sanitizarIngresoPayload(raw: IngresoRecord, userId: string = DEFAULT_USER_ID) {
+  return {
+    id: isUuid(raw.id) ? raw.id : undefined,
+    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    codigo_legado: raw.codigo_legado,
+    tipo_origen: raw.tipo_origen || 'HONORARIO',
+    categoria_ingreso: raw.categoria_ingreso || 'General',
+    fecha_ingreso: sanitizeDate(raw.fecha_ingreso) || new Date().toISOString().split('T')[0],
+    descripcion_ingreso: raw.descripcion_ingreso?.trim() || 'Ingreso sin descripción',
+    moneda_original: raw.moneda_original || 'PEN',
+    monto_original: Math.max(0, Number(raw.monto_original) || 0),
+    tipo_cambio: Number(raw.tipo_cambio) || 1.0,
+    monto_pen: Math.max(0, Number(raw.monto_pen) || 0),
+    metodo_cobro: raw.metodo_cobro || 'TRANSFERENCIA',
+    cuenta_destino: raw.cuenta_destino || 'Principal',
+    estado_cobro: raw.estado_cobro || 'COBRADO',
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+// ============================================================================
+// 9. SANITIZADOR DE CUOTAS
+// ============================================================================
+
+export function sanitizarCuotaPayload(raw: CuotaRecord, userId: string = DEFAULT_USER_ID) {
+  return {
+    id: isUuid(raw.id) ? raw.id : undefined,
+    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    codigo_legado: raw.codigo_legado,
+    id_credito_padre: raw.id_credito_padre || null,
+    entidad_financiera: raw.entidad_financiera || 'Banco',
+    numero_cuota: Math.max(1, Number(raw.numero_cuota) || 1),
+    total_cuotas: Math.max(1, Number(raw.total_cuotas) || 1),
+    monto_cuota: Math.max(0, Number(raw.monto_cuota) || 0),
+    moneda: raw.moneda || 'PEN',
+    fecha_vencimiento: sanitizeDate(raw.fecha_vencimiento) || new Date().toISOString().split('T')[0],
+    estado_cuota: raw.estado_cuota || 'PENDIENTE',
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+// ============================================================================
+// 10. SANITIZADOR DE METAS Y PLANES
+// ============================================================================
+
+export function sanitizarMetaPlanPayload(raw: MetaPlanRecord, userId: string = DEFAULT_USER_ID) {
+  return {
+    id: isUuid(raw.id) ? raw.id : undefined,
+    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    codigo_legado: raw.codigo_legado,
+    nombre_meta: raw.nombre_meta?.trim() || 'Meta sin nombre',
+    descripcion: raw.descripcion?.trim() || null,
+    categoria_vida: raw.categoria_vida || 'SALUD_DEPORTE',
+    tipo_meta: raw.tipo_meta || 'CUANTITATIVA',
+    unidad_medida: raw.unidad_medida?.trim() || 'unidades',
+    meta_objetivo_total: Math.max(0, Number(raw.meta_objetivo_total) || 0),
+    valor_acumulado_actual: Math.max(0, Number(raw.valor_acumulado_actual) || 0),
+    nivel_rescate_minimo: Math.max(0, Number(raw.nivel_rescate_minimo) || 0),
+    peso_hitos_pct: Math.max(0, Number(raw.peso_hitos_pct) || 50),
+    peso_habitos_pct: Math.max(0, Number(raw.peso_habitos_pct) || 50),
+    fecha_inicio: sanitizeDate(raw.fecha_inicio),
+    fecha_fin: sanitizeDate(raw.fecha_fin),
+    estado: raw.estado || '01_Backlog',
+    proyecto_id: isUuid(raw.proyecto_id) ? raw.proyecto_id : null,
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+// ============================================================================
+// 11. SANITIZADOR DE HITOS DEL PLAN DE ACCIÓN
+// ============================================================================
+
+export function sanitizarHitoPlanPayload(
+  raw: HitoPlanRecord,
+  metaUuidMap: Map<string, string>,
+  userId: string = DEFAULT_USER_ID
+) {
+  let resolvedMetaUuid: string | null = null;
+  const metaId = raw.meta_id || '';
+  if (metaUuidMap.has(metaId)) {
+    resolvedMetaUuid = metaUuidMap.get(metaId)!;
+  } else if (isUuid(metaId)) {
+    resolvedMetaUuid = metaId;
+  }
+
+  return {
+    id: isUuid(raw.id) ? raw.id : undefined,
+    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    codigo_legado: raw.codigo_legado,
+    meta_id: resolvedMetaUuid,
+    titulo_hito: raw.titulo_hito?.trim() || 'Hito sin título',
+    orden_secuencia: Math.max(1, Number(raw.orden_secuencia) || 1),
+    fecha_objetivo: sanitizeDate(raw.fecha_objetivo),
+    completado: Boolean(raw.completado),
+    fecha_completado: sanitizeDate(raw.fecha_completado),
+    peso_relativo: Math.max(1, Number(raw.peso_relativo) || 1),
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+// ============================================================================
+// 12. SANITIZADOR DE VÍNCULOS HÁBITO-META
+// ============================================================================
+
+export function sanitizarVinculoPayload(
+  raw: HabitoMetaVinculo,
+  habitoUuidMap: Map<string, string>,
+  metaUuidMap: Map<string, string>,
+  userId: string = DEFAULT_USER_ID
+) {
+  let resolvedHabitoUuid: string | null = null;
+  const habId = raw.habito_id || '';
+  if (habitoUuidMap.has(habId)) {
+    resolvedHabitoUuid = habitoUuidMap.get(habId)!;
+  } else if (isUuid(habId)) {
+    resolvedHabitoUuid = habId;
+  }
+
+  let resolvedMetaUuid: string | null = null;
+  const metaId = raw.meta_id || '';
+  if (metaUuidMap.has(metaId)) {
+    resolvedMetaUuid = metaUuidMap.get(metaId)!;
+  } else if (isUuid(metaId)) {
+    resolvedMetaUuid = metaId;
+  }
+
+  return {
+    id: isUuid(raw.id) ? raw.id : undefined,
+    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    habito_id: resolvedHabitoUuid,
+    meta_id: resolvedMetaUuid,
+    modo_computo: raw.modo_computo || 'VOLUMEN_DIRECTO',
+    factor_conversion: Number(raw.factor_conversion) || 1.0,
+    peso_contribucion_pct: Math.max(0, Number(raw.peso_contribucion_pct) || 100),
+    meta_volumen_esperada: Math.max(0, Number(raw.meta_volumen_esperada) || 0),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
   };

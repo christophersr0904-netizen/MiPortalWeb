@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Columns,
   HeartPulse,
@@ -39,8 +39,36 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
 }) => {
   const [sheetAccionAbierto, setSheetAccionAbierto] = useState(false);
   const [sheetMasAbierto, setSheetMasAbierto] = useState(false);
+  const [tecladoVisible, setTecladoVisible] = useState(false);
 
   useBodyScrollLock(sheetAccionAbierto || sheetMasAbierto);
+
+  // Ocultamiento reactivo cuando el teclado virtual emerge
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        setTecladoVisible(true);
+      }
+    };
+
+    const handleFocusOut = () => {
+      setTecladoVisible(false);
+    };
+
+    window.addEventListener('focusin', handleFocusIn);
+    window.addEventListener('focusout', handleFocusOut);
+
+    return () => {
+      window.removeEventListener('focusin', handleFocusIn);
+      window.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
 
   const cerrarSheets = () => {
     setSheetAccionAbierto(false);
@@ -49,12 +77,17 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
 
   return (
     <>
-      {/* Barra Fija Inferior (< 768px) */}
+      {/* Barra Fija Inferior (< 768px) con Touch Targets de 48px y Safe-Area */}
       <nav
         id="bottom-navigation-bar"
-        className="fixed bottom-0 inset-x-0 z-[9999] md:hidden bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/80 shadow-[0_-8px_25px_rgba(0,0,0,0.35)] px-3 pt-1.5 pb-safe flex items-center justify-around select-none"
+        className={`fixed bottom-0 inset-x-0 z-[9999] md:hidden bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/80 shadow-[0_-8px_25px_rgba(0,0,0,0.35)] px-3 pt-1 safe-area-bottom flex items-center justify-around select-none transition-all duration-200 ${
+          tecladoVisible ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
+        }`}
+        style={{
+          paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))'
+        }}
       >
-        {/* Botón 1: Kanban */}
+        {/* Botón 1: Kanban (min-h-[48px]) */}
         <button
           type="button"
           id="bottom-nav-kanban"
@@ -62,16 +95,16 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
             cerrarSheets();
             onCambiarVista('kanban');
           }}
-          className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors group cursor-pointer active:scale-95 ${
-            vistaActiva === 'kanban' ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
+          className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center flex-1 transition-colors group cursor-pointer active:scale-95 ${
+            vistaActiva === 'kanban' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
           }`}
           title="Tablero Kanban"
         >
-          <Columns className="w-5 h-5 transition-transform group-hover:scale-110" />
+          <Columns className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
           <span className="text-[10px] font-semibold mt-1 tracking-tight">Kanban</span>
         </button>
 
-        {/* Botón 2: Hábitos */}
+        {/* Botón 2: Hábitos (min-h-[48px]) */}
         <button
           type="button"
           id="bottom-nav-habitos"
@@ -79,16 +112,16 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
             cerrarSheets();
             onCambiarVista('habitos');
           }}
-          className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors group cursor-pointer active:scale-95 ${
-            vistaActiva === 'habitos' ? 'text-indigo-400' : 'text-slate-400 hover:text-slate-200'
+          className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center flex-1 transition-colors group cursor-pointer active:scale-95 ${
+            vistaActiva === 'habitos' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
           }`}
           title="Hábitos & Vida"
         >
-          <HeartPulse className="w-5 h-5 transition-transform group-hover:scale-110" />
+          <HeartPulse className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
           <span className="text-[10px] font-semibold mt-1 tracking-tight">Hábitos</span>
         </button>
 
-        {/* Botón Central (+): Acción Rápida Elevada */}
+        {/* Botón Central (+): Acción Rápida Elevada (48x48px) */}
         <div className="flex flex-col items-center justify-center -mt-5 px-1 shrink-0">
           <button
             type="button"
@@ -97,17 +130,17 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
               setSheetMasAbierto(false);
               setSheetAccionAbierto(!sheetAccionAbierto);
             }}
-            className="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white flex items-center justify-center shadow-lg shadow-indigo-600/40 ring-4 ring-slate-900 dark:ring-slate-950 active:scale-90 transition-transform cursor-pointer"
+            className="w-12 h-12 min-w-[48px] min-h-[48px] rounded-full bg-gradient-to-tr from-sky-600 via-sky-500 to-blue-600 text-white flex items-center justify-center shadow-lg shadow-sky-600/40 ring-4 ring-slate-900 dark:ring-slate-950 active:scale-90 transition-[transform] duration-150 transform-gpu will-change-transform cursor-pointer"
             title="Crear Nuevo Registro"
           >
-            <Plus className="w-6 h-6 stroke-[2.5]" />
+            <Plus className="w-6 h-6" strokeWidth={1.75} />
           </button>
-          <span className="text-[9px] font-bold text-indigo-400 dark:text-indigo-300 mt-0.5 tracking-tight">
+          <span className="text-[9px] font-bold text-sky-400 dark:text-sky-300 mt-0.5 tracking-tight">
             Nuevo
           </span>
         </div>
 
-        {/* Botón 4: Notas */}
+        {/* Botón 4: Notas (min-h-[48px]) */}
         <button
           type="button"
           id="bottom-nav-notas"
@@ -115,16 +148,16 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
             cerrarSheets();
             onCambiarVista('notas');
           }}
-          className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors group cursor-pointer active:scale-95 ${
-            vistaActiva === 'notas' ? 'text-amber-400' : 'text-slate-400 hover:text-slate-200'
+          className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center flex-1 transition-colors group cursor-pointer active:scale-95 ${
+            vistaActiva === 'notas' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
           }`}
           title="Notas Inteligentes"
         >
-          <FileText className="w-5 h-5 transition-transform group-hover:scale-110" />
+          <FileText className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
           <span className="text-[10px] font-semibold mt-1 tracking-tight">Notas</span>
         </button>
 
-        {/* Botón 5: Más / Proyectos & Finanzas */}
+        {/* Botón 5: Más / Proyectos & Finanzas (min-h-[48px]) */}
         <button
           type="button"
           id="bottom-nav-mas"
@@ -132,14 +165,14 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
             setSheetAccionAbierto(false);
             setSheetMasAbierto(!sheetMasAbierto);
           }}
-          className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors group cursor-pointer active:scale-95 ${
+          className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center flex-1 transition-colors group cursor-pointer active:scale-95 ${
             sheetMasAbierto || vistaActiva === 'portafolio' || vistaActiva === 'financiero' || vistaActiva === 'detalle'
-              ? 'text-indigo-400'
+              ? 'text-sky-400'
               : 'text-slate-400 hover:text-slate-200'
           }`}
           title="Más Módulos"
         >
-          <Layers className="w-5 h-5 transition-transform group-hover:scale-110" />
+          <Layers className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
           <span className="text-[10px] font-semibold mt-1 tracking-tight">Más</span>
         </button>
       </nav>
@@ -157,7 +190,10 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
       {sheetAccionAbierto && (
         <div
           id="bottom-sheet-accion-rapida"
-          className="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 pb-safe shadow-2xl md:hidden flex flex-col animate-in slide-in-from-bottom duration-250"
+          className="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 safe-area-bottom shadow-2xl md:hidden flex flex-col animate-in slide-in-from-bottom duration-250"
+          style={{
+            paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom, 0px))'
+          }}
         >
           <div className="w-10 h-1 bg-slate-700/80 rounded-full mx-auto mb-4 shrink-0" />
 
@@ -169,9 +205,10 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
             <button
               type="button"
               onClick={cerrarSheets}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              className="min-w-[44px] min-h-[44px] p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-[color,background-color] duration-150 cursor-pointer"
+              aria-label="Cerrar panel de acción rápida"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -184,10 +221,10 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
                 if (onCrearTareaRapida) onCrearTareaRapida();
                 else onCambiarVista('kanban');
               }}
-              className="p-3.5 rounded-2xl flex flex-col items-start gap-2 bg-slate-850/60 dark:bg-slate-900/60 border border-slate-800/80 hover:border-indigo-500/50 active:scale-95 transition-all text-left cursor-pointer group"
+              className="p-3.5 rounded-2xl flex flex-col items-start gap-2 bg-slate-850/60 dark:bg-slate-900/60 border border-slate-800/80 hover:border-sky-500/50 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform text-left cursor-pointer group"
             >
-              <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                <CheckSquare className="w-5 h-5" />
+              <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 group-hover:bg-sky-500 group-hover:text-white transition-colors">
+                <CheckSquare className="w-5 h-5" strokeWidth={1.75} />
               </div>
               <div>
                 <div className="text-xs font-black text-slate-100">Nueva Tarea</div>
@@ -203,10 +240,10 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
                 if (onCrearHabitoRapido) onCrearHabitoRapido();
                 else onCambiarVista('habitos');
               }}
-              className="p-3.5 rounded-2xl flex flex-col items-start gap-2 bg-slate-850/60 dark:bg-slate-900/60 border border-slate-800/80 hover:border-emerald-500/50 active:scale-95 transition-all text-left cursor-pointer group"
+              className="p-3.5 rounded-2xl flex flex-col items-start gap-2 bg-slate-850/60 dark:bg-slate-900/60 border border-slate-800/80 hover:border-emerald-500/50 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform text-left cursor-pointer group"
             >
               <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                <Activity className="w-5 h-5" />
+                <Activity className="w-5 h-5" strokeWidth={1.75} />
               </div>
               <div>
                 <div className="text-xs font-black text-slate-100">Nuevo Hábito</div>
@@ -222,10 +259,10 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
                 if (onCrearNotaRapida) onCrearNotaRapida();
                 else onCambiarVista('notas');
               }}
-              className="p-3.5 rounded-2xl flex flex-col items-start gap-2 bg-slate-850/60 dark:bg-slate-900/60 border border-slate-800/80 hover:border-amber-500/50 active:scale-95 transition-all text-left cursor-pointer group"
+              className="p-3.5 rounded-2xl flex flex-col items-start gap-2 bg-slate-850/60 dark:bg-slate-900/60 border border-slate-800/80 hover:border-amber-500/50 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform text-left cursor-pointer group"
             >
               <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 group-hover:bg-amber-500 group-hover:text-white transition-colors">
-                <FileText className="w-5 h-5" />
+                <FileText className="w-5 h-5" strokeWidth={1.75} />
               </div>
               <div>
                 <div className="text-xs font-black text-slate-100">Nueva Nota</div>
@@ -241,10 +278,10 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
                 if (onCrearGastoRapido) onCrearGastoRapido();
                 else onCambiarVista('financiero');
               }}
-              className="p-3.5 rounded-2xl flex flex-col items-start gap-2 bg-slate-850/60 dark:bg-slate-900/60 border border-slate-800/80 hover:border-rose-500/50 active:scale-95 transition-all text-left cursor-pointer group"
+              className="p-3.5 rounded-2xl flex flex-col items-start gap-2 bg-slate-850/60 dark:bg-slate-900/60 border border-slate-800/80 hover:border-rose-500/50 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform text-left cursor-pointer group"
             >
               <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 group-hover:bg-rose-500 group-hover:text-white transition-colors">
-                <Receipt className="w-5 h-5" />
+                <Receipt className="w-5 h-5" strokeWidth={1.75} />
               </div>
               <div>
                 <div className="text-xs font-black text-slate-100">Nuevo Gasto</div>
@@ -259,7 +296,10 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
       {sheetMasAbierto && (
         <div
           id="bottom-sheet-mas"
-          className="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 pb-safe shadow-2xl md:hidden flex flex-col animate-in slide-in-from-bottom duration-250"
+          className="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 safe-area-bottom shadow-2xl md:hidden flex flex-col animate-in slide-in-from-bottom duration-250"
+          style={{
+            paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom, 0px))'
+          }}
         >
           <div className="w-10 h-1 bg-slate-700/80 rounded-full mx-auto mb-4 shrink-0" />
 
@@ -271,9 +311,10 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
             <button
               type="button"
               onClick={cerrarSheets}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              className="min-w-[44px] min-h-[44px] p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-[color,background-color] duration-150 cursor-pointer"
+              aria-label="Cerrar panel de módulos"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -285,18 +326,18 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
                 cerrarSheets();
                 onCambiarVista('portafolio');
               }}
-              className="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition cursor-pointer"
+              className="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
-                  <FolderKanban className="w-5 h-5" />
+                  <FolderKanban className="w-5 h-5" strokeWidth={1.75} />
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-100">Portafolio de Proyectos</div>
                   <div className="text-[10px] text-slate-400">Iniciativas, carteras e hitos WBS</div>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-400" />
+              <ChevronRight className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
             </button>
 
             {/* Finanzas */}
@@ -306,18 +347,18 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
                 cerrarSheets();
                 onCambiarVista('financiero');
               }}
-              className="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition cursor-pointer"
+              className="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                  <Wallet className="w-5 h-5" />
+                  <Wallet className="w-5 h-5" strokeWidth={1.75} />
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-100">Flujo de Caja & Finanzas</div>
                   <div className="text-[10px] text-slate-400">Ingresos, egresos, cuotas y liquidez</div>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-400" />
+              <ChevronRight className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
             </button>
 
             {/* Detalle 360 */}
@@ -327,18 +368,18 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
                 cerrarSheets();
                 onCambiarVista('detalle');
               }}
-              className="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition cursor-pointer"
+              className="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0">
-                  <Compass className="w-5 h-5" />
+                  <Compass className="w-5 h-5" strokeWidth={1.75} />
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-100">Detalle 360° de Proyecto</div>
                   <div className="text-[10px] text-slate-400">Visión profunda, hitos y gobernanza</div>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-400" />
+              <ChevronRight className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
             </button>
 
             {/* Bóveda de Archivados */}
@@ -348,18 +389,18 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
                 cerrarSheets();
                 if (onAbrirDrawerArchivados) onAbrirDrawerArchivados();
               }}
-              className="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition cursor-pointer"
+              className="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-                  <Archive className="w-5 h-5" />
+                  <Archive className="w-5 h-5" strokeWidth={1.75} />
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-100">Bóveda de Archivados</div>
                   <div className="text-[10px] text-slate-400">Historial de tareas y registros cerrados (+10 días)</div>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-400" />
+              <ChevronRight className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
             </button>
           </div>
         </div>
