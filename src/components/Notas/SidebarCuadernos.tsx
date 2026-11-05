@@ -399,11 +399,11 @@ export const CarruselCuadernosMovil: React.FC<CarruselCuadernosMovilProps> = ({
   onAbrirModalCrear
 }) => {
   return (
-    <div className="md:hidden shrink-0 bg-[#0D1526] border-b border-slate-800/40 px-3 py-2 flex items-center gap-1.5 overflow-x-auto custom-scrollbar select-none">
+    <div className="md:hidden shrink-0 bg-[#0D1526] border-b border-slate-800/40 px-2.5 py-1 flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden snap-x select-none overscroll-contain h-9">
       <button
         type="button"
         onClick={() => setBlockActivo(null)}
-        className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+        className={`h-7 px-2.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 snap-start ${
           blockActivo === null
             ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
             : 'text-slate-400 bg-slate-900 border border-slate-800'
@@ -415,7 +415,7 @@ export const CarruselCuadernosMovil: React.FC<CarruselCuadernosMovilProps> = ({
       <button
         type="button"
         onClick={() => setBlockActivo('__sin_block__')}
-        className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+        className={`h-7 px-2.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 snap-start ${
           blockActivo === '__sin_block__'
             ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
             : 'text-slate-400 bg-slate-900 border border-slate-800'
@@ -433,7 +433,7 @@ export const CarruselCuadernosMovil: React.FC<CarruselCuadernosMovilProps> = ({
             key={b}
             type="button"
             onClick={() => setBlockActivo(activo ? null : b)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+            className={`h-7 px-2.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 snap-start ${
               activo
                 ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
                 : 'text-slate-400 bg-slate-900 border border-slate-800'
@@ -450,7 +450,7 @@ export const CarruselCuadernosMovil: React.FC<CarruselCuadernosMovilProps> = ({
       <button
         type="button"
         onClick={onAbrirModalCrear}
-        className="px-2 py-1 rounded-lg text-xs font-bold text-sky-400 bg-sky-950/40 border border-sky-500/30 whitespace-nowrap flex items-center gap-1 cursor-pointer"
+        className="h-7 px-2 rounded-lg text-[11px] font-bold text-sky-400 bg-sky-950/40 border border-sky-500/30 whitespace-nowrap flex items-center gap-1 cursor-pointer shrink-0 snap-start"
       >
         <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
         <span>Block</span>

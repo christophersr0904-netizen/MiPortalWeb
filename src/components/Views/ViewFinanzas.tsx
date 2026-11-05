@@ -12,7 +12,8 @@ import {
   ArrowDownRight,
   CheckCircle2,
   Clock,
-  Receipt
+  Receipt,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -49,6 +50,7 @@ export const ViewFinanzas: React.FC = () => {
   const [tipoFlujo, setTipoFlujo] = useState<TipoFlujo>('TODOS');
   const [estadoFlujo, setEstadoFlujo] = useState<EstadoFlujo>('TODOS');
   const [busquedaTrx, setBusquedaTrx] = useState<string>('');
+  const [filtrosTrxAbiertos, setFiltrosTrxAbiertos] = useState(false);
   const deferredBusquedaTrx = useDeferredValue(busquedaTrx);
 
   // Modales de Nueva Transacción & Edición
@@ -640,37 +642,37 @@ export const ViewFinanzas: React.FC = () => {
       className="flex-1 bg-[#040711] flex flex-col w-full h-full overflow-y-auto transition-colors duration-200 custom-scrollbar select-none"
     >
       {/* 1. HEADER FINANCIERO */}
-      <header className="bg-[#0D1526]/85 backdrop-blur-md border-b border-slate-800/40 px-4 md:px-6 py-3.5 shrink-0 shadow-cobalt-1 flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-0 z-20 transition-colors duration-200">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 text-xl font-bold shrink-0">
-            <Wallet className="w-5 h-5 text-white" />
+      <header className="bg-[#0D1526]/85 backdrop-blur-md border-b border-slate-800/40 px-3 md:px-6 py-2 md:py-3.5 shrink-0 shadow-cobalt-1 flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-20 transition-colors duration-200">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 text-lg sm:text-xl font-bold shrink-0">
+            <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-black text-slate-100 text-lg tracking-tight">
-                Finanzas & Gobernanza de Liquidez
+              <h2 className="font-black text-slate-100 text-sm sm:text-lg tracking-tight">
+                Finanzas & Gobernanza
               </h2>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-800/60">
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-800/60">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
                 En Tiempo Real
               </span>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="hidden sm:block text-xs text-slate-400">
               Coexistencia Real / Proyectado, Cuotas Bancarias, Calendarios Sincronizados y Presupuestos
             </p>
           </div>
         </div>
 
         {/* Indicador de Tipo de Cambio (TC) con paridad cambiaria oficial */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             type="button"
             onClick={handleRefreshTC}
             title={`Actualizar tipo de cambio oficial SUNAT / SBS. Última cotización: ${fechaCotizacion}`}
-            className="px-3 py-1.5 rounded-xl border border-slate-800/60 bg-[#0D1526] text-slate-300 hover:bg-slate-800/60 hover:text-white text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition cursor-pointer shadow-2xs"
+            className="h-7.5 sm:h-auto px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-slate-800/60 bg-[#0D1526] text-slate-300 hover:bg-slate-800/60 hover:text-white text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition cursor-pointer shadow-2xs"
           >
             <span id="icon-refresh-tc" className="transition-transform duration-300 flex items-center">
-              <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${actualizandoTC ? 'animate-spin text-amber-500' : ''}`} />
+              <RefreshCw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 ${actualizandoTC ? 'animate-spin text-amber-500' : ''}`} />
             </span>
             <span className="hidden sm:inline">TC SUNAT:</span>
             <span id="btn-label-tc" className="font-mono tabular-nums text-amber-400 font-black">
@@ -681,22 +683,22 @@ export const ViewFinanzas: React.FC = () => {
       </header>
 
       {/* 2. BARRA DE NAVEGACIÓN PRINCIPAL (4 PESTAÑAS ESTRUCTURALES) */}
-      <div className="px-4 md:px-6 pt-3 pb-2 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800/40 bg-[#0D1526]/50 shrink-0">
+      <div className="px-2.5 sm:px-4 md:px-6 pt-2 pb-1.5 sm:pt-3 sm:pb-2 flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-3 border-b border-slate-800/40 bg-[#0D1526]/50 shrink-0">
         {/* Tabs Pills */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-2xl border border-slate-800/60 overflow-x-auto">
+        <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 sm:p-1 rounded-xl sm:rounded-2xl border border-slate-800/60 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0">
           {/* Pestaña 1: Vista General & KPIs */}
           <button
             type="button"
             id="tab-btn-fin-general"
             onClick={() => setTabActiva('general')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0 ${
               tabActiva === 'general'
                 ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
                 : 'text-slate-400 hover:text-sky-300'
             }`}
           >
-            <TrendingUp className="w-4 h-4 shrink-0" />
-            <span>Vista General & KPIs</span>
+            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span>Vista General</span>
           </button>
 
           {/* Pestaña 2: Transacciones */}
@@ -704,17 +706,17 @@ export const ViewFinanzas: React.FC = () => {
             type="button"
             id="tab-btn-fin-transacciones"
             onClick={() => setTabActiva('transacciones')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0 ${
               tabActiva === 'transacciones'
-                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
+                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60 font-bold'
                 : 'text-slate-400 hover:text-sky-300'
             }`}
           >
-            <Layers className="w-4 h-4 shrink-0" />
+            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             <span>Transacciones</span>
             <span
               id="tab-count-transacciones"
-              className="text-[10px] px-2 py-0.2 bg-emerald-950 text-emerald-300 rounded-full font-mono font-bold"
+              className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 bg-emerald-950 text-emerald-300 rounded-full font-mono font-bold"
             >
               {gastosFiltrados.length + ingresosFiltrados.length}
             </span>
@@ -725,17 +727,17 @@ export const ViewFinanzas: React.FC = () => {
             type="button"
             id="tab-btn-fin-cuotas"
             onClick={() => setTabActiva('cuotas')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0 ${
               tabActiva === 'cuotas'
-                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
+                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60 font-bold'
                 : 'text-slate-400 hover:text-sky-300'
             }`}
           >
-            <CreditCard className="w-4 h-4 shrink-0" />
-            <span>Control de Cuotas / Créditos</span>
+            <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span>Cuotas / Deudas</span>
             <span
               id="tab-count-cuotas"
-              className="text-[10px] px-2 py-0.2 bg-violet-950 text-violet-300 rounded-full font-mono font-bold"
+              className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 bg-violet-950 text-violet-300 rounded-full font-mono font-bold"
             >
               {cuotasRaw.length}
             </span>
@@ -746,26 +748,26 @@ export const ViewFinanzas: React.FC = () => {
             type="button"
             id="tab-btn-fin-presupuesto"
             onClick={() => setTabActiva('presupuesto')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0 ${
               tabActiva === 'presupuesto'
-                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
+                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60 font-bold'
                 : 'text-slate-400 hover:text-sky-300'
             }`}
           >
-            <PieChart className="w-4 h-4 shrink-0" />
+            <PieChart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             <span>Presupuestos</span>
           </button>
         </div>
 
         {/* Segmentación y Periodo */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto [&::-webkit-scrollbar]:hidden py-0.5">
           {/* Barra de Segmentación Maestra: [ Todos | Proyectos | Personal ] */}
-          <div className="inline-flex p-1 bg-slate-900/90 rounded-2xl border border-slate-800/60 gap-1 text-xs">
+          <div className="inline-flex p-0.5 sm:p-1 bg-slate-900/90 rounded-xl sm:rounded-2xl border border-slate-800/60 gap-1 text-[11px] sm:text-xs shrink-0">
             <button
               type="button"
               id="btn-seg-fin-todos"
               onClick={() => setSegmento('TODOS')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
                 segmento === 'TODOS'
                   ? 'bg-slate-800 text-white border border-slate-700/60'
                   : 'text-slate-400 hover:text-sky-300'
@@ -777,7 +779,7 @@ export const ViewFinanzas: React.FC = () => {
               type="button"
               id="btn-seg-fin-proyectos"
               onClick={() => setSegmento('PROYECTOS')}
-              className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                 segmento === 'PROYECTOS'
                   ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
                   : 'text-slate-400 hover:text-sky-300'
@@ -789,7 +791,7 @@ export const ViewFinanzas: React.FC = () => {
               type="button"
               id="btn-seg-fin-personal"
               onClick={() => setSegmento('PERSONAL')}
-              className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                 segmento === 'PERSONAL'
                   ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
                   : 'text-slate-400 hover:text-emerald-400'
@@ -800,12 +802,12 @@ export const ViewFinanzas: React.FC = () => {
           </div>
 
           {/* Selector de Periodo Global */}
-          <div className="relative inline-flex items-center">
+          <div className="relative inline-flex items-center shrink-0">
             <select
               id="filtro-mes-finanzas"
               value={periodo}
               onChange={(e) => setPeriodo(e.target.value as PeriodoFinanzas)}
-              className="py-1.5 pl-3 pr-8 text-xs bg-[#0D1526] border border-slate-800/80 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 text-slate-200 shadow-2xs font-semibold cursor-pointer transition"
+              className="py-1 sm:py-1.5 pl-2 sm:pl-3 pr-6 sm:pr-8 text-[11px] sm:text-xs bg-[#0D1526] border border-slate-800/80 rounded-xl outline-none focus:ring-1 focus:ring-sky-500 text-slate-200 shadow-2xs font-semibold cursor-pointer transition h-7 sm:h-auto"
             >
               <option value="MES_ACTUAL">Mes Actual</option>
               <option value="MES_ANTERIOR">Mes Anterior</option>
@@ -856,40 +858,82 @@ export const ViewFinanzas: React.FC = () => {
       {/* PESTAÑA 2: TRANSACCIONES (COEXISTENCIA REAL VS PROGRAMADO)         */}
       {/* ================================================================= */}
       {tabActiva === 'transacciones' && (
-        <div id="vista-fin-tab-transacciones" className="tab-fin-view p-4 md:p-6 space-y-4 flex-1">
+        <div id="vista-fin-tab-transacciones" className="tab-fin-view p-2.5 sm:p-4 md:p-6 space-y-3 sm:space-y-4 flex-1">
           {/* CABECERA Y FILTROS RÁPIDOS ERGONÓMICOS */}
-          <div className="portal-surface p-4 rounded-2xl bg-[#0D1526] border border-slate-800/40 shadow-cobalt-1 space-y-3">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-              <div>
-                <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
-                  <span>Registro Unificado de Movimientos Financieros</span>
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Movimientos reales ejecutados conviven con compromisos programados. Concilia manualmente con el check.
-                </p>
+          <div className="portal-surface p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526] border border-slate-800/40 shadow-cobalt-1 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
+                <div>
+                  <h3 className="font-bold text-slate-100 text-xs sm:text-sm">
+                    Registro de Movimientos
+                  </h3>
+                  <p className="hidden sm:block text-[11px] text-slate-400">
+                    Movimientos reales conviven con compromisos programados.
+                  </p>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => setModalIngresoAbierto(true)}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
+                  className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold shadow-xs transition cursor-pointer"
                 >
                   + Ingreso
                 </button>
                 <button
                   type="button"
                   onClick={() => setModalGastoAbierto(true)}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
+                  className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold shadow-xs transition cursor-pointer"
                 >
                   + Gasto
                 </button>
               </div>
             </div>
 
-            {/* BARRAS DE FILTROS TIPO PÍLDORA */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/60">
+            {/* FILA DE BÚSQUEDA Y BOTÓN DE FILTROS DESPLEGABLE (ESTILO KANBAN) */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  id="input-busqueda-transacciones"
+                  value={busquedaTrx}
+                  onChange={(e) => setBusquedaTrx(e.target.value)}
+                  placeholder="Buscar movimientos..."
+                  className="w-full h-8 pl-8 pr-7 text-xs bg-slate-900/80 border border-slate-800 rounded-xl outline-none focus:ring-1 focus:ring-sky-500 text-slate-100 placeholder:text-slate-500"
+                />
+                {busquedaTrx && (
+                  <button
+                    type="button"
+                    onClick={() => setBusquedaTrx('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setFiltrosTrxAbiertos(!filtrosTrxAbiertos)}
+                className={`h-8 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 md:hidden ${
+                  (tipoFlujo !== 'TODOS' || estadoFlujo !== 'TODOS') || filtrosTrxAbiertos
+                    ? 'bg-sky-950/40 border-sky-800/60 text-sky-300'
+                    : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:text-white'
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <span>Filtros</span>
+                {(tipoFlujo !== 'TODOS' || estadoFlujo !== 'TODOS') && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                )}
+              </button>
+            </div>
+
+            {/* BARRAS DE FILTROS TIPO PÍLDORA: DESPLEGABLE EN MÓVIL, VISIBLE EN DESKTOP */}
+            <div className={`${filtrosTrxAbiertos ? 'grid' : 'hidden md:grid'} grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-800/60`}>
               {/* Filtro 1: Selector Tipo de Movimiento */}
               <div>
                 <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Tipo de Flujo</span>
@@ -979,28 +1023,6 @@ export const ViewFinanzas: React.FC = () => {
                   </button>
                 </div>
               </div>
-            </div>
-
-            {/* Búsqueda en Vivo */}
-            <div className="relative pt-1">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-3.5 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                id="input-busqueda-transacciones"
-                value={busquedaTrx}
-                onChange={(e) => setBusquedaTrx(e.target.value)}
-                placeholder="Buscar por concepto, entidad, categoría o código..."
-                className="w-full pl-8 pr-8 py-2 text-xs bg-slate-900/80 border border-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 text-slate-100"
-              />
-              {busquedaTrx && (
-                <button
-                  type="button"
-                  onClick={() => setBusquedaTrx('')}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-200"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
           </div>
 

@@ -23,7 +23,8 @@ import {
   Check,
   X,
   BookOpen,
-  Plus
+  Plus,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 
@@ -55,6 +56,7 @@ export const VisorNotas: React.FC = () => {
   const [subFiltro, setSubFiltro] = useState<SubFiltroRapido>('');
   const [tagsSeleccionados, setTagsSeleccionados] = useState<string[]>([]);
   const [colorFiltro, setColorFiltro] = useState<string>('');
+  const [filtrosNotasAbiertos, setFiltrosNotasAbiertos] = useState(false);
 
   // Blocks Dinámicos
   const [blockActivo, setBlockActivo] = useState<string | null>(null); // null = todas, '__sin_block__' = sueltas
@@ -545,38 +547,38 @@ export const VisorNotas: React.FC = () => {
       {/* ===================================================================== */}
       <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
         {/* BARRA SUPERIOR DE HERRAMIENTAS */}
-        <div className="shrink-0 bg-[#0D1526]/80 backdrop-blur-md border-b border-slate-800/40 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-cobalt-1 z-10">
+        <div className="shrink-0 bg-[#0D1526]/85 backdrop-blur-md border-b border-slate-800/40 px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2 shadow-cobalt-1 z-10 h-10 sm:h-auto">
           {/* Lado Izquierdo: Título y Block Activo */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-amber-400 to-orange-500 flex items-center justify-center font-bold text-white shadow-md shadow-amber-500/20 ring-1 ring-white/20 shrink-0">
-              <FileText className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-gradient-to-tr from-amber-500 via-amber-400 to-orange-500 flex items-center justify-center font-bold text-white shadow-md shadow-amber-500/20 ring-1 ring-white/20 shrink-0">
+              <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold text-slate-100 leading-none">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h2 className="text-xs sm:text-sm font-bold text-slate-100 leading-none truncate max-w-[120px] sm:max-w-none">
                   {blockActivo === '__sin_block__'
                     ? 'Notas Sueltas'
                     : blockActivo
                     ? `Block: ${blockActivo}`
-                    : 'Notas Inteligentes'}
+                    : 'Notas'}
                 </h2>
                 <span
                   id="badge-total-notas"
-                  className="px-2 py-0.5 rounded-full text-[10px] font-mono tabular-nums font-bold bg-amber-950/60 text-amber-300 border border-amber-500/30"
+                  className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[9px] sm:text-[10px] font-mono tabular-nums font-bold bg-amber-950/60 text-amber-300 border border-amber-500/30 shrink-0"
                 >
-                  {notasRaw.length} notas
+                  {notasRaw.length}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="hidden sm:block text-[11px] text-slate-400 mt-0.5">
                 {blockActivo ? `Filtrando por cuaderno "${blockActivo}"` : 'Modular Compuesto: Texto + Checklists + Wishlist'}
               </p>
             </div>
           </div>
 
           {/* Lado Derecho: Conmutador de Vistas y Botón '+ Nueva Nota' */}
-          <div className="flex items-center gap-2 shrink-0 justify-end">
-            {/* Conmutador de Vista */}
-            <div className="flex items-center p-0.5 bg-slate-900/80 rounded-xl border border-slate-800/80">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 justify-end">
+            {/* Conmutador de Vista (Desktop) */}
+            <div className="hidden sm:flex items-center p-0.5 bg-slate-900/80 rounded-xl border border-slate-800/80">
               <button
                 type="button"
                 id="btn-vista-notas-masonry"
@@ -613,42 +615,83 @@ export const VisorNotas: React.FC = () => {
                 setNotaEnEdicion(null);
                 setModalAbierto(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 transition shadow-sm shadow-amber-500/20 cursor-pointer"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 transition shadow-sm shadow-amber-500/20 cursor-pointer h-7 sm:h-auto"
               title="Crear nota detallada con modal 360°"
             >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span className="hidden sm:inline">Nueva Nota</span>
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span className="text-[11px] sm:text-xs">Nueva Nota</span>
             </button>
           </div>
         </div>
 
         {/* NIVEL SECUNDARIO: Búsqueda Rápida y Filtros de Refinamiento */}
-        <div className="shrink-0 bg-[#0D1526]/50 backdrop-blur-xs border-b border-slate-800/40 px-4 sm:px-6 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2.5 z-10">
-          {/* Buscador en tiempo real */}
-          <div className="relative w-full md:max-w-md">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5 pointer-events-none" />
-            <input
-              type="text"
-              id="input-busqueda-notas"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar notas, checklists, etiquetas o @..."
-              className="w-full pl-9 pr-7 py-1.5 text-xs rounded-xl bg-slate-900/90 border border-slate-800 text-slate-100 placeholder-slate-500 focus:ring-1 focus:ring-sky-500 focus:border-sky-500/60 transition-all outline-none"
-            />
-            {busqueda && (
-              <button
-                type="button"
-                id="btn-limpiar-busqueda-notas"
-                onClick={() => setBusqueda('')}
-                className="absolute right-2.5 top-2 text-slate-500 hover:text-slate-300 text-xs cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+        <div className="shrink-0 bg-[#0D1526]/50 backdrop-blur-xs border-b border-slate-800/40 px-3 sm:px-6 py-1.5 sm:py-2 flex flex-col md:flex-row md:items-center justify-between gap-2 z-10">
+          {/* Fila compacta de búsqueda + botón de filtros móvil */}
+          <div className="flex items-center gap-2 w-full md:max-w-md">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                id="input-busqueda-notas"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar notas, checklists o #tags..."
+                className="w-full h-8 pl-8 pr-7 text-xs rounded-xl bg-slate-900/90 border border-slate-800 text-slate-100 placeholder-slate-500 focus:ring-1 focus:ring-sky-500 focus:border-sky-500/60 transition-all outline-none"
+              />
+              {busqueda && (
+                <button
+                  type="button"
+                  id="btn-limpiar-busqueda-notas"
+                  onClick={() => setBusqueda('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setFiltrosNotasAbiertos(!filtrosNotasAbiertos)}
+              className={`h-8 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 md:hidden ${
+                (tagsSeleccionados.length > 0 || colorFiltro) || filtrosNotasAbiertos
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Filtros</span>
+              {(tagsSeleccionados.length > 0 || colorFiltro) && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              )}
+            </button>
           </div>
 
-          {/* Refinamiento: Tags, Color y Limpieza */}
-          <div className="flex flex-wrap items-center gap-1.5 justify-start md:justify-end">
+          {/* Refinamiento: Tags, Color y Limpieza (Desplegable en móvil, visible en md:) */}
+          <div className={`${filtrosNotasAbiertos ? 'flex' : 'hidden md:flex'} flex-wrap items-center gap-1.5 justify-start md:justify-end pt-1 md:pt-0 border-t md:border-t-0 border-slate-800/40`}>
+            {/* Conmutador de vista en móvil cuando se abren filtros */}
+            <div className="flex sm:hidden items-center p-0.5 bg-slate-900/80 rounded-xl border border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setModoVista('masonry')}
+                className={`p-1 rounded-lg transition ${
+                  modoVista === 'masonry' ? 'text-sky-300 bg-sky-950/40' : 'text-slate-400'
+                }`}
+                title="Vista Mosaico"
+              >
+                <Layers className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoVista('lista')}
+                className={`p-1 rounded-lg transition ${
+                  modoVista === 'lista' ? 'text-sky-300 bg-sky-950/40' : 'text-slate-400'
+                }`}
+                title="Vista Lista"
+              >
+                <FileText className="w-3.5 h-3.5" />
+              </button>
+            </div>
             {/* Selector de Filtro de Etiquetas */}
             <div className="relative inline-block" id="dropdown-filtro-etiquetas-notas-wrap">
               <button
@@ -789,8 +832,34 @@ export const VisorNotas: React.FC = () => {
           onAbrirModalCrear={() => setModalCrearCuadernoAbierto(true)}
         />
 
-        {/* CONTENEDOR EXPANDIBLE DE CREACIÓN RÁPIDA (GOOGLE KEEP STYLE) */}
-        <div className="shrink-0 w-full max-w-2xl mx-auto px-4 pt-3 pb-1 z-10 min-h-[4rem]">
+        {/* DISPARADOR MÓVIL DE CREACIÓN RÁPIDA (H-8) */}
+        <div className="md:hidden shrink-0 px-3 pt-1.5 pb-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              setNotaEnEdicion(null);
+              setModalAbierto(true);
+            }}
+            className="w-full h-8 text-xs text-slate-400 border border-dashed border-slate-800 hover:border-amber-500/50 hover:text-amber-300 rounded-xl px-3 flex items-center justify-between bg-[#0D1526]/60 active:scale-[0.98] transition cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="truncate">
+                {blockActivo && blockActivo !== '__sin_block__'
+                  ? `Tomar nota en "${blockActivo}"...`
+                  : 'Tomar nota rápida...'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-slate-500">
+              <CheckSquare className="w-3.5 h-3.5" />
+              <DollarSign className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+          </button>
+        </div>
+
+        {/* CONTENEDOR EXPANDIBLE DE CREACIÓN RÁPIDA (GOOGLE KEEP STYLE - DESKTOP) */}
+        <div className="hidden md:block shrink-0 w-full max-w-2xl mx-auto px-4 pt-3 pb-1 z-10 min-h-[4rem]">
           <div
             id="quick-note-box"
             className={`bg-[#0D1526] rounded-2xl border border-slate-800/80 shadow-cobalt-1 relative overflow-hidden group ${
@@ -1148,10 +1217,10 @@ export const VisorNotas: React.FC = () => {
         </div>
 
         {/* CONTENEDOR DE SCROLL: NOTAS FIJADAS Y OTRAS NOTAS */}
-        <div id="contenedor-scroll-notas" className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 sm:px-6 pt-3 pb-32 space-y-6">
+        <div id="contenedor-scroll-notas" className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar px-2.5 sm:px-6 pt-2 sm:pt-3 pb-24 sm:pb-32 space-y-3.5 sm:space-y-6">
           {/* SECCIÓN: NOTAS FIJADAS */}
           {notasFijadas.length > 0 && (
-            <div id="seccion-notas-fijadas" className="space-y-3">
+            <div id="seccion-notas-fijadas" className="space-y-2.5 sm:space-y-3">
               <div className="flex items-center gap-2 px-1">
                 <span className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                   <Pin className="w-3.5 h-3.5 text-amber-500 rotate-45" />
@@ -1167,7 +1236,7 @@ export const VisorNotas: React.FC = () => {
 
               <div
                 id="grid-notas-fijadas"
-                className={modoVista === 'masonry' ? 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4' : 'flex flex-col gap-2'}
+                className={modoVista === 'masonry' ? 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-2.5 sm:gap-4 space-y-2.5 sm:space-y-4' : 'flex flex-col gap-2'}
               >
                 {notasFijadas.map((nota) => (
                   <TarjetaNota
@@ -1202,7 +1271,7 @@ export const VisorNotas: React.FC = () => {
 
               <div
                 id="grid-notas-otras"
-                className={modoVista === 'masonry' ? 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4' : 'flex flex-col gap-2'}
+                className={modoVista === 'masonry' ? 'columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-2.5 sm:gap-4 space-y-2.5 sm:space-y-4' : 'flex flex-col gap-2'}
               >
                 {notasOtras.map((nota) => (
                   <TarjetaNota

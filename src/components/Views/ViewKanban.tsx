@@ -28,7 +28,8 @@ import {
   ArrowDownCircle,
   CheckSquare,
   Check,
-  X
+  X,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -89,6 +90,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   const [popoverEnergiaAbierto, setPopoverEnergiaAbierto] = useState(false);
   const [popoverPlazoAbierto, setPopoverPlazoAbierto] = useState(false);
   const [popoverDepAbierto, setPopoverDepAbierto] = useState(false);
+
+  // Estados para vistas y ergonomía móvil (REQ-PWA-04)
+  const [columnaMovilActiva, setColumnaMovilActiva] = useState<string>('02_Por_Hacer');
+  const [drawerFiltrosMovilAbierto, setDrawerFiltrosMovilAbierto] = useState<boolean>(false);
 
   // Hover timers con buffer de delay (140ms) optimizado para evitar fricción háptica (REQ-SYS-003-KANBAN)
   const leaveTimers = useRef<Record<string, number | null>>({});
@@ -421,6 +426,19 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
       filtroTemporal !== 'TODO'
     );
   }, [proyectoSeleccionadoCodigo, busquedaTarea, filtroHito, filtroPrioridad, filtroEnergia, filtroPlazo, filtroDependencia, filtroTemporal]);
+
+  // Conteo de filtros activos para badge móvil (REQ-PWA-04)
+  const totalFiltrosActivosCount = useMemo(() => {
+    let count = 0;
+    if (busquedaTarea.trim()) count++;
+    if (filtroHito) count++;
+    if (filtroPrioridad) count++;
+    if (filtroEnergia) count++;
+    if (filtroPlazo) count++;
+    if (filtroDependencia) count++;
+    if (filtroTemporal !== 'TODO') count++;
+    return count;
+  }, [busquedaTarea, filtroHito, filtroPrioridad, filtroEnergia, filtroPlazo, filtroDependencia, filtroTemporal]);
 
   // Proyectos filtrados en el sidebar
   const proyectosFiltrados = useMemo(() => {
@@ -1135,18 +1153,89 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
       {/* =================================================================== */}
       {/* 2. ÁREA CENTRAL DEL TABLERO KANBAN                                 */}
       {/* =================================================================== */}
-      <main className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto md:overflow-hidden bg-slate-100 dark:bg-[#040711] transition-colors duration-200">
+      <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-slate-100 dark:bg-[#040711] transition-colors duration-200">
+        {/* ================================================================= */}
+        {/* SELECTOR / CARRUSEL MÓVIL DE PROYECTOS & GASTO (md:hidden)        */}
+        {/* ================================================================= */}
+        <div
+          id="carrusel-proyectos-movil"
+          className="md:hidden shrink-0 h-9 bg-slate-100/95 dark:bg-[#070C18]/95 border-b border-slate-200 dark:border-slate-800/60 px-2.5 py-1 flex items-center justify-between gap-2 select-none"
+        >
+          {/* Carrusel horizontal de chips de proyecto (Paso 1) */}
+          <div className="flex-1 flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden overscroll-contain min-w-0">
+            <button
+              type="button"
+              onClick={() => setProyectoSeleccionadoCodigo(null)}
+              className={`h-7 px-2.5 py-0.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1 shrink-0 active:scale-95 ${
+                proyectoSeleccionadoCodigo === null
+                  ? 'bg-sky-500/20 text-sky-400 dark:text-sky-300 border border-sky-500/40 font-bold shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 bg-white/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <FolderKanban className="w-3 h-3 shrink-0" strokeWidth={1.75} />
+              <span>Todos</span>
+              <span className="font-mono tabular-nums text-[10px] opacity-75">
+                ({proyectos.length})
+              </span>
+            </button>
+            {proyectos.map((proy) => {
+              const isActivo = proyectoSeleccionadoCodigo === proy.codigo_legado;
+              return (
+                <button
+                  key={proy.id}
+                  type="button"
+                  onClick={() => setProyectoSeleccionadoCodigo(isActivo ? null : proy.codigo_legado)}
+                  className={`h-7 px-2.5 py-0.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1 shrink-0 active:scale-95 ${
+                    isActivo
+                      ? 'bg-sky-500/20 text-sky-400 dark:text-sky-300 border border-sky-500/40 font-bold shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 bg-white/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                  title={proy.nombre}
+                >
+                  <span className="font-mono tabular-nums text-[10px] font-bold text-sky-400">
+                    {proy.codigo_legado}
+                  </span>
+                  <span className="max-w-[110px] truncate">{proy.nombre}</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                if (onNuevoProyecto) onNuevoProyecto();
+                else setModalNuevoProyectoAbierto(true);
+              }}
+              className="h-7 px-2 py-0.5 rounded-lg text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 border border-sky-300 dark:border-sky-500/30 whitespace-nowrap flex items-center gap-1 cursor-pointer shrink-0 active:scale-95"
+              title="Crear Nuevo Proyecto"
+            >
+              <Plus className="w-3 h-3" strokeWidth={1.75} />
+              <span>Proyecto</span>
+            </button>
+          </div>
+
+          {/* Micro-Badge Integrado de Gasto Contextual en Móvil (REQ-PWA-05) */}
+          <div
+            id="kanban-gasto-presupuesto-box-movil"
+            className="shrink-0 flex items-center gap-1 text-[10px] bg-white/80 dark:bg-slate-900/90 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-medium"
+            title={proyectoActivo ? `Gasto ${proyectoActivo.codigo_legado}` : 'Gasto Global'}
+          >
+            <span className="text-slate-400 font-mono text-[9px]">PEN</span>
+            <b className="text-slate-800 dark:text-slate-200 font-bold font-mono tabular-nums text-[10.5px]">
+              {gastoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </b>
+          </div>
+        </div>
         {/* ================================================================= */}
         {/* HEADER MULTI-FILA CANÓNICO (L81-546 de View_Kanban.html)          */}
         {/* ================================================================= */}
-        <header className="bg-white dark:bg-[#080E1C] border-b border-slate-200 dark:border-slate-800/60 px-4 py-2 shrink-0 flex flex-col gap-2 shadow-2xs transition-colors overflow-visible relative">
+        <header className="bg-white dark:bg-[#080E1C] border-b border-slate-200 dark:border-slate-800/60 px-2.5 py-1.5 md:px-4 md:py-2 shrink-0 flex flex-col gap-1.5 md:gap-2 shadow-2xs transition-colors overflow-visible relative">
           {/* =============================================================== */}
           {/* FILA 1: CONTEXTO DE PROYECTO, CRONOGRAMA & GASTO GLOBAL          */}
           {/* =============================================================== */}
-          <div className="flex items-center justify-between gap-3 min-h-[38px] overflow-visible relative w-full flex-wrap pb-1 border-b border-slate-200/60 dark:border-slate-800/40">
+          <div className="hidden md:flex items-center justify-between gap-3 min-h-[38px] overflow-visible relative w-full flex-wrap pb-1 border-b border-slate-200/60 dark:border-slate-800/40">
             {/* Lado Izquierdo: Título y Píldora de Estado (Vista Global o Proyecto Activo) */}
             <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-              <h2 className="font-bold text-slate-800 dark:text-slate-100 text-sm md:text-base flex items-center gap-2 shrink-0">
+              <h2 className="hidden md:flex font-bold text-slate-800 dark:text-slate-100 text-sm md:text-base items-center gap-2 shrink-0">
                 <span>Tablero Kanban</span>
               </h2>
 
@@ -1241,7 +1330,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
               {/* Cápsula Compacta Filtro Temporal */}
               <div
-                className="relative kanban-popover-container group/timefilter shrink-0"
+                className="hidden sm:block relative kanban-popover-container group/timefilter shrink-0"
                 id="container-time-filter"
                 onMouseEnter={() => handlePopoverMouseEnter('tiempo', setDropdownTiempoAbierto)}
                 onMouseLeave={() => handlePopoverMouseLeave('tiempo', setDropdownTiempoAbierto)}
@@ -1307,21 +1396,24 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 </div>
               </div>
 
-              {/* Bloque de Gasto Acumulado / Presupuesto Global */}
+              {/* Bloque de Gasto Acumulado / Presupuesto Global (Micro-línea compacta) */}
               <div
                 id="kanban-gasto-presupuesto-box"
-                className="flex items-center gap-1.5 text-[11px] bg-slate-50 dark:bg-slate-900/70 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800/60 font-medium shrink-0"
+                className="flex items-center gap-1.5 text-[10.5px] sm:text-[11px] bg-slate-50 dark:bg-slate-900/70 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-slate-200 dark:border-slate-800/60 font-medium shrink-0"
               >
-                <span className="text-slate-500 dark:text-slate-400">
+                <span className="text-slate-500 dark:text-slate-400 hidden sm:inline">
                   {proyectoActivo ? 'Gasto Proyecto:' : 'Gasto Global:'}
+                </span>
+                <span className="text-slate-500 dark:text-slate-400 sm:hidden">
+                  Gasto:
                 </span>
                 <b className="text-slate-900 dark:text-slate-100 font-bold font-mono tabular-nums">
                   PEN {gastoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </b>
                 {presupuestoContextualPen > 0 && (
                   <>
-                    <span className="text-slate-400 dark:text-slate-600">/</span>
-                    <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400" title="Presupuesto Tope">
+                    <span className="hidden sm:inline text-slate-400 dark:text-slate-600">/</span>
+                    <span className="hidden sm:inline font-mono tabular-nums text-slate-500 dark:text-slate-400" title="Presupuesto Tope">
                       PEN {presupuestoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                     <span
@@ -1343,29 +1435,89 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
           {/* =============================================================== */}
           {/* FILA 2: BARRA DE FILTROS OPERATIVOS KANBAN                       */}
           {/* =============================================================== */}
-          <div className="portal-surface p-2 rounded-xl flex items-center gap-2 text-xs overflow-visible relative flex-wrap bg-slate-50/70 dark:bg-[#080E1C]/90 border border-slate-200/80 dark:border-slate-800/70">
-            {/* Buscador de Tareas Compacto */}
-            <div className="relative w-36 md:w-44 shrink-0">
-              <Search className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 w-3.5 h-3.5 top-2" strokeWidth={1.75} />
-              <input
-                type="text"
-                id="filter-buscar-tarea"
-                value={busquedaTarea}
-                onChange={(e) => setBusquedaTarea(e.target.value)}
-                placeholder="Buscar tarea..."
-                className="w-full bg-slate-100 dark:bg-[#0D1526]/60 hover:dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-[11px] rounded-lg border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 pl-7 pr-6 py-1.5 outline-none transition font-medium"
-              />
-              {busquedaTarea && (
+          <div className="portal-surface p-1.5 md:p-2 rounded-xl flex flex-col gap-1.5 md:gap-2 text-xs overflow-visible relative bg-slate-50/70 dark:bg-[#080E1C]/90 border border-slate-200/80 dark:border-slate-800/70">
+            {/* 1. FILA COMPACTA MÓVIL (< md) - REQ-PWA-05 (h-8 y padding compacto) */}
+            <div className="md:hidden flex items-center gap-1.5 w-full">
+              {/* Buscador de Tareas Móvil */}
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-2.5 top-2 pointer-events-none text-slate-400 w-3.5 h-3.5" strokeWidth={1.75} />
+                <input
+                  type="text"
+                  id="filter-buscar-tarea-mobile"
+                  value={busquedaTarea}
+                  onChange={(e) => setBusquedaTarea(e.target.value)}
+                  placeholder="Buscar tarea..."
+                  className="w-full h-8 bg-slate-100 dark:bg-[#0D1526]/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-xs rounded-lg border border-slate-200 dark:border-slate-800 focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 pl-7 pr-6 py-1 outline-none font-medium"
+                />
+                {busquedaTarea && (
+                  <button
+                    type="button"
+                    onClick={() => setBusquedaTarea('')}
+                    className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-200 text-xs font-bold cursor-pointer"
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  </button>
+                )}
+              </div>
+
+              {/* Botón Desplegable de Filtros Móvil Compacto (h-8) */}
+              <button
+                type="button"
+                id="btn-toggle-filtros-movil"
+                onClick={() => setDrawerFiltrosMovilAbierto(!drawerFiltrosMovilAbierto)}
+                className={`h-8 px-2 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1 cursor-pointer active:scale-95 shrink-0 ${
+                  totalFiltrosActivosCount > 0 || drawerFiltrosMovilAbierto
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs'
+                    : 'text-slate-300 bg-slate-900 border border-slate-800 hover:text-white'
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                <span>Filtros</span>
+                {totalFiltrosActivosCount > 0 && (
+                  <span className="font-mono tabular-nums text-[10px] px-1.5 py-0.2 rounded-full bg-sky-400 text-slate-950 font-black">
+                    {totalFiltrosActivosCount}
+                  </span>
+                )}
+              </button>
+
+              {hayFiltrosActivos && (
                 <button
                   type="button"
-                  onClick={() => setBusquedaTarea('')}
-                  className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-200 text-xs font-bold cursor-pointer"
-                  title="Limpiar búsqueda"
+                  id="btn-limpiar-filtros-movil"
+                  onClick={limpiarTodosLosFiltros}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 bg-slate-900 border border-slate-800 hover:border-rose-500/40 transition shrink-0 cursor-pointer active:scale-95"
+                  title="Limpiar todos los filtros"
                 >
-                  <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.75} />
                 </button>
               )}
             </div>
+
+            {/* 2. CONTENEDOR DESKTOP & DESPLEGABLE MÓVIL DE FILTROS */}
+            <div className={`${drawerFiltrosMovilAbierto ? 'flex' : 'hidden'} md:flex items-center gap-2 text-xs overflow-visible relative flex-wrap w-full`}>
+              {/* Buscador de Tareas Desktop */}
+              <div className="hidden md:block relative w-36 md:w-44 shrink-0">
+                <Search className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 w-3.5 h-3.5 top-2" strokeWidth={1.75} />
+                <input
+                  type="text"
+                  id="filter-buscar-tarea"
+                  value={busquedaTarea}
+                  onChange={(e) => setBusquedaTarea(e.target.value)}
+                  placeholder="Buscar tarea..."
+                  className="w-full bg-slate-100 dark:bg-[#0D1526]/60 hover:dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-[11px] rounded-lg border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 pl-7 pr-6 py-1.5 outline-none transition font-medium"
+                />
+                {busquedaTarea && (
+                  <button
+                    type="button"
+                    onClick={() => setBusquedaTarea('')}
+                    className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-200 text-xs font-bold cursor-pointer"
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  </button>
+                )}
+              </div>
 
             {/* Micro-Riel Compacto de Ordenamiento Kanban */}
             <div
@@ -1800,7 +1952,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
             {/* Indicador reactivo y botón Limpiar Filtros */}
             {hayFiltrosActivos && (
-              <div className="ml-auto flex items-center gap-2 shrink-0">
+              <div className="ml-auto hidden md:flex items-center gap-2 shrink-0">
                 <span
                   id="badge-filtro-activo-resumen"
                   className="bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono tabular-nums text-[11px] px-2 py-1 rounded-lg flex items-center gap-1 shadow-2xs whitespace-nowrap"
@@ -1820,25 +1972,63 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 </button>
               </div>
             )}
+            </div>
           </div>
         </header>
+
+        {/* ================================================================= */}
+        {/* SELECTOR / TABS HORIZONTALES DE COLUMNAS EN MÓVIL (md:hidden)    */}
+        {/* ================================================================= */}
+        <div
+          id="selector-columnas-kanban-movil"
+          role="tablist"
+          aria-label="Selector de columnas Kanban"
+          className="md:hidden shrink-0 bg-[#080E1C] border-b border-slate-800/80 px-2 py-1 flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden select-none overscroll-contain"
+        >
+          {columnas.map((col) => {
+            const count = (tareasAgrupadasPorColumna[col.id] || []).length;
+            const isActiva = columnaMovilActiva === col.id;
+            return (
+              <button
+                key={col.id}
+                role="tab"
+                id={`tab-col-movil-${col.id}`}
+                aria-selected={isActiva}
+                type="button"
+                onClick={() => setColumnaMovilActiva(col.id)}
+                className={`flex-1 min-w-[68px] h-7 px-1.5 py-0.5 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 ${
+                  isActiva
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-xs'
+                    : 'text-slate-400 bg-slate-900/60 border border-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <span className="truncate">{col.titulo.replace(/^\d+\.\s*/, '')}</span>
+                <span className={`font-mono tabular-nums text-[10px] px-1 py-0.2 rounded-full ${isActiva ? 'bg-sky-400/20 text-sky-200 font-bold' : 'bg-slate-800 text-slate-400'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
         {/* ================================================================= */}
         {/* 3. CHASIS DE 4 COLUMNAS KANBAN Y DRAG-AND-DROP NATIVO HTML5       */}
         {/* ================================================================= */}
         <div
           id="board-kanban-container"
-          className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden p-3 md:p-4 custom-scrollbar [&::-webkit-scrollbar]:hidden"
+          className="flex-1 min-h-0 overflow-x-hidden md:overflow-x-auto overflow-y-hidden p-2 md:p-4 custom-scrollbar [&::-webkit-scrollbar]:hidden flex flex-col"
         >
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 min-w-[320px] md:min-w-[1050px] h-full min-h-0 items-start">
+          <div className="flex-1 min-h-0 flex flex-col md:grid md:grid-cols-4 md:gap-4 w-full md:min-w-[1050px] h-full items-start">
             {columnas.map((col) => {
               const tareasColumna = tareasAgrupadasPorColumna[col.id] || [];
               const isOverThisCol = dragOverColId === col.id;
+              const isActivaMovil = columnaMovilActiva === col.id;
 
               return (
                 <ColumnaKanban
                   key={col.id}
                   col={col}
+                  isActivaMovil={isActivaMovil}
                   tareasColumna={tareasColumna}
                   isOverThisCol={isOverThisCol}
                   cargandoDatosIniciales={cargandoDatosIniciales}

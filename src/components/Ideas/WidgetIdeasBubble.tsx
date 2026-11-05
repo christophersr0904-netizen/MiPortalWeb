@@ -502,8 +502,9 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  // Estilo de posición del contenedor
-  const containerStyle: React.CSSProperties = posicion
+  // Estilo de posición del contenedor (en móvil se ancla por encima de BottomNavMobile)
+  const esMovil = typeof window !== 'undefined' && window.innerWidth < 768;
+  const containerStyle: React.CSSProperties = (posicion && !esMovil)
     ? {
         position: 'fixed',
         left: `${posicion.x}px`,
@@ -636,16 +637,16 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       }
     : {
         position: 'fixed',
-        left: posicionVentana ? `${posicionVentana.x}px` : undefined,
-        top: posicionVentana ? `${posicionVentana.y}px` : undefined,
-        right: !posicionVentana ? '24px' : undefined,
-        bottom: !posicionVentana ? '80px' : undefined,
-        width: `${tamanoVentana?.width ?? 480}px`,
-        height: `${tamanoVentana?.height ?? 580}px`,
-        minWidth: 'min(480px, calc(100vw - 32px))',
-        minHeight: '400px',
-        maxWidth: '95vw',
-        maxHeight: '90vh',
+        left: (posicionVentana && !esMovil) ? `${posicionVentana.x}px` : undefined,
+        top: (posicionVentana && !esMovil) ? `${posicionVentana.y}px` : undefined,
+        right: (!posicionVentana || esMovil) ? (esMovil ? '8px' : '24px') : undefined,
+        bottom: (!posicionVentana || esMovil) ? 'calc(5rem + env(safe-area-inset-bottom, 0px))' : undefined,
+        width: esMovil ? 'calc(100vw - 16px)' : `${tamanoVentana?.width ?? 480}px`,
+        height: esMovil ? 'min(560px, calc(100dvh - 7rem))' : `${tamanoVentana?.height ?? 580}px`,
+        minWidth: esMovil ? 'auto' : 'min(480px, calc(100vw - 32px))',
+        minHeight: esMovil ? '300px' : '400px',
+        maxWidth: '96vw',
+        maxHeight: 'calc(100dvh - 6rem)',
         zIndex: 9995
       };
 
@@ -655,7 +656,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       <div
         id="widget-ideas-bubble-container"
         style={containerStyle}
-        className={`fixed ${!posicion ? 'bottom-20 md:bottom-6 right-4 md:right-6' : ''} z-[9990] flex flex-col items-end gap-2.5 select-none pointer-events-auto`}
+        className={`fixed ${(!posicion || esMovil) ? 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6 right-4 md:right-6' : ''} z-[9990] flex flex-col items-end gap-2.5 select-none pointer-events-auto`}
       >
         {/* POPOVER DE MICRO-CAPTURA RÁPIDA */}
         {popoverAbierto && (

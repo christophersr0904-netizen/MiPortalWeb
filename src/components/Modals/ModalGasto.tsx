@@ -231,7 +231,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
     >
       <div
         id="modal-gasto-card"
-        className="portal-surface elevation-3 w-full max-w-xl max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/60 shadow-cobalt-2 relative bg-[#0D1526] text-slate-100"
+        className="portal-surface elevation-3 w-full max-w-xl max-h-[92dvh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/60 shadow-cobalt-2 relative bg-[#0D1526] text-slate-100 overflow-hidden"
       >
         {/* Drag handle móvil */}
         <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
@@ -331,7 +331,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
 
         {/* Formulario */}
         <form onSubmit={handleGuardar} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
+          <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
             {/* Concepto */}
             <div>
               <label className="block font-semibold mb-1 text-slate-300">
@@ -476,7 +476,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
                   value={montoOriginal}
                   onChange={(e) => setMontoOriginal(e.target.value)}
                   placeholder="0.00"
-                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl p-2 font-mono font-bold text-sm outline-none"
+                  className="w-full h-11 bg-slate-900/60 border border-slate-800 text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 font-mono font-bold text-base outline-none"
                 />
               </div>
             </div>
@@ -614,7 +614,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
           </div>
 
           {/* Footer de Acciones */}
-          <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-800 bg-[#0D1526]/90 flex items-center justify-between gap-2.5">
+          <div className="shrink-0 sticky bottom-0 bg-[#0D1526] border-t border-slate-800/60 p-3 sm:px-6 z-10 flex items-center justify-between gap-2.5 shadow-lg">
             {gastoEditar ? (
               <button
                 type="button"

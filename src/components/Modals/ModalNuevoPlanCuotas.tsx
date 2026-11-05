@@ -97,7 +97,7 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
     >
       <div
         id="modal-plan-cuotas-card"
-        className="w-full max-w-md bg-[#0D1526] rounded-t-3xl sm:rounded-2xl border border-slate-800/80 shadow-2xl p-5 space-y-4 text-slate-100 animate-in zoom-in-95 duration-150"
+        className="w-full max-w-md max-h-[92dvh] flex flex-col bg-[#0D1526] rounded-t-3xl sm:rounded-2xl border border-slate-800/80 shadow-2xl p-4 sm:p-5 text-slate-100 animate-in zoom-in-95 duration-150 overflow-hidden"
       >
         {/* Cabecera Bento Cobalt */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -135,7 +135,7 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
           </div>
         )}
 
-        <form onSubmit={handleGuardar} className="space-y-3.5 text-xs">
+        <form onSubmit={handleGuardar} className="flex-1 overflow-y-auto overscroll-contain space-y-3.5 text-xs custom-scrollbar">
           <div>
             <label className="block text-slate-400 font-semibold mb-1">Entidad Financiera / Banco</label>
             <input
@@ -209,7 +209,7 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
+          <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2 sticky bottom-0 bg-[#0D1526] z-10">
             <button
               type="button"
               onClick={onClose}

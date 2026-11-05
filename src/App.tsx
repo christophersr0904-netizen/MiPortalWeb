@@ -343,7 +343,7 @@ export const App: React.FC = () => {
 
   return (
     <UndoDeleteProvider>
-      <div className="min-h-screen md:h-full flex flex-col overflow-y-auto md:overflow-hidden bg-slate-50 dark:bg-[#040711] text-slate-800 dark:text-slate-200 antialiased font-sans safe-area-insets">
+      <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden bg-slate-50 dark:bg-[#040711] text-slate-800 dark:text-slate-200 antialiased font-sans safe-area-insets">
         {/* 1. Header Maestro Global */}
         <HeaderMaestro
           vistaActiva={vistaActiva}
@@ -360,7 +360,7 @@ export const App: React.FC = () => {
         />
 
         {/* 2. Área Central con Renderizado Condicional de Vistas Canónicas */}
-        <div className="flex-1 flex overflow-y-auto md:overflow-hidden relative pb-20 md:pb-0">
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overscroll-contain md:overflow-hidden relative pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
           <Suspense fallback={<VistaCargandoFallback />}>
             {vistaActiva === 'kanban' && (
               <ViewKanban

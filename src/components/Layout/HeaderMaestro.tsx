@@ -237,11 +237,11 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white/80 dark:bg-[#0D1526]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/40 transition-colors duration-200 shadow-xs flex items-center justify-between px-3 md:px-6 py-1.5 md:py-2.5 h-11 md:h-auto shrink-0 gap-3 relative">
+      <header className="sticky top-0 z-40 bg-white/80 dark:bg-[#0D1526]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/40 transition-colors duration-200 shadow-xs flex items-center justify-between px-3 md:px-6 py-1.5 md:py-2.5 h-12 md:h-auto shrink-0 gap-3 relative">
         {/* FLANCO IZQUIERDO: Branding & Sync Status */}
         <div className="flex items-center gap-2.5 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 md:w-9 md:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center font-black text-xs md:text-sm text-white shadow-md shadow-indigo-500/20 ring-1 ring-white/20">
+            <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center font-black text-xs md:text-sm text-white shadow-md shadow-indigo-500/20 ring-1 ring-white/20">
               <span>P</span>
             </div>
             <div className="hidden md:flex flex-col">
@@ -506,7 +506,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               type="button"
               id="btn-theme-dropdown"
               onClick={() => setMenuTemaAbierto(!menuTemaAbierto)}
-              className="h-8 w-8 md:h-9 md:w-9 p-0 rounded-xl bg-transparent text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 flex items-center justify-center active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
+              className="w-11 h-11 min-w-[44px] min-h-[44px] md:w-9 md:h-9 md:min-w-0 md:min-h-0 p-0 rounded-xl bg-transparent text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 flex items-center justify-center active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
               title="Tema e Iluminación (Sol / Luna y Paletas)"
             >
               {modoColor === 'light' ? (

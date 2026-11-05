@@ -337,10 +337,10 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
         id="btn-pin-nota"
         onClick={handleTogglePin}
         title={nota.es_fijada ? 'Desfijar nota' : 'Fijar nota en la parte superior'}
-        className={`absolute top-3 right-3 p-1.5 rounded-lg transition-transform active:scale-90 cursor-pointer ${
+        className={`absolute top-2.5 right-2.5 p-2 sm:p-1.5 rounded-lg transition-transform active:scale-90 cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center ${
           nota.es_fijada
             ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 opacity-100 shadow-xs'
-            : 'text-slate-400 hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 opacity-0 group-hover:opacity-100'
+            : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800 opacity-80 sm:opacity-0 sm:group-hover:opacity-100'
         }`}
       >
         <Pin className={`w-3.5 h-3.5 ${nota.es_fijada ? 'fill-amber-400 rotate-45' : ''}`} />
@@ -571,12 +571,12 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             day: 'numeric'
           })}
         </span>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <div className="flex items-center gap-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
           <button
             type="button"
             onClick={handleCopiarNota}
             title="Copiar texto plano al portapapeles"
-            className="p-1 hover:text-sky-300 rounded transition-colors cursor-pointer"
+            className="p-1.5 sm:p-1 hover:text-sky-300 rounded transition-colors cursor-pointer"
           >
             {copiado ? (
               <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={1.75} />
@@ -591,7 +591,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
               onEditar(nota);
             }}
             title="Editar Nota"
-            className="p-1 hover:text-sky-400 rounded transition-colors cursor-pointer"
+            className="p-1.5 sm:p-1 hover:text-sky-400 rounded transition-colors cursor-pointer"
           >
             <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
@@ -599,7 +599,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             type="button"
             onClick={handleEliminarDirecto}
             title="Eliminar Nota"
-            className="p-1 hover:text-rose-400 rounded transition-colors cursor-pointer"
+            className="p-1.5 sm:p-1 hover:text-rose-400 rounded transition-colors cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>

@@ -334,13 +334,13 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
         {nombreProyecto} • {nombreHito}
       </div>
 
-      {/* 7. Botonera canónica bidireccional al pie */}
-      <div className="pt-1" onClick={(e) => e.stopPropagation()}>
+      {/* 7. Botonera canónica bidireccional al pie con Touch Target ergonómico >= 44px */}
+      <div className="pt-1.5" onClick={(e) => e.stopPropagation()}>
         {colId === '01_Backlog' && (
           <button
             type="button"
             onClick={() => onMoverTareaAEstado(tar, '02_Por_Hacer')}
-            className="w-full py-1.5 px-3 rounded-lg bg-slate-800/80 hover:bg-indigo-950/40 text-indigo-300 border border-slate-700/60 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+            className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-sky-950/40 text-sky-300 border border-slate-700/60 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
             title="Mover a Por Hacer"
           >
             <span className="tracking-wide">A Por Hacer</span>
@@ -353,7 +353,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
             <button
               type="button"
               onClick={() => onMoverTareaAEstado(tar, '01_Backlog')}
-              className="h-7 px-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/40 text-xs font-semibold transition shrink-0 flex items-center gap-1 cursor-pointer"
+              className="min-h-[44px] px-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/40 text-xs font-semibold transition shrink-0 flex items-center gap-1 cursor-pointer active:scale-[0.98]"
               title="Retroceder a Backlog"
             >
               <span>←</span>
@@ -362,7 +362,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
             <button
               type="button"
               onClick={() => onMoverTareaAEstado(tar, '03_En_Proceso')}
-              className="h-7 flex-1 px-2.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+              className="min-h-[44px] flex-1 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-[0.98]"
               title="Iniciar tarea (Mover a En Proceso)"
             >
               <span className="tracking-wide">Iniciar</span>
@@ -377,7 +377,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
             <button
               type="button"
               onClick={() => onMoverTareaAEstado(tar, '02_Por_Hacer')}
-              className="h-7 px-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/40 text-xs font-semibold transition shrink-0 flex items-center gap-1 cursor-pointer"
+              className="min-h-[44px] px-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/40 text-xs font-semibold transition shrink-0 flex items-center gap-1 cursor-pointer active:scale-[0.98]"
               title="Retroceder a Por Hacer"
             >
               <span>←</span>
@@ -386,7 +386,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
             <button
               type="button"
               onClick={() => onMoverTareaAEstado(tar, '04_Completado')}
-              className="h-7 flex-1 px-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+              className="min-h-[44px] flex-1 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-[0.98]"
               title="Finalizar tarea (Mover a Completado)"
             >
               <span className="tracking-wide">Completar</span>
@@ -399,7 +399,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
           <button
             type="button"
             onClick={() => onMoverTareaAEstado(tar, '03_En_Proceso')}
-            className="w-full h-7 rounded-lg bg-slate-800/30 hover:bg-slate-800/60 text-slate-400 hover:text-amber-300 border border-slate-700/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+            className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-slate-800/30 hover:bg-slate-800/60 text-slate-400 hover:text-amber-300 border border-slate-700/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98]"
             title="Reabrir tarea a En Proceso"
           >
             <RotateCcw className="w-3 h-3 text-slate-500" />

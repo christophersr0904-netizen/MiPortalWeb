@@ -251,13 +251,13 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
             tituloEntidad={tituloHabito}
           />
 
-          {/* Acciones Secundarias: Reveladas en Hover suave con ancho estable */}
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
+          {/* Acciones Secundarias: Visibles en móvil y con Hover suave en Desktop (REQ-PWA-07) */}
+          <div className="flex items-center gap-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150 shrink-0">
             {onEditar && (
               <button
                 type="button"
                 onClick={handleSolicitarEditar}
-                className="text-slate-400 hover:text-sky-300 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-sky-300 p-1.5 rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
                 title="Editar hábito"
               >
                 <Pencil className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -268,7 +268,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               <button
                 type="button"
                 onClick={handleSolicitarEliminar}
-                className="text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
                 title="Eliminar hábito"
               >
                 <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -278,12 +278,12 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
         </div>
       </div>
 
-      {/* FILA 2: Checkbox Instantáneo (0ms) + Título */}
+      {/* FILA 2: Checkbox con Touch Target Ergonómico (44x44px) + Título (REQ-PWA-07) */}
       <div className="flex items-start gap-2.5 mb-3">
         <button
           type="button"
           onClick={handleToggleCheck}
-          className="mt-0.5 shrink-0 focus:outline-none group/chk active:scale-95 transition-transform cursor-pointer"
+          className="-m-2.5 p-2.5 mt-[-6px] min-w-[44px] min-h-[44px] shrink-0 focus:outline-none group/chk active:scale-95 transition-transform cursor-pointer flex items-center justify-center"
           title={esCompletada ? 'Marcar como pendiente' : 'Marcar como completado'}
         >
           {/* Checkbox Cobalt Aerodynamic con físicas fluidas GPU y cero layout shifts */}
