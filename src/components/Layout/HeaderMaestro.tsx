@@ -19,7 +19,8 @@ import {
   Palette,
   Globe,
   Briefcase,
-  Lightbulb
+  Lightbulb,
+  Gauge
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -499,6 +500,18 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               <FileText className="w-4 h-4" strokeWidth={1.75} />
             </button>
           )}
+
+          {/* 4.5 Acceso Directo Global al Cockpit Diario (#btn-toggle-cockpit) */}
+          <button
+            type="button"
+            id="btn-toggle-cockpit"
+            onClick={() => window.dispatchEvent(new CustomEvent('pmo:toggle-cockpit'))}
+            className="w-11 h-11 min-w-[44px] min-h-[44px] md:w-9 md:h-9 md:min-w-0 md:min-h-0 p-0 rounded-xl bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-300 flex items-center justify-center active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer shadow-[0_0_12px_rgba(6,182,212,0.2)]"
+            title="Abrir / Cerrar Cockpit Diario (Ritmo y Agenda)"
+            aria-label="Abrir o cerrar Cockpit Diario"
+          >
+            <Gauge className="w-4 h-4 text-cyan-400" strokeWidth={1.75} />
+          </button>
 
           {/* 5. Selector de Tema / Paleta */}
           <div className="relative" id="container-theme-dropdown">

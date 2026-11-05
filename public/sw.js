@@ -3,7 +3,7 @@
  * Estrategia: Stale-While-Revalidate para recursos estáticos y Cache-First con fallback offline
  */
 
-const CACHE_NAME = 'pmo-cache-v2.4-hud-standalone';
+const CACHE_NAME = 'pmo-cache-v2.5-cockpit-restore';
 const STATIC_ASSETS = [
   './',
   './index.html',

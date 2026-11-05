@@ -147,6 +147,36 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     setCockpitAbierto(false);
   };
 
+  // REQ-PWA-14: Listener global para apertura y alternancia remota desde Header o BottomNav
+  useEffect(() => {
+    const handleOpenCockpit = () => {
+      handleAbrirCockpit();
+    };
+    const handleToggleCockpit = () => {
+      setCockpitAbierto((prev) => {
+        if (!prev) {
+          if (esWidgetNativo && typeof window !== 'undefined' && window.desktopWidget) {
+            window.desktopWidget.expand();
+          }
+          return true;
+        } else {
+          if (esWidgetNativo && typeof window !== 'undefined' && window.desktopWidget) {
+            window.desktopWidget.collapse();
+          }
+          return false;
+        }
+      });
+    };
+
+    window.addEventListener('pmo:open-cockpit', handleOpenCockpit);
+    window.addEventListener('pmo:toggle-cockpit', handleToggleCockpit);
+
+    return () => {
+      window.removeEventListener('pmo:open-cockpit', handleOpenCockpit);
+      window.removeEventListener('pmo:toggle-cockpit', handleToggleCockpit);
+    };
+  }, [esWidgetNativo]);
+
   // Posición libre de la cápsula en modo web persistida en localStorage
   const [posicionWeb, setPosicionWeb] = useState<{ x: number; y: number } | null>(() => {
     if (typeof window !== 'undefined') {
@@ -275,14 +305,9 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
   }, [esWidgetNativo]);
 
-  // Detección de coexistencia exclusiva y sincronización de puente local
-  const [hayWidgetDeEscritorioActivo, setHayWidgetDeEscritorioActivo] = useState(false);
-
+  // REQ-PWA-14: En modo widget nativo de Electron, cargar snapshot del puente local
   useEffect(() => {
-    // Si estamos dentro del widget nativo de Electron, NUNCA ocultarse
     if (esWidgetNativo) {
-      setHayWidgetDeEscritorioActivo(false);
-      // Al montar o al recibir foco en el widget nativo, cargar el snapshot más reciente del puente local
       syncManager.cargarSnapshotDesdePuenteLocal().catch(() => {});
       const handleFocus = () => {
         syncManager.cargarSnapshotDesdePuenteLocal().catch(() => {});
@@ -290,49 +315,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       window.addEventListener('focus', handleFocus);
       return () => window.removeEventListener('focus', handleFocus);
     }
-
-    if (modoForzadoDesacoplado) return;
-
-    let cancelado = false;
-
-    const pingLoopbackDesktop = async () => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300);
-
-      try {
-        const res = await fetch('http://127.0.0.1:48123/status', {
-          mode: 'cors',
-          cache: 'no-store',
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        if (!cancelado) {
-          if (res.ok) {
-            const data = await res.json();
-            if (data.desktopWidgetAlive) {
-              setHayWidgetDeEscritorioActivo(true);
-              return;
-            }
-          }
-          setHayWidgetDeEscritorioActivo(false);
-        }
-      } catch {
-        clearTimeout(timeoutId);
-        if (!cancelado) {
-          setHayWidgetDeEscritorioActivo(false);
-        }
-      }
-    };
-
-    // Ping inmediato al montar y recurrente cada 1200ms
-    pingLoopbackDesktop();
-    const timer = setInterval(pingLoopbackDesktop, 1200);
-
-    return () => {
-      cancelado = true;
-      clearInterval(timer);
-    };
-  }, [esWidgetNativo, modoForzadoDesacoplado]);
+  }, [esWidgetNativo]);
 
   const [horizonte, setHorizonte] = useState<HorizonteAgenda>('HOY');
   const [modoVista, setModoVista] = useState<'RIEL' | 'CHECKLIST'>('CHECKLIST');
@@ -1344,11 +1327,10 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     );
   }
 
-  // Si hay un widget nativo de escritorio activo en Windows y el Cockpit web no está abierto ni en PiP,
-  // se oculta la cápsula web para evitar duplicidad visual en pantalla
-  if (!esWidgetNativo && !modoForzadoDesacoplado && hayWidgetDeEscritorioActivo && !cockpitAbierto && !pipWindow) {
-    return null;
-  }
+  // REQ-PWA-14: Renderizado incondicional en web/PWA (se desactivó el return null para garantizar visibilidad permanente)
+  // if (!esWidgetNativo && !modoForzadoDesacoplado && hayWidgetDeEscritorioActivo && !cockpitAbierto && !pipWindow) {
+  //   return null;
+  // }
 
   // MODO NORMAL DE LA APLICACIÓN PRINCIPAL (con soporte Portal PiP si pipWindow está activo)
   return (
@@ -1372,15 +1354,15 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           onPointerUp={handlePointerUp}
           style={{
             touchAction: 'none',
-            ...(posicionWeb
+            ...(posicionWeb && typeof window !== 'undefined' && window.innerWidth >= 768
               ? { left: `${posicionWeb.x}px`, top: `${posicionWeb.y}px`, bottom: 'auto', right: 'auto' }
               : {})
           }}
           className={`fixed ${
-            !posicionWeb
+            !posicionWeb || (typeof window !== 'undefined' && window.innerWidth < 768)
               ? 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-4 sm:left-6 md:bottom-6 md:left-auto md:right-28'
               : ''
-          } z-[9998] pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0a101f]/95 border border-sky-500/25 backdrop-blur-2xl shadow-[0_8px_30px_-4px_rgba(2,6,23,0.55),0_0_35px_-4px_rgba(56,189,248,0.18)] hover:shadow-[0_12px_40px_-4px_rgba(2,6,23,0.7),0_0_45px_0px_rgba(56,189,248,0.28)] hover:border-sky-400/40 flex items-center gap-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] cursor-grab active:cursor-grabbing group select-none`}
+          } z-[9998] pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0D1526] border border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.25)] hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] flex items-center gap-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] cursor-grab active:cursor-grabbing group select-none`}
           title={pipWindow ? "Cockpit activo Always-on-Top (clic para enfocar)" : "Arrastrar para mover libremente / Clic para abrir Cockpit"}
         >
           {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}

@@ -13,7 +13,8 @@ import {
   Wallet,
   Compass,
   ChevronRight,
-  Archive
+  Archive,
+  Gauge
 } from 'lucide-react';
 import type { VistaGlobal } from './HeaderMaestro';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
@@ -319,6 +320,31 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
           </div>
 
           <div className="space-y-2 mb-2">
+            {/* Cockpit Diario (Acceso Directo REQ-PWA-14) */}
+            <button
+              type="button"
+              id="bottom-sheet-mas-cockpit"
+              onClick={() => {
+                cerrarSheets();
+                window.dispatchEvent(new CustomEvent('pmo:open-cockpit'));
+              }}
+              className="w-full p-3 rounded-2xl bg-cyan-950/30 hover:bg-cyan-950/50 border border-cyan-500/30 flex items-center justify-between text-left active:scale-98 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/30">
+                  <Gauge className="w-5 h-5" strokeWidth={1.75} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                    <span>Cockpit Diario</span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-cyan-900/60 text-cyan-300 border border-cyan-400/30 font-bold">LIVE</span>
+                  </div>
+                  <div className="text-[10px] text-cyan-300">Agenda táctica, ritmo horario y checklist</div>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-cyan-400" strokeWidth={1.75} />
+            </button>
+
             {/* Portafolio */}
             <button
               type="button"
