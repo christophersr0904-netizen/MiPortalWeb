@@ -342,7 +342,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
   return (
     <div
       id="vista-portafolio-wrapper"
-      className="flex-1 flex flex-col h-full w-full overflow-y-auto p-4 md:p-6 lg:p-8 bg-[#040711] text-slate-100 transition-colors duration-200 custom-scrollbar space-y-6"
+      className="flex-1 flex flex-col h-full w-full overflow-y-auto overscroll-contain p-3 md:p-6 lg:p-8 bg-[#040711] text-slate-100 transition-colors duration-200 custom-scrollbar space-y-4 md:space-y-6"
     >
       {/* CABECERA PRINCIPAL DEL PORTAFOLIO */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800">
@@ -502,8 +502,9 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Salud & Riesgos
             </span>
-            <span id="kpi-health-icon" className="w-7 h-7 rounded-xl bg-emerald-950/60 text-emerald-400 flex items-center justify-center text-xs font-bold">
-              <span className={`w-2.5 h-2.5 rounded-full inline-block ${countBloqueado > 0 ? 'bg-rose-400 ring-2 ring-rose-400/20' : countRiesgo > 0 ? 'bg-amber-400 ring-2 ring-amber-400/20' : 'bg-emerald-400 ring-2 ring-emerald-400/20'}`} />
+            <span id="kpi-health-icon" className="w-7 h-7 rounded-xl bg-slate-900/80 flex items-center justify-center text-xs font-bold relative">
+              <span className={`animate-ping absolute inline-flex h-4 w-4 rounded-full opacity-60 duration-1000 ${countBloqueado > 0 ? 'bg-rose-500' : countRiesgo > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 shadow-[0_0_8px_currentColor] ${countBloqueado > 0 ? 'bg-rose-500 text-rose-500' : countRiesgo > 0 ? 'bg-amber-400 text-amber-400' : 'bg-emerald-400 text-emerald-400'}`} />
             </span>
           </div>
           <div className="my-2">
@@ -887,7 +888,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             </div>
           )
         ) : (
-          <div id="grid-proyectos-cards" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 min-h-[520px] contain-layout [contain:layout]">
+          <div id="grid-proyectos-cards" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 sm:gap-3 md:gap-5 min-h-[420px] md:min-h-[520px] contain-layout [contain:layout]">
             {proyectosFiltrados.map((p) => {
               const resumen = resumenTareasPorProyecto.get(p.codigo_legado) ||
                               resumenTareasPorProyecto.get(p.id) ||
@@ -934,12 +935,6 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                 const isCrit = h.includes('bloqueado') || h.includes('crítico') || h.includes('critico');
                 const isRiesgo = h.includes('riesgo') || h.includes('alerta');
                 const healthClean = (p.health_status || 'En Rango').replace(/^[^\p{L}\p{N}]+/u, '').trim();
-                const colorBarra = isCrit ? 'bg-rose-500' : isRiesgo ? 'bg-amber-500' : 'bg-emerald-400';
-                const ledShadowClass = isCrit
-                  ? 'shadow-[0_0_8px_#f43f5e]'
-                  : isRiesgo
-                  ? 'shadow-[0_0_8px_#f59e0b]'
-                  : 'shadow-[0_0_8px_#10b981]';
 
                 return (
                   <tr
@@ -960,13 +955,22 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                     </td>
                     <td className="py-3 px-3">
                       <div
-                        className="p-1 rounded-full inline-flex items-center justify-center cursor-help"
+                        className="relative flex items-center justify-center w-4 h-4 shrink-0 cursor-help"
                         title={healthClean}
                         aria-label={`Salud: ${healthClean}`}
                       >
                         <span
-                          className={`w-2.5 h-2.5 rounded-full ${colorBarra} ${ledShadowClass} ${
-                            isCrit ? 'animate-pulse' : ''
+                          className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-60 duration-1000 ${
+                            isCrit ? 'bg-rose-500' : isRiesgo ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`}
+                        />
+                        <span
+                          className={`relative inline-flex rounded-full h-2.5 w-2.5 shadow-[0_0_8px_currentColor] ${
+                            isCrit
+                              ? 'bg-rose-500 text-rose-500'
+                              : isRiesgo
+                              ? 'bg-amber-400 text-amber-400'
+                              : 'bg-emerald-400 text-emerald-400'
                           }`}
                         />
                       </div>

@@ -1,8 +1,9 @@
 import React from 'react';
 import {
   Sparkles,
-  Clock,
+  CheckCircle2,
   Calendar,
+  Wallet,
   ExternalLink,
   Plus,
   Edit3,
@@ -47,21 +48,22 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
     const healthClean = (p.health_status || 'En Rango').replace(/^[^\p{L}\p{N}]+/u, '').trim();
 
     const colorBarra = isCrit ? 'bg-rose-500' : isRiesgo ? 'bg-amber-500' : 'bg-emerald-400';
-    const ledHealthClass = isCrit
-      ? 'bg-rose-400 ring-2 ring-rose-400/20 animate-pulse'
+    const healthBeacon = isCrit
+      ? { halo: 'bg-rose-500', solid: 'bg-rose-500 text-rose-500' }
       : isRiesgo
-      ? 'bg-amber-400 ring-2 ring-amber-400/20'
-      : 'bg-emerald-400 ring-2 ring-emerald-400/20';
+      ? { halo: 'bg-amber-400', solid: 'bg-amber-400 text-amber-400' }
+      : { halo: 'bg-emerald-400', solid: 'bg-emerald-400 text-emerald-400' };
 
-    let progGradient = 'from-slate-600 to-sky-500';
-    if (avReal >= 80) progGradient = 'from-teal-400 to-emerald-400';
+    let progGradient = 'from-sky-500 to-indigo-500';
+    if (isCrit) progGradient = 'from-rose-500 to-amber-500';
+    else if (isRiesgo) progGradient = 'from-amber-400 to-yellow-500';
+    else if (avReal >= 80) progGradient = 'from-teal-400 to-emerald-400';
     else if (avReal >= 50) progGradient = 'from-sky-400 to-teal-400';
-    else if (avReal >= 25) progGradient = 'from-amber-400 to-yellow-400';
 
     return (
       <div
         onClick={() => onSeleccionarProyecto(p.codigo_legado || p.id)}
-        className="portfolio-card portal-surface bg-[#0D1526] rounded-2xl p-4 pl-4.5 border border-slate-800/40 hover:border-sky-500/40 shadow-xs hover:shadow-xl transition-all duration-150 ease-out hover:-translate-y-0.5 flex flex-col justify-between min-h-[320px] relative group overflow-hidden select-none cursor-pointer"
+        className="portfolio-card portal-surface bg-[#0D1526] rounded-2xl p-4 pl-4.5 border border-slate-800/40 hover:border-slate-700/60 hover:shadow-lg hover:shadow-sky-500/5 hover:-translate-y-0.5 active:scale-[0.98] active:brightness-105 transform-gpu transition-all duration-200 ease-out flex flex-col justify-between min-h-[320px] relative group overflow-hidden select-none cursor-pointer"
       >
         {/* Barra lateral de salud dinámica */}
         <div
@@ -85,12 +87,15 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
               />
             </div>
             <div
-              className="p-1 rounded-full flex items-center justify-center shrink-0 cursor-help"
+              className="relative flex items-center justify-center w-4 h-4 shrink-0 cursor-help"
               title={healthClean}
               aria-label={`Salud: ${healthClean}`}
             >
               <span
-                className={`w-2.5 h-2.5 rounded-full ${ledHealthClass}`}
+                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-60 duration-1000 ${healthBeacon.halo}`}
+              />
+              <span
+                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${healthBeacon.solid} shadow-[0_0_8px_currentColor]`}
               />
             </div>
           </div>
@@ -124,30 +129,36 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
               </span>
               <span className="text-[11px] text-slate-400">Proyectado: {avPlan}%</span>
             </div>
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden relative shadow-inner">
+            <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden relative shadow-inner">
               <div
                 className="bg-sky-950/60 border border-sky-800/40 h-full rounded-full absolute left-0 top-0"
                 style={{ width: `${avPlan}%` }}
               />
               <div
-                className={`bg-gradient-to-r ${progGradient} h-full rounded-full absolute left-0 top-0 transition-all duration-500`}
+                className={`bg-gradient-to-r ${progGradient} h-full rounded-full absolute left-0 top-0 transition-all duration-500 ease-out`}
                 style={{ width: `${avReal}%` }}
               />
             </div>
           </div>
 
           {/* Fila de Metadatos de Tareas y Plazo */}
-          <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 font-medium mb-3 pt-2 border-t border-slate-800/80">
-            <span className="inline-flex items-center gap-1 bg-slate-900/60 px-2 py-0.5 rounded-md border border-slate-800/60 text-[10px] font-mono tabular-nums text-slate-300">
-              <Clock className="w-3 h-3 text-sky-400" strokeWidth={1.75} />
+          <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-400 font-medium mb-3 pt-2 border-t border-slate-800/80">
+            <span
+              className="inline-flex items-center gap-1.5 bg-slate-900/60 px-2 py-0.5 rounded-md border border-slate-800/60 text-xs font-mono tabular-nums text-slate-300"
+              title="Tareas completadas vs totales"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
               <span>
-                <b>{tComp}</b>/{tTotal} tareas
+                <b className="text-slate-100">{tComp}</b>/{tTotal}
               </span>
             </span>
 
             {p.fecha_fin && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono tabular-nums font-medium bg-slate-900/60 border border-slate-800/60 text-slate-400">
-                <Calendar className="w-3 h-3" strokeWidth={1.75} />
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-mono tabular-nums bg-slate-900/60 border border-slate-800/60 text-slate-300"
+                title="Fecha límite"
+              >
+                <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
                 <span>{p.fecha_fin}</span>
               </span>
             )}
@@ -160,15 +171,18 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
           {/* Bloque Financiero BAC vs AC y Burn Rate */}
           <div className="bg-slate-950/50 p-2.5 rounded-xl border border-slate-800/60 text-xs font-mono tabular-nums mb-4">
             <div className="flex justify-between items-center text-slate-400 mb-1.5">
-              <span>
-                Presupuesto (BAC):{' '}
-                <b className="text-slate-200">
-                  PEN{' '}
-                  {bac.toLocaleString('es-PE', {
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1
-                  })}
-                </b>
+              <span className="flex items-center gap-1.5">
+                <Wallet className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
+                <span>
+                  BAC:{' '}
+                  <b className="text-slate-200">
+                    PEN{' '}
+                    {bac.toLocaleString('es-PE', {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1
+                    })}
+                  </b>
+                </span>
               </span>
               <span
                 className={
@@ -184,11 +198,11 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
                 })}
               </span>
             </div>
-            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden relative">
+            <div className="w-full bg-slate-800/60 h-1.5 rounded-full overflow-hidden relative">
               <div
                 className={`${
                   burn > 100 ? 'bg-rose-500' : burn > 85 ? 'bg-amber-500' : 'bg-emerald-400'
-                } h-full rounded-full transition-all duration-500`}
+                } h-full rounded-full transition-all duration-500 ease-out`}
                 style={{ width: `${Math.min(burn, 100)}%` }}
               />
             </div>
