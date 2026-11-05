@@ -573,7 +573,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       className={`flex flex-col bg-[#0B132B]/95 border border-slate-700/60 text-slate-100 shadow-2xl backdrop-blur-md select-none transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         modoForzadoDesacoplado || pipWindow || esWidgetNativo
           ? 'w-full h-full flex-1 rounded-2xl border overflow-hidden'
-          : 'w-full md:w-[440px] h-[85vh] md:h-[680px] max-h-[85vh] rounded-t-3xl md:rounded-3xl border-t md:border'
+          : 'w-full md:w-[440px] h-[92dvh] md:h-[680px] max-h-[92dvh] pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-0 rounded-t-3xl md:rounded-3xl border-t md:border'
       }`}
     >
       {/* 1. Cabecera Táctica Canónica con Región de Arrastre Libre */}
@@ -1376,7 +1376,11 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
               ? { left: `${posicionWeb.x}px`, top: `${posicionWeb.y}px`, bottom: 'auto', right: 'auto' }
               : {})
           }}
-          className={`fixed ${!posicionWeb ? 'bottom-20 right-4 sm:bottom-6 sm:right-6 md:bottom-6 md:right-6' : ''} z-50 pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0a101f]/95 border border-sky-500/25 backdrop-blur-2xl shadow-[0_8px_30px_-4px_rgba(2,6,23,0.55),0_0_35px_-4px_rgba(56,189,248,0.18)] hover:shadow-[0_12px_40px_-4px_rgba(2,6,23,0.7),0_0_45px_0px_rgba(56,189,248,0.28)] hover:border-sky-400/40 flex items-center gap-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] cursor-grab active:cursor-grabbing group select-none`}
+          className={`fixed ${
+            !posicionWeb
+              ? 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-4 sm:left-6 md:bottom-6 md:left-auto md:right-28'
+              : ''
+          } z-[9998] pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0a101f]/95 border border-sky-500/25 backdrop-blur-2xl shadow-[0_8px_30px_-4px_rgba(2,6,23,0.55),0_0_35px_-4px_rgba(56,189,248,0.18)] hover:shadow-[0_12px_40px_-4px_rgba(2,6,23,0.7),0_0_45px_0px_rgba(56,189,248,0.28)] hover:border-sky-400/40 flex items-center gap-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] cursor-grab active:cursor-grabbing group select-none`}
           title={pipWindow ? "Cockpit activo Always-on-Top (clic para enfocar)" : "Arrastrar para mover libremente / Clic para abrir Cockpit"}
         >
           {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}
@@ -1418,13 +1422,13 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
       {/* B. COCKPIT DESPLEGADO */}
       {cockpitAbierto && !pipWindow && (
-        <div className="fixed inset-0 md:inset-auto md:bottom-6 md:right-6 z-50 flex items-end md:items-start justify-center md:justify-end bg-black/40 md:bg-transparent backdrop-blur-xs md:backdrop-blur-none animate-in fade-in duration-200">
+        <div className="fixed inset-0 md:inset-auto md:bottom-6 md:right-6 z-[10000] flex items-end md:items-start justify-center md:justify-end bg-black/50 md:bg-transparent backdrop-blur-xs md:backdrop-blur-none pointer-events-auto animate-in fade-in duration-200">
           {/* Backdrop móvil para cerrar */}
           <div
-            className="md:hidden absolute inset-0 -z-10"
+            className="md:hidden absolute inset-0 -z-10 cursor-pointer pointer-events-auto"
             onClick={() => setCockpitAbierto(false)}
           />
-          <div className="w-full md:w-auto transition-transform duration-200 ease-out origin-bottom-right">
+          <div className="w-full md:w-auto transition-transform duration-200 ease-out origin-bottom-right pointer-events-auto">
             <CockpitInternalErrorBoundary>
               {cockpitContent}
             </CockpitInternalErrorBoundary>

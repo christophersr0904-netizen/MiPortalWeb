@@ -656,14 +656,14 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       <div
         id="widget-ideas-bubble-container"
         style={containerStyle}
-        className={`fixed ${(!posicion || esMovil) ? 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6 right-4 md:right-6' : ''} z-[9990] flex flex-col items-end gap-2.5 select-none pointer-events-auto`}
+        className={`fixed ${(!posicion || esMovil) ? 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6 right-4 md:right-6' : ''} z-[9990] flex flex-col items-end gap-2.5 select-none pointer-events-none`}
       >
         {/* POPOVER DE MICRO-CAPTURA RÁPIDA */}
         {popoverAbierto && (
           <div
             ref={popoverRef}
             id="popover-captura-rapida-idea"
-            className="w-80 sm:w-96 p-4 rounded-3xl bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/60 shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_25px_rgba(56,189,248,0.12)] focus-within:border-sky-500/50 focus-within:shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_30px_rgba(56,189,248,0.2)] text-slate-100 flex flex-col gap-3.5 transition-all duration-200 origin-bottom-right animate-in fade-in zoom-in-95"
+            className="w-80 sm:w-96 p-4 rounded-3xl bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/60 shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_25px_rgba(56,189,248,0.12)] focus-within:border-sky-500/50 focus-within:shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_30px_rgba(56,189,248,0.2)] text-slate-100 flex flex-col gap-3.5 transition-all duration-200 origin-bottom-right animate-in fade-in zoom-in-95 pointer-events-auto"
           >
             {/* Cabecera */}
             <div className="flex items-center justify-between border-b border-slate-800/60 pb-2.5">
@@ -803,7 +803,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
         <div
           ref={pillRef}
           id="widget-ideas-pill"
-          className="group flex items-center p-1 rounded-full bg-[#0D1526]/90 backdrop-blur-xl border border-slate-800/60 shadow-2xl transition-all duration-300 ease-out select-none"
+          className="group flex items-center p-1 rounded-full bg-[#0D1526]/90 backdrop-blur-xl border border-slate-800/60 shadow-2xl transition-all duration-300 ease-out select-none pointer-events-auto"
         >
           {/* 1. Drag Handle interactivo con 6 puntos */}
           <div
@@ -875,7 +875,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
         <div
           id="ventana-flotante-ideas"
           style={ventanaStyle}
-          className="ideas-floating-window fixed z-[9995] rounded-3xl bg-[#0D1526]/95 backdrop-blur-2xl border border-slate-800/60 shadow-[0_25px_60px_-15px_rgba(2,6,23,0.9),0_0_20px_rgba(30,58,138,0.25)] select-none flex flex-col overflow-hidden transition-[box-shadow,border-color] duration-200"
+          className="ideas-floating-window fixed z-[9995] rounded-3xl bg-[#0D1526]/95 backdrop-blur-2xl border border-slate-800/60 shadow-[0_25px_60px_-15px_rgba(2,6,23,0.9),0_0_20px_rgba(30,58,138,0.25)] select-none flex flex-col overflow-hidden transition-[box-shadow,border-color] duration-200 pointer-events-auto"
         >
           {/* Cabecera Arrastrable con Controles PIP */}
           <div
