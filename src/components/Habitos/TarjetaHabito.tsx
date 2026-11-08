@@ -180,24 +180,24 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
   return (
     <div
       style={{ contain: 'layout paint' }}
-      className={`group portal-surface min-h-[140px] p-3 pl-3.5 space-y-2.5 transition-all duration-150 ease-out border rounded-xl relative overflow-hidden will-change-[transform,opacity] ${esCompletada
+      className={`group portal-surface p-2.5 pl-3 space-y-1.5 transition-all duration-150 ease-out border rounded-xl relative overflow-hidden will-change-[transform,opacity] ${esCompletada
           ? 'opacity-65 border-slate-800/40 bg-[#070B14]/90'
           : 'border-slate-800/40 hover:border-slate-700/80 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/50 bg-[#0D1526]'
         }`}
     >
       {/* Micro-franja lateral de acento semántico por categoría */}
       <div
-        className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full ${catConfig.colorBarra} opacity-80`}
+        className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${catConfig.colorBarra} opacity-80`}
         title={`Categoría: ${catConfig.nombre}`}
       />
 
       {/* FILA 1: Metadatos superiores y Acciones Silenciosas */}
-      <div className="flex items-center justify-between gap-2 mb-2">
+      <div className="flex items-center justify-between gap-1.5">
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           {/* Badge de código canónico */}
           {codigoHabito ? (
             <span
-              className="font-mono text-[11px] font-medium text-sky-400 bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.5 rounded select-none shrink-0 tabular-nums"
+              className="font-mono text-[10px] font-medium text-sky-400 bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.2 rounded select-none shrink-0 tabular-nums"
               title={`Código: ${codigoHabito}`}
             >
               {codigoHabito}
@@ -206,41 +206,41 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
 
           {/* Icono de categoría sutil con tooltip */}
           <span
-            className={`inline-flex items-center justify-center w-5 h-5 rounded-md border ${catConfig.badgeClase} shrink-0`}
+            className={`inline-flex items-center justify-center w-4 h-4 rounded border ${catConfig.badgeClase} shrink-0`}
             title={`Categoría: ${catConfig.nombre}`}
           >
-            {renderIconoCategoriaVida(catConfig.icono, "w-3 h-3")}
+            {renderIconoCategoriaVida(catConfig.icono, "w-2.5 h-2.5")}
           </span>
 
           {/* Cápsula compacta de mora */}
           {diasMora > 0 && !esCompletada && (
             <span
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-mono tabular-nums font-semibold shrink-0"
+              className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[9.5px] font-mono tabular-nums font-semibold shrink-0"
               title={`Retraso acumulado: ${diasMora} día(s)`}
             >
-              <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" strokeWidth={1.75} />
+              <AlertTriangle className="w-2.5 h-2.5 text-rose-400 shrink-0" strokeWidth={1.75} />
               <span>+{diasMora}d</span>
             </span>
           )}
 
           {esHabitual && actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'DIARIA' && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60 font-mono shrink-0">
+            <span className="inline-flex items-center gap-1 px-1 py-0.2 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60 font-mono shrink-0">
               {actividad.frecuencia_ciclo}
             </span>
           )}
         </div>
 
         {/* Racha y Botones de acción rápida con Ley de Silencio Visual (Hover Suave sin Layout Shifts) */}
-        <div className="flex items-center gap-1.5 shrink-0 ml-auto min-h-[24px]">
+        <div className="flex items-center gap-1 shrink-0 ml-auto min-h-[20px]">
           {racha > 0 && (
             <span
-              className={`flex items-center gap-1 text-[11px] font-mono border px-2 py-0.5 rounded-full shrink-0 ${racha >= 7
+              className={`flex items-center gap-0.5 text-[10px] font-mono border px-1.5 py-0.2 rounded-full shrink-0 ${racha >= 7
                   ? 'text-amber-300 bg-amber-950/40 border-amber-800/40 shadow-xs'
                   : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
                 }`}
               title={`Racha consecutiva de ${racha} días`}
             >
-              <Flame className={`w-3 h-3 ${racha >= 7 ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} strokeWidth={1.75} />
+              <Flame className={`w-2.5 h-2.5 ${racha >= 7 ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} strokeWidth={1.75} />
               <span className="tabular-nums font-mono">{racha} d</span>
             </span>
           )}
@@ -252,15 +252,15 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           />
 
           {/* Acciones Secundarias: Visibles en móvil y con Hover suave en Desktop (REQ-PWA-07) */}
-          <div className="flex items-center gap-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150 shrink-0">
+          <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150 shrink-0">
             {onEditar && (
               <button
                 type="button"
                 onClick={handleSolicitarEditar}
-                className="text-slate-400 hover:text-sky-300 p-1.5 rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-sky-300 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
                 title="Editar hábito"
               >
-                <Pencil className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <Pencil className="w-3 h-3" strokeWidth={1.75} />
               </button>
             )}
 
@@ -268,43 +268,43 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               <button
                 type="button"
                 onClick={handleSolicitarEliminar}
-                className="text-slate-400 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
+                className="text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
                 title="Eliminar hábito"
               >
-                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <Trash2 className="w-3 h-3" strokeWidth={1.75} />
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* FILA 2: Checkbox con Touch Target Ergonómico (44x44px) + Título (REQ-PWA-07) */}
-      <div className="flex items-start gap-2.5 mb-3">
+      {/* FILA 2: Checkbox Ergonómico Compacto (w-6 h-6) + Título Táctico */}
+      <div className="flex items-start gap-2">
         <button
           type="button"
           onClick={handleToggleCheck}
-          className="-m-2.5 p-2.5 mt-[-6px] min-w-[44px] min-h-[44px] shrink-0 focus:outline-none group/chk active:scale-95 transition-transform cursor-pointer flex items-center justify-center"
+          className="w-6 h-6 p-0 shrink-0 focus:outline-none group/chk active:scale-95 transition-transform cursor-pointer flex items-center justify-center mt-0.5"
           title={esCompletada ? 'Marcar como pendiente' : 'Marcar como completado'}
         >
           {/* Checkbox Cobalt Aerodynamic con físicas fluidas GPU y cero layout shifts */}
           <div
-            className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all duration-200 ease-out transform-gpu ${esCompletada
-                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.25)] ring-2 ring-emerald-500/20'
-                : 'border-slate-600 bg-slate-900/60 group-hover/chk:border-slate-400'
+            className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all duration-200 ease-out transform-gpu ${esCompletada
+                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.25)] ring-1 ring-emerald-500/20'
+                : 'border-slate-700 bg-slate-900/80 group-hover/chk:border-slate-500'
               }`}
           >
             <Check
-              className={`w-3.5 h-3.5 text-emerald-400 transition-all duration-200 ease-out transform-gpu ${
+              className={`w-3 h-3 text-emerald-400 transition-all duration-200 ease-out transform-gpu ${
                 esCompletada ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'
               }`}
-              strokeWidth={1.75}
+              strokeWidth={2}
             />
           </div>
         </button>
 
         <h4
           onClick={handleSolicitarEditar}
-          className={`text-sm sm:text-base font-medium leading-snug break-words flex-1 select-none transition-colors ${esCompletada
+          className={`text-[12.5px] font-medium leading-snug break-words flex-1 select-none transition-colors line-clamp-2 mb-0 ${esCompletada
               ? 'line-through text-slate-500'
               : 'text-slate-100'
             } ${onEditar ? 'cursor-pointer hover:text-emerald-300' : ''}`}
@@ -323,29 +323,29 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               onAbrirMeta360(metaAsociada);
             }
           }}
-          className={`flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/30 border border-sky-800/40 text-[11px] transition-all duration-150 ${metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:bg-sky-950/50 hover:border-sky-700/60' : ''
+          className={`flex items-center justify-between gap-1.5 px-2 py-0.5 rounded-md bg-sky-950/25 border border-sky-800/35 text-[10px] transition-all duration-150 ${metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:bg-sky-950/50 hover:border-sky-700/60' : ''
             }`}
           title={metaAsociada ? `Meta: ${metaAsociada.nombre_meta}${onAbrirMeta360 ? ' (Clic para abrir Vista 360°)' : ''}` : `Meta: ${actividad.meta_macro_nombre}`}
         >
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <Target className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+            <Target className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.75} />
             <span className="font-semibold text-sky-200 truncate">
               {metaAsociada?.nombre_meta || actividad.meta_macro_nombre}
             </span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {progresoMetaCalculado !== null ? (
-              <span className="font-mono tabular-nums text-[9.5px] font-bold text-sky-300 bg-sky-900/50 px-1.5 py-0.2 rounded border border-sky-700/50">
+              <span className="font-mono tabular-nums text-[9px] font-bold text-sky-300 bg-sky-900/50 px-1.5 py-0.2 rounded border border-sky-700/50">
                 {progresoMetaCalculado}%
               </span>
             ) : metaAsociada?.estado ? (
-              <span className="text-[9px] font-mono text-sky-300/80 uppercase">
+              <span className="text-[8.5px] font-mono text-sky-300/80 uppercase">
                 {metaAsociada.estado.replace(/^\d+_/, '')}
               </span>
             ) : null}
             {metaAsociada && onAbrirMeta360 && (
-              <span className="text-[9px] text-sky-400 opacity-70">
-                <ArrowUpRight className="w-3 h-3" strokeWidth={1.75} />
+              <span className="text-[8.5px] text-sky-400 opacity-70">
+                <ArrowUpRight className="w-2.5 h-2.5" strokeWidth={1.75} />
               </span>
             )}
           </div>
@@ -354,13 +354,13 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
 
       {/* Resumen / Conteo de Subtareas y Pasos Vinculados */}
       {actividadesAsociadas.length > 0 && (
-        <div className="space-y-1 p-2 rounded-xl bg-sky-950/20 border border-sky-800/40 text-[11px]">
-          <div className="flex items-center justify-between gap-1 text-[10.5px]">
+        <div className="space-y-1 p-1.5 rounded-lg bg-sky-950/15 border border-sky-800/30 text-[10px]">
+          <div className="flex items-center justify-between gap-1 text-[10px]">
             <div className="flex items-center gap-1.5 text-sky-300">
-              <ListTodo className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+              <ListTodo className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.75} />
               <span className="font-semibold">Subtareas / Pasos</span>
             </div>
-            <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-sky-950/60 text-sky-300 border border-sky-800/60">
+            <span className="font-mono tabular-nums text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-sky-950/60 text-sky-300 border border-sky-800/60">
               {actividadesAsociadas.length} {actividadesAsociadas.length === 1 ? 'paso' : 'pasos'}
             </span>
           </div>
@@ -372,18 +372,18 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               return (
                 <span
                   key={actItem.id || idx}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-medium border transition-colors ${completado
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-mono border transition-colors ${completado
                       ? 'bg-emerald-950/30 text-emerald-300 border-emerald-800/40 line-through opacity-75'
                       : 'bg-slate-900/80 text-slate-300 border-slate-800/80'
                     }`}
                   title={nombre}
                 >
-                  <span className="truncate max-w-[130px]">{nombre}</span>
+                  <span className="truncate max-w-[120px]">{nombre}</span>
                 </span>
               );
             })}
             {actividadesAsociadas.length > 3 && (
-              <span className="text-[9.5px] text-slate-400 font-mono tabular-nums self-center px-1">
+              <span className="text-[9px] text-slate-400 font-mono tabular-nums self-center px-0.5">
                 +{actividadesAsociadas.length - 3} más
               </span>
             )}
@@ -402,7 +402,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
 
       {/* Barra de Avance Cuantitativo */}
       {(metaTotal > 0 || valorAcum > 0 || actividad.meta_macro_nombre || Boolean(metaAsociada)) && (
-        <div className="space-y-1.5 p-2 rounded-xl bg-cyan-950/20 border border-cyan-800/40 text-[11px]">
+        <div className="space-y-1 p-1.5 rounded-lg bg-cyan-950/20 border border-cyan-800/30 text-[10px]">
           <div className="flex items-center justify-between gap-1 flex-wrap font-mono">
             <div className="flex items-center gap-1.5 min-w-0 max-w-[65%]">
               <span
@@ -425,20 +425,20 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
                     e.stopPropagation();
                     if (onAbrirMeta360) onAbrirMeta360(metaAsociada);
                   }}
-                  className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-white border border-sky-500/30 font-mono font-bold shrink-0 transition cursor-pointer"
+                  className="text-[8.5px] px-1 py-0.2 rounded bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-white border border-sky-500/30 font-mono font-bold shrink-0 transition cursor-pointer"
                   title="Abrir Vista Detallada 360° de la Meta"
                 >
                   360°
                 </button>
               )}
             </div>
-            <span className="font-bold text-cyan-300 font-mono tabular-nums">
+            <span className="font-bold text-cyan-300 font-mono tabular-nums text-[9.5px]">
               {valorAcum}{metaTotal > 0 ? ` / ${metaTotal}` : ''} {uMed}
             </span>
           </div>
 
           {metaTotal > 0 && (
-            <div className="w-full bg-cyan-950/60 h-1.5 rounded-full overflow-hidden">
+            <div className="w-full bg-cyan-950/60 h-1 rounded-full overflow-hidden">
               <div
                 className="bg-gradient-to-r from-cyan-500 to-teal-500 h-full rounded-full transition-all duration-300"
                 style={{ width: `${pctAvance}%` }}
@@ -448,7 +448,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
 
           <div className="flex items-center justify-between gap-1 pt-0.5">
             {rescateMin > 0 && (
-              <span className="inline-flex items-center gap-1 text-[9.5px] px-1.5 py-0.5 rounded-md bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 font-semibold font-mono tabular-nums">
+              <span className="inline-flex items-center gap-1 text-[8.5px] px-1 py-0.2 rounded bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 font-semibold font-mono tabular-nums">
                 Rescate: ≥ {rescateMin} {uMed}
               </span>
             )}
@@ -456,10 +456,10 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
             <button
               type="button"
               onClick={handleAbrirAvanceModal}
-              className="ml-auto px-2 py-0.5 rounded-lg bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-800/60 font-semibold text-[10px] transition active:scale-95 flex items-center gap-1 cursor-pointer"
+              className="ml-auto h-5 px-1.5 py-0 rounded bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-800/60 font-semibold text-[9px] font-mono transition active:scale-95 flex items-center gap-0.5 cursor-pointer"
               title="Registrar avance cuantitativo"
             >
-              <PlusCircle className="w-3 h-3" />
+              <PlusCircle className="w-2.5 h-2.5" />
               <span>Avance</span>
             </button>
           </div>
@@ -467,16 +467,16 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
       )}
 
       {/* Footer de la Tarjeta */}
-      <div className="flex items-center justify-between gap-1.5 flex-wrap pt-2 border-t border-slate-800/80 text-[10px] text-slate-400">
+      <div className="flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-slate-800/40 text-[9.5px] font-mono tabular-nums text-slate-400">
         <div className="flex items-center gap-2">
           {esCompletada ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono tabular-nums">
-              <Calendar className="w-3.5 h-3.5 text-emerald-400" strokeWidth={1.75} />
-              <span>Próxima: {actividad.proxima_fecha_programada || 'Mañana'}</span>
+            <span className="inline-flex items-center gap-1 text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono tabular-nums">
+              <Calendar className="w-2.5 h-2.5 text-emerald-400" strokeWidth={1.75} />
+              <span>Próx: {actividad.proxima_fecha_programada || 'Mañana'}</span>
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 font-mono tabular-nums">
-              <Calendar className="w-3 h-3 text-slate-500" strokeWidth={1.75} />
+            <span className="inline-flex items-center gap-1 font-mono tabular-nums text-[9.5px]">
+              <Calendar className="w-2.5 h-2.5 text-slate-500" strokeWidth={1.75} />
               <span>
                 {esRutinaria && (actividad.proxima_fecha_programada || actividad.fecha_programada > hoyStr)
                   ? `Próx: ${actividad.proxima_fecha_programada || actividad.fecha_programada}`
@@ -486,16 +486,16 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           )}
 
           {actividad.hora_inicio && (
-            <span className="inline-flex items-center gap-1 font-mono tabular-nums">
-              <Clock className="w-3 h-3 text-slate-500" />
+            <span className="inline-flex items-center gap-1 font-mono tabular-nums text-[9.5px]">
+              <Clock className="w-2.5 h-2.5 text-slate-500" />
               <span>{actividad.hora_inicio}</span>
             </span>
           )}
         </div>
 
         {typeof actividad.monto_gasto_asociado === 'number' && actividad.monto_gasto_asociado > 0 && (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/50 font-mono tabular-nums font-bold">
-            <DollarSign className="w-3 h-3" />
+          <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/50 font-mono tabular-nums font-bold text-[9px]">
+            <DollarSign className="w-2.5 h-2.5" />
             <span>S/ {actividad.monto_gasto_asociado.toFixed(2)}</span>
           </span>
         )}

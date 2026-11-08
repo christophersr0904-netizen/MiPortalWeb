@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { formatFechaIsoLocal } from '../../../utils/timeFormatters';
 import { areHabitoPropsEqual, type TarjetaHabitoProps } from '../TarjetaHabito';
+import { esTipoHabitoRecurrente } from '../TableroHabitos';
+import seedLife from '../../../db/seedLife.json';
 import type { ActividadPersonal } from '../../../types';
 
 describe('Tracker de Hábitos & Consistencia Diaria [REQ-SYS-001-F6]', () => {
@@ -132,6 +134,30 @@ describe('Tracker de Hábitos & Consistencia Diaria [REQ-SYS-001-F6]', () => {
         actividad: { ...actividadBase, updated_at: '2026-11-02T10:05:00Z' }
       };
       expect(areHabitoPropsEqual(mockProps, nextPropsConTimestamp)).toBe(false);
+    });
+  });
+
+  describe('V5: Clasificación Inclusiva de Hábitos y Contratos [REQ-FIX-01]', () => {
+    it('esTipoHabitoRecurrente identifica HABITUAL, HABITO_MANTENIMIENTO, HABITO_ACUMULATIVO y CHECKLIST_META', () => {
+      expect(esTipoHabitoRecurrente('HABITUAL')).toBe(true);
+      expect(esTipoHabitoRecurrente('HABITO_MANTENIMIENTO')).toBe(true);
+      expect(esTipoHabitoRecurrente('HABITO_ACUMULATIVO')).toBe(true);
+      expect(esTipoHabitoRecurrente('CHECKLIST_META')).toBe(true);
+      expect(esTipoHabitoRecurrente('PUNTUAL')).toBe(false);
+      expect(esTipoHabitoRecurrente('META')).toBe(false);
+      expect(esTipoHabitoRecurrente(undefined)).toBe(false);
+    });
+
+    it('clasifica los 13 hábitos de seedLife sin descartar ninguno silenciosamente', () => {
+      const actividades = seedLife.actividades_personales || [];
+      expect(actividades.length).toBe(13);
+
+      const habituales = actividades.filter((a: any) => esTipoHabitoRecurrente(a.tipo_compromiso));
+      const puntuales = actividades.filter((a: any) => !esTipoHabitoRecurrente(a.tipo_compromiso));
+
+      expect(habituales.length).toBe(12);
+      expect(puntuales.length).toBe(1);
+      expect(puntuales[0].codigo_legado).toBe('ACT-012');
     });
   });
 });

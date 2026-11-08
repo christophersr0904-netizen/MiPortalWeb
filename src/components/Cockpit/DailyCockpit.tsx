@@ -14,8 +14,6 @@ import {
   Clock,
   ListTodo,
   ExternalLink,
-  ChevronDown,
-  ChevronUp,
   X,
   Gauge,
   Zap,
@@ -25,8 +23,23 @@ import {
   TrendingUp,
   TrendingDown,
   Check,
-  Calendar
+  Calendar,
+  Play,
+  Pause,
+  RotateCcw,
+  Briefcase,
+  Sparkles,
+  LayoutGrid,
+  Minimize2,
+  SlidersHorizontal,
+  ChevronLeft,
+  ChevronRight,
+  Bell,
+  Plus,
+  Target,
+  Volume2
 } from 'lucide-react';
+import { db } from '../../db/db';
 import {
   useDailySchedule,
   type HorizonteAgenda,
@@ -111,7 +124,8 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     new URLSearchParams(window.location.hash.replace(/^#/, '')).get('mode') === 'hud'
   );
 
-  // Estado de visibilidad y visualización (adaptativo en standalone HUD según altura o parámetro)
+  // Estado de visibilidad y factor de forma (REQ-DESKTOP-05)
+  // En modo widget nativo arranca en reposo (340x58) salvo que se pase ?state=open
   const [cockpitAbierto, setCockpitAbierto] = useState(() => {
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
@@ -120,16 +134,339 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
       if (getParam('state') === 'open') return true;
       if (getParam('state') === 'rest') return false;
-      if (
-        (window as any).IS_DESKTOP_WIDGET === true ||
-        getParam('widget') === 'desktop' ||
-        getParam('mode') === 'hud'
-      ) {
-        return true; // En modo widget nativo de escritorio (420x720) arranca en vista táctica completa
+      if ((window as any).IS_DESKTOP_WIDGET === true || getParam('widget') === 'desktop') {
+        return false; // Inicia discretamente como cápsula flotante compacta
+      }
+      if (getParam('mode') === 'hud') {
+        return true;
       }
     }
     return modoForzadoDesacoplado;
   });
+
+  // Coordinación inicial y reactiva de dimensiones con Electron
+  useEffect(() => {
+    if (esWidgetNativo && typeof window !== 'undefined' && window.desktopWidget) {
+      if (cockpitAbierto) {
+        window.desktopWidget.expand();
+      } else {
+        window.desktopWidget.collapse();
+      }
+    }
+  }, [esWidgetNativo, cockpitAbierto]);
+
+  // Modo de Enfoque Activo (Deep Work / Admin / Recarga) (REQ-DESKTOP-05)
+  const [modoEnfoque, setModoEnfoque] = useState<'DEEP_WORK' | 'ADMIN' | 'RECARGA'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('pmo_modo_enfoque') as any) || 'DEEP_WORK';
+    }
+    return 'DEEP_WORK';
+  });
+
+  // Temporizador Pomodoro con Barra Ultra-Fina (sincronizado con modo de enfoque inicial - REQ-DESKTOP-08)
+  const duracionInicialPomodoro = modoEnfoque === 'DEEP_WORK' ? 50 * 60 : modoEnfoque === 'ADMIN' ? 25 * 60 : 15 * 60;
+  const [pomodoroSegundos, setPomodoroSegundos] = useState(duracionInicialPomodoro);
+  const [pomodoroCorriendo, setPomodoroCorriendo] = useState(false);
+  const [pomodoroTotal, setPomodoroTotal] = useState(duracionInicialPomodoro);
+  const timerPomodoroRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Micro-input para tiempo personalizado (1-180 min) en Pomodoro (REQ-DESKTOP-13 Paso 1)
+  const [customMinutosAbierto, setCustomMinutosAbierto] = useState(false);
+  const [inputMinutosCustom, setInputMinutosCustom] = useState('45');
+
+  const handleAplicarMinutosCustom = () => {
+    const min = parseInt(inputMinutosCustom, 10);
+    if (!isNaN(min) && min >= 1 && min <= 180) {
+      handleSetPresetPomodoro(min);
+    }
+    setCustomMinutosAbierto(false);
+  };
+
+  // Estado y Sistema de Alerta Multisensorial Pomodoro (REQ-DESKTOP-14 / REQ-DESKTOP-15)
+  const [tiempoExpirado, setTiempoExpirado] = useState(false);
+
+  // Selector de Perfiles de Alarma Sonora (REQ-DESKTOP-17 Paso 2)
+  const [perfilAlarma, setPerfilAlarma] = useState<'zen' | 'digital' | 'radar'>(() => {
+    if (typeof window !== 'undefined') {
+      const guardado = localStorage.getItem('pmo_perfil_alarma');
+      if (guardado === 'zen' || guardado === 'digital' || guardado === 'radar') return guardado;
+    }
+    return 'zen';
+  });
+
+  const handleCambiarPerfilAlarma = (perfil: 'zen' | 'digital' | 'radar') => {
+    setPerfilAlarma(perfil);
+    try {
+      localStorage.setItem('pmo_perfil_alarma', perfil);
+    } catch {}
+  };
+
+  // Métrica de Bloques Diarios de Foco (REQ-DESKTOP-17 Paso 3)
+  const obtenerKeyFocoHoy = () => {
+    const hoyStr = new Date().toISOString().split('T')[0];
+    return `pmo_foco_metric_${hoyStr}`;
+  };
+
+  const [metricasFocoHoy, setMetricasFocoHoy] = useState<{ bloques: number; minutos: number }>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(obtenerKeyFocoHoy());
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          return {
+            bloques: Number(parsed.bloques) || 0,
+            minutos: Number(parsed.minutos) || 0
+          };
+        }
+      } catch {}
+    }
+    return { bloques: 0, minutos: 0 };
+  });
+
+  const registrarBloqueCompletado = (duracionSegundos: number) => {
+    try {
+      const minBloque = Math.max(1, Math.round(duracionSegundos / 60));
+      const key = obtenerKeyFocoHoy();
+      const actual = (() => {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) return JSON.parse(raw);
+        } catch {}
+        return { bloques: 0, minutos: 0 };
+      })();
+      const actualizado = {
+        bloques: (Number(actual.bloques) || 0) + 1,
+        minutos: (Number(actual.minutos) || 0) + minBloque
+      };
+      localStorage.setItem(key, JSON.stringify(actualizado));
+      setMetricasFocoHoy(actualizado);
+    } catch (e) {
+      console.warn('[Cockpit FocusMetric] Error al persistir bloque de foco:', e);
+    }
+  };
+
+  // Alarma Sonora Nativa mediante Web Audio API con perfiles y desbloqueo explícito en Chromium (REQ-DESKTOP-17 Paso 2)
+  const reproducirAlarmaFin = async () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+
+      // En Chromium / Electron, si el AudioContext nace suspendido por Autoplay Policy, reanudarlo
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      const ahora = ctx.currentTime;
+
+      if (perfilAlarma === 'digital') {
+        // 'digital': Doble beep rápido tipo cronómetro clásico (2000Hz)
+        [0, 0.12].forEach((offset) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(2000, ahora + offset);
+
+          gain.gain.setValueAtTime(0.0001, ahora + offset);
+          gain.gain.linearRampToValueAtTime(0.22, ahora + offset + 0.01);
+          gain.gain.setValueAtTime(0.22, ahora + offset + 0.07);
+          gain.gain.linearRampToValueAtTime(0.0001, ahora + offset + 0.08);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ahora + offset);
+          osc.stop(ahora + offset + 0.09);
+        });
+      } else if (perfilAlarma === 'radar') {
+        // 'radar': Tres pulsos tácticos de advertencia (520Hz -> 650Hz)
+        [
+          { freq: 520, t: 0 },
+          { freq: 580, t: 0.14 },
+          { freq: 650, t: 0.28 }
+        ].forEach(({ freq, t }) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, ahora + t);
+
+          gain.gain.setValueAtTime(0.0001, ahora + t);
+          gain.gain.exponentialRampToValueAtTime(0.25, ahora + t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ahora + t + 0.11);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ahora + t);
+          osc.stop(ahora + t + 0.12);
+        });
+      } else {
+        // 'zen': Tríada armónica brillante (880Hz -> 1046Hz -> 1318.5Hz)
+        const frecuencias = [880, 1046, 1318.5];
+        frecuencias.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ahora + idx * 0.16);
+
+          gain.gain.setValueAtTime(0.0001, ahora + idx * 0.16);
+          gain.gain.exponentialRampToValueAtTime(0.35, ahora + idx * 0.16 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ahora + idx * 0.16 + 0.5);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(ahora + idx * 0.16);
+          osc.stop(ahora + idx * 0.16 + 0.55);
+        });
+      }
+
+      setTimeout(() => {
+        try {
+          ctx.close();
+        } catch {}
+      }, 1500);
+    } catch (err) {
+      console.warn('[Cockpit Audio] No se pudo reproducir la alarma:', err);
+    }
+  };
+
+  // Notificación Nativa de Sistema al Finalizar Bloque
+  const lanzarNotificacionExpirado = () => {
+    try {
+      if (typeof Notification === 'undefined') return;
+      if (Notification.permission === 'granted') {
+        new Notification('Cockpit: Tiempo Cumplido', {
+          body: 'Tu bloque de enfoque ha finalizado con éxito.'
+        });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((perm) => {
+          if (perm === 'granted') {
+            new Notification('Cockpit: Tiempo Cumplido', {
+              body: 'Tu bloque de enfoque ha finalizado con éxito.'
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('[Cockpit Notification] Error al emitir notificación:', e);
+    }
+  };
+
+  // Motor Atómico de Temporizador Pomodoro con Limpieza Inmediata de Intervalo (REQ-DESKTOP-15 Paso 1 / REQ-DESKTOP-17 Paso 3)
+  useEffect(() => {
+    if (!pomodoroCorriendo) {
+      if (timerPomodoroRef.current) {
+        clearInterval(timerPomodoroRef.current);
+        timerPomodoroRef.current = null;
+      }
+      return;
+    }
+
+    if (pomodoroSegundos <= 0) {
+      setPomodoroCorriendo(false);
+      setTiempoExpirado(true);
+      return;
+    }
+
+    timerPomodoroRef.current = setInterval(() => {
+      setPomodoroSegundos((prev) => {
+        if (prev <= 1) {
+          if (timerPomodoroRef.current) {
+            clearInterval(timerPomodoroRef.current);
+            timerPomodoroRef.current = null;
+          }
+          // Desacoplado inmediato fuera del updater puro de React para garantizar persistencia y audio atómico
+          setTimeout(() => {
+            setPomodoroCorriendo(false);
+            setTiempoExpirado(true);
+            registrarBloqueCompletado(pomodoroTotal);
+            reproducirAlarmaFin();
+            lanzarNotificacionExpirado();
+          }, 0);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerPomodoroRef.current) {
+        clearInterval(timerPomodoroRef.current);
+        timerPomodoroRef.current = null;
+      }
+    };
+  }, [pomodoroCorriendo, pomodoroTotal]);
+
+  const handleTogglePomodoro = () => {
+    if (tiempoExpirado) {
+      setTiempoExpirado(false);
+      handleResetPomodoro();
+      return;
+    }
+    setPomodoroCorriendo((p) => !p);
+  };
+  const handleResetPomodoro = () => {
+    if (timerPomodoroRef.current) {
+      clearInterval(timerPomodoroRef.current);
+      timerPomodoroRef.current = null;
+    }
+    setPomodoroCorriendo(false);
+    setTiempoExpirado(false);
+    setPomodoroSegundos(pomodoroTotal);
+  };
+  const handleSetPresetPomodoro = (minutos: number) => {
+    if (timerPomodoroRef.current) {
+      clearInterval(timerPomodoroRef.current);
+      timerPomodoroRef.current = null;
+    }
+    setPomodoroTotal(minutos * 60);
+    setPomodoroSegundos(minutos * 60);
+    setPomodoroCorriendo(false);
+    setTiempoExpirado(false);
+    if (minutos === 50) {
+      setModoEnfoque('DEEP_WORK');
+      try { localStorage.setItem('pmo_modo_enfoque', 'DEEP_WORK'); } catch {}
+    } else if (minutos === 25) {
+      setModoEnfoque('ADMIN');
+      try { localStorage.setItem('pmo_modo_enfoque', 'ADMIN'); } catch {}
+    } else if (minutos === 15) {
+      setModoEnfoque('RECARGA');
+      try { localStorage.setItem('pmo_modo_enfoque', 'RECARGA'); } catch {}
+    }
+  };
+
+  const handleCambiarEnfoque = (modo: 'DEEP_WORK' | 'ADMIN' | 'RECARGA') => {
+    setModoEnfoque(modo);
+    try {
+      localStorage.setItem('pmo_modo_enfoque', modo);
+    } catch {}
+    if (modo === 'DEEP_WORK') {
+      setPomodoroTotal(50 * 60);
+      setPomodoroSegundos(50 * 60);
+      setPomodoroCorriendo(false);
+    } else if (modo === 'ADMIN') {
+      setPomodoroTotal(25 * 60);
+      setPomodoroSegundos(25 * 60);
+      setPomodoroCorriendo(false);
+    } else {
+      setPomodoroTotal(15 * 60);
+      setPomodoroSegundos(15 * 60);
+      setPomodoroCorriendo(false);
+    }
+  };
+
+  const tiempoPomodoroStr = useMemo(() => {
+    const m = Math.floor(pomodoroSegundos / 60);
+    const s = pomodoroSegundos % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }, [pomodoroSegundos]);
+
+  const pctPomodoro = useMemo(() => {
+    return Math.min(100, Math.max(0, ((pomodoroTotal - pomodoroSegundos) / pomodoroTotal) * 100));
+  }, [pomodoroTotal, pomodoroSegundos]);
+
+  // Pestaña activa del Dock desplegado: 'BENTO' vs 'AGENDA'
+  const [tabDock, setTabDock] = useState<'BENTO' | 'AGENDA'>('BENTO');
 
   // Expansión con sincronización de ventana nativa de Electron si aplica en modo HUD
   const handleAbrirCockpit = () => {
@@ -146,36 +483,6 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
     setCockpitAbierto(false);
   };
-
-  // REQ-PWA-14: Listener global para apertura y alternancia remota desde Header o BottomNav
-  useEffect(() => {
-    const handleOpenCockpit = () => {
-      handleAbrirCockpit();
-    };
-    const handleToggleCockpit = () => {
-      setCockpitAbierto((prev) => {
-        if (!prev) {
-          if (esWidgetNativo && typeof window !== 'undefined' && window.desktopWidget) {
-            window.desktopWidget.expand();
-          }
-          return true;
-        } else {
-          if (esWidgetNativo && typeof window !== 'undefined' && window.desktopWidget) {
-            window.desktopWidget.collapse();
-          }
-          return false;
-        }
-      });
-    };
-
-    window.addEventListener('pmo:open-cockpit', handleOpenCockpit);
-    window.addEventListener('pmo:toggle-cockpit', handleToggleCockpit);
-
-    return () => {
-      window.removeEventListener('pmo:open-cockpit', handleOpenCockpit);
-      window.removeEventListener('pmo:toggle-cockpit', handleToggleCockpit);
-    };
-  }, [esWidgetNativo]);
 
   // Posición libre de la cápsula en modo web persistida en localStorage
   const [posicionWeb, setPosicionWeb] = useState<{ x: number; y: number } | null>(() => {
@@ -305,9 +612,14 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
   }, [esWidgetNativo]);
 
-  // REQ-PWA-14: En modo widget nativo de Electron, cargar snapshot del puente local
+  // Detección de coexistencia exclusiva y sincronización de puente local
+  const [hayWidgetDeEscritorioActivo, setHayWidgetDeEscritorioActivo] = useState(false);
+
   useEffect(() => {
+    // Si estamos dentro del widget nativo de Electron, NUNCA ocultarse
     if (esWidgetNativo) {
+      setHayWidgetDeEscritorioActivo(false);
+      // Al montar o al recibir foco en el widget nativo, cargar el snapshot más reciente del puente local
       syncManager.cargarSnapshotDesdePuenteLocal().catch(() => {});
       const handleFocus = () => {
         syncManager.cargarSnapshotDesdePuenteLocal().catch(() => {});
@@ -315,7 +627,49 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       window.addEventListener('focus', handleFocus);
       return () => window.removeEventListener('focus', handleFocus);
     }
-  }, [esWidgetNativo]);
+
+    if (modoForzadoDesacoplado) return;
+
+    let cancelado = false;
+
+    const pingLoopbackDesktop = async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300);
+
+      try {
+        const res = await fetch('http://127.0.0.1:48123/status', {
+          mode: 'cors',
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!cancelado) {
+          if (res.ok) {
+            const data = await res.json();
+            if (data.desktopWidgetAlive) {
+              setHayWidgetDeEscritorioActivo(true);
+              return;
+            }
+          }
+          setHayWidgetDeEscritorioActivo(false);
+        }
+      } catch {
+        clearTimeout(timeoutId);
+        if (!cancelado) {
+          setHayWidgetDeEscritorioActivo(false);
+        }
+      }
+    };
+
+    // Ping inmediato al montar y recurrente cada 1200ms
+    pingLoopbackDesktop();
+    const timer = setInterval(pingLoopbackDesktop, 1200);
+
+    return () => {
+      cancelado = true;
+      clearInterval(timer);
+    };
+  }, [esWidgetNativo, modoForzadoDesacoplado]);
 
   const [horizonte, setHorizonte] = useState<HorizonteAgenda>('HOY');
   const [modoVista, setModoVista] = useState<'RIEL' | 'CHECKLIST'>('CHECKLIST');
@@ -353,6 +707,25 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     });
   }, [items, filtroTipo]);
 
+  // Top 3 Tareas Clave para Bento Card Focus (REQ-DESKTOP-05)
+  const tresTareasClave = useMemo(() => {
+    return (items || []).filter((i) => i && i.tipo === 'TAREA').slice(0, 3);
+  }, [items]);
+
+  // Estado para Detalle Expandible de Tareas Clave (REQ-DESKTOP-13 Paso 2)
+  const [tareaDetalleSeleccionada, setTareaDetalleSeleccionada] = useState<DailyScheduleItem | null>(null);
+  const tareaDetalleActualizada = useMemo(() => {
+    if (!tareaDetalleSeleccionada) return null;
+    return (items || []).find((i) => i.id === tareaDetalleSeleccionada.id) || tareaDetalleSeleccionada;
+  }, [items, tareaDetalleSeleccionada]);
+
+  // Hábitos de Hoy para Bento Card Radar (REQ-DESKTOP-05)
+  const habitosHoy = useMemo(() => {
+    return (items || []).filter((i) => i && i.tipo === 'HABITO');
+  }, [items]);
+  const completadosHabitos = useMemo(() => habitosHoy.filter((h) => h.completado).length, [habitosHoy]);
+  const totalHabitos = habitosHoy.length;
+
   // Completar rápido con aislamiento de propagación
   const handleToggle = async (item: DailyScheduleItem, e?: React.MouseEvent) => {
     if (e) {
@@ -363,6 +736,49 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     // Enviar snapshot al puente local si estamos en navegador web para actualizar Electron
     if (!esWidgetNativo) {
       syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
+    }
+  };
+
+  // Quick-Add de Tareas Clave (REQ-DESKTOP-17 Paso 1)
+  const [quickAddTareaAbierto, setQuickAddTareaAbierto] = useState(false);
+  const [inputQuickAddTarea, setInputQuickAddTarea] = useState('');
+  const [guardandoTareaRapida, setGuardandoTareaRapida] = useState(false);
+
+  const handleCrearTareaRapida = async () => {
+    const texto = inputQuickAddTarea.trim();
+    if (!texto || guardandoTareaRapida) return;
+    try {
+      setGuardandoTareaRapida(true);
+      const totalTareas = await db.tareas.count();
+      const nuevoCodigoTar = `TAR-${String(totalTareas + 1).padStart(3, '0')}`;
+      const nuevaTareaId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}`;
+      const fechaHoy = new Date().toISOString().split('T')[0];
+
+      await db.tareas.add({
+        id: nuevaTareaId,
+        user_id: '00000000-0000-0000-0000-000000000001',
+        codigo_legado: nuevoCodigoTar,
+        nombre_tarea_actividad: texto,
+        estado_tarea: '02_Por_Hacer',
+        prioridad_eisenhower: 'DO_FIRST',
+        nivel_energia_requerido: 'Medio',
+        fecha_programada: fechaHoy,
+        horas_estimadas: 1,
+        horas_reales: 0,
+        sync_status: 'pending',
+        updated_at: new Date().toISOString()
+      });
+
+      if (!esWidgetNativo) {
+        syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
+      }
+
+      setInputQuickAddTarea('');
+      setQuickAddTareaAbierto(false);
+    } catch (err) {
+      console.error('[Cockpit QuickAdd] Error al crear tarea rápida:', err);
+    } finally {
+      setGuardandoTareaRapida(false);
     }
   };
 
@@ -550,66 +966,122 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     return 'text-rose-400 border-rose-500/30 bg-rose-950/30';
   }, [metricas?.porcentajeRitmo]);
 
-  // Contenido interno del Cockpit
+  // Contenido interno del Cockpit (Dock Aeroespacial Bento - REQ-DESKTOP-05)
   const cockpitContent = (
     <div
-      className={`flex flex-col bg-[#0B132B]/95 border border-slate-700/60 text-slate-100 shadow-2xl backdrop-blur-md select-none transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+      className={`flex flex-col bg-[#080D1A] border border-cyan-500/30 text-slate-100 shadow-[0_0_35px_rgba(6,182,212,0.18),0_20px_50px_rgba(2,6,23,0.9)] select-none transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden font-sans ${
         modoForzadoDesacoplado || pipWindow || esWidgetNativo
-          ? 'w-full h-full flex-1 rounded-2xl border overflow-hidden'
-          : 'w-full md:w-[440px] h-[92dvh] md:h-[680px] max-h-[92dvh] pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-0 rounded-t-3xl md:rounded-3xl border-t md:border'
+          ? 'w-full h-full flex-1 rounded-2xl'
+          : 'w-full md:w-[440px] h-[92dvh] md:h-[680px] max-h-[92dvh] pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-0 rounded-t-3xl md:rounded-3xl border'
       }`}
     >
-      {/* 1. Cabecera Táctica Canónica con Región de Arrastre Libre */}
+      {/* 1. Cabecera Aeroespacial Compacta con Selector de Energía y Pestañas */}
       <div
         style={DRAG_REGION_STYLE}
-        className="px-4 py-3 border-b border-slate-700/60 bg-slate-950/80 flex items-center justify-between shrink-0 cursor-grab active:cursor-grabbing"
+        className="px-3 py-2 border-b border-cyan-500/20 bg-[#080D1A] flex items-center justify-between shrink-0 cursor-grab active:cursor-grabbing"
       >
-        <div className="flex items-center gap-2" style={DRAG_REGION_STYLE}>
-          <div className="relative w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0" style={NO_DRAG_REGION_STYLE}>
-            <Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
-            <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+        {/* Lado Izquierdo: Glifo Técnico + Título + Selector de Modo de Energía */}
+        <div className="flex items-center gap-1.5" style={DRAG_REGION_STYLE}>
+          <button
+            type="button"
+            onClick={handleContraerCockpit}
+            style={NO_DRAG_REGION_STYLE}
+            className="relative w-6 h-6 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 hover:bg-cyan-500/25 transition-colors cursor-pointer shrink-0"
+            title="Replegar Cockpit a cápsula"
+          >
+            <Gauge className="w-3.5 h-3.5 text-cyan-400 shrink-0" strokeWidth={1.75} />
+            <span className="absolute -top-0.5 -right-0.5 flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-500"></span>
             </span>
-          </div>
-          <div style={DRAG_REGION_STYLE}>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold font-mono tracking-tight text-white uppercase">
-                Cockpit Diario
-              </span>
-              <span className="text-[10px] font-mono tabular-nums px-1.5 py-0.2 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60" style={NO_DRAG_REGION_STYLE}>
-                {horaActual}
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-400 font-mono">
-              {metricas?.completadasTotal ?? 0} de {metricas?.totalItems ?? 0} cumplidas ({metricas?.porcentajeTotal ?? 0}%)
-            </span>
+          </button>
+
+          <div className="flex items-center gap-1" style={NO_DRAG_REGION_STYLE}>
+            <button
+              type="button"
+              onClick={() => handleCambiarEnfoque('DEEP_WORK')}
+              className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                modoEnfoque === 'DEEP_WORK'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.25)]'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+              title="Modo Deep Work (50m Focus)"
+            >
+              <Zap className="w-3 h-3 text-cyan-400" strokeWidth={1.75} />
+              Deep
+            </button>
+            <button
+              type="button"
+              onClick={() => handleCambiarEnfoque('ADMIN')}
+              className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                modoEnfoque === 'ADMIN'
+                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-[0_0_10px_rgba(99,102,241,0.25)]'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+              title="Modo Admin (25m Focus)"
+            >
+              <Briefcase className="w-3 h-3 text-indigo-400" strokeWidth={1.75} />
+              Admin
+            </button>
+            <button
+              type="button"
+              onClick={() => handleCambiarEnfoque('RECARGA')}
+              className={`px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer flex items-center gap-1 ${
+                modoEnfoque === 'RECARGA'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.25)]'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+              title="Modo Recarga (15m)"
+            >
+              <Sparkles className="w-3 h-3 text-emerald-400" strokeWidth={1.75} />
+              Recarga
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5" style={NO_DRAG_REGION_STYLE}>
-          {/* Badge Ritmo Horario */}
-          <div
-            className={`px-2 py-0.5 rounded-lg border text-[11px] font-mono tabular-nums font-bold flex items-center gap-1 ${colorRitmo}`}
-            title="Porcentaje de avance sobre entidades programadas hasta este momento"
-          >
-            <Zap className="w-3 h-3" strokeWidth={1.75} />
-            {metricas?.porcentajeRitmo ?? 100}%
+        {/* Lado Derecho: Toggle Bento/Agenda + Minimizar + Cerrar */}
+        <div className="flex items-center gap-1" style={NO_DRAG_REGION_STYLE}>
+          {/* Switch Dock Tab */}
+          <div className="flex items-center bg-slate-900/80 p-0.5 rounded-lg border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setTabDock('BENTO')}
+              className={`p-1 rounded text-xs transition-all cursor-pointer ${
+                tabDock === 'BENTO'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+              title="Vista Bento Táctica"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" strokeWidth={1.75} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setTabDock('AGENDA')}
+              className={`p-1 rounded text-xs transition-all cursor-pointer ${
+                tabDock === 'AGENDA'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+              title="Vista Agenda 24H"
+            >
+              <Clock className="w-3.5 h-3.5" strokeWidth={1.75} />
+            </button>
           </div>
 
-          {/* Botón Desacople Always-on-Top (disponible si no está desacoplado en PiP ni widget nativo) */}
+          {/* Botón Desacople Always-on-Top PiP (cuando no es widget nativo ni PiP) */}
           {!pipWindow && !esWidgetNativo && (
             <button
               type="button"
               onClick={desacoplarAEscritorio}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
+              className="p-1 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
               title="Desacoplar Cockpit a ventana flotante Always-on-Top en PC"
             >
-              <ExternalLink className="w-4 h-4" strokeWidth={1.75} />
+              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} />
             </button>
           )}
 
-          {/* Botón Contraer a Píldora de Reposo / Minimizar */}
+          {/* Botón Contraer a Píldora */}
           <button
             type="button"
             onClick={() => {
@@ -619,13 +1091,13 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                 handleContraerCockpit();
               }
             }}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
-            title={modoForzadoDesacoplado ? "Contraer a widget en reposo" : "Cerrar Cockpit"}
+            className="p-1 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/80 transition-colors cursor-pointer"
+            title="Replegar a cápsula flotante"
           >
-            <ChevronDown className="w-4 h-4" strokeWidth={1.75} />
+            <Minimize2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
 
-          {/* Botón Salir de Modo Standalone / Cerrar Widget */}
+          {/* Botón Salir / Ocultar a Bandeja */}
           {(modoForzadoDesacoplado || esWidgetNativo) && (
             <button
               type="button"
@@ -636,119 +1108,597 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                   onCerrarDesacoplado();
                 }
               }}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors cursor-pointer"
-              title={esWidgetNativo ? "Ocultar a la bandeja del sistema" : "Volver a la vista completa del Portal"}
+              className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors cursor-pointer"
+              title={esWidgetNativo ? "Ocultar a la bandeja del sistema" : "Cerrar"}
             >
-              <X className="w-4 h-4" strokeWidth={1.75} />
+              <X className="w-3.5 h-3.5" strokeWidth={1.75} />
             </button>
           )}
         </div>
       </div>
 
-      {/* 2. Selector de Horizonte (Hoy / Mañana / Semana) */}
-      <div className="px-3 py-2 bg-slate-900/60 border-b border-slate-800/60 flex items-center justify-between gap-1 shrink-0">
-        <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800/80 w-full">
-          <button
-            type="button"
-            onClick={() => setHorizonte('HOY')}
-            className={`flex-1 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              horizonte === 'HOY'
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Hoy
-          </button>
-          <button
-            type="button"
-            onClick={() => setHorizonte('MANANA')}
-            className={`flex-1 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              horizonte === 'MANANA'
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Mañana
-          </button>
-          <button
-            type="button"
-            onClick={() => setHorizonte('SEMANA')}
-            className={`flex-1 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              horizonte === 'SEMANA'
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Semana
-          </button>
-        </div>
-      </div>
-
-      {/* 3. Barra de Herramientas Dual (Riel vs Checklist + Filtros Rápidos) */}
-      <div className="px-3 py-2 bg-[#040711]/50 border-b border-slate-800/50 flex flex-col gap-2 shrink-0">
-        <div className="flex items-center justify-between gap-2">
-          {/* Switch Modo Vista */}
-          <div className="flex items-center gap-1 bg-slate-900/80 p-0.5 rounded-xl border border-slate-800/80">
-            <button
-              type="button"
-              onClick={() => setModoVista('CHECKLIST')}
-              className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg transition-all cursor-pointer ${
-                modoVista === 'CHECKLIST'
-                  ? 'bg-slate-800 text-sky-300 font-bold border border-slate-700/80'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <ListTodo className="w-3.5 h-3.5" strokeWidth={1.75} />
-              Checklist
-            </button>
-            <button
-              type="button"
-              onClick={() => setModoVista('RIEL')}
-              className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg transition-all cursor-pointer ${
-                modoVista === 'RIEL'
-                  ? 'bg-slate-800 text-sky-300 font-bold border border-slate-700/80'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" strokeWidth={1.75} />
-              Riel Horario
-            </button>
-          </div>
-
-          {/* Siguiente en turno badge */}
-          {metricas?.siguienteItem && (
-            <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-slate-400 truncate max-w-[200px]">
-              <span className="text-sky-400 font-bold shrink-0">Turno:</span>
-              <span className="truncate text-slate-300">{metricas?.siguienteItem?.titulo}</span>
+      {tabDock === 'BENTO' ? (
+        <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+          {/* Banner Prominente de Fin de Bloque Pomodoro (REQ-DESKTOP-14 Paso 3) */}
+          {tiempoExpirado && (
+            <div className="rounded-xl p-3 bg-gradient-to-r from-amber-500/20 via-rose-500/15 to-amber-500/20 border border-amber-500/50 shadow-[0_0_20px_rgba(251,191,36,0.3)] animate-pulse flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/30 border border-amber-400/50 flex items-center justify-center text-amber-300 shrink-0">
+                  <Bell className="w-4 h-4 animate-bounce" strokeWidth={2.5} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-amber-200 uppercase font-mono tracking-wide">
+                    ¡Bloque Finalizado!
+                  </h4>
+                  <p className="text-[10px] text-amber-300/80 font-sans">
+                    Tiempo de enfoque cumplido con éxito.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setTiempoExpirado(false);
+                  handleResetPomodoro();
+                }}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-mono font-bold text-xs shadow-md transition-all cursor-pointer whitespace-nowrap"
+              >
+                Reiniciar
+              </button>
             </div>
           )}
-        </div>
 
-        {/* Filtros tipo Ghost Controls */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[10px] font-medium">
-          {(['TODOS', 'TAREAS', 'HABITOS', 'VENCIDAS', 'FINANZAS'] as const).map((filtro) => {
-            const activo = filtroTipo === filtro;
-            return (
-              <button
-                key={filtro}
-                type="button"
-                onClick={() => setFiltroTipo(filtro)}
-                className={`px-2 py-0.5 rounded-lg whitespace-nowrap transition-colors cursor-pointer ${
-                  activo
-                    ? 'bg-sky-950/60 text-sky-300 border border-sky-500/30 font-semibold'
-                    : 'text-slate-400 hover:text-slate-200 bg-slate-900/40 border border-transparent'
-                }`}
-              >
-                {filtro === 'TODOS' && 'Todos'}
-                {filtro === 'TAREAS' && 'Tareas'}
-                {filtro === 'HABITOS' && 'Hábitos'}
-                {filtro === 'VENCIDAS' && 'Vencidas'}
-                {filtro === 'FINANZAS' && 'Finanzas'}
-              </button>
-            );
-          })}
+          {/* Bento Card 1: Pomodoro Focus Timer con Presets y Tiempo Personalizado (REQ-DESKTOP-13 Paso 1) */}
+          <div className="rounded-xl p-3 bg-[#0D1526] border border-slate-800/60 hover:border-cyan-500/30 transition-all shadow-md">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                    tiempoExpirado ? 'bg-amber-400' : pomodoroCorriendo ? 'bg-cyan-400' : 'bg-slate-500'
+                  }`}></span>
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                    tiempoExpirado ? 'bg-amber-400' : pomodoroCorriendo ? 'bg-cyan-400' : 'bg-slate-500'
+                  }`}></span>
+                </span>
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                  {tiempoExpirado ? '¡Tiempo Cumplido!' : pomodoroCorriendo ? 'Sesión en Curso' : 'Timer de Enfoque'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                {customMinutosAbierto ? (
+                  <div className="flex items-center gap-1 bg-slate-950/90 p-0.5 rounded-lg border border-cyan-500/40">
+                    <input
+                      type="number"
+                      min={1}
+                      max={180}
+                      value={inputMinutosCustom}
+                      onChange={(e) => setInputMinutosCustom(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAplicarMinutosCustom();
+                        if (e.key === 'Escape') setCustomMinutosAbierto(false);
+                      }}
+                      autoFocus
+                      className="w-10 px-1 py-0.5 text-[9px] font-mono tabular-nums bg-transparent text-cyan-300 text-center outline-none"
+                      placeholder="min"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAplicarMinutosCustom}
+                      className="p-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors cursor-pointer"
+                      title="Confirmar"
+                    >
+                      <Check className="w-2.5 h-2.5" strokeWidth={2.5} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomMinutosAbierto(false)}
+                      className="p-0.5 rounded text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                      title="Cancelar"
+                    >
+                      <X className="w-2.5 h-2.5" strokeWidth={2} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleSetPresetPomodoro(50)}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-mono tabular-nums transition-all cursor-pointer ${
+                        pomodoroTotal === 50 * 60 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      50m
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetPresetPomodoro(25)}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-mono tabular-nums transition-all cursor-pointer ${
+                        pomodoroTotal === 25 * 60 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      25m
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetPresetPomodoro(15)}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-mono tabular-nums transition-all cursor-pointer ${
+                        pomodoroTotal === 15 * 60 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold' : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      15m
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomMinutosAbierto(true)}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-mono transition-all flex items-center gap-0.5 cursor-pointer ${
+                        ![50 * 60, 25 * 60, 15 * 60].includes(pomodoroTotal)
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Tiempo personalizado (1-180 min)"
+                    >
+                      <SlidersHorizontal className="w-2.5 h-2.5" strokeWidth={1.75} />
+                      <span>{![50 * 60, 25 * 60, 15 * 60].includes(pomodoroTotal) ? `${Math.round(pomodoroTotal / 60)}m` : 'Custom'}</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-2xl font-mono tabular-nums font-bold tracking-tight ${
+                tiempoExpirado ? 'text-amber-300 animate-pulse' : 'text-cyan-300'
+              }`}>
+                {tiempoExpirado ? '¡00:00 HECHO!' : tiempoPomodoroStr}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleTogglePomodoro}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1 transition-all cursor-pointer ${
+                    tiempoExpirado
+                      ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-[0_0_12px_rgba(251,191,36,0.4)] animate-pulse'
+                      : 'bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                  }`}
+                >
+                  {tiempoExpirado ? (
+                    <>
+                      <RotateCcw className="w-3 h-3" strokeWidth={2.5} />
+                      Reiniciar
+                    </>
+                  ) : pomodoroCorriendo ? (
+                    <>
+                      <Pause className="w-3 h-3" strokeWidth={2.5} />
+                      Pausar
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3 h-3" strokeWidth={2.5} />
+                      Iniciar
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetPomodoro}
+                  className="p-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                  title="Reiniciar Pomodoro"
+                >
+                  <RotateCcw className="w-3 h-3" strokeWidth={1.75} />
+                </button>
+              </div>
+            </div>
+
+            {/* Barra de progreso ultra-fina (h-1.5) con gradiente cian a índigo */}
+            <div className="w-full h-1.5 rounded-full bg-slate-950/80 border border-slate-800/80 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-400 via-sky-400 to-indigo-500 transition-all duration-300"
+                style={{ width: `${pctPomodoro}%` }}
+              />
+            </div>
+
+            {/* Métrica de Bloques Diarios y Selector de Perfiles de Alarma (REQ-DESKTOP-17 Pasos 2 y 3) */}
+            <div className="flex items-center justify-between pt-2 mt-2 border-t border-slate-800/80 text-[10px] font-mono text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <Target className="w-3 h-3 text-cyan-400 shrink-0" strokeWidth={1.75} />
+                <span>
+                  <strong className="text-cyan-300 font-mono tabular-nums">{metricasFocoHoy.bloques}</strong> bloques completados
+                  {' • '}
+                  <strong className="text-slate-200 font-mono tabular-nums">{metricasFocoHoy.minutos}</strong> min de foco
+                </span>
+              </div>
+              <div className="flex items-center gap-0.5 bg-slate-950/80 p-0.5 rounded-lg border border-slate-800/80">
+                <Volume2 className="w-2.5 h-2.5 text-slate-500 ml-0.5 shrink-0" strokeWidth={1.75} />
+                {(['zen', 'digital', 'radar'] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => handleCambiarPerfilAlarma(p)}
+                    className={`px-1.5 py-0.2 rounded text-[9px] uppercase font-mono transition-all cursor-pointer ${
+                      perfilAlarma === p
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold'
+                        : 'text-slate-500 hover:text-slate-300 border border-transparent'
+                    }`}
+                    title={`Perfil de alarma: ${p}`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Bento Card 2: Tira de las 3 Tareas Clave con Detalle Expandible y Quick-Add (REQ-DESKTOP-13 / REQ-DESKTOP-17 Paso 1) */}
+          <div className="rounded-xl p-3 bg-[#0D1526] border border-slate-800/60 hover:border-cyan-500/30 transition-all shadow-md">
+            {tareaDetalleActualizada ? (
+              /* Vista de Detalle Interna de Tarea Clave */
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setTareaDetalleSeleccionada(null)}
+                    className="flex items-center gap-1 text-[11px] font-mono text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2} />
+                    <span>Volver a tareas</span>
+                  </button>
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
+                    Detalle de Tarea
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggle(tareaDetalleActualizada, e);
+                    }}
+                    className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                      tareaDetalleActualizada.completado
+                        ? 'bg-cyan-500 border-cyan-400 text-slate-950 shadow-[0_0_8px_rgba(6,182,212,0.4)]'
+                        : 'bg-slate-950/80 border-slate-700 hover:border-cyan-400 text-transparent'
+                    }`}
+                  >
+                    <Check className="w-3 h-3" strokeWidth={2.5} />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`text-xs font-semibold leading-snug ${tareaDetalleActualizada.completado ? 'line-through text-slate-500' : 'text-slate-100'}`}>
+                      {tareaDetalleActualizada.titulo}
+                    </h4>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[10px] font-mono">
+                      {tareaDetalleActualizada.proyectoCodigo && (
+                        <span className="px-1.5 py-0.2 rounded bg-sky-950/60 text-sky-300 border border-sky-500/30 flex items-center gap-1">
+                          <Briefcase className="w-2.5 h-2.5" />
+                          {tareaDetalleActualizada.proyectoCodigo}
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-1">
+                        <Clock className="w-2.5 h-2.5" />
+                        {tareaDetalleActualizada.duracionMinutos || 30} min
+                      </span>
+                      {tareaDetalleActualizada.prioridad && (
+                        <span className="px-1.5 py-0.2 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-500/30">
+                          {tareaDetalleActualizada.prioridad}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Descripción / Notas de la tarea */}
+                <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 max-h-32 overflow-y-auto scrollbar-thin">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block mb-1">
+                    Descripción y Notas
+                  </span>
+                  <p className="text-[11px] text-slate-300 font-sans leading-relaxed whitespace-pre-wrap">
+                    {(tareaDetalleActualizada.raw as any)?.notas ||
+                      (tareaDetalleActualizada.raw as any)?.descripcion ||
+                      tareaDetalleActualizada.subtitulo ||
+                      'Sin notas registradas para esta tarea.'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* Lista Top 3 Tareas Clave con trigger de detalle y Quick-Add */
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-cyan-400" strokeWidth={2} />
+                    Foco Diario (Top 3)
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setQuickAddTareaAbierto((v) => !v)}
+                      className="p-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/50 hover:bg-cyan-950/30 text-slate-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                      title="Crear nueva tarea rápida"
+                    >
+                      <Plus className="w-3 h-3" strokeWidth={2} />
+                    </button>
+                    <span className="px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums font-bold bg-cyan-950/50 text-cyan-300 border border-cyan-500/30">
+                      {tresTareasClave.filter((t) => t.completado).length} / {tresTareasClave.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Campo Inline de Creación Rápida (REQ-DESKTOP-17 Paso 1) */}
+                {quickAddTareaAbierto && (
+                  <div className="mb-2 p-1.5 rounded-lg bg-slate-950/90 border border-cyan-500/40 flex items-center gap-1.5 animate-in fade-in duration-150">
+                    <input
+                      type="text"
+                      value={inputQuickAddTarea}
+                      onChange={(e) => setInputQuickAddTarea(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCrearTareaRapida();
+                        if (e.key === 'Escape') {
+                          setInputQuickAddTarea('');
+                          setQuickAddTareaAbierto(false);
+                        }
+                      }}
+                      autoFocus
+                      placeholder="Nueva tarea clave..."
+                      className="flex-1 bg-transparent text-xs text-slate-100 placeholder-slate-500 outline-none px-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCrearTareaRapida}
+                      disabled={!inputQuickAddTarea.trim() || guardandoTareaRapida}
+                      className="px-2 py-0.5 rounded bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-slate-950 font-bold text-[10px] font-mono transition cursor-pointer"
+                    >
+                      Enter
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInputQuickAddTarea('');
+                        setQuickAddTareaAbierto(false);
+                      }}
+                      className="p-0.5 text-slate-500 hover:text-slate-300 transition cursor-pointer"
+                      title="Cancelar (Esc)"
+                    >
+                      <X className="w-3 h-3" strokeWidth={2} />
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  {tresTareasClave.length === 0 ? (
+                    <div className="text-center py-2.5 text-xs text-slate-400 font-mono">
+                      Sin tareas prioritarias para hoy
+                    </div>
+                  ) : (
+                    tresTareasClave.map((tarea) => {
+                      return (
+                        <div
+                          key={tarea.id}
+                          onClick={() => setTareaDetalleSeleccionada(tarea)}
+                          className={`group flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer ${
+                            tarea.completado
+                              ? 'bg-slate-950/40 border-slate-800/50 opacity-60'
+                              : 'bg-slate-900/60 border-slate-800/80 hover:border-cyan-500/40 hover:bg-slate-900/90'
+                          }`}
+                          title="Clic para ver detalle de la tarea"
+                        >
+                          <div className="flex items-center gap-2 truncate pr-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggle(tarea, e);
+                              }}
+                              className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                                tarea.completado
+                                  ? 'bg-cyan-500 border-cyan-400 text-slate-950 shadow-[0_0_8px_rgba(6,182,212,0.4)]'
+                                  : 'bg-slate-950/80 border-slate-700 group-hover:border-cyan-400 text-transparent'
+                              }`}
+                            >
+                              <Check className="w-3 h-3" strokeWidth={2.5} />
+                            </button>
+                            <span
+                              className={`text-xs truncate transition-all ${
+                                tarea.completado ? 'line-through text-slate-500' : 'text-slate-200 group-hover:text-white font-medium'
+                              }`}
+                            >
+                              {tarea.titulo}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] font-mono tabular-nums text-slate-400">
+                              {tarea.horaInicio || 'Hoy'}
+                            </span>
+                            <ChevronRight className="w-3 h-3 text-slate-600 group-hover:text-cyan-400 transition-colors" />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Bento Card 3: Hábitos Personales en Cuadrícula Compacta (REQ-DESKTOP-13 Paso 3) */}
+          <div className="rounded-xl p-3 bg-[#0D1526] border border-slate-800/60 hover:border-cyan-500/30 transition-all shadow-md">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" strokeWidth={1.75} />
+                Hábitos Personales
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums font-bold bg-cyan-950/50 text-cyan-300 border border-cyan-500/30">
+                  {completadosHabitos} / {totalHabitos} completados
+                </span>
+                <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums font-bold border ${colorRitmo}`}>
+                  {metricas?.porcentajeRitmo ?? 100}%
+                </span>
+              </div>
+            </div>
+
+            {/* Layout Cuadrícula Compacta 2 columnas */}
+            {habitosHoy.length === 0 ? (
+              <div className="text-center w-full py-3 text-xs text-slate-400 font-mono">
+                No hay hábitos configurados para hoy
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {habitosHoy.slice(0, 8).map((habito) => {
+                  const estaCompletado = habito.completado;
+                  return (
+                    <button
+                      key={habito.id}
+                      type="button"
+                      onClick={() => handleToggle(habito)}
+                      className={`p-2 rounded-xl text-left transition-all duration-200 cursor-pointer flex flex-col justify-between border ${
+                        estaCompletado
+                          ? 'bg-cyan-950/30 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.15)]'
+                          : 'bg-[#0A101D] border-slate-800 hover:border-slate-700 hover:bg-[#0D1526]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <span
+                          className={`w-5 h-5 rounded-lg flex items-center justify-center text-xs ${
+                            estaCompletado ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-900 text-slate-400'
+                          }`}
+                        >
+                          <Flame className="w-3 h-3 text-amber-400" strokeWidth={1.75} />
+                        </span>
+                        <span
+                          className={`w-3.5 h-3.5 rounded flex items-center justify-center border transition-all ${
+                            estaCompletado
+                              ? 'bg-cyan-500 border-cyan-400 text-slate-950 shadow-[0_0_6px_rgba(6,182,212,0.5)]'
+                              : 'border-slate-700 bg-slate-950/60 text-transparent'
+                          }`}
+                        >
+                          <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                        </span>
+                      </div>
+                      <span
+                        className={`text-[11px] font-medium leading-tight line-clamp-2 transition-all ${
+                          estaCompletado ? 'line-through text-slate-400' : 'text-slate-200'
+                        }`}
+                      >
+                        {habito.titulo}
+                      </span>
+                      {habito.horaInicio && (
+                        <span className="text-[9px] font-mono tabular-nums text-slate-500 mt-1">
+                          {habito.horaInicio}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* 2. Barra de Control Táctico Bento (Horizonte + Modo + Filtros) */}
+          <div className="px-3.5 py-2.5 bg-[#080D1A] border-b border-slate-800/60 flex flex-col gap-2 shrink-0 backdrop-blur-md">
+            {/* Fila Superior: Selector de Horizonte Bento */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1 bg-[#040711]/90 p-1 rounded-xl border border-slate-800/80 w-full">
+                <button
+                  type="button"
+                  onClick={() => setHorizonte('HOY')}
+                  className={`flex-1 py-1 text-xs font-mono font-semibold rounded-lg transition-all cursor-pointer ${
+                    horizonte === 'HOY'
+                      ? 'bg-cyan-950/30 text-cyan-300 border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.15)]'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  Hoy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHorizonte('MANANA')}
+                  className={`flex-1 py-1 text-xs font-mono font-semibold rounded-lg transition-all cursor-pointer ${
+                    horizonte === 'MANANA'
+                      ? 'bg-cyan-950/30 text-cyan-300 border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.15)]'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  Mañana
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHorizonte('SEMANA')}
+                  className={`flex-1 py-1 text-xs font-mono font-semibold rounded-lg transition-all cursor-pointer ${
+                    horizonte === 'SEMANA'
+                      ? 'bg-cyan-950/30 text-cyan-300 border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.15)]'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  Semana
+                </button>
+              </div>
+            </div>
+
+            {/* Fila Media: Modo de Vista + Badge Turno Siguiente */}
+            <div className="flex items-center justify-between gap-2">
+              {/* Switch Modo Vista */}
+              <div className="flex items-center gap-1 bg-[#040711]/90 p-0.5 rounded-xl border border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setModoVista('CHECKLIST')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono rounded-lg transition-all cursor-pointer ${
+                    modoVista === 'CHECKLIST'
+                      ? 'bg-cyan-950/30 text-cyan-300 font-semibold border border-cyan-500/40 shadow-[0_0_8px_rgba(6,182,212,0.15)]'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <ListTodo className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  Checklist
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoVista('RIEL')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono rounded-lg transition-all cursor-pointer ${
+                    modoVista === 'RIEL'
+                      ? 'bg-cyan-950/30 text-cyan-300 font-semibold border border-cyan-500/40 shadow-[0_0_8px_rgba(6,182,212,0.15)]'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  Riel Horario
+                </button>
+              </div>
+
+              {/* Siguiente en turno badge */}
+              {metricas?.siguienteItem && (
+                <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-slate-400 truncate max-w-[200px] bg-[#040711]/60 px-2 py-1 rounded-lg border border-slate-800/60">
+                  <span className="text-cyan-400 font-bold shrink-0">Turno:</span>
+                  <span className="truncate text-slate-300">{metricas?.siguienteItem?.titulo}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Fila Inferior: Filtros tipo Ghost Controls */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[10px] font-mono">
+              {(['TODOS', 'TAREAS', 'HABITOS', 'VENCIDAS', 'FINANZAS'] as const).map((filtro) => {
+                const activo = filtroTipo === filtro;
+                return (
+                  <button
+                    key={filtro}
+                    type="button"
+                    onClick={() => setFiltroTipo(filtro)}
+                    className={`px-2.5 py-0.5 rounded-lg whitespace-nowrap transition-all cursor-pointer ${
+                      activo
+                        ? 'bg-sky-950/60 text-sky-300 border border-sky-500/40 font-semibold shadow-[0_0_8px_rgba(14,165,233,0.15)]'
+                        : 'text-slate-400 hover:text-slate-200 bg-[#040711]/60 border border-slate-800/60'
+                    }`}
+                  >
+                    {filtro === 'TODOS' && 'Todos'}
+                    {filtro === 'TAREAS' && 'Tareas'}
+                    {filtro === 'HABITOS' && 'Hábitos'}
+                    {filtro === 'VENCIDAS' && 'Vencidas'}
+                    {filtro === 'FINANZAS' && 'Finanzas'}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
       {/* 4. Cuerpo de Ejecución Táctica */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -990,15 +1940,15 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                   <div
                     key={slot}
                     className={`flex items-stretch h-[64px] min-h-[64px] border-b border-slate-800/40 relative shrink-0 ${
-                      esHoraEnCurso ? 'bg-sky-950/15' : ''
+                      esHoraEnCurso ? 'bg-sky-500/5 border-l-2 border-l-sky-400/50' : ''
                     }`}
                     style={{ height: `${ALTURA_HORA_PX}px`, minHeight: `${ALTURA_HORA_PX}px` }}
                   >
                     {/* Eje izquierdo de marcas horarias (00:00 a 23:00) */}
                     <div className="w-16 shrink-0 pr-2.5 pt-1.5 border-r border-slate-800/60 flex items-start justify-end">
                       <span
-                        className={`text-[10px] font-mono tabular-nums leading-none ${
-                          esHoraEnCurso ? 'text-sky-400 font-bold' : 'text-slate-500'
+                        className={`text-[11px] font-mono tabular-nums tracking-tight leading-none ${
+                          esHoraEnCurso ? 'text-sky-300 font-bold' : 'text-slate-400'
                         }`}
                       >
                         {slot}
@@ -1007,7 +1957,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
                     {/* Guía intermedia tenue de media hora (:30) */}
                     <div className="flex-1 relative">
-                      <div className="absolute left-0 right-0 top-1/2 border-b border-dashed border-slate-800/25" />
+                      <div className="absolute left-0 right-0 top-1/2 border-b border-dashed border-slate-800/20" />
                     </div>
                   </div>
                 );
@@ -1016,16 +1966,18 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
             {/* Banner informativo cuando el Riel no tiene bloques activos */}
             {bloquesCalendarPosicion.length === 0 && (
-              <div className="absolute top-4 left-20 right-4 z-30 p-3 bg-[#0B132B]/95 border border-slate-700/60 rounded-xl flex items-center justify-between text-xs text-slate-300 shadow-xl backdrop-blur-md">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
-                  <span>Sin bloques en el riel horario para {horizonte === 'HOY' ? 'hoy' : horizonte.toLowerCase()}</span>
+              <div className="absolute top-4 left-20 right-4 z-30 p-3.5 bg-[#0D1526]/90 border border-slate-800/70 rounded-xl flex items-center justify-between text-xs text-slate-300 shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8)] backdrop-blur-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-cyan-950/30 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                    <Calendar className="w-4 h-4" strokeWidth={1.75} />
+                  </div>
+                  <span className="font-mono text-xs">Sin bloques en el riel horario para {horizonte === 'HOY' ? 'hoy' : horizonte.toLowerCase()}</span>
                 </div>
                 {horizonte === 'HOY' && (
                   <button
                     type="button"
                     onClick={() => setHorizonte('SEMANA')}
-                    className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] font-semibold hover:bg-sky-500/30 transition cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg bg-cyan-950/40 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono font-semibold hover:bg-cyan-900/40 transition cursor-pointer"
                   >
                     Ver Semana
                   </button>
@@ -1076,8 +2028,10 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                       width: `calc(${widthPct}% - 8px)`
                     }}
                     title={`${item?.titulo || ''} · ${item?.subtitulo || ''} (${item?.horaInicio || ''} - ${item?.horaFin || ''})`}
-                    className={`group absolute rounded-xl border border-l-4 px-2.5 py-1 text-xs cursor-pointer bg-[#0B132B]/90 backdrop-blur-sm border-slate-700/50 hover:scale-[1.01] hover:border-sky-400/60 hover:shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-150 overflow-hidden flex items-start justify-between gap-2 z-10 hover:z-20 ${bordeIzquierdoClase} ${
+                    className={`group absolute rounded-xl border border-l-4 px-2.5 py-1 text-xs cursor-pointer bg-[#0D1526]/90 backdrop-blur-md border-slate-800/70 hover:border-sky-400/80 hover:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(30,58,138,0.25)] transition-all duration-200 overflow-hidden flex items-start justify-between gap-2 z-10 hover:z-20 ${bordeIzquierdoClase} ${
                       estaCompletado ? 'opacity-40' : ''
+                    } ${
+                      esFocus ? 'ring-1 ring-cyan-400/50 shadow-[0_0_15px_rgba(34,211,238,0.2)]' : ''
                     }`}
                   >
                     <div className="min-w-0 flex-1">
@@ -1107,7 +2061,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                             estaCompletado
                               ? 'line-through text-slate-500'
                               : esFocus
-                              ? 'text-sky-200'
+                              ? 'text-cyan-200 font-semibold'
                               : 'text-slate-100 group-hover:text-white'
                           }`}
                         >
@@ -1168,7 +2122,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                       className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-all duration-200 cursor-pointer ${
                         estaCompletado
                           ? 'bg-emerald-500 border-emerald-400 text-slate-950 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
-                          : 'bg-slate-950/80 border-slate-600/80 text-transparent group-hover:border-sky-400'
+                          : 'bg-slate-950/80 border-slate-700/80 text-transparent group-hover:border-cyan-400'
                       }`}
                     >
                       <Check
@@ -1192,7 +2146,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             >
               {/* Etiqueta digital de hora actual en el eje izquierdo (HH:mm AM/PM) */}
               <div className="w-16 shrink-0 pr-1.5 flex items-center justify-end">
-                <span className="px-1.5 py-0.5 rounded-md bg-rose-600 border border-rose-400 text-white font-mono tabular-nums text-[9px] font-bold shadow-[0_0_12px_rgba(244,63,94,0.7)] whitespace-nowrap leading-none">
+                <span className="px-1.5 py-0.5 rounded bg-[#080D1A] border border-rose-500/50 text-rose-300 font-mono tabular-nums text-[9.5px] font-bold shadow-[0_0_10px_rgba(244,63,94,0.3)] whitespace-nowrap leading-none">
                   {horaActualAmPm}
                 </span>
               </div>
@@ -1200,18 +2154,20 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
               {/* Micro-punto radar vivo en la intersección del eje horario */}
               <span className="relative -ml-1.5 flex h-3 w-3 shrink-0 items-center justify-center z-10">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-85"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 ring-2 ring-white/80 shadow-[0_0_10px_rgba(244,63,94,1)]"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 ring-2 ring-white/90 shadow-[0_0_10px_rgba(244,63,94,1)]"></span>
               </span>
 
-              {/* Trazo horizontal luminoso continuo sobre todo el ancho del riel */}
-              <div className="flex-1 h-[2px] bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.85)]" />
+              {/* Trazo horizontal luminoso continuo sobre todo el ancho del riel con gradiente láser */}
+              <div className="flex-1 h-[1.5px] bg-gradient-to-r from-rose-500 via-sky-400 to-transparent shadow-[0_0_8px_rgba(56,189,248,0.5)]" />
             </div>
           </div>
         )}
       </div>
+        </>
+      )}
 
       {/* 5. Footer con Resumen Rápido */}
-      <div className="px-4 py-2.5 border-t border-slate-800/80 bg-slate-950/70 flex items-center justify-between text-[11px] font-mono text-slate-400 shrink-0">
+      <div className="px-3.5 py-2 border-t border-cyan-500/20 bg-[#080D1A] flex items-center justify-between text-[11px] font-mono text-slate-400 shrink-0">
         <div className="flex items-center gap-2">
           <span>Fecha: {fechaActual}</span>
         </div>
@@ -1224,74 +2180,114 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
   // MODO DESACOPLADO DIRECTO (cuando se renderiza en modo standalone / widget de escritorio ?mode=hud)
   if (modoForzadoDesacoplado) {
-    // Si no está abierto y no hay PiP activo, renderizar la Cápsula Flotante en Reposo (Widget Pill)
+    // Si no está abierto y no hay PiP activo, renderizar la Cápsula Flotante en Reposo (Widget Pill - REQ-DESKTOP-08)
     if (!cockpitAbierto && !pipWindow) {
       return (
-        <div className={`h-screen w-screen ${esWidgetNativo ? 'bg-transparent p-0' : 'bg-[#040711] p-4'} flex items-center justify-center select-none overflow-hidden font-sans`}>
+        <div className="w-full h-full bg-transparent flex items-center justify-center p-0 select-none overflow-hidden font-sans">
           <div
-            onClick={handleAbrirCockpit}
             style={esWidgetNativo ? DRAG_REGION_STYLE : undefined}
-            className="px-4 py-2 rounded-full bg-[#0a101f]/95 border border-sky-500/25 backdrop-blur-2xl shadow-[0_8px_30px_-4px_rgba(2,6,23,0.55),0_0_35px_-4px_rgba(56,189,248,0.18)] hover:shadow-[0_12px_40px_-4px_rgba(2,6,23,0.7),0_0_45px_0px_rgba(56,189,248,0.28)] hover:border-sky-400/40 flex items-center gap-3 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] active:scale-[0.97] cursor-pointer group select-none animate-in fade-in zoom-in-95"
-            title="Expandir Cockpit de Ejecución Diaria"
+            className={`w-full h-10 rounded-full bg-[#080D1A] border ${
+              tiempoExpirado
+                ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.5)] animate-pulse'
+                : 'border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)] hover:shadow-[0_0_20px_rgba(6,182,212,0.25)] hover:border-cyan-400/50'
+            } flex items-center justify-between px-3 py-1 transition-all duration-200 cursor-grab active:cursor-grabbing group select-none`}
+            title="Cockpit Flotante OS (arrastrar para mover / clic para desplegar)"
           >
-            {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}
-            <div
-              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
-              className="relative flex items-center justify-center shrink-0"
-            >
-              <Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
-              <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
-              </span>
-            </div>
-
-            {/* Reloj Actual */}
-            <span
-              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
-              className="text-xs font-bold font-mono tabular-nums text-slate-100"
-            >
-              {horaActual}
-            </span>
-
-            {/* Semáforo de Ritmo */}
-            <div
-              style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums font-bold border ${colorRitmo}`}
-            >
-              {metricas?.porcentajeRitmo ?? 100}%
-            </div>
-
-            {/* Siguiente en turno */}
-            {metricas?.siguienteItem && (
-              <div
-                style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
-                className="flex items-center gap-1 max-w-[150px] truncate text-[11px] text-slate-300 font-sans border-l border-slate-800 pl-2"
+            {/* Lado Izquierdo: Icono Principal con Disparador Unificado (NO DRAG) */}
+            <div className="flex items-center gap-1.5 shrink-0" style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAbrirCockpit();
+                }}
+                className="relative flex items-center justify-center p-1 rounded-full text-cyan-400 hover:text-cyan-300 hover:bg-cyan-950/40 transition-colors cursor-pointer shrink-0"
+                title="Desplegar Dock Bento"
               >
-                <span className="truncate">{metricas.siguienteItem.titulo}</span>
-              </div>
-            )}
+                <Gauge className="w-4 h-4 shrink-0 group-hover:scale-105 transition-transform" strokeWidth={1.75} />
+                <span className="absolute top-0 right-0 flex h-2 w-2">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                    tiempoExpirado ? 'bg-amber-400' : pomodoroCorriendo ? 'bg-cyan-400' : 'bg-cyan-500'
+                  }`}></span>
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                    tiempoExpirado ? 'bg-amber-400' : pomodoroCorriendo ? 'bg-cyan-400' : 'bg-cyan-500'
+                  }`}></span>
+                </span>
+              </button>
+            </div>
 
-            {/* Micro-botón de apertura para garantizar activación rápida */}
-            <button
-              type="button"
+            {/* Zona Principal Central: Clic para desplegar (Display de Tiempo, Ritmo y Foco) */}
+            <div
+              onClick={() => handleAbrirCockpit()}
               style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAbrirCockpit();
-              }}
-              className="p-1 rounded-full text-slate-400 hover:text-sky-300 hover:bg-slate-800/80 transition-colors"
-              title="Abrir Cockpit"
+              className="flex-1 flex items-center justify-between gap-2 min-w-0 px-1.5 cursor-pointer"
+              title="Clic para desplegar Dock Bento"
             >
-              <ChevronUp className="w-3.5 h-3.5" strokeWidth={1.75} />
-            </button>
+              {/* Contador en vivo (REQ-DESKTOP-08 / REQ-DESKTOP-14) o reloj del sistema */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {tiempoExpirado ? (
+                  <div className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                    <span className="font-mono tabular-nums text-amber-300 text-xs font-bold tracking-tight animate-pulse">
+                      ¡00:00 HECHO!
+                    </span>
+                  </div>
+                ) : pomodoroCorriendo || pomodoroSegundos !== pomodoroTotal ? (
+                  <div className="flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full ${pomodoroCorriendo ? 'bg-cyan-400 animate-pulse' : 'bg-amber-400'}`} />
+                    <span className="font-mono tabular-nums text-cyan-300 text-xs font-semibold tracking-tight">
+                      {tiempoPomodoroStr}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xs font-bold font-mono tabular-nums text-slate-100">
+                    {horaActual}
+                  </span>
+                )}
+                <div className={`px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums font-bold border ${colorRitmo}`}>
+                  {metricas?.porcentajeRitmo ?? 100}%
+                </div>
+              </div>
+
+              {/* Título de Foco o Siguiente Item */}
+              <div className="flex items-center gap-1 min-w-0 truncate text-[11px] text-slate-300 font-sans border-l border-slate-800/80 pl-2">
+                <span className="truncate">
+                  {metricas?.siguienteItem
+                    ? metricas.siguienteItem.titulo
+                    : modoEnfoque === 'DEEP_WORK'
+                    ? 'Deep Work'
+                    : modoEnfoque === 'ADMIN'
+                    ? 'Admin'
+                    : 'Recarga'}
+                </span>
+              </div>
+            </div>
+
+            {/* Lado Derecho: Únicamente botón de Ocultar a la Bandeja (NO DRAG) */}
+            <div className="flex items-center shrink-0 ml-1" style={esWidgetNativo ? NO_DRAG_REGION_STYLE : undefined}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.desktopWidget?.close) {
+                    window.desktopWidget.close();
+                  } else if (onCerrarDesacoplado) {
+                    onCerrarDesacoplado();
+                  }
+                }}
+                className="p-1 rounded-full text-slate-500 hover:text-rose-400 hover:bg-slate-800/80 transition-colors cursor-pointer"
+                title="Ocultar a la bandeja"
+              >
+                <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+              </button>
+            </div>
           </div>
         </div>
       );
     }
 
     return (
-      <div className={`h-screen w-screen ${esWidgetNativo ? 'bg-transparent p-0' : 'bg-[#040711] p-2'} flex items-center justify-center font-sans select-none overflow-hidden`}>
+      <div className={`w-full h-full ${esWidgetNativo ? 'bg-transparent p-0' : 'bg-[#040711] p-2'} flex items-center justify-center font-sans select-none overflow-hidden`}>
         {pipWindow &&
           createPortal(
             <div className="w-screen h-screen max-w-full max-h-full flex flex-col bg-[#040711] p-2 box-border overflow-hidden">
@@ -1327,10 +2323,11 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     );
   }
 
-  // REQ-PWA-14: Renderizado incondicional en web/PWA (se desactivó el return null para garantizar visibilidad permanente)
-  // if (!esWidgetNativo && !modoForzadoDesacoplado && hayWidgetDeEscritorioActivo && !cockpitAbierto && !pipWindow) {
-  //   return null;
-  // }
+  // Si hay un widget nativo de escritorio activo en Windows y el Cockpit web no está abierto ni en PiP,
+  // se oculta la cápsula web para evitar duplicidad visual en pantalla
+  if (!esWidgetNativo && !modoForzadoDesacoplado && hayWidgetDeEscritorioActivo && !cockpitAbierto && !pipWindow) {
+    return null;
+  }
 
   // MODO NORMAL DE LA APLICACIÓN PRINCIPAL (con soporte Portal PiP si pipWindow está activo)
   return (
@@ -1362,26 +2359,50 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             !posicionWeb || (typeof window !== 'undefined' && window.innerWidth < 768)
               ? 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-4 sm:left-6 md:bottom-6 md:left-auto md:right-28'
               : ''
-          } z-[9998] pointer-events-auto px-3.5 py-1.5 rounded-full bg-[#0D1526] border border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.25)] hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] flex items-center gap-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] cursor-grab active:cursor-grabbing group select-none`}
+          } z-[9998] pointer-events-auto h-10 px-3 py-1 rounded-full bg-[#080D1A] border ${
+            tiempoExpirado
+              ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.5)] animate-pulse'
+              : 'border-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)] hover:border-cyan-400/50 hover:shadow-[0_0_20px_rgba(6,182,212,0.25)]'
+          } flex items-center gap-2 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] cursor-grab active:cursor-grabbing group select-none`}
           title={pipWindow ? "Cockpit activo Always-on-Top (clic para enfocar)" : "Arrastrar para mover libremente / Clic para abrir Cockpit"}
         >
           {/* Glifo Técnico Maestro: Gauge + Micro-punto Radar de Actividad */}
           <div className="relative flex items-center justify-center shrink-0">
-            <Gauge className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
-            <span className="absolute -top-1 -right-1 flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+            <Gauge className="w-4 h-4 text-cyan-400 shrink-0" strokeWidth={1.75} />
+            <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                tiempoExpirado ? 'bg-amber-400' : pomodoroCorriendo ? 'bg-cyan-400' : 'bg-cyan-500'
+              }`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                tiempoExpirado ? 'bg-amber-400' : pomodoroCorriendo ? 'bg-cyan-400' : 'bg-cyan-500'
+              }`}></span>
             </span>
           </div>
 
-          {/* Reloj Actual */}
-          <span className="text-xs font-bold font-mono tabular-nums text-slate-100">
-            {horaActual}
-          </span>
+          {/* Reloj o Pomodoro en Vivo (REQ-DESKTOP-08 / REQ-DESKTOP-14) */}
+          {tiempoExpirado ? (
+            <div className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+              <span className="font-mono tabular-nums text-amber-300 text-xs font-bold tracking-tight animate-pulse">
+                ¡00:00 HECHO!
+              </span>
+            </div>
+          ) : pomodoroCorriendo || pomodoroSegundos !== pomodoroTotal ? (
+            <div className="flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${pomodoroCorriendo ? 'bg-cyan-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span className="font-mono tabular-nums text-cyan-300 text-xs font-semibold tracking-tight">
+                {tiempoPomodoroStr}
+              </span>
+            </div>
+          ) : (
+            <span className="text-xs font-bold font-mono tabular-nums text-slate-100">
+              {horaActual}
+            </span>
+          )}
 
           {/* Semáforo de Ritmo */}
           <div
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono tabular-nums font-bold border ${colorRitmo}`}
+            className={`px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums font-bold border ${colorRitmo}`}
           >
             {metricas?.porcentajeRitmo ?? 100}%
           </div>

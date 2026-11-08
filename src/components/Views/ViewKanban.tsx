@@ -190,14 +190,24 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
   const { programarEliminacion, estaOculto } = useUndoDelete();
 
-  // Live queries reactivas desde Dexie filtradas con el búfer de deshacer
-  const rawProyectosLive = useLiveQuery(() => db.proyectos.toArray(), []);
-  const rawTareasLive = useLiveQuery(() => db.tareas.toArray(), []);
-  const rawSubtareasLive = useLiveQuery(() => db.subtareas_pasos.toArray(), []);
-  const rawHitosLive = useLiveQuery(() => db.hitos_wbs.toArray(), []);
-  const rawGastosLive = useLiveQuery(() => db.gastos.toArray(), []);
+  // Live query unificada y atómica desde Dexie (REQ-FIX-08)
+  const datosKanbanLive = useLiveQuery(async () => {
+    const [proyectos, tareas, subtareas, hitos, gastos] = await Promise.all([
+      db.proyectos.toArray(),
+      db.tareas.toArray(),
+      db.subtareas_pasos.toArray(),
+      db.hitos_wbs.toArray(),
+      db.gastos.toArray()
+    ]);
+    return { proyectos, tareas, subtareas, hitos, gastos };
+  }, []);
 
-  const cargandoDatosIniciales = rawTareasLive === undefined || rawProyectosLive === undefined;
+  const cargandoDatosIniciales = datosKanbanLive === undefined;
+  const rawProyectosLive = datosKanbanLive?.proyectos;
+  const rawTareasLive = datosKanbanLive?.tareas;
+  const rawSubtareasLive = datosKanbanLive?.subtareas;
+  const rawHitosLive = datosKanbanLive?.hitos;
+  const rawGastosLive = datosKanbanLive?.gastos;
 
   const rawProyectos = useMemo(
     () => (rawProyectosLive ?? []).filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado)),
@@ -298,17 +308,18 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     return map;
   }, [rawSubtareas]);
 
-  // Pre-cálculo memoizado de avances de proyectos en sidebar O(P)
+  // Pre-cálculo memoizado de avances de proyectos en sidebar O(P) (REQ-FIX-08)
   const avancesPorProyecto = useMemo(() => {
     const map = new Map<string, { avanceReal: number; avanceTotalProyectado: number }>();
+    if (cargandoDatosIniciales) return map;
     proyectos.forEach((proy) => {
       const key = proy.codigo_legado || proy.id;
       if (key) {
-        map.set(key, calcularAvancesProyectoCanonica(proy, rawHitos, rawTareas));
+        map.set(key, calcularAvancesProyectoCanonica(proy, rawHitos, tareas));
       }
     });
     return map;
-  }, [proyectos, rawHitos, rawTareas]);
+  }, [cargandoDatosIniciales, proyectos, rawHitos, tareas]);
 
   // Diccionario de Contadores O(1) por proyecto (REQ-SYS-002-KANBAN)
   const contadoresTareasPorProyecto = useMemo(() => {
@@ -343,6 +354,12 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     if (typeof performance !== 'undefined' && performance.mark) {
       performance.mark('t3_kanban_mount');
     }
+    return () => {
+      if (typeof performance !== 'undefined' && performance.clearMarks) {
+        performance.clearMarks('t3_kanban_mount');
+        performance.clearMarks('t4_kanban_cards_painted');
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -353,7 +370,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
         const getMarkTime = (name: string) => {
           const entries = performance.getEntriesByName(name, 'mark');
-          return entries.length > 0 ? entries[0].startTime : null;
+          return entries.length > 0 ? entries[entries.length - 1].startTime : null;
         };
 
         const t0 = getMarkTime('t0_bootstrap') ?? 0;

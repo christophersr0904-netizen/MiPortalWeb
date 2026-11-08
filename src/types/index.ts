@@ -24,7 +24,7 @@ export type EstadoActividad =
   | '04_Completado'
   | '05_Archivado';
 
-export type SyncStatus = 'synced' | 'pending' | 'conflict' | 'error';
+export type SyncStatus = 'synced' | 'pending' | 'conflict' | 'error' | 'quarantined';
 
 export type AlcanceRecurrencia = 'SINGLE' | 'FUTURE' | 'ALL';
 
@@ -570,7 +570,7 @@ export interface TombstoneRecord {
   id: string;
   tabla: string;
   deleted_at: string;
-  sync_status: 'pending' | 'synced' | 'error';
+  sync_status: SyncStatus;
 }
 
 export interface DesktopWidgetBridge {

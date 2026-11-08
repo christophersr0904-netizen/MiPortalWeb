@@ -17,7 +17,9 @@ import {
   HeartPulse,
   GraduationCap,
   Coffee,
-  Activity
+  Activity,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 export interface TarjetaTareaKanbanProps {
@@ -118,7 +120,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
       onMouseEnter={() => onMouseEnter(tar.codigo_legado)}
       onMouseLeave={onMouseLeave}
       onClick={() => onClick(tar.id, tar.estado)}
-      className={`kanban-card group relative p-3.5 pl-4 rounded-xl border border-slate-800/80 bg-[#0D1526]/90 hover:bg-[#0D1526] hover:border-slate-700 hover:shadow-[0_8px_25px_rgba(2,6,23,0.7),0_0_15px_rgba(56,189,248,0.08)] hover:-translate-y-0.5 active:scale-[0.985] transition-[transform,box-shadow,border-color,background-color] duration-150 ease-out cursor-grab active:cursor-grabbing select-none text-xs space-y-2.5 overflow-hidden animate-in fade-in-50 slide-in-from-top-1 duration-150 ${
+      className={`kanban-card group relative p-2.5 pl-3.5 rounded-xl border border-slate-800/80 bg-[#0D1526]/90 hover:bg-[#0D1526] hover:border-slate-700 hover:shadow-[0_8px_25px_rgba(2,6,23,0.7),0_0_15px_rgba(56,189,248,0.08)] hover:-translate-y-0.5 active:scale-[0.985] transition-[transform,box-shadow,border-color,background-color] duration-150 ease-out cursor-grab active:cursor-grabbing select-none text-xs space-y-1.5 overflow-hidden animate-in fade-in-50 slide-in-from-top-1 duration-150 ${
         isDragged
           ? 'opacity-40 scale-[1.02] rotate-1 border-dashed border-sky-400/90 ring-2 ring-sky-500/50 shadow-[0_20px_35px_-10px_rgba(2,6,23,0.9)] cursor-grabbing'
           : ''
@@ -132,7 +134,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
     >
       {/* Franja lateral izquierda continua de prioridad */}
       <div
-        className={`absolute left-0 top-0 bottom-0 w-1.5 ${colorBarraPrioridad} rounded-l-xl transition-transform duration-150 ease-out origin-left group-hover:scale-x-125 pointer-events-none`}
+        className={`absolute left-0 top-0 bottom-0 w-1 ${colorBarraPrioridad} rounded-l-xl transition-transform duration-150 ease-out origin-left group-hover:scale-x-125 pointer-events-none`}
       />
 
       {/* Badges de relación para dependencias */}
@@ -256,7 +258,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
 
       {/* 3. Título de la tarea */}
       <h4
-        className={`text-sm font-semibold text-slate-100 line-clamp-2 mt-1 cursor-pointer hover:text-indigo-300 transition ${
+        className={`text-[12.5px] font-medium leading-snug text-slate-100 line-clamp-2 mt-0.5 cursor-pointer hover:text-indigo-300 transition ${
           tar.estado === '04_Completado' ? 'line-through text-slate-400' : ''
         }`}
         title={tar.nombre}
@@ -269,15 +271,15 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
         <div className="flex items-center flex-wrap gap-1.5 pt-0.5">
           {tieneDep && (
             <span
-              className="px-2 py-0.5 text-[11px] font-mono tabular-nums font-medium rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 shadow-2xs truncate max-w-[150px]"
+              className="px-1.5 py-0.5 text-[9.5px] font-mono tabular-nums font-medium rounded bg-amber-500/15 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-2xs truncate max-w-[150px]"
               title={`Requiere: ${rawDep}`}
             >
-              <Lock className="w-3 h-3 text-amber-400 shrink-0" strokeWidth={1.75} />
+              <Lock className="w-2.5 h-2.5 text-amber-400 shrink-0" strokeWidth={1.75} />
               <span className="truncate">{rawDep}</span>
             </span>
           )}
           {costoTotalPen > 0 && (
-            <span className="px-2 py-0.5 text-[11px] font-mono tabular-nums font-medium text-emerald-400 bg-emerald-500/10 rounded-md border border-emerald-500/25">
+            <span className="px-1.5 py-0.5 text-[9.5px] font-mono tabular-nums font-medium text-emerald-400 bg-emerald-500/10 rounded border border-emerald-500/25">
               S/ {costoTotalPen.toFixed(2)}
             </span>
           )}
@@ -285,12 +287,12 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
       )}
 
       {/* 5. Subtareas y Horas */}
-      <div className="space-y-1.5 pt-1">
+      <div className="space-y-1 pt-0.5">
         {totalSubs > 0 && (
           <div className="space-y-1">
-            <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-400">
+            <div className="flex items-center justify-between text-[10px] font-mono tabular-nums text-slate-400">
               <span className="flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" strokeWidth={1.75} />
+                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" strokeWidth={1.75} />
                 <span>{completadasSubs}/{totalSubs} pasos ({pctSubs}%)</span>
               </span>
             </div>
@@ -303,24 +305,24 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-1 text-[11px] font-mono tabular-nums pt-0.5 flex-wrap">
+        <div className="flex items-center justify-between gap-1 text-[9.5px] font-mono tabular-nums pt-0.5 flex-wrap">
           <span
-            className={`px-2 py-0.5 text-[11px] font-mono tabular-nums rounded-md flex items-center gap-1 border ${
+            className={`px-1.5 py-0.5 text-[9.5px] font-mono tabular-nums rounded flex items-center gap-1 border ${
               estaVencida
                 ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-semibold'
-                : 'bg-slate-800/70 text-slate-300 border-slate-700/50'
+                : 'bg-slate-900/70 text-slate-300 border-slate-800/60'
             }`}
             title={estaVencida ? 'Tarea vencida' : 'Fecha límite programada'}
           >
-            <Calendar className={`w-3 h-3 ${estaVencida ? 'text-rose-400' : 'text-slate-400'}`} strokeWidth={1.75} />
+            <Calendar className={`w-2.5 h-2.5 ${estaVencida ? 'text-rose-400' : 'text-slate-400'}`} strokeWidth={1.75} />
             <span>{formatFechaDDMMYYYY(tar.fecha_programada)}</span>
           </span>
 
           <span
-            className="bg-slate-800/80 text-slate-300 border border-slate-700/60 px-2 py-0.5 rounded-md flex items-center gap-1 font-mono tabular-nums"
+            className="bg-slate-900/70 text-slate-300 border border-slate-800/60 px-1.5 py-0.5 rounded flex items-center gap-1 font-mono tabular-nums"
             title={`Horas Reales: ${tar.horas_reales ?? 0}h / Horas Estimadas: ${tar.horas_estimadas ?? 0}h`}
           >
-            <Clock className="w-3 h-3 text-slate-400 shrink-0" strokeWidth={1.75} />
+            <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" strokeWidth={1.75} />
             <span>{tar.horas_reales ?? 0}h / {tar.horas_estimadas ?? 0}h</span>
           </span>
         </div>
@@ -328,23 +330,23 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
 
       {/* 6. Pie de tarjeta (Breadcrumb WBS) */}
       <div
-        className="text-xs text-slate-400 truncate pt-1.5 border-t border-slate-800/70"
+        className="text-[9.5px] font-mono tracking-tight text-slate-400 truncate pt-1 border-t border-slate-800/50"
         title={`${nombreProyecto} • ${nombreHito}`}
       >
         {nombreProyecto} • {nombreHito}
       </div>
 
-      {/* 7. Botonera canónica bidireccional al pie con Touch Target ergonómico >= 44px */}
-      <div className="pt-1.5" onClick={(e) => e.stopPropagation()}>
+      {/* 7. Micro-Botonera Táctica de Estado en h-6 */}
+      <div className="pt-1" onClick={(e) => e.stopPropagation()}>
         {colId === '01_Backlog' && (
           <button
             type="button"
             onClick={() => onMoverTareaAEstado(tar, '02_Por_Hacer')}
-            className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-sky-950/40 text-sky-300 border border-slate-700/60 font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-[0.98]"
+            className="w-full h-6 px-2 rounded-lg bg-sky-950/20 hover:bg-sky-950/40 border border-sky-500/30 hover:border-sky-400/50 text-sky-300 font-mono text-[10px] font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
             title="Mover a Por Hacer"
           >
-            <span className="tracking-wide">A Por Hacer</span>
-            <span className="font-bold">→</span>
+            <span>A Por Hacer</span>
+            <ChevronRight className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.75} />
           </button>
         )}
 
@@ -353,21 +355,19 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
             <button
               type="button"
               onClick={() => onMoverTareaAEstado(tar, '01_Backlog')}
-              className="min-h-[44px] px-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/40 text-xs font-semibold transition shrink-0 flex items-center gap-1 cursor-pointer active:scale-[0.98]"
+              className="w-6 h-6 shrink-0 rounded-lg bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center cursor-pointer active:scale-[0.98]"
               title="Retroceder a Backlog"
             >
-              <span>←</span>
-              <span>Backlog</span>
+              <ChevronLeft className="w-3 h-3" strokeWidth={1.75} />
             </button>
             <button
               type="button"
               onClick={() => onMoverTareaAEstado(tar, '03_En_Proceso')}
-              className="min-h-[44px] flex-1 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-[0.98]"
+              className="flex-1 h-6 px-2 rounded-lg bg-amber-950/20 hover:bg-amber-950/40 border border-amber-500/30 hover:border-amber-400/50 text-amber-300 font-mono text-[10px] font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
               title="Iniciar tarea (Mover a En Proceso)"
             >
-              <span className="tracking-wide">Iniciar</span>
-              <Zap className="w-3 h-3 text-amber-300" />
-              <span className="font-bold">→</span>
+              <span>Iniciar</span>
+              <Zap className="w-3 h-3 text-amber-300 shrink-0" strokeWidth={1.75} />
             </button>
           </div>
         )}
@@ -377,20 +377,19 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
             <button
               type="button"
               onClick={() => onMoverTareaAEstado(tar, '02_Por_Hacer')}
-              className="min-h-[44px] px-3 rounded-xl bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/40 text-xs font-semibold transition shrink-0 flex items-center gap-1 cursor-pointer active:scale-[0.98]"
+              className="w-6 h-6 shrink-0 rounded-lg bg-slate-900/80 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center cursor-pointer active:scale-[0.98]"
               title="Retroceder a Por Hacer"
             >
-              <span>←</span>
-              <span>Por Hacer</span>
+              <ChevronLeft className="w-3 h-3" strokeWidth={1.75} />
             </button>
             <button
               type="button"
               onClick={() => onMoverTareaAEstado(tar, '04_Completado')}
-              className="min-h-[44px] flex-1 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-[0.98]"
+              className="flex-1 h-6 px-2 rounded-lg bg-emerald-950/20 hover:bg-emerald-950/40 border border-emerald-500/30 hover:border-emerald-400/50 text-emerald-300 font-mono text-[10px] font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-[0.98]"
               title="Finalizar tarea (Mover a Completado)"
             >
-              <span className="tracking-wide">Completar</span>
-              <Check className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Completar</span>
+              <Check className="w-3 h-3 text-emerald-300 shrink-0" strokeWidth={2} />
             </button>
           </div>
         )}
@@ -399,11 +398,11 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
           <button
             type="button"
             onClick={() => onMoverTareaAEstado(tar, '03_En_Proceso')}
-            className="w-full min-h-[44px] py-2 px-3 rounded-xl bg-slate-800/30 hover:bg-slate-800/60 text-slate-400 hover:text-amber-300 border border-slate-700/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98]"
+            className="w-full h-6 px-2 rounded-lg bg-slate-900/40 hover:bg-slate-800/60 border border-slate-800/50 text-slate-400 hover:text-amber-300 font-mono text-[10px] font-medium flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98]"
             title="Reabrir tarea a En Proceso"
           >
-            <RotateCcw className="w-3 h-3 text-slate-500" />
-            <span>Reabrir tarea a En Proceso</span>
+            <RotateCcw className="w-3 h-3 text-slate-500 shrink-0" strokeWidth={1.75} />
+            <span>Reabrir tarea</span>
           </button>
         )}
       </div>

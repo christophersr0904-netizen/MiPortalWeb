@@ -8,6 +8,8 @@ import {
   sanitizarNotaPayload,
   sanitizarActividadPayload,
   sanitizarSubtareaPayload,
+  sanitizarActividadInbound,
+  sanitizarSubtareaInbound,
   sanitizeDate,
   isUuid
 } from '../syncPayloadSanitizer';
@@ -340,6 +342,111 @@ describe('REQ-SYNC-02: syncPayloadSanitizer (Sanitización Pura de Payloads)', (
       expect(payload.tarea_id).toBeNull();
     });
   });
+
+  describe('8. Sanitización Inbound de Actividades (sanitizarActividadInbound) [REQ-FIX-01]', () => {
+    it('mapea nombre a nombre_actividad y preserva campos locales críticos', () => {
+      const remoto = {
+        id: 'a0000000-0000-0000-0000-000000000001',
+        user_id: dummyUser,
+        codigo_legado: 'ACT-001',
+        nombre: 'Entrenamiento de fuerza en gimnasio',
+        tipo_registro: 'HABITUAL',
+        categoria_vida: 'SALUD_DEPORTE',
+        meta_macro_nombre: 'Acondicionamiento Físico',
+        estado: '03_En_Proceso',
+        racha_actual: 5,
+        fecha_programada: '2026-11-06',
+        hora_inicio: '06:30',
+        duracion_horas: 1.0,
+        agendado_calendar: 'Sí',
+        updated_at: '2026-11-06T10:00:00Z'
+      };
+
+      const localPrevio = {
+        id: 'a0000000-0000-0000-0000-000000000001',
+        user_id: dummyUser,
+        codigo_legado: 'ACT-001',
+        nombre_actividad: 'Entrenamiento de fuerza en gimnasio',
+        tipo_compromiso: 'HABITO_MANTENIMIENTO',
+        categoria_vida: 'SALUD_DEPORTE',
+        frecuencia_ciclo: 'DIARIA',
+        regla_repeticion: 'L-V',
+        notas_checklist: '- [x] Calentamiento\n- [ ] Series',
+        icono: 'Dumbbell',
+        monto_gasto_asociado: 50
+      };
+
+      const inbound = sanitizarActividadInbound(remoto, localPrevio);
+      expect(inbound.nombre_actividad).toBe('Entrenamiento de fuerza en gimnasio');
+      expect(inbound.tipo_compromiso).toBe('HABITO_MANTENIMIENTO'); // Preserva subtipo local específico
+      expect(inbound.frecuencia_ciclo).toBe('DIARIA');
+      expect(inbound.regla_repeticion).toBe('L-V');
+      expect(inbound.notas_checklist).toBe('- [x] Calentamiento\n- [ ] Series');
+      expect((inbound as any).icono).toBe('Dumbbell');
+      expect(inbound.monto_gasto_asociado).toBe(50);
+      expect(inbound.sync_status).toBe('synced');
+    });
+
+    it('genera defaults seguros si no existe registro previo local', () => {
+      const remoto = {
+        id: 'a0000000-0000-0000-0000-000000000002',
+        nombre: 'Correr 5km',
+        tipo_registro: 'HABITUAL',
+        categoria_vida: 'SALUD_DEPORTE'
+      };
+
+      const inbound = sanitizarActividadInbound(remoto);
+      expect(inbound.nombre_actividad).toBe('Correr 5km');
+      expect(inbound.tipo_compromiso).toBe('HABITUAL');
+      expect(inbound.frecuencia_ciclo).toBe('DIARIA');
+      expect(inbound.regla_repeticion).toBe('');
+      expect(inbound.sync_status).toBe('synced');
+    });
+  });
+
+  describe('9. Sanitización Inbound de Subtareas (sanitizarSubtareaInbound) [REQ-FIX-01]', () => {
+    it('reconstruye id_padre_vinculado y tipo_padre a partir de tarea_id o actividad_id', () => {
+      const remotoTarea = {
+        id: 's0000000-0000-0000-0000-000000000001',
+        codigo_legado: 'SUB-001',
+        tarea_id: '550e8400-e29b-41d4-a716-446655440020',
+        actividad_id: null,
+        numero_paso: 1,
+        descripcion_paso: 'Paso 1',
+        completado: true
+      };
+
+      const localPrevio = {
+        id: 's0000000-0000-0000-0000-000000000001',
+        id_padre_vinculado: 'TAR-002',
+        tipo_padre: 'TAREA'
+      };
+
+      const inbound = sanitizarSubtareaInbound(remotoTarea, localPrevio);
+      expect(inbound.tipo_padre).toBe('TAREA');
+      expect(inbound.id_padre_vinculado).toBe('TAR-002');
+      expect(inbound.descripcion_paso).toBe('Paso 1');
+      expect(inbound.completado).toBe(true);
+      expect(inbound.sync_status).toBe('synced');
+    });
+
+    it('asigna tipo_padre ACTIVIDAD cuando viene actividad_id', () => {
+      const remotoAct = {
+        id: 's0000000-0000-0000-0000-000000000002',
+        codigo_legado: 'SUB-002',
+        tarea_id: null,
+        actividad_id: 'a0000000-0000-0000-0000-000000000001',
+        numero_paso: 2,
+        descripcion_paso: 'Paso 2 hábito',
+        completado: false
+      };
+
+      const inbound = sanitizarSubtareaInbound(remotoAct);
+      expect(inbound.tipo_padre).toBe('ACTIVIDAD');
+      expect(inbound.id_padre_vinculado).toBe('a0000000-0000-0000-0000-000000000001');
+      expect(inbound.completado).toBe(false);
+    });
+  });
 });
 
 describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () => {
@@ -641,5 +748,120 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
     expect(updateMetaSpy).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440077', {
       sync_status: 'synced'
     });
+  });
+
+  it('REQ-DESKTOP-11: aísla y pone en cuarentena errores de Foreign Key 23503 sin reintentos agresivos', async () => {
+    syncManager.limpiarCuarentenaFk();
+    const mockMetaFkError = {
+      id: '550e8400-e29b-41d4-a716-446655440099',
+      codigo_legado: 'MET-FK-01',
+      nombre_meta: 'Meta con FK Invalido',
+      tipo_meta: 'CUANTITATIVA',
+      updated_at: new Date().toISOString(),
+      sync_status: 'pending'
+    };
+
+    vi.spyOn(db.metas_planes, 'where').mockReturnValue({
+      anyOf: () => ({
+        toArray: async () => [mockMetaFkError],
+        count: async () => 1
+      }),
+      equals: () => ({
+        toArray: async () => [mockMetaFkError],
+        count: async () => 1
+      })
+    } as any);
+
+    const updateMetaSpy = vi.spyOn(db.metas_planes, 'update').mockResolvedValue(1);
+
+    const upsertSpy = vi.fn().mockResolvedValue({
+      error: {
+        code: '23503',
+        message: 'insert or update on table "metas_planes" violates foreign key constraint "metas_planes_user_id_fkey"'
+      }
+    });
+
+    (syncManager as any).supabase = {
+      from: vi.fn().mockReturnValue({ upsert: upsertSpy })
+    };
+
+    // Primera ejecución: detecta el error 23503, actualiza Dexie y pone en cuarentena
+    const res1 = await syncManager.sincronizarMetasPlanes();
+    expect(res1.failed).toBe(1);
+    expect(upsertSpy).toHaveBeenCalledTimes(1);
+    expect(syncManager.estaEnCuarentenaFk('550e8400-e29b-41d4-a716-446655440099')).toBe(true);
+    expect(updateMetaSpy).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440099', {
+      sync_status: 'quarantined'
+    });
+
+    // Segunda ejecución (siguiente ciclo de sincronización): omite reintento para evitar saturar la red y el event loop
+    const res2 = await syncManager.sincronizarMetasPlanes();
+    expect(res2.failed).toBe(0);
+    expect(res2.success).toBe(0);
+    // El spy de upsert NO debió llamarse de nuevo
+    expect(upsertSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('REQ-WEB-01: suprime consultas a tablas inexistentes (gastos, ingresos, cuotas) en descargarDatosDescendientes para neutralizar 404', async () => {
+    const fromSpy = vi.fn().mockImplementation((_table: string) => ({
+      select: vi.fn().mockResolvedValue({ data: [], error: null })
+    }));
+
+    (syncManager as any).supabase = { from: fromSpy };
+    syncManager.syncFinanzasRemotoHabilitado = false;
+
+    await syncManager.descargarDatosDescendientes();
+
+    // No debe consultar gastos, ingresos ni cuotas
+    expect(fromSpy).not.toHaveBeenCalledWith('gastos');
+    expect(fromSpy).not.toHaveBeenCalledWith('ingresos');
+    expect(fromSpy).not.toHaveBeenCalledWith('cuotas');
+
+    // Debe seguir consultando tablas existentes
+    expect(fromSpy).toHaveBeenCalledWith('proyectos');
+    expect(fromSpy).toHaveBeenCalledWith('tareas');
+    expect(fromSpy).toHaveBeenCalledWith('notas');
+  });
+
+  it('REQ-WEB-01: permite descargar tablas financieras si se especifican en tablasFiltro o se habilita la bandera', async () => {
+    const fromSpy = vi.fn().mockImplementation((_table: string) => ({
+      select: vi.fn().mockReturnValue({
+        gte: vi.fn().mockResolvedValue({ data: [], error: null })
+      })
+    }));
+
+    (syncManager as any).supabase = { from: fromSpy };
+
+    // Con filtro explícito
+    await syncManager.descargarDatosDescendientes(['gastos']);
+    expect(fromSpy).toHaveBeenCalledWith('gastos');
+    expect(fromSpy).not.toHaveBeenCalledWith('ingresos');
+
+    // Con bandera habilitada
+    fromSpy.mockClear();
+    syncManager.habilitarSyncFinanzasRemoto(true);
+    await syncManager.descargarDatosDescendientes();
+    expect(fromSpy).toHaveBeenCalledWith('gastos');
+    expect(fromSpy).toHaveBeenCalledWith('ingresos');
+    expect(fromSpy).toHaveBeenCalledWith('cuotas');
+
+    syncManager.habilitarSyncFinanzasRemoto(false);
+  });
+
+  it('REQ-WEB-01: obtenerRegistrosPendientes descarta registros con sync_status quarantined', async () => {
+    const mockTable = {
+      where: vi.fn().mockReturnValue({
+        anyOf: () => ({
+          toArray: async () => [
+            { id: 'item-1', sync_status: 'pending' },
+            { id: 'item-2', sync_status: 'quarantined' },
+            { id: 'item-3', sync_status: 'error' }
+          ]
+        })
+      })
+    };
+
+    const pendientes = await syncManager.obtenerRegistrosPendientes(mockTable);
+    expect(pendientes.map((p: any) => p.id)).toEqual(['item-1', 'item-3']);
   });
 });

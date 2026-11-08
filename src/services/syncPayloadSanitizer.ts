@@ -348,6 +348,64 @@ export function sanitizarActividadPayload(raw: ActividadPersonal, userId: string
   };
 }
 
+/**
+ * Normalizador inverso Inbound para actividades_personales (Supabase -> Dexie)
+ * Protege contra la degradación de esquemas y preserva campos locales críticos.
+ */
+export function sanitizarActividadInbound(remoto: any, localPrevio?: any): ActividadPersonal {
+  const nombreAct = remoto.nombre_actividad || remoto.nombre || localPrevio?.nombre_actividad || localPrevio?.nombre || 'Actividad';
+
+  // Si localPrevio ya tenía un subtipo específico (ej. 'HABITO_MANTENIMIENTO', 'HABITO_ACUMULATIVO', 'CHECKLIST_META'),
+  // preservarlo en lugar de sobreescribir con 'HABITUAL'.
+  let tipoComp: any = localPrevio?.tipo_compromiso || localPrevio?.tipo_registro;
+  if (!tipoComp || tipoComp === 'HABITUAL') {
+    const tr = String(remoto.tipo_compromiso || remoto.tipo_registro || '').toUpperCase();
+    if (tr.includes('META') || tr.includes('CHECKLIST')) tipoComp = 'CHECKLIST_META';
+    else if (tr.includes('PUNTUAL')) tipoComp = 'PUNTUAL';
+    else if (tr.includes('ACUMULATIVO')) tipoComp = 'HABITO_ACUMULATIVO';
+    else if (tr.includes('MANTENIMIENTO')) tipoComp = 'HABITO_MANTENIMIENTO';
+    else tipoComp = remoto.tipo_compromiso || remoto.tipo_registro || 'HABITUAL';
+  }
+
+  return {
+    ...localPrevio,
+    ...remoto,
+    id: remoto.id || localPrevio?.id,
+    user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
+    codigo_legado: remoto.codigo_legado || localPrevio?.codigo_legado || '',
+    nombre_actividad: nombreAct,
+    tipo_compromiso: tipoComp,
+    categoria_vida: remoto.categoria_vida || localPrevio?.categoria_vida || 'SALUD_DEPORTE',
+    meta_macro_nombre: remoto.meta_macro_nombre ?? localPrevio?.meta_macro_nombre,
+    unidad_medida: remoto.unidad_medida ?? localPrevio?.unidad_medida,
+    meta_objetivo_total: Math.max(0, Number(remoto.meta_objetivo_total ?? localPrevio?.meta_objetivo_total ?? 0)),
+    valor_acumulado_actual: Math.max(0, Number(remoto.valor_acumulado_actual ?? localPrevio?.valor_acumulado_actual ?? 0)),
+    meta_diaria_estandar: Math.max(0, Number(remoto.meta_diaria_estandar ?? localPrevio?.meta_diaria_estandar ?? 0)),
+    nivel_rescate_minimo: Math.max(0, Number(remoto.nivel_rescate_minimo ?? localPrevio?.nivel_rescate_minimo ?? 0)),
+    estado: remoto.estado || localPrevio?.estado || '02_Por_Hacer',
+    racha_actual: Math.max(0, Number(remoto.racha_actual ?? localPrevio?.racha_actual ?? 0)),
+    fecha_programada: sanitizeDate(remoto.fecha_programada) || sanitizeDate(localPrevio?.fecha_programada) || new Date().toISOString().split('T')[0],
+    fecha_fin: sanitizeDate(remoto.fecha_fin) ?? localPrevio?.fecha_fin,
+    hora_inicio: remoto.hora_inicio?.trim() || localPrevio?.hora_inicio || '08:00',
+    duracion_horas: Math.max(0, Number(remoto.duracion_horas ?? localPrevio?.duracion_horas ?? 1)),
+    agendado_calendar: remoto.agendado_calendar || localPrevio?.agendado_calendar || 'No',
+    id_evento_calendar: remoto.id_evento_calendar ?? localPrevio?.id_evento_calendar ?? null,
+    // Preservación inquebrantable de campos locales que no existen en Supabase
+    frecuencia_ciclo: remoto.frecuencia_ciclo ?? localPrevio?.frecuencia_ciclo ?? 'DIARIA',
+    regla_repeticion: remoto.regla_repeticion ?? localPrevio?.regla_repeticion ?? '',
+    notas_checklist: remoto.notas_checklist ?? localPrevio?.notas_checklist ?? '',
+    icono: remoto.icono ?? localPrevio?.icono,
+    monto_gasto_asociado: Number(remoto.monto_gasto_asociado ?? localPrevio?.monto_gasto_asociado ?? 0),
+    actividad_padre_id: remoto.actividad_padre_id ?? localPrevio?.actividad_padre_id,
+    ultima_fecha_completado: remoto.ultima_fecha_completado ?? localPrevio?.ultima_fecha_completado,
+    excepciones_fechas: remoto.excepciones_fechas ?? localPrevio?.excepciones_fechas,
+    historial_fechas: remoto.historial_fechas ?? localPrevio?.historial_fechas,
+    version: remoto.version ?? localPrevio?.version ?? 1,
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(remoto.updated_at) || localPrevio?.updated_at || new Date().toISOString()
+  };
+}
+
 // ============================================================================
 // 6. SANITIZADOR DE SUBTAREAS / PASOS
 // ============================================================================
@@ -389,6 +447,49 @@ export function sanitizarSubtareaPayload(
     fecha_completado: sanitizeTimestamp(raw.fecha_completado),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+/**
+ * Normalizador inverso Inbound para subtareas_pasos (Supabase -> Dexie)
+ * Reconstruye id_padre_vinculado y tipo_padre a partir de tarea_id o actividad_id.
+ */
+export function sanitizarSubtareaInbound(remoto: any, localPrevio?: any): SubtareaPaso {
+  let tipoPadre: 'TAREA' | 'ACTIVIDAD' = localPrevio?.tipo_padre || 'TAREA';
+  let idPadre: string = localPrevio?.id_padre_vinculado || '';
+
+  if (remoto.tarea_id) {
+    tipoPadre = 'TAREA';
+    if (!idPadre || isUuid(idPadre)) {
+      idPadre = localPrevio?.id_padre_vinculado || remoto.tarea_id;
+    }
+  } else if (remoto.actividad_id) {
+    tipoPadre = 'ACTIVIDAD';
+    if (!idPadre || isUuid(idPadre)) {
+      idPadre = localPrevio?.id_padre_vinculado || remoto.actividad_id;
+    }
+  } else if (remoto.tipo_padre) {
+    tipoPadre = remoto.tipo_padre;
+    if (remoto.id_padre_vinculado) {
+      idPadre = remoto.id_padre_vinculado;
+    }
+  }
+
+  return {
+    ...localPrevio,
+    ...remoto,
+    id: remoto.id || localPrevio?.id,
+    user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
+    codigo_legado: remoto.codigo_legado || localPrevio?.codigo_legado || '',
+    id_padre_vinculado: idPadre,
+    tipo_padre: tipoPadre,
+    numero_paso: Math.max(1, Number(remoto.numero_paso ?? localPrevio?.numero_paso ?? 1)),
+    descripcion_paso: remoto.descripcion_paso || localPrevio?.descripcion_paso || 'Paso sin descripción',
+    completado: typeof remoto.completado === 'boolean' ? remoto.completado : Boolean(localPrevio?.completado),
+    fecha_completado: sanitizeTimestamp(remoto.fecha_completado) ?? localPrevio?.fecha_completado,
+    version: remoto.version ?? localPrevio?.version ?? 1,
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(remoto.updated_at) || localPrevio?.updated_at || new Date().toISOString()
   };
 }
 

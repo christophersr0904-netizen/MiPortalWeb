@@ -12,7 +12,7 @@ if (process.env.ELECTRON_RUN_AS_NODE || typeof require('electron') === 'string')
   child.on('close', (code) => process.exit(code || 0));
 } else {
   const electron = require('electron');
-  const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, shell } = electron;
+  const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, shell, globalShortcut } = electron;
 
 // Para soporte de ventana transparente en Windows es necesario hardware acceleration o software rasterizer compatible
 // No deshabilitamos forzosamente toda aceleración cuando se requiere transparencia DWM en Windows
@@ -207,6 +207,98 @@ if (gotTheLock) {
   }
 }
 
+// Memoria Persistente de Bounds y Factor de Forma Dinámico (REQ-DESKTOP-16 Paso 1)
+let isWidgetExpanded = false;
+let saveBoundsTimeout = null;
+
+const BOUNDS_FILE = path.join(app.getPath('userData'), 'cockpit-bounds.json');
+
+function loadSavedBounds() {
+  try {
+    if (fs.existsSync(BOUNDS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(BOUNDS_FILE, 'utf-8'));
+      return {
+        capsule: {
+          x: typeof data.capsule?.x === 'number' ? data.capsule.x : 100,
+          y: typeof data.capsule?.y === 'number' ? data.capsule.y : 100
+        },
+        bento: {
+          x: typeof data.bento?.x === 'number' ? data.bento.x : 100,
+          y: typeof data.bento?.y === 'number' ? data.bento.y : 100,
+          width: typeof data.bento?.width === 'number' ? data.bento.width : 380,
+          height: typeof data.bento?.height === 'number' ? data.bento.height : 620
+        }
+      };
+    }
+  } catch (err) {
+    console.warn('[Cockpit Bounds] Error al leer cockpit-bounds.json:', err.message);
+  }
+  return {
+    capsule: { x: 100, y: 100 },
+    bento: { x: 100, y: 100, width: 380, height: 620 }
+  };
+}
+
+let currentBoundsMemory = loadSavedBounds();
+
+function saveBoundsToDisk() {
+  try {
+    const dir = app.getPath('userData');
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(BOUNDS_FILE, JSON.stringify(currentBoundsMemory, null, 2), 'utf-8');
+    console.log('[Cockpit Bounds] Bounds persistidos en disco exitosamente.');
+  } catch (err) {
+    console.warn('[Cockpit Bounds] Error al persistir cockpit-bounds.json:', err.message);
+  }
+}
+
+function scheduleSaveBounds() {
+  if (saveBoundsTimeout) clearTimeout(saveBoundsTimeout);
+  saveBoundsTimeout = setTimeout(() => {
+    saveBoundsToDisk();
+  }, 500);
+}
+
+// Validación de Coordenadas contra el Viewport Activo de los Monitores (screen.getDisplayMatching)
+function getValidatedCoordinates(targetX, targetY, targetW, targetH) {
+  try {
+    const matchingDisplay = screen.getDisplayMatching({
+      x: targetX,
+      y: targetY,
+      width: targetW,
+      height: targetH
+    }) || screen.getPrimaryDisplay();
+
+    const workArea = matchingDisplay.workArea;
+
+    let finalX = targetX;
+    let finalY = targetY;
+
+    // Si está fuera de los márgenes horizontales de la pantalla
+    if (finalX + targetW < workArea.x + 20 || finalX > workArea.x + workArea.width - 20) {
+      finalX = workArea.x + 100;
+    }
+    // Si está fuera de los márgenes verticales de la pantalla
+    if (finalY + targetH < workArea.y + 20 || finalY > workArea.y + workArea.height - 20) {
+      finalY = workArea.y + 100;
+    }
+
+    // Ajustar si se desborda por los extremos derechos o inferiores
+    if (finalX + targetW > workArea.x + workArea.width) {
+      finalX = Math.max(workArea.x + 10, workArea.x + workArea.width - targetW - 10);
+    }
+    if (finalY + targetH > workArea.y + workArea.height) {
+      finalY = Math.max(workArea.y + 10, workArea.y + workArea.height - targetH - 10);
+    }
+
+    return { x: Math.round(finalX), y: Math.round(finalY), width: targetW, height: targetH };
+  } catch (err) {
+    return { x: 100, y: 100, width: targetW, height: targetH };
+  }
+}
+
 function toggleWidgetVisibility() {
   const win = mainWindow || widgetWin;
   if (!win || win.isDestroyed()) return;
@@ -215,47 +307,60 @@ function toggleWidgetVisibility() {
   } else {
     win.show();
     win.focus();
+    win.setSkipTaskbar(true);
+    win.setAlwaysOnTop(true, 'screen-saver');
   }
 }
 
 function resetWidgetPosition() {
   const win = mainWindow || widgetWin;
   if (!win || win.isDestroyed()) return;
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
-  const targetX = Math.max(10, width - 440);
-  const targetY = Math.max(20, Math.round((height - 720) / 2));
-  win.setPosition(targetX, targetY);
+  const targetX = 100;
+  const targetY = 100;
+
+  if (isWidgetExpanded) {
+    const w = currentBoundsMemory.bento.width || 380;
+    const h = currentBoundsMemory.bento.height || 620;
+    win.setBounds({ x: targetX, y: targetY, width: w, height: h });
+    currentBoundsMemory.bento.x = targetX;
+    currentBoundsMemory.bento.y = targetY;
+  } else {
+    win.setBounds({ x: targetX, y: targetY, width: 320, height: 44 });
+    currentBoundsMemory.capsule.x = targetX;
+    currentBoundsMemory.capsule.y = targetY;
+  }
+  saveBoundsToDisk();
+
   if (!win.isVisible()) {
     win.show();
   }
   win.focus();
+  win.setSkipTaskbar(true);
+  win.setAlwaysOnTop(true, 'screen-saver');
 }
 
 function createWindow() {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
-  const targetX = Math.max(10, width - 440);
-  const targetY = Math.max(20, Math.round((height - 720) / 2));
+  // Cargar coordenadas persistidas de cápsula y validar visibilidad en monitores (REQ-DESKTOP-16 Paso 1)
+  const savedCapsule = currentBoundsMemory.capsule || { x: 100, y: 100 };
+  const validated = getValidatedCoordinates(savedCapsule.x, savedCapsule.y, 320, 44);
 
-  // Widget Flotante de Escritorio Translúcido y Arrastrable (REQ-COCKPIT-DESKTOP-FLOATING-WIDGET-97)
+  // Widget Flotante de Silueta Orgánica y Factor de Forma Dinámico (REQ-DESKTOP-08 / REQ-DESKTOP-12 / REQ-DESKTOP-14 / REQ-DESKTOP-16)
   mainWindow = new BrowserWindow({
-    width: 420,
-    height: 720,
-    x: targetX,
-    y: targetY,
-    minWidth: 380,
-    minHeight: 100,
-    maxWidth: 520,
-    maxHeight: height - 40,
+    width: 320,
+    height: 44,
+    x: validated.x,
+    y: validated.y,
+    minWidth: 320,
+    minHeight: 44,
+    maxWidth: 420,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
     hasShadow: false,
-    resizable: true,
+    resizable: false,
     alwaysOnTop: true,
-    skipTaskbar: true, // Reside exclusivamente en System Tray sin ocupar barra de tareas
-    show: true, // Visibilidad directa del widget al arrancar
+    skipTaskbar: true, // Residencia exclusiva en System Tray (REQ-DESKTOP-12)
+    show: false, // Inicio oculto para eliminar flash negro antes del renderizado (REQ-DESKTOP-14)
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -266,8 +371,32 @@ function createWindow() {
   });
   widgetWin = mainWindow;
 
-  // Forzar nivel flotante sobre el escritorio de Windows
-  mainWindow.setAlwaysOnTop(true, 'floating');
+  // Registrar listeners de movimiento y redimensionamiento para persistencia automática con debounce (REQ-DESKTOP-16 Paso 1)
+  mainWindow.on('move', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const bounds = mainWindow.getBounds();
+    if (isWidgetExpanded) {
+      currentBoundsMemory.bento.x = bounds.x;
+      currentBoundsMemory.bento.y = bounds.y;
+    } else {
+      currentBoundsMemory.capsule.x = bounds.x;
+      currentBoundsMemory.capsule.y = bounds.y;
+    }
+    scheduleSaveBounds();
+  });
+
+  mainWindow.on('resize', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (isWidgetExpanded) {
+      const bounds = mainWindow.getBounds();
+      currentBoundsMemory.bento.width = bounds.width;
+      currentBoundsMemory.bento.height = bounds.height;
+      scheduleSaveBounds();
+    }
+  });
+
+  // Forzar nivel flotante máximo sobre el escritorio de Windows
+  mainWindow.setAlwaysOnTop(true, 'screen-saver');
 
   // Interceptar evento 'close': mantener residente en System Tray
   mainWindow.on('close', (event) => {
@@ -285,8 +414,20 @@ function createWindow() {
   console.log('[Electron] Cargando URL:', targetUrl);
   mainWindow.loadURL(targetUrl);
 
+  // DevTools desactivadas para arranque limpio en producción (REQ-DESKTOP-11)
+  // mainWindow.webContents.openDevTools({ mode: 'detach' });
+
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[Electron] Carga finalizada con éxito');
+    // Fallback de seguridad si ready-to-show no disparase en algún hardware específico
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+        mainWindow.show();
+        mainWindow.focus();
+        mainWindow.setSkipTaskbar(true);
+        mainWindow.setAlwaysOnTop(true, 'screen-saver');
+      }
+    }, 300);
   });
 
   // Manejo de did-fail-load con fallback automático a servidor loopback local
@@ -300,44 +441,54 @@ function createWindow() {
     }
   });
 
+  // Mostrar ventana únicamente tras el cálculo y pintado de la superficie gráfica (cero flash negro - REQ-DESKTOP-14)
   mainWindow.once('ready-to-show', () => {
+    console.log('[Electron] ready-to-show disparado: superficie calculada');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
       mainWindow.focus();
+      mainWindow.setSkipTaskbar(true);
+      mainWindow.setAlwaysOnTop(true, 'screen-saver');
     }
   });
 
-  // Inicialización de la Bandeja del Sistema (System Tray)
+  // Inicialización Blindada de la Bandeja del Sistema (System Tray - REQ-DESKTOP-06 Paso 2 / REQ-DESKTOP-16 Paso 2)
   if (!tray) {
     try {
-      const iconPath = path.join(__dirname, '../public/icon-192.png');
-      const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+      const iconPath = path.resolve(__dirname, '../public/icon-192.png');
+      const iconExists = fs.existsSync(iconPath);
+      console.log(`[Tray Init] Ruta del icono: "${iconPath}" | Existe: ${iconExists}`);
+
+      let trayIcon;
+      if (iconExists) {
+        trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+      } else {
+        console.warn(`[Tray Init] AVISO: No se encontró icono en "${iconPath}", usando fallback nativeImage.createEmpty()`);
+        trayIcon = nativeImage.createEmpty();
+      }
+
       tray = new Tray(trayIcon);
-      tray.setToolTip('Cockpit Flotante PMO & Life OS');
+      tray.setToolTip('Cockpit Flotante PMO & Life OS (Alt+Shift+C)');
 
       const contextMenu = Menu.buildFromTemplate([
         {
-          label: 'Mostrar Widget Flotante',
-          click: () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.show();
-              mainWindow.focus();
-            }
-          }
-        },
-        {
-          label: 'Ocultar a la Bandeja',
-          click: () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.hide();
-            }
-          }
+          label: 'Mostrar / Ocultar Widget (Alt+Shift+C)',
+          click: () => toggleWidgetVisibility()
         },
         { type: 'separator' },
         {
           label: 'Abrir Portal Web en Navegador (http://localhost:3000)',
           click: () => {
             shell.openExternal('http://localhost:3000');
+          }
+        },
+        {
+          label: 'Abrir Carpeta de Autoarranque (shell:startup)',
+          click: () => {
+            if (process.env.APPDATA) {
+              const startupDir = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+              shell.openPath(startupDir);
+            }
           }
         },
         { type: 'separator' },
@@ -357,12 +508,13 @@ function createWindow() {
       tray.setContextMenu(contextMenu);
       tray.on('click', () => toggleWidgetVisibility());
       tray.on('double-click', () => toggleWidgetVisibility());
+      console.log('[Tray Init] System Tray instanciado exitosamente.');
     } catch (err) {
-      console.warn('[Desktop Widget] Error al instanciar Tray:', err);
+      console.error('[TRAY ERROR] Fallo al instanciar Tray:', err);
     }
   }
 
-  // Soporte de IPC nativo para expandir/cerrar
+  // Soporte de IPC nativo para expandir/contraer dinámicamente el factor de forma con memoria de bounds (REQ-DESKTOP-16 Paso 1)
   ipcMain.on('widget-close', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.hide();
@@ -372,21 +524,76 @@ function createWindow() {
   ipcMain.on('widget-expand', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) || mainWindow || widgetWin;
     if (win && !win.isDestroyed()) {
-      win.setBounds({ width: 420, height: 720 });
+      isWidgetExpanded = true;
+      const currentCapsuleBounds = win.getBounds();
+      currentBoundsMemory.capsule.x = currentCapsuleBounds.x;
+      currentBoundsMemory.capsule.y = currentCapsuleBounds.y;
+
+      const targetW = currentBoundsMemory.bento.width || 380;
+      const targetH = currentBoundsMemory.bento.height || 620;
+
+      const validated = getValidatedCoordinates(currentCapsuleBounds.x, currentCapsuleBounds.y, targetW, targetH);
+
+      win.setResizable(true);
+      win.setMinimumSize(320, 450);
+      win.setMaximumSize(1200, 1600);
+      win.setBounds(validated);
+      win.setSkipTaskbar(true);
+
+      currentBoundsMemory.bento.x = validated.x;
+      currentBoundsMemory.bento.y = validated.y;
+      scheduleSaveBounds();
     }
   });
 
   ipcMain.on('widget-collapse', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) || mainWindow || widgetWin;
     if (win && !win.isDestroyed()) {
-      win.setBounds({ width: 420, height: 120 });
+      isWidgetExpanded = false;
+      const currentBentoBounds = win.getBounds();
+      currentBoundsMemory.bento.x = currentBentoBounds.x;
+      currentBoundsMemory.bento.y = currentBentoBounds.y;
+      currentBoundsMemory.bento.width = currentBentoBounds.width;
+      currentBoundsMemory.bento.height = currentBentoBounds.height;
+
+      const validated = getValidatedCoordinates(currentBentoBounds.x, currentBentoBounds.y, 320, 44);
+
+      win.setResizable(false);
+      win.setMinimumSize(320, 44);
+      win.setMaximumSize(420, 44);
+      win.setBounds(validated);
+      win.setSkipTaskbar(true);
+
+      currentBoundsMemory.capsule.x = validated.x;
+      currentBoundsMemory.capsule.y = validated.y;
+      scheduleSaveBounds();
     }
   });
 }
 
 if (gotTheLock) {
-  app.whenReady().then(createWindow);
+  app.whenReady().then(() => {
+    createWindow();
+
+    // Registro de Atajo Global Alt+Shift+C (REQ-DESKTOP-16 Paso 2)
+    try {
+      const atajoRegistrado = globalShortcut.register('Alt+Shift+C', () => {
+        console.log('[Atajo Global] Alt+Shift+C presionado -> Alternando visibilidad del widget');
+        toggleWidgetVisibility();
+      });
+      console.log(`[Atajo Global] Alt+Shift+C registrado: ${atajoRegistrado ? 'EXITOSO' : 'FALLIDO'}`);
+    } catch (err) {
+      console.error('[Atajo Global] Error al registrar atajo global Alt+Shift+C:', err);
+    }
+  });
 }
+
+app.on('will-quit', () => {
+  try {
+    globalShortcut.unregisterAll();
+    console.log('[Atajo Global] Atajos globales liberados limpiamente.');
+  } catch {}
+});
 
 app.on('before-quit', () => {
   app.isQuitting = true;

@@ -35,6 +35,7 @@ import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { ModalAlcanceRecurrencia } from '../Modals/ModalAlcanceRecurrencia';
 import { ModalRegistroAvanceHabito } from '../Modals/ModalRegistroAvanceHabito';
 import { recalcularProgresoMetaLocal } from '../../services/metasService';
+import { calcularProximaFechaValida } from '../../services/habitosService';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 
 const EMPTY_ARRAY: any[] = [];
@@ -61,9 +62,21 @@ const CATEGORIAS_CANONICAS: CategoriaVida[] = [
   'PERSONAL_DESCANSO'
 ];
 
-type ModoOrden = 'TIME' | 'STREAK' | 'ALPHA' | 'PRIORITY';
+type ModoOrden = 'TIME' | 'GOAL' | 'ALPHA' | 'STREAK' | 'PRIORITY';
 type FiltroCompromiso = 'TODOS' | 'HABITUAL' | 'UNICO' | 'RACHA';
 type FiltroTemporal = 'HOY' | 'SEMANA' | 'TODOS';
+
+export const TIPOS_HABITO_INCLUSIVOS = [
+  'HABITUAL',
+  'HABITO_MANTENIMIENTO',
+  'HABITO_ACUMULATIVO',
+  'CHECKLIST_META'
+] as const;
+
+export function esTipoHabitoRecurrente(tipo?: string): boolean {
+  if (!tipo) return false;
+  return (TIPOS_HABITO_INCLUSIVOS as readonly string[]).includes(tipo);
+}
 
 export interface TableroHabitosProps {
   ocultarHeader?: boolean;
@@ -77,7 +90,6 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     metasPorHabitoId,
     actividadesPorHabitoId,
     metasPlanes,
-    kpis,
     filtroTexto,
     setFiltroTexto,
     toggleCompletar,
@@ -156,13 +168,14 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
 
   // Contextual KPIs y Contadores para el Tablero según filtroMetaId (REQ-HABITS-FILTER-BY-META-16)
   const kpisTablero = useMemo(() => {
-    if (filtroMetaId === 'TODAS') {
-      return kpis;
-    }
-
     const actsMeta = actividades.filter((a) => {
-      if (esElementoArchivado(a, 'actividades')) return false;
-      return evaluarFiltroMeta(a, filtroMetaId, metasPorHabitoId, metasPlanes);
+      const tieneRec = Boolean(
+        (a.frecuencia_ciclo && a.frecuencia_ciclo !== 'NINGUNA') ||
+        (a.regla_repeticion && a.regla_repeticion.trim() !== '')
+      );
+      const esRec = esTipoHabitoRecurrente(a.tipo_compromiso) || tieneRec;
+      if (esRec ? a.estado === '05_Archivado' : esElementoArchivado(a, 'actividades')) return false;
+      return filtroMetaId === 'TODAS' || evaluarFiltroMeta(a, filtroMetaId, metasPorHabitoId, metasPlanes);
     });
 
     const res = {
@@ -184,7 +197,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     };
 
     for (const a of actsMeta) {
-      if (a.tipo_compromiso === 'HABITUAL') res.countHabitual++;
+      if (esTipoHabitoRecurrente(a.tipo_compromiso)) res.countHabitual++;
       else res.countUnico++;
 
       const racha = a.racha_actual || 0;
@@ -196,14 +209,14 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
       }
 
       const esCompletado = a.estado === '04_Completado' || a.ultima_fecha_completado === hoyStr;
-      if (esCompletado || (a.tipo_compromiso === 'HABITUAL' && a.fecha_programada > hoyStr && racha > 0)) {
+      if (esCompletado || (esTipoHabitoRecurrente(a.tipo_compromiso) && a.fecha_programada > hoyStr && racha > 0)) {
         res.completadosHoy++;
         res.horasInvertidas += a.duracion_horas || 0;
       }
     }
 
     return res;
-  }, [filtroMetaId, kpis, actividades, metasPorHabitoId, metasPlanes, hoyStr]);
+  }, [filtroMetaId, actividades, metasPorHabitoId, metasPlanes, hoyStr]);
 
   const pctCumplimiento = kpisTablero.total > 0 ? Math.round((kpisTablero.completadosHoy / kpisTablero.total) * 100) : 0;
   const pilaresActivos = Object.values(kpisTablero.pilarCounts).filter((c) => c > 0).length;
@@ -212,7 +225,13 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
   const actividadesProcesadas = useMemo(() => {
     let list = actividades.filter((a) => {
       // 1. Exclusión obligatoria de Bóveda de Archivados (+10 días desde su fecha terminal)
-      if (esElementoArchivado(a, 'actividades')) {
+      // Para elementos de tipo hábito/recurrente, evitar que esElementoArchivado los oculte por desfase de fecha semilla si están activos (estado !== '05_Archivado').
+      const tieneRec = Boolean(
+        (a.frecuencia_ciclo && a.frecuencia_ciclo !== 'NINGUNA') ||
+        (a.regla_repeticion && a.regla_repeticion.trim() !== '')
+      );
+      const esRecurrente = esTipoHabitoRecurrente(a.tipo_compromiso) || tieneRec;
+      if (esRecurrente ? a.estado === '05_Archivado' : esElementoArchivado(a, 'actividades')) {
         return false;
       }
 
@@ -221,18 +240,14 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
         return false;
       }
 
-      // 3. Filtro por tipo de compromiso
-      if (filtroCompromiso === 'HABITUAL' && a.tipo_compromiso !== 'HABITUAL') return false;
-      if (filtroCompromiso === 'UNICO' && a.tipo_compromiso === 'HABITUAL') return false;
+      // 3. Filtro por tipo de compromiso flexibilizado (REQ-FIX-01)
+      if (filtroCompromiso === 'HABITUAL' && !esTipoHabitoRecurrente(a.tipo_compromiso)) return false;
+      if (filtroCompromiso === 'UNICO' && esTipoHabitoRecurrente(a.tipo_compromiso)) return false;
       if (filtroCompromiso === 'RACHA' && (!a.racha_actual || a.racha_actual <= 0)) return false;
 
       // 4. Filtro Temporal Canónico ('HOY' | 'SEMANA' | 'TODOS')
       if (filtroTemporal !== 'TODOS') {
-        const tieneRec = Boolean(
-          (a.frecuencia_ciclo && a.frecuencia_ciclo !== 'NINGUNA') ||
-          (a.regla_repeticion && a.regla_repeticion.trim() !== '')
-        );
-        const esRutinaria = a.tipo_compromiso === 'HABITUAL' || tieneRec;
+        const esRutinaria = esRecurrente;
 
         if (filtroTemporal === 'HOY') {
           const fProgLimpia = (a.fecha_programada || '').split(/[\sT]/)[0];
@@ -245,12 +260,24 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           );
           if (esRutinaria) {
             const agendadaHoy = fProgLimpia === hoyStr;
-            if (!agendadaHoy && !estaEnMora && !completadaHoy) return false;
+            const aplicaPorRecurrenciaHoy =
+              calcularProximaFechaValida(hoyStr, a.frecuencia_ciclo as any, a.regla_repeticion) === hoyStr;
+            if (!agendadaHoy && !estaEnMora && !completadaHoy && !aplicaPorRecurrenciaHoy) return false;
           } else {
             if (!evaluarFiltroTemporal(a.fecha_programada, 'HOY') && !estaEnMora && !completadaHoy) return false;
           }
         } else if (filtroTemporal === 'SEMANA') {
-          if (!evaluarFiltroTemporal(a.fecha_programada, 'SEMANA')) return false;
+          if (esRutinaria) {
+            const aplicaSemana =
+              evaluarFiltroTemporal(a.fecha_programada, 'SEMANA') ||
+              a.frecuencia_ciclo === 'DIARIA' ||
+              a.frecuencia_ciclo === 'DIARIA_LABORAL' ||
+              a.frecuencia_ciclo === 'FIN_SEMANA' ||
+              a.frecuencia_ciclo === 'SEMANAL';
+            if (!aplicaSemana) return false;
+          } else {
+            if (!evaluarFiltroTemporal(a.fecha_programada, 'SEMANA')) return false;
+          }
         }
       }
 
@@ -258,23 +285,61 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     });
 
     list.sort((a, b) => {
+      // 1. Caso 'TIME' (Orden Cronológico por hora_inicio canónica con desempate alfabético)
+      if (modoOrden === 'TIME') {
+        const hA = a.hora_inicio?.trim() || '99:99';
+        const hB = b.hora_inicio?.trim() || '99:99';
+        const diff = hA.localeCompare(hB);
+        return diff !== 0 ? diff : (a.nombre_actividad || '').localeCompare(b.nombre_actividad || '');
+      }
+
+      // 2. Caso 'GOAL' (Orden por Meta Estratégica vinculada con desempate por hora)
+      if (modoOrden === 'GOAL') {
+        const mA = a.metaVinculada?.codigo_legado || a.meta_macro_nombre || 'ZZZ';
+        const mB = b.metaVinculada?.codigo_legado || b.meta_macro_nombre || 'ZZZ';
+        const diff = mA.localeCompare(mB);
+        if (diff !== 0) return diff;
+        const hA = a.hora_inicio?.trim() || '99:99';
+        const hB = b.hora_inicio?.trim() || '99:99';
+        return hA.localeCompare(hB);
+      }
+
+      // 3. Caso 'STREAK' (Mayor Racha consecutiva)
       if (modoOrden === 'STREAK') {
         return (b.racha_actual || 0) - (a.racha_actual || 0);
       }
+
+      // 4. Caso 'ALPHA' (Alfabético A-Z)
       if (modoOrden === 'ALPHA') {
         const nomA = a.nombre_actividad || (a as any).nombre || (a as any).Nombre_Actividad || (a as any).Nombre || (a as any).titulo || '';
         const nomB = b.nombre_actividad || (b as any).nombre || (b as any).Nombre_Actividad || (b as any).Nombre || (b as any).titulo || '';
         return nomA.localeCompare(nomB);
       }
+
+      // 5. Caso 'PRIORITY' (Matriz Eisenhower: Alta/P1 -> Media/P2 -> Baja/P3 -> P4)
       if (modoOrden === 'PRIORITY') {
-        const pA = (a as any).prioridad_anual || 0;
-        const pB = (b as any).prioridad_anual || 0;
-        return pB - pA;
+        const mapearPrio = (prio?: string): number => {
+          if (!prio) return 99;
+          const p = String(prio).toUpperCase().trim();
+          if (p.includes('DO_FIRST') || p.includes('01_P1') || p.includes('ALTA') || p.includes('P1')) return 1;
+          if (p.includes('SCHEDULE') || p.includes('02_P2') || p.includes('MEDIA') || p.includes('P2')) return 2;
+          if (p.includes('DELEGATE') || p.includes('03_P3') || p.includes('BAJA') || p.includes('P3')) return 3;
+          if (p.includes('DONT_DO') || p.includes('04_P4') || p.includes('DELEGABLE') || p.includes('P4')) return 4;
+          return 99;
+        };
+        const pA = mapearPrio((a as any).prioridad_eisenhower || (a as any).Prioridad_Eisenhower);
+        const pB = mapearPrio((b as any).prioridad_eisenhower || (b as any).Prioridad_Eisenhower);
+        if (pA !== pB) return pA - pB;
+        const hA = a.hora_inicio?.trim() || '99:99';
+        const hB = b.hora_inicio?.trim() || '99:99';
+        return hA.localeCompare(hB);
       }
-      // Por defecto: TIME (hora_limite_sugerida)
-      const hA = (a as any).hora_limite_sugerida || '99:99';
-      const hB = (b as any).hora_limite_sugerida || '99:99';
-      return hA.localeCompare(hB);
+
+      // Fallback por defecto: Cronológico
+      const hA = a.hora_inicio?.trim() || '99:99';
+      const hB = b.hora_inicio?.trim() || '99:99';
+      const diff = hA.localeCompare(hB);
+      return diff !== 0 ? diff : (a.nombre_actividad || '').localeCompare(b.nombre_actividad || '');
     });
 
     return list;
@@ -340,7 +405,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     const tieneRecurrencia = Boolean(
       (act.frecuencia_ciclo && act.frecuencia_ciclo !== 'NINGUNA') ||
       (act.regla_repeticion && act.regla_repeticion.trim() !== '') ||
-      act.tipo_compromiso === 'HABITUAL'
+      esTipoHabitoRecurrente(act.tipo_compromiso)
     );
     if (tieneRecurrencia) {
       setModalAlcance({ isOpen: true, accion: 'editar', actividad: act });
@@ -368,7 +433,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     const tieneRecurrencia = Boolean(
       (act.frecuencia_ciclo && act.frecuencia_ciclo !== 'NINGUNA') ||
       (act.regla_repeticion && act.regla_repeticion.trim() !== '') ||
-      act.tipo_compromiso === 'HABITUAL'
+      esTipoHabitoRecurrente(act.tipo_compromiso)
     );
     if (tieneRecurrencia) {
       setModalAlcance({ isOpen: true, accion: 'eliminar', actividad: act });
@@ -474,23 +539,23 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
       {/* ================================================================= */}
       {/* BARRA DE KPIS RELEVANTES DE IMPACTO PERSONAL (BENTO BAR - 5 CARDS) */}
       {/* ================================================================= */}
-      <div className="flex flex-row overflow-x-auto [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 mb-2 sm:mb-3.5 shrink-0 snap-x overscroll-contain select-none">
+      <div className="flex flex-row overflow-x-auto [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5 mb-2 sm:mb-2.5 shrink-0 snap-x overscroll-contain select-none">
         {/* BENTO 1: RACHA ACTIVA & CONSISTENCIA */}
-        <div className="min-w-[140px] sm:min-w-0 snap-start shrink-0 portal-surface bg-[#0D1526] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-amber-400/50 transition-all">
+        <div className="min-w-[130px] sm:min-w-0 snap-start shrink-0 portal-surface bg-[#0D1526] p-2 sm:p-2.5 rounded-xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-amber-400/50 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[9.5px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Racha Activa
             </span>
-            <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-amber-950/60 flex items-center justify-center text-amber-500">
-              <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
+            <span className="w-5 h-5 rounded-md bg-amber-950/60 flex items-center justify-center text-amber-500">
+              <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-1 sm:my-1.5">
-            <span className="text-sm sm:text-lg font-black text-white tracking-tight font-mono tabular-nums" id="kpi-mayor-racha">
+          <div className="my-0.5 sm:my-1">
+            <span className="text-sm sm:text-base font-bold text-white tracking-tight font-mono tabular-nums" id="kpi-mayor-racha">
               {kpisTablero.maxRacha} días
             </span>
           </div>
-          <div className="flex items-center gap-1 text-[9.5px] sm:text-[10px] text-slate-400 truncate">
+          <div className="flex items-center gap-1 text-[9px] sm:text-[9.5px] text-slate-400 truncate">
             <span id="kpi-racha-subtexto" className="truncate font-medium">
               {kpisTablero.maxRacha >= 7 ? 'Alto rendimiento' : 'Hábito diario'}
             </span>
@@ -498,24 +563,24 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
         </div>
 
         {/* BENTO 2: TASA DE CUMPLIMIENTO DIARIO */}
-        <div className="min-w-[150px] sm:min-w-0 snap-start shrink-0 portal-surface bg-[#0D1526] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-emerald-400/50 transition-all">
+        <div className="min-w-[140px] sm:min-w-0 snap-start shrink-0 portal-surface bg-[#0D1526] p-2 sm:p-2.5 rounded-xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-emerald-400/50 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[9.5px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Cumplimiento
             </span>
-            <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-sky-950/60 border border-sky-800/40 flex items-center justify-center text-sky-400">
-              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
+            <span className="w-5 h-5 rounded-md bg-sky-950/60 border border-sky-800/40 flex items-center justify-center text-sky-400">
+              <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-1 sm:my-1.5 flex items-baseline justify-between">
-            <span className="text-sm sm:text-lg font-black text-white tracking-tight font-mono tabular-nums" id="kpi-habitos-hoy-ratio">
+          <div className="my-0.5 sm:my-1 flex items-baseline justify-between">
+            <span className="text-sm sm:text-base font-bold text-white tracking-tight font-mono tabular-nums" id="kpi-habitos-hoy-ratio">
               {kpisTablero.completadosHoy} / {kpisTablero.total}
             </span>
-            <span className="text-xs font-bold font-mono tabular-nums text-emerald-400" id="kpi-habitos-global-cumplimiento">
+            <span className="text-[11px] font-bold font-mono tabular-nums text-emerald-400" id="kpi-habitos-global-cumplimiento">
               {pctCumplimiento}%
             </span>
           </div>
-          <div className="w-full bg-slate-800 h-1 sm:h-1.5 rounded-full overflow-hidden">
+          <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
             <div
               id="kpi-habitos-hoy-bar"
               className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300"
@@ -525,66 +590,66 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
         </div>
 
         {/* BENTO 3: BALANCE DE PILARES DE VIDA */}
-        <div className="min-w-[140px] sm:min-w-0 snap-start shrink-0 portal-surface bg-[#0D1526] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-400/50 transition-all">
+        <div className="min-w-[130px] sm:min-w-0 snap-start shrink-0 portal-surface bg-[#0D1526] p-2 sm:p-2.5 rounded-xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-400/50 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[9.5px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Balance Vida
             </span>
-            <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400">
-              <PieChart className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
+            <span className="w-5 h-5 rounded-md bg-slate-800 flex items-center justify-center text-slate-400">
+              <PieChart className="w-3 h-3 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-1 sm:my-1.5">
-            <span className="text-sm sm:text-lg font-black text-white tracking-tight font-mono tabular-nums" id="kpi-balance-pilares">
+          <div className="my-0.5 sm:my-1">
+            <span className="text-sm sm:text-base font-bold text-white tracking-tight font-mono tabular-nums" id="kpi-balance-pilares">
               {pilaresActivos} / 6 pilares
             </span>
           </div>
-          <div className="flex items-center gap-1 text-[9.5px] sm:text-[10px] text-slate-400 truncate">
+          <div className="flex items-center gap-1 text-[9px] sm:text-[9.5px] text-slate-400 truncate">
             <span id="kpi-balance-subtexto" className="truncate font-medium">Equilibrio activo</span>
           </div>
         </div>
 
         {/* BENTO 4: RADAR DE HÁBITOS & CONTROL */}
-        <div className="min-w-[140px] sm:min-w-0 snap-start shrink-0 portal-surface bg-[#0D1526] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-teal-400/50 transition-all">
+        <div className="min-w-[130px] sm:min-w-0 snap-start shrink-0 portal-surface bg-[#0D1526] p-2 sm:p-2.5 rounded-xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-teal-400/50 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[9.5px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Radar Control
             </span>
-            <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-emerald-950/60 flex items-center justify-center text-emerald-400">
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
+            <span className="w-5 h-5 rounded-md bg-emerald-950/60 flex items-center justify-center text-emerald-400">
+              <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-1 sm:my-1.5">
-            <span className="text-sm sm:text-lg font-black text-white tracking-tight font-mono tabular-nums" id="kpi-radar-habitos">
+          <div className="my-0.5 sm:my-1">
+            <span className="text-sm sm:text-base font-bold text-white tracking-tight font-mono tabular-nums" id="kpi-radar-habitos">
               {kpisTablero.total} en foco
             </span>
           </div>
-          <div className="flex items-center gap-1 text-[9.5px] sm:text-[10px] text-slate-400 truncate">
+          <div className="flex items-center gap-1 text-[9px] sm:text-[9.5px] text-slate-400 truncate">
             <span id="kpi-radar-subtexto" className="truncate font-medium">100% activos</span>
           </div>
         </div>
 
         {/* BENTO 5: INVERSIÓN FINANCIERA EN BIENESTAR */}
         <div
-          className="min-w-[155px] sm:min-w-0 snap-start shrink-0 col-span-2 sm:col-span-1 portal-surface bg-[#0D1526] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-emerald-400/60 transition-all select-none"
+          className="min-w-[145px] sm:min-w-0 snap-start shrink-0 col-span-2 sm:col-span-1 portal-surface bg-[#0D1526] p-2 sm:p-2.5 rounded-xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-emerald-400/60 transition-all select-none"
           title={`${kpisTablero.horasInvertidas.toFixed(1)} horas invertidas hoy en desarrollo personal y salud.`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">
+            <span className="text-[9.5px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Bienestar
             </span>
             <div className="flex items-center gap-1 sm:gap-1.5">
-              <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-rose-950/60 flex items-center justify-center text-rose-500">
-                <Wallet className="w-3 sm:w-3.5 h-3 sm:h-3.5" strokeWidth={1.75} />
+              <span className="w-5 h-5 rounded-md bg-rose-950/60 flex items-center justify-center text-rose-500">
+                <Wallet className="w-3 h-3" strokeWidth={1.75} />
               </span>
             </div>
           </div>
-          <div className="my-1">
-            <span className="text-sm sm:text-lg font-black text-emerald-400 font-mono tabular-nums tracking-tight" id="kpi-gasto-vida">
+          <div className="my-0.5 sm:my-1">
+            <span className="text-sm sm:text-base font-bold text-emerald-400 font-mono tabular-nums tracking-tight" id="kpi-gasto-vida">
               S/ 0.00
             </span>
           </div>
-          <div className="flex items-center justify-between text-[9.5px] sm:text-[10px] text-slate-400 truncate pt-0.5 sm:pt-1 border-t border-slate-800/60">
+          <div className="flex items-center justify-between text-[9px] sm:text-[9.5px] text-slate-400 truncate pt-0.5 border-t border-slate-800/60">
             <span id="kpi-habitos-global-horas" className="font-mono tabular-nums">
               {kpisTablero.horasInvertidas.toFixed(1)}h hoy
             </span>
@@ -595,73 +660,81 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
       {/* ================================================================= */}
       {/* PÍLDORAS BENTO DE FILTRO Y BÚSQUEDA RÁPIDA                        */}
       {/* ================================================================= */}
-      <div className="portal-surface bg-[#0D1526] p-1.5 sm:p-2.5 my-1.5 sm:my-2 rounded-xl sm:rounded-2xl border border-slate-800/40 flex flex-col md:flex-row md:items-center justify-between gap-1.5 sm:gap-2 shrink-0 shadow-xs">
+      <div className="portal-surface bg-[#0D1526] p-1.5 sm:p-2 my-1.5 rounded-xl border border-slate-800/40 flex flex-col md:flex-row md:items-center justify-between gap-1.5 shrink-0 shadow-xs">
         <div className="inline-flex items-center gap-1 text-xs select-none overflow-x-auto [&::-webkit-scrollbar]:hidden overscroll-contain w-full md:w-auto shrink-0 pb-0.5 md:pb-0">
           <button
             type="button"
             onClick={() => setFiltroCompromiso('TODOS')}
-            className={`h-7 px-2.5 py-0.5 rounded-lg font-bold transition flex items-center gap-1.5 text-xs cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`h-6.5 px-2.5 py-0.5 rounded-lg border font-mono text-[10.5px] transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
               filtroCompromiso === 'TODOS'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                ? 'bg-cyan-950/30 text-cyan-300 border-cyan-500/40 shadow-[0_0_8px_rgba(6,182,212,0.15)] font-semibold'
+                : 'bg-[#040711]/60 border-slate-800/60 text-slate-400 hover:text-slate-200'
             }`}
           >
             <span>Todos</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-black font-mono tabular-nums">{kpisTablero.total}</span>
+            <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
+              filtroCompromiso === 'TODOS' ? 'bg-cyan-900/50 text-cyan-200 border border-cyan-700/40' : 'bg-slate-800/80 text-slate-400'
+            }`}>{kpisTablero.total}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setFiltroCompromiso('HABITUAL')}
-            className={`h-7 px-2.5 py-0.5 rounded-lg font-bold transition flex items-center gap-1.5 text-xs cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`h-6.5 px-2.5 py-0.5 rounded-lg border font-mono text-[10.5px] transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
               filtroCompromiso === 'HABITUAL'
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                ? 'bg-cyan-950/30 text-cyan-300 border-cyan-500/40 shadow-[0_0_8px_rgba(6,182,212,0.15)] font-semibold'
+                : 'bg-[#040711]/60 border-slate-800/60 text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Repeat className="w-3.5 h-3.5" />
+            <Repeat className={`w-3 h-3 ${filtroCompromiso === 'HABITUAL' ? 'text-cyan-400' : 'text-slate-400'}`} strokeWidth={1.75} />
             <span>Hábitos</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700 font-bold font-mono tabular-nums">{kpisTablero.countHabitual}</span>
+            <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
+              filtroCompromiso === 'HABITUAL' ? 'bg-cyan-900/50 text-cyan-200 border border-cyan-700/40' : 'bg-slate-800/80 text-slate-400'
+            }`}>{kpisTablero.countHabitual}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setFiltroCompromiso('UNICO')}
-            className={`h-7 px-2.5 py-0.5 rounded-lg font-bold transition flex items-center gap-1.5 text-xs cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`h-6.5 px-2.5 py-0.5 rounded-lg border font-mono text-[10.5px] transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
               filtroCompromiso === 'UNICO'
-                ? 'bg-sky-600 text-white shadow-xs'
-                : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                ? 'bg-cyan-950/30 text-cyan-300 border-cyan-500/40 shadow-[0_0_8px_rgba(6,182,212,0.15)] font-semibold'
+                : 'bg-[#040711]/60 border-slate-800/60 text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Target className="w-3.5 h-3.5" />
+            <Target className={`w-3 h-3 ${filtroCompromiso === 'UNICO' ? 'text-cyan-400' : 'text-slate-400'}`} strokeWidth={1.75} />
             <span>Puntuales</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700 font-bold font-mono tabular-nums">{kpisTablero.countUnico}</span>
+            <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
+              filtroCompromiso === 'UNICO' ? 'bg-cyan-900/50 text-cyan-200 border border-cyan-700/40' : 'bg-slate-800/80 text-slate-400'
+            }`}>{kpisTablero.countUnico}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setFiltroCompromiso('RACHA')}
-            className={`h-7 px-2.5 py-0.5 rounded-lg font-bold transition flex items-center gap-1.5 text-xs cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`h-6.5 px-2.5 py-0.5 rounded-lg border font-mono text-[10.5px] transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
               filtroCompromiso === 'RACHA'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                ? 'bg-cyan-950/30 text-cyan-300 border-cyan-500/40 shadow-[0_0_8px_rgba(6,182,212,0.15)] font-semibold'
+                : 'bg-[#040711]/60 border-slate-800/60 text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Flame className="w-3.5 h-3.5" />
+            <Flame className={`w-3 h-3 ${filtroCompromiso === 'RACHA' ? 'text-amber-400' : 'text-slate-400'}`} strokeWidth={1.75} />
             <span>Con Racha</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700 font-bold font-mono tabular-nums">{kpisTablero.countRacha}</span>
+            <span className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-mono tabular-nums ${
+              filtroCompromiso === 'RACHA' ? 'bg-cyan-900/50 text-cyan-200 border border-cyan-700/40' : 'bg-slate-800/80 text-slate-400'
+            }`}>{kpisTablero.countRacha}</span>
           </button>
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden overscroll-contain w-full md:w-auto shrink-0 pb-0.5 md:pb-0">
           {/* Selector de Filtro por Meta (REQ-HABITS-FILTER-BY-META-16) */}
-          <div className="h-7.5 bg-slate-900/60 border border-slate-800/60 rounded-lg px-2 py-1 flex items-center gap-1.5 shadow-xs shrink-0">
-            <Target className="w-3.5 h-3.5 text-cyan-400 shrink-0" strokeWidth={1.75} />
+          <div className="h-6.5 bg-[#040711]/60 border border-slate-800/60 rounded-lg px-2 flex items-center gap-1.5 shadow-xs shrink-0">
+            <Target className="w-3 h-3 text-cyan-400 shrink-0" strokeWidth={1.75} />
             <select
               id="filtro-meta-select"
               value={filtroMetaId}
               onChange={(e) => setFiltroMetaId(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 font-medium focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[200px] truncate"
+              className="bg-transparent text-[11px] text-slate-200 font-medium focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[200px] truncate"
             >
               <option value="TODAS" className="bg-[#0D1526] text-slate-200">Todas las Metas</option>
               <option value="__SIN_META__" className="bg-[#0D1526] text-slate-200">Rutina Base (Sin meta)</option>
@@ -679,7 +752,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
               <button
                 type="button"
                 onClick={() => setMeta360Id(filtroMetaId)}
-                className="px-1.5 py-0.2 rounded bg-sky-950/60 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-800/60 text-[9.5px] font-bold flex items-center gap-1 transition cursor-pointer shrink-0"
+                className="px-1.5 py-0.2 rounded bg-sky-950/60 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-800/60 text-[9px] font-bold flex items-center gap-0.5 transition cursor-pointer shrink-0 font-mono"
                 title="Abrir Vista Detallada 360°"
               >
                 <span>360°</span>
@@ -692,7 +765,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                 className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer"
                 title="Restablecer"
               >
-                <X className="w-3 h-3" strokeWidth={1.75} />
+                <X className="w-2.5 h-2.5" strokeWidth={1.75} />
               </button>
             )}
           </div>
@@ -702,40 +775,56 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
             <button
               type="button"
               onClick={() => setShowSortPopover(!showSortPopover)}
-              className="h-7.5 px-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:text-white flex items-center gap-1 text-xs font-semibold transition cursor-pointer"
+              className="h-6.5 px-2 rounded-lg border border-slate-800/60 bg-[#040711]/60 text-slate-300 hover:text-white flex items-center gap-1 text-[11px] font-medium transition cursor-pointer font-mono"
               title="Opciones de Ordenamiento"
             >
-              <SlidersHorizontal className="w-3 h-3 text-sky-400" />
+              <SlidersHorizontal className="w-3 h-3 text-cyan-400" />
               <span>
                 {modoOrden === 'TIME' && 'Hora'}
-                {modoOrden === 'STREAK' && 'Racha'}
+                {modoOrden === 'GOAL' && 'Metas'}
                 {modoOrden === 'ALPHA' && 'A-Z'}
                 {modoOrden === 'PRIORITY' && 'Prio'}
+                {modoOrden === 'STREAK' && 'Racha'}
               </span>
             </button>
 
             {showSortPopover && (
-              <div className="absolute right-0 top-full mt-1.5 z-50 bg-[#0B1222] border border-slate-700/80 rounded-xl shadow-2xl p-1.5 flex items-center gap-1 min-w-[150px]">
-                {[
-                  { key: 'TIME', label: 'Por Hora' },
-                  { key: 'STREAK', label: 'Mayor Racha' },
-                  { key: 'ALPHA', label: 'Alfabético' },
-                  { key: 'PRIORITY', label: 'Prioridad' }
-                ].map((m) => (
-                  <button
-                    key={m.key}
-                    type="button"
-                    onClick={() => { setModoOrden(m.key as ModoOrden); setShowSortPopover(false); }}
-                    className={`px-2 py-1 rounded-lg text-xs font-medium cursor-pointer ${
-                      modoOrden === m.key
-                        ? 'bg-sky-600 text-white font-bold'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
+              <>
+                {/* Backdrop invisible para cerrar al hacer clic afuera */}
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowSortPopover(false)}
+                />
+                <div className="absolute right-0 top-full mt-1.5 z-50 flex flex-col gap-1 p-1.5 min-w-[140px] bg-[#080D1A] border border-slate-800/80 rounded-xl shadow-xl backdrop-blur-md">
+                  {[
+                    { key: 'TIME', label: 'Por Hora' },
+                    { key: 'GOAL', label: 'Por Metas' },
+                    { key: 'ALPHA', label: 'Alfabético (A-Z)' },
+                    { key: 'PRIORITY', label: 'Por Prioridad' },
+                    { key: 'STREAK', label: 'Mayor Racha' }
+                  ].map((m) => {
+                    const activo = modoOrden === m.key;
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => {
+                          setModoOrden(m.key as ModoOrden);
+                          setShowSortPopover(false);
+                        }}
+                        className={`font-mono text-[11px] px-2 py-1 rounded-lg text-left transition-colors cursor-pointer flex items-center justify-between ${
+                          activo
+                            ? 'bg-cyan-950/40 text-cyan-300 border border-cyan-500/40 font-semibold shadow-xs'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span>{m.label}</span>
+                        {activo && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0 ml-1.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
 

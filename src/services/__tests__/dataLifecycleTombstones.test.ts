@@ -169,7 +169,7 @@ describe('REQ-SYS-009: Data Lifecycle, Tombstones y Garbage Collection', () => {
 
       (syncManager as any).supabase = { from: fromSpy };
 
-      await syncManager.descargarDatosDescendientes();
+      await syncManager.descargarDatosDescendientes(['gastos', 'ingresos']);
 
       expect(fromSpy).toHaveBeenCalledWith('gastos');
       expect(fromSpy).toHaveBeenCalledWith('ingresos');

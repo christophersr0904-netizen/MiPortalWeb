@@ -252,9 +252,6 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
     for (const a of (datosDexie.actividades || [])) {
       if (!a) continue;
       const estadoAct = String(getProp(a, 'estado', 'Estado', 'estado_actividad') ?? '02_Por_Hacer');
-      if (estadoAct === '05_Archivado' || esElementoArchivado(a, 'actividades')) continue;
-      const fProgRaw = String(getProp(a, 'fecha_programada', 'Fecha_Programada') ?? '');
-      const fProg = normalizarFechaAFechaIso(fProgRaw);
 
       const freqCiclo = String(getProp(a, 'frecuencia_ciclo', 'Frecuencia_Ciclo') ?? 'DIARIA').toUpperCase().trim();
       const reglaRep = String(getProp(a, 'regla_repeticion', 'Regla_Repeticion') ?? '').trim();
@@ -265,6 +262,16 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
         reglaRep !== ''
       );
       const esRutinaria = tipoCompromiso !== 'PUNTUAL' || tieneRecurrencia;
+
+      // REQ-FIX-01: Para elementos de tipo hábito/recurrente, evitar que esElementoArchivado los oculte por desfase de fecha semilla si están activos
+      if (esRutinaria) {
+        if (estadoAct === '05_Archivado') continue;
+      } else {
+        if (estadoAct === '05_Archivado' || esElementoArchivado(a, 'actividades')) continue;
+      }
+
+      const fProgRaw = String(getProp(a, 'fecha_programada', 'Fecha_Programada') ?? '');
+      const fProg = normalizarFechaAFechaIso(fProgRaw);
 
       const ultimaFechaComp = normalizarFechaAFechaIso(String(getProp(a, 'ultima_fecha_completado', 'Ultima_Fecha_Completado') ?? ''));
       const histFechasRaw = getProp(a, 'historial_fechas', 'Historial_Fechas');
@@ -328,10 +335,9 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       const catVidaLimpia = catVida.replace(/_/g, ' ');
 
       for (const fechaItem of fechasAplicables) {
-        const completadoEnFecha =
-          estadoAct === '04_Completado' ||
-          (fechaItem === fechaActual && completadoHoy) ||
-          histFechas.includes(fechaItem);
+        const completadoEnFecha = esRutinaria
+          ? (completadoHoy || histFechas.includes(fechaItem) || (estadoAct === '04_Completado' && fProg === fechaItem))
+          : (estadoAct === '04_Completado' || (fechaItem === fechaActual && completadoHoy) || histFechas.includes(fechaItem));
 
         let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
         if (

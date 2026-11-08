@@ -18,6 +18,9 @@ import {
 } from '../services/habitosService';
 import { syncManager, type SyncState } from '../services/syncManager';
 
+// Bandera global para evitar ciclos de hidratación redundantes en IndexedDB
+let autoHidratacionEjecutadaGlobal = false;
+
 /**
  * FIX-HABITOS-HIERARCHY-DECOUPLING-108: Resuelve exclusivamente subtareas reales o pasos procedurales
  * vinculados a un hábito. NUNCA subyuga ni absorbe otras ActividadPersonal ni tareas principales completas.
@@ -248,6 +251,19 @@ export function useHabitos() {
     return mapa;
   }, [vinculos, metasPlanes, todasLasActividades]);
 
+  // Mapeo O(1) de HabitoMetaVinculo[] por habito_id / codigo_legado
+  const vinculosPorHabitoId = useMemo(() => {
+    const map = new Map<string, typeof vinculos>();
+    for (const v of vinculos) {
+      if (!v) continue;
+      const hId = String(v.habito_id || (v as any).habitoId || '').trim();
+      if (!hId) continue;
+      if (!map.has(hId)) map.set(hId, []);
+      map.get(hId)!.push(v);
+    }
+    return map;
+  }, [vinculos]);
+
   // FIX-HABITOS-HIERARCHY-DECOUPLING-108: Resolución estricta de subtareas reales/checklist por hábito
   const actividadesPorHabitoId = useMemo(() => {
     const map = new Map<string, Array<SubtareaPaso | any>>();
@@ -418,17 +434,22 @@ export function useHabitos() {
         'Hábito sin título';
 
       const metaVinc = (aId ? metasPorHabitoId.get(aId) : undefined) || (aCod ? metasPorHabitoId.get(aCod) : undefined);
+      const vMeta = (aId ? vinculosPorHabitoId.get(aId) : undefined) || (aCod ? vinculosPorHabitoId.get(aCod) : undefined) || [];
+
       return {
         ...a,
         nombre_actividad: nomDefensivo,
         actividadesVinculadas: actVinc || [],
-        metaVinculada: metaVinc
+        metaVinculada: metaVinc,
+        vinculosMeta: vMeta
       };
     });
-  }, [actividadesFiltradas, actividadesPorHabitoId, metasPorHabitoId, todasLasSubtareas]);
+  }, [actividadesFiltradas, actividadesPorHabitoId, metasPorHabitoId, vinculosPorHabitoId, todasLasSubtareas]);
 
   // Auto-hidratación inicial al montar para poblar relaciones si IndexedDB está vacía
   useEffect(() => {
+    if (autoHidratacionEjecutadaGlobal) return;
+    autoHidratacionEjecutadaGlobal = true;
     autoHidratarVinculosHabitosActividades().catch((err) => {
       console.warn('[useHabitos] Error en auto-hidratación de vínculos:', err);
     });
@@ -436,11 +457,20 @@ export function useHabitos() {
 
   // Instrumentación de logs de diagnóstico solicitada en DIAG-HABITOS-DATA-INSPECTION-104 & FIX-105
   useEffect(() => {
-    console.group('[DEBUG HÁBITOS]');
+    console.groupCollapsed('[DEBUG HÁBITOS]');
     console.log('Total hábitos en DB:', todasLasActividades.length);
-    console.log('Total actividades en DB:', rawTodasLasTareas?.length || 0);
+    console.log('Total tareas en DB:', rawTodasLasTareas?.length || 0);
     console.log('Vínculos habitos_metas_vinculos:', vinculos?.length || 0);
-    console.log('Muestra primer hábito con vínculos:', actividadesEnriquecidas[0]?.actividadesVinculadas, actividadesEnriquecidas[0]?.metaVinculada);
+    console.log(
+      'Muestra primer hábito:',
+      actividadesEnriquecidas[0]?.codigo_legado,
+      '| metaVinculada:',
+      actividadesEnriquecidas[0]?.metaVinculada?.codigo_legado || 'Sin meta',
+      '| subtareas:',
+      actividadesEnriquecidas[0]?.actividadesVinculadas?.length || 0,
+      '| vinculosMeta:',
+      actividadesEnriquecidas[0]?.vinculosMeta?.length || 0
+    );
     console.groupEnd();
   }, [todasLasActividades.length, rawTodasLasTareas?.length, vinculos?.length, actividadesEnriquecidas]);
 

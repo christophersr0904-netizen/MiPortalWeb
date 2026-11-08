@@ -81,10 +81,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Ignorar llamadas a Supabase o extensiones del navegador
+  // Ignorar llamadas a Supabase, extensiones del navegador o entorno de desarrollo local (Vite HMR)
   if (
     url.hostname.includes('supabase.co') ||
-    url.protocol.startsWith('chrome-extension')
+    url.protocol.startsWith('chrome-extension') ||
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1' ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.includes('node_modules')
   ) {
     return;
   }
@@ -107,12 +112,22 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(() => {
+        .catch(async () => {
           // Si estamos offline y es navegación, entregar index.html en caché
           if (req.mode === 'navigate') {
-            return caches.match('./') || caches.match('./index.html') || caches.match('/index.html');
+            const fallback =
+              (await caches.match('./')) ||
+              (await caches.match('./index.html')) ||
+              (await caches.match('/index.html'));
+            if (fallback) return fallback;
           }
-          return cachedResponse;
+          // Si no hay respuesta en caché ni red, retornar respuesta de error válida (nunca undefined)
+          if (cachedResponse) return cachedResponse;
+          return new Response('PMO Offline - Recurso no disponible en caché', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: new Headers({ 'Content-Type': 'text/plain; charset=utf-8' })
+          });
         });
 
       // Devolver inmediatamente desde caché si existe (0 ms), o esperar red

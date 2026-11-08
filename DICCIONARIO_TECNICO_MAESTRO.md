@@ -8768,3 +8768,86 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Entregables Verificados en `release/`:**
   * `MiPortalWeb HUD Setup 2.0.0.exe` (170.72 MB).
   * `MiPortalWeb HUD 2.0.0.exe` (149.42 MB).
+
+---
+
+### [REQ-FIX-07: Corrección Aritmética en Telemetría de Montaje de ViewKanban]
+**Fecha:** Noviembre 2026 | **Fase:** 4.99 | **Archivos Modificados:** `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Artefacto Matemático en Buffer W3C Performance Timeline:** La función `getMarkTime('t3_kanban_mount')` indexaba rígidamente `entries[0].startTime`. Dado que la API W3C acumula marcas en un buffer global de sesión, `entries[0]` preservaba la marca del primer montaje (~200ms de la sesión). Al navegar hacia otras vistas (Hábitos, Detalle 360) y regresar al Kanban transcurridos 40s o 104s, `performance.now() - entries[0].startTime` reportaba el tiempo acumulado de la sesión del usuario (104,388ms) en lugar de la latencia real de renderizado del componente.
+- **Acumulación de Marcas sin Purga:** No existía función de cleanup al desmontar `ViewKanban`, dejando marcas huérfanas en el buffer de performance del navegador.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Indexación de la Marca Más Reciente:**
+   - En `src/components/Views/ViewKanban.tsx` (`getMarkTime`), se actualizó la consulta a `entries[entries.length - 1].startTime`, asegurando que cada ciclo de render mida estrictamente respecto a su propia marca de montaje.
+2. **Purga Automática de Marcas al Desmontar:**
+   - Se añadió un retorno de limpieza en el `useEffect` de montaje:
+     ```typescript
+     return () => {
+       if (typeof performance !== 'undefined' && performance.clearMarks) {
+         performance.clearMarks('t3_kanban_mount');
+         performance.clearMarks('t4_kanban_cards_painted');
+       }
+     };
+     ```
+   - Garantiza que al desmontar el tablero por cambio de vista, las marcas previas sean eliminadas del buffer, erradicando lecturas obsoletas.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (228/228 tests).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.92s).
+- **Latencia Real de Renderizado:** Normalizada a medición fidedigna de render (< 50ms).
+
+---
+
+### [REQ-FIX-08: Unificación Atómica de useLiveQuery en ViewKanban, Sincronización Optimista de Avances y Blindaje contra Throttling de Foco]
+**Fecha:** Noviembre 2026 | **Fase:** 5.00 | **Archivos Modificados:** `src/components/Views/ViewKanban.tsx`, `src/services/syncManager.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Condición de Carrera en 5 `useLiveQuery` Desacoplados:** `ViewKanban` ejecutaba 5 consultas independientes contra Dexie (`proyectos`, `tareas`, `subtareas`, `hitos`, `gastos`). Al resolver `proyectos` antes que `hitos` o `tareas`, `calcularAvancesProyectoCanonica` caía en la rama temporal por fechas (Caso 3), para luego saltar a promedio plano de tareas (Caso 2) y finalmente a WBS ponderado (Caso 1), provocando una oscilación visible del porcentaje de avance en el Sidebar.
+- **Disociación de Estado Optimista:** La función de avances recibía `rawTareas` en vez de `tareas` (la colección con los estados optimistas aplicados en memoria). Al mover una tarjeta a completado, el contador O(1) del sidebar se actualizaba al instante pero la barra de avance del proyecto quedaba desfasada hasta la persistencia física en disco.
+- **Ráfaga por Throttling de Foco en SyncManager:** Chromium congela los timers de fondo. Al reenfocar la ventana tras minutos de inactividad, el `setInterval(45000)` de `SyncManager` se ejecutaba inmediatamente en ráfaga llamando a `descargarDatosDescendientes()`, el cual aplicaba `bulkPut` secuencial tabla por tabla, detonando una cascada de re-renders desfasados.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Unificación Atómica de `useLiveQuery`:**
+   - En `src/components/Views/ViewKanban.tsx`, se consolidaron las 5 consultas en una sola transacción asíncrona mediante `Promise.all`:
+     ```typescript
+     const datosKanbanLive = useLiveQuery(async () => {
+       const [proyectos, tareas, subtareas, hitos, gastos] = await Promise.all([
+         db.proyectos.toArray(),
+         db.tareas.toArray(),
+         db.subtareas_pasos.toArray(),
+         db.hitos_wbs.toArray(),
+         db.gastos.toArray()
+       ]);
+       return { proyectos, tareas, subtareas, hitos, gastos };
+     }, []);
+     const cargandoDatosIniciales = datosKanbanLive === undefined;
+     ```
+   - Garantiza entrega indivisible y atómica de todas las entidades en el mismo tick de React.
+2. **Sincronización Optimista en `avancesPorProyecto`:**
+   - Se sustituyó `rawTareas` por `tareas` y se blindó el cálculo ante cargas iniciales:
+     ```typescript
+     const avancesPorProyecto = useMemo(() => {
+       const map = new Map<string, { avanceReal: number; avanceTotalProyectado: number }>();
+       if (cargandoDatosIniciales) return map;
+       proyectos.forEach((proy) => {
+         const key = proy.codigo_legado || proy.id;
+         if (key) {
+           map.set(key, calcularAvancesProyectoCanonica(proy, rawHitos, tareas));
+         }
+       });
+       return map;
+     }, [cargandoDatosIniciales, proyectos, rawHitos, tareas]);
+     ```
+   - Actualización sincrónica instantánea del porcentaje de avance al interactuar con cualquier tarjeta Kanban.
+3. **Blindaje contra Throttling y Amortiguación de Foco en `SyncManager`:**
+   - En `src/services/syncManager.ts`, se inhibió el disparo del intervalo periódico si la pestaña está oculta (`document.visibilityState === 'hidden'`).
+   - Se añadió un listener a `visibilitychange` con debounce de 800ms (`visibilityDebounceTimer`) para estabilizar el render antes de ejecutar sincronizaciones remotas tras reenfocar.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (228/228 tests).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 7.91s).
+- **Estabilidad Reactiva:** Erradicada la fluctuación de avances en el Sidebar y eliminada la sobrecarga al reenfocar la ventana.

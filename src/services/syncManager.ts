@@ -15,7 +15,9 @@ import {
   sanitizarCuotaPayload,
   sanitizarMetaPlanPayload,
   sanitizarHitoPlanPayload,
-  sanitizarVinculoPayload
+  sanitizarVinculoPayload,
+  sanitizarActividadInbound,
+  sanitizarSubtareaInbound
 } from './syncPayloadSanitizer';
 import type { TombstoneRecord } from '../types';
 
@@ -37,7 +39,12 @@ class SyncManager {
   private recentlyPushedIds = new Map<string, number>();
   private realtimeChannel: any = null;
   private realtimeDebounceTimer: any = null;
+  private visibilityDebounceTimer: any = null;
   private tablasPendientesRealtime = new Set<string>();
+
+  // Cuarentena en memoria para registros con fallos irrecuperables de Foreign Key (23503 / 409 / user_id ausente)
+  // Impide bucles infinitos de reintento que saturen la red y congelen el event loop de React (REQ-DESKTOP-11)
+  private registrosFkCuarentena = new Set<string>();
 
   constructor() {
     this.initSupabaseClient();
@@ -69,12 +76,73 @@ class SyncManager {
 
   public setUserId(userId: string) {
     if (isUuid(userId)) {
-      this.currentUserId = userId;
+      if (this.currentUserId !== userId) {
+        this.currentUserId = userId;
+        this.registrosFkCuarentena.clear();
+      }
     }
   }
 
   public getUserId(): string {
     return this.currentUserId;
+  }
+
+  /**
+   * Evalúa si un error retornado por Supabase corresponde a una violación de Foreign Key no recuperable (código 23503 o 409)
+   */
+  public esErrorFkNoRecuperable(error: any): boolean {
+    if (!error) return false;
+    const code = String(error.code || '');
+    const status = Number(error.status || error.statusCode || 0);
+    const msg = String(error.message || '').toLowerCase();
+    const details = String(error.details || '').toLowerCase();
+    const hint = String(error.hint || '').toLowerCase();
+    return (
+      code === '23503' ||
+      code === '409' ||
+      status === 409 ||
+      msg.includes('23503') ||
+      msg.includes('409') ||
+      msg.includes('foreign key') ||
+      msg.includes('violates foreign key constraint') ||
+      msg.includes('user_id') ||
+      msg.includes('is not present in table') ||
+      msg.includes('conflict') ||
+      details.includes('is not present in table') ||
+      details.includes('foreign key') ||
+      details.includes('violates foreign key') ||
+      hint.includes('foreign key')
+    );
+  }
+
+  // Bandera de seguridad para suprimir consultas a tablas inexistentes en Supabase (REQ-WEB-01)
+  // Por defecto se omiten 'gastos', 'ingresos' y 'cuotas' para neutralizar 404 (Could not find table in schema cache).
+  public syncFinanzasRemotoHabilitado: boolean = false;
+  private tablasInexistentesSupabase: Set<string> = new Set<string>(['gastos', 'ingresos', 'cuotas']);
+
+  public habilitarSyncFinanzasRemoto(habilitar: boolean = true): void {
+    this.syncFinanzasRemotoHabilitado = habilitar;
+    if (habilitar) {
+      this.tablasInexistentesSupabase.delete('gastos');
+      this.tablasInexistentesSupabase.delete('ingresos');
+      this.tablasInexistentesSupabase.delete('cuotas');
+    } else {
+      this.tablasInexistentesSupabase.add('gastos');
+      this.tablasInexistentesSupabase.add('ingresos');
+      this.tablasInexistentesSupabase.add('cuotas');
+    }
+  }
+
+  public esTablaInexistenteSupabase(tabla: string): boolean {
+    return this.tablasInexistentesSupabase.has(tabla);
+  }
+
+  public limpiarCuarentenaFk(): void {
+    this.registrosFkCuarentena.clear();
+  }
+
+  public estaEnCuarentenaFk(id: string): boolean {
+    return this.registrosFkCuarentena.has(id);
   }
 
   private initSupabaseClient() {
@@ -108,9 +176,12 @@ class SyncManager {
       this.setSyncState('offline');
     });
 
-    // Sincronización periódica cada 45 segundos si hay conexión
+    // Sincronización periódica cada 45 segundos si hay conexión (Blindaje contra pestañas en segundo plano REQ-FIX-08)
     setInterval(async () => {
       if (typeof navigator !== 'undefined' && navigator.onLine && !this.isSyncing) {
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          return;
+        }
         try {
           await this.syncPendingRecords();
           await this.descargarDatosDescendientes();
@@ -119,6 +190,28 @@ class SyncManager {
         }
       }
     }, 45000);
+
+    // Amortiguación de sincronización al recuperar visibilidad (REQ-FIX-08)
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          if (this.visibilityDebounceTimer) {
+            clearTimeout(this.visibilityDebounceTimer);
+          }
+          this.visibilityDebounceTimer = setTimeout(async () => {
+            this.visibilityDebounceTimer = null;
+            if (typeof navigator !== 'undefined' && navigator.onLine && !this.isSyncing) {
+              try {
+                await this.syncPendingRecords();
+                await this.descargarDatosDescendientes();
+              } catch (err) {
+                console.warn('[SyncManager] Error al sincronizar tras recuperar visibilidad:', err);
+              }
+            }
+          }, 800);
+        }
+      });
+    }
   }
 
   /**
@@ -245,47 +338,46 @@ class SyncManager {
   /**
    * Resuelve registros en cola de sincronización ('pending' o 'error' para reintentos con backoff).
    * Compatible con mocks de pruebas unitarias que sólo implementen .equals().
+   * Descarta permanentemente registros en estado 'quarantined' (REQ-WEB-01) o en registrosFkCuarentena.
    */
   public async obtenerRegistrosPendientes<T>(tableRef: any): Promise<T[]> {
+    let records: T[] = [];
     try {
       const w = tableRef.where('sync_status');
       if (typeof w.anyOf === 'function') {
-        return await w.anyOf(['pending', 'error']).toArray();
+        records = await w.anyOf(['pending', 'error']).toArray();
+      } else if (typeof w.equals === 'function') {
+        records = await w.equals('pending').toArray();
+      } else {
+        records = (await tableRef.toArray()).filter(
+          (r: any) => r.sync_status === 'pending' || r.sync_status === 'error'
+        );
       }
-      if (typeof w.equals === 'function') {
-        return await w.equals('pending').toArray();
-      }
-      return (await tableRef.toArray()).filter(
-        (r: any) => r.sync_status === 'pending' || r.sync_status === 'error'
-      );
     } catch {
       try {
-        return await tableRef.where('sync_status').equals('pending').toArray();
+        records = await tableRef.where('sync_status').equals('pending').toArray();
       } catch {
-        return [];
+        records = [];
       }
     }
+
+    return records.filter((r: any) => {
+      if (!r) return false;
+      if (r.sync_status === 'quarantined' || r.sync_status === 'synced') return false;
+      if (r.id && this.registrosFkCuarentena.has(String(r.id))) return false;
+      return true;
+    });
   }
 
   /**
-   * Conteo seguro de registros pendientes o en error
+   * Conteo seguro de registros pendientes o en error (excluye registros en cuarentena)
    */
   public async contarPendientes(tableRef: any): Promise<number> {
     try {
-      const w = tableRef.where('sync_status');
-      if (typeof w.anyOf === 'function') {
-        return await w.anyOf(['pending', 'error']).count();
-      }
-      if (typeof w.equals === 'function') {
-        return await w.equals('pending').count();
-      }
-      return 0;
+      const pending = await this.obtenerRegistrosPendientes(tableRef);
+      return pending.length;
     } catch {
-      try {
-        return await tableRef.where('sync_status').equals('pending').count();
-      } catch {
-        return 0;
-      }
+      return 0;
     }
   }
 
@@ -396,6 +488,9 @@ class SyncManager {
     }
 
     for (const proy of pending) {
+      if (this.registrosFkCuarentena.has(proy.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('proyectos', proy.codigo_legado, proy.updated_at)) {
           await db.proyectos.update(proy.id, { sync_status: 'synced' });
@@ -410,8 +505,14 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar proyecto:', proy.codigo_legado, error);
-          await db.proyectos.update(proy.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(`[SyncManager] Violación FK/409 en proyecto ${proy.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(proy.id);
+            await db.proyectos.update(proy.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar proyecto:', proy.codigo_legado, error);
+            await db.proyectos.update(proy.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.proyectos.update(proy.id, {
@@ -420,9 +521,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar proyecto:', proy.codigo_legado, err);
-        await db.proyectos.update(proy.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción FK/409 en proyecto ${proy.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(proy.id);
+          await db.proyectos.update(proy.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar proyecto:', proy.codigo_legado, err);
+          await db.proyectos.update(proy.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -447,6 +554,9 @@ class SyncManager {
     const map = proyectoMap || (await this.construirMapaProyectos());
 
     for (const hito of pending) {
+      if (this.registrosFkCuarentena.has(hito.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('hitos_wbs', hito.codigo_legado, hito.updated_at)) {
           await db.hitos_wbs.update(hito.id, { sync_status: 'synced' });
@@ -456,8 +566,9 @@ class SyncManager {
 
         const payload = sanitizarHitoPayload(hito, map, this.currentUserId);
         if (!payload.proyecto_id) {
-          console.warn('[SyncManager] Hito sin proyecto_id UUID resuelto, omitiendo:', hito.codigo_legado);
-          await db.hitos_wbs.update(hito.id, { sync_status: 'error' });
+          console.warn('[SyncManager] Hito sin proyecto_id UUID resuelto, cuarentena en Dexie:', hito.codigo_legado);
+          this.registrosFkCuarentena.add(hito.id);
+          await db.hitos_wbs.update(hito.id, { sync_status: 'quarantined' });
           result.failed++;
           continue;
         }
@@ -468,8 +579,14 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar hito:', hito.codigo_legado, error);
-          await db.hitos_wbs.update(hito.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(`[SyncManager] Violación FK/409 en hito ${hito.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(hito.id);
+            await db.hitos_wbs.update(hito.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar hito:', hito.codigo_legado, error);
+            await db.hitos_wbs.update(hito.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.hitos_wbs.update(hito.id, {
@@ -478,9 +595,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar hito:', hito.codigo_legado, err);
-        await db.hitos_wbs.update(hito.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción FK/409 en hito ${hito.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(hito.id);
+          await db.hitos_wbs.update(hito.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar hito:', hito.codigo_legado, err);
+          await db.hitos_wbs.update(hito.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -509,6 +632,9 @@ class SyncManager {
     const hMap = hitoMap || (await this.construirMapaHitos());
 
     for (const tarea of pending) {
+      if (this.registrosFkCuarentena.has(tarea.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('tareas', tarea.codigo_legado, tarea.updated_at)) {
           await db.tareas.update(tarea.id, { sync_status: 'synced' });
@@ -518,8 +644,9 @@ class SyncManager {
 
         const payload = sanitizarTareaPayload(tarea, pMap, hMap, this.currentUserId);
         if (!payload.proyecto_id || !payload.hito_id) {
-          console.warn('[SyncManager] Tarea sin proyecto_id o hito_id UUID resuelto:', tarea.codigo_legado);
-          await db.tareas.update(tarea.id, { sync_status: 'error' });
+          console.warn('[SyncManager] Tarea sin proyecto_id o hito_id UUID resuelto, cuarentena en Dexie:', tarea.codigo_legado);
+          this.registrosFkCuarentena.add(tarea.id);
+          await db.tareas.update(tarea.id, { sync_status: 'quarantined' });
           result.failed++;
           continue;
         }
@@ -530,8 +657,14 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar tarea:', tarea.codigo_legado, error);
-          await db.tareas.update(tarea.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(`[SyncManager] Violación FK/409 en tarea ${tarea.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(tarea.id);
+            await db.tareas.update(tarea.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar tarea:', tarea.codigo_legado, error);
+            await db.tareas.update(tarea.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.tareas.update(tarea.id, {
@@ -540,9 +673,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar tarea:', tarea.codigo_legado, err);
-        await db.tareas.update(tarea.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción FK/409 en tarea ${tarea.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(tarea.id);
+          await db.tareas.update(tarea.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar tarea:', tarea.codigo_legado, err);
+          await db.tareas.update(tarea.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -565,6 +704,9 @@ class SyncManager {
     }
 
     for (const act of pending) {
+      if (this.registrosFkCuarentena.has(act.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('actividades_personales', act.codigo_legado, act.updated_at)) {
           await db.actividades_personales.update(act.id, { sync_status: 'synced' });
@@ -579,8 +721,14 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar actividad:', act.codigo_legado, error);
-          await db.actividades_personales.update(act.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(`[SyncManager] Violación FK/409 en actividad ${act.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(act.id);
+            await db.actividades_personales.update(act.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar actividad:', act.codigo_legado, error);
+            await db.actividades_personales.update(act.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.actividades_personales.update(act.id, {
@@ -589,9 +737,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar actividad:', act.codigo_legado, err);
-        await db.actividades_personales.update(act.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción FK/409 en actividad ${act.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(act.id);
+          await db.actividades_personales.update(act.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar actividad:', act.codigo_legado, err);
+          await db.actividades_personales.update(act.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -620,6 +774,9 @@ class SyncManager {
     const aMap = actividadMap || (await this.construirMapaActividades());
 
     for (const sub of pending) {
+      if (this.registrosFkCuarentena.has(sub.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('subtareas_pasos', sub.codigo_legado, sub.updated_at)) {
           await db.subtareas_pasos.update(sub.id, { sync_status: 'synced' });
@@ -629,8 +786,9 @@ class SyncManager {
 
         const payload = sanitizarSubtareaPayload(sub, tMap, aMap, this.currentUserId);
         if (!payload.tarea_id && !payload.actividad_id) {
-          console.warn('[SyncManager] Subtarea sin padre UUID resuelto:', sub.codigo_legado);
-          await db.subtareas_pasos.update(sub.id, { sync_status: 'error' });
+          console.warn('[SyncManager] Subtarea sin padre UUID resuelto, cuarentena en Dexie:', sub.codigo_legado);
+          this.registrosFkCuarentena.add(sub.id);
+          await db.subtareas_pasos.update(sub.id, { sync_status: 'quarantined' });
           result.failed++;
           continue;
         }
@@ -641,8 +799,14 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar subtarea:', sub.codigo_legado, error);
-          await db.subtareas_pasos.update(sub.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(`[SyncManager] Violación FK/409 en subtarea ${sub.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(sub.id);
+            await db.subtareas_pasos.update(sub.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar subtarea:', sub.codigo_legado, error);
+            await db.subtareas_pasos.update(sub.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.subtareas_pasos.update(sub.id, {
@@ -651,9 +815,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar subtarea:', sub.codigo_legado, err);
-        await db.subtareas_pasos.update(sub.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción FK/409 en subtarea ${sub.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(sub.id);
+          await db.subtareas_pasos.update(sub.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar subtarea:', sub.codigo_legado, err);
+          await db.subtareas_pasos.update(sub.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -676,6 +846,9 @@ class SyncManager {
     }
 
     for (const meta of pending) {
+      if (this.registrosFkCuarentena.has(meta.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('metas_planes', meta.codigo_legado, meta.updated_at)) {
           await db.metas_planes.update(meta.id, { sync_status: 'synced' });
@@ -690,8 +863,17 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar meta:', meta.codigo_legado, error);
-          await db.metas_planes.update(meta.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(
+              `[SyncManager] Violación Foreign Key (código ${error.code || '23503'}) en meta ${meta.codigo_legado}. Cuarentena definitiva en Dexie para contener bucle:`,
+              error.message
+            );
+            this.registrosFkCuarentena.add(meta.id);
+            await db.metas_planes.update(meta.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar meta:', meta.codigo_legado, error);
+            await db.metas_planes.update(meta.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.metas_planes.update(meta.id, {
@@ -700,9 +882,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar meta:', meta.codigo_legado, err);
-        await db.metas_planes.update(meta.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción Foreign Key en meta ${meta.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(meta.id);
+          await db.metas_planes.update(meta.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar meta:', meta.codigo_legado, err);
+          await db.metas_planes.update(meta.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -727,6 +915,9 @@ class SyncManager {
     const mMap = metaMap || (await this.construirMapaMetas());
 
     for (const hito of pending) {
+      if (this.registrosFkCuarentena.has(hito.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('planes_accion_hitos', hito.codigo_legado, hito.updated_at)) {
           await db.planes_accion_hitos.update(hito.id, { sync_status: 'synced' });
@@ -736,8 +927,9 @@ class SyncManager {
 
         const payload = sanitizarHitoPlanPayload(hito, mMap, this.currentUserId);
         if (!payload.meta_id) {
-          console.warn('[SyncManager] Hito de plan sin meta_id UUID resuelto:', hito.codigo_legado);
-          await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
+          console.warn('[SyncManager] Hito de plan sin meta_id UUID resuelto, cuarentena en Dexie:', hito.codigo_legado);
+          this.registrosFkCuarentena.add(hito.id);
+          await db.planes_accion_hitos.update(hito.id, { sync_status: 'quarantined' });
           result.failed++;
           continue;
         }
@@ -748,8 +940,17 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar hito de plan:', hito.codigo_legado, error);
-          await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(
+              `[SyncManager] Violación Foreign Key (código ${error.code || '23503'}) en hito de plan ${hito.codigo_legado}. Cuarentena definitiva en Dexie:`,
+              error.message
+            );
+            this.registrosFkCuarentena.add(hito.id);
+            await db.planes_accion_hitos.update(hito.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar hito de plan:', hito.codigo_legado, error);
+            await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.planes_accion_hitos.update(hito.id, {
@@ -758,9 +959,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar hito de plan:', hito.codigo_legado, err);
-        await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción Foreign Key en hito de plan ${hito.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(hito.id);
+          await db.planes_accion_hitos.update(hito.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar hito de plan:', hito.codigo_legado, err);
+          await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -789,11 +996,15 @@ class SyncManager {
     const mMap = metaMap || (await this.construirMapaMetas());
 
     for (const vinculo of pending) {
+      if (this.registrosFkCuarentena.has(vinculo.id)) {
+        continue;
+      }
       try {
         const payload = sanitizarVinculoPayload(vinculo, aMap, mMap, this.currentUserId);
         if (!payload.habito_id || !payload.meta_id) {
-          console.warn('[SyncManager] Vínculo hábito-meta sin UUIDs resueltos:', vinculo.id);
-          await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
+          console.warn('[SyncManager] Vínculo hábito-meta sin UUIDs resueltos, cuarentena en Dexie:', vinculo.id);
+          this.registrosFkCuarentena.add(vinculo.id);
+          await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'quarantined' });
           result.failed++;
           continue;
         }
@@ -804,8 +1015,17 @@ class SyncManager {
           .upsert(payload, { onConflict: 'id' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar vínculo hábito-meta:', vinculo.id, error);
-          await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(
+              `[SyncManager] Violación Foreign Key (código ${error.code || '23503'}) en vínculo hábito-meta ${vinculo.id}. Cuarentena definitiva en Dexie para contener bucle:`,
+              error.message
+            );
+            this.registrosFkCuarentena.add(vinculo.id);
+            await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar vínculo hábito-meta:', vinculo.id, error);
+            await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.habitos_metas_vinculos.update(vinculo.id, {
@@ -814,9 +1034,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar vínculo hábito-meta:', vinculo.id, err);
-        await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción Foreign Key en vínculo hábito-meta ${vinculo.id}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(vinculo.id);
+          await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar vínculo hábito-meta:', vinculo.id, err);
+          await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -829,6 +1055,11 @@ class SyncManager {
    */
   public async sincronizarGastos(): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
+    // REQ-WEB-01: Suprimir push hacia Supabase si la tabla no existe en el schema remoto (404)
+    if (!this.syncFinanzasRemotoHabilitado && this.tablasInexistentesSupabase.has('gastos')) {
+      return result;
+    }
+
     const pending = await this.obtenerRegistrosPendientes<any>(db.gastos);
     if (pending.length === 0) return result;
 
@@ -839,6 +1070,9 @@ class SyncManager {
     }
 
     for (const gasto of pending) {
+      if (this.registrosFkCuarentena.has(gasto.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('gastos', gasto.codigo_legado, gasto.updated_at)) {
           await db.gastos.update(gasto.id, { sync_status: 'synced' });
@@ -853,8 +1087,14 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar gasto:', gasto.codigo_legado, error);
-          await db.gastos.update(gasto.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(`[SyncManager] Violación FK/409 en gasto ${gasto.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(gasto.id);
+            await db.gastos.update(gasto.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar gasto:', gasto.codigo_legado, error);
+            await db.gastos.update(gasto.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.gastos.update(gasto.id, {
@@ -863,9 +1103,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar gasto:', gasto.codigo_legado, err);
-        await db.gastos.update(gasto.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción FK/409 en gasto ${gasto.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(gasto.id);
+          await db.gastos.update(gasto.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar gasto:', gasto.codigo_legado, err);
+          await db.gastos.update(gasto.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -878,6 +1124,11 @@ class SyncManager {
    */
   public async sincronizarIngresos(): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
+    // REQ-WEB-01: Suprimir push hacia Supabase si la tabla no existe en el schema remoto (404)
+    if (!this.syncFinanzasRemotoHabilitado && this.tablasInexistentesSupabase.has('ingresos')) {
+      return result;
+    }
+
     const pending = await this.obtenerRegistrosPendientes<any>(db.ingresos);
     if (pending.length === 0) return result;
 
@@ -888,6 +1139,9 @@ class SyncManager {
     }
 
     for (const ingreso of pending) {
+      if (this.registrosFkCuarentena.has(ingreso.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('ingresos', ingreso.codigo_legado, ingreso.updated_at)) {
           await db.ingresos.update(ingreso.id, { sync_status: 'synced' });
@@ -902,8 +1156,14 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar ingreso:', ingreso.codigo_legado, error);
-          await db.ingresos.update(ingreso.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(`[SyncManager] Violación FK/409 en ingreso ${ingreso.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(ingreso.id);
+            await db.ingresos.update(ingreso.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar ingreso:', ingreso.codigo_legado, error);
+            await db.ingresos.update(ingreso.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.ingresos.update(ingreso.id, {
@@ -912,9 +1172,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar ingreso:', ingreso.codigo_legado, err);
-        await db.ingresos.update(ingreso.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción FK/409 en ingreso ${ingreso.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(ingreso.id);
+          await db.ingresos.update(ingreso.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar ingreso:', ingreso.codigo_legado, err);
+          await db.ingresos.update(ingreso.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -927,6 +1193,11 @@ class SyncManager {
    */
   public async sincronizarCuotas(): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
+    // REQ-WEB-01: Suprimir push hacia Supabase si la tabla no existe en el schema remoto (404)
+    if (!this.syncFinanzasRemotoHabilitado && this.tablasInexistentesSupabase.has('cuotas')) {
+      return result;
+    }
+
     const pending = await this.obtenerRegistrosPendientes<any>(db.cuotas);
     if (pending.length === 0) return result;
 
@@ -937,6 +1208,9 @@ class SyncManager {
     }
 
     for (const cuota of pending) {
+      if (this.registrosFkCuarentena.has(cuota.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('cuotas', cuota.codigo_legado, cuota.updated_at)) {
           await db.cuotas.update(cuota.id, { sync_status: 'synced' });
@@ -951,8 +1225,14 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar cuota:', cuota.codigo_legado, error);
-          await db.cuotas.update(cuota.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(`[SyncManager] Violación FK/409 en cuota ${cuota.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(cuota.id);
+            await db.cuotas.update(cuota.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar cuota:', cuota.codigo_legado, error);
+            await db.cuotas.update(cuota.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.cuotas.update(cuota.id, {
@@ -961,9 +1241,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar cuota:', cuota.codigo_legado, err);
-        await db.cuotas.update(cuota.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción FK/409 en cuota ${cuota.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(cuota.id);
+          await db.cuotas.update(cuota.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar cuota:', cuota.codigo_legado, err);
+          await db.cuotas.update(cuota.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -986,6 +1272,9 @@ class SyncManager {
     }
 
     for (const nota of pending) {
+      if (this.registrosFkCuarentena.has(nota.id)) {
+        continue;
+      }
       try {
         if (await this.esRemotoMasReciente('notas', nota.codigo_legado, nota.updated_at)) {
           await db.notas.update(nota.id, { sync_status: 'synced' });
@@ -1000,8 +1289,14 @@ class SyncManager {
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
-          console.error('[SyncManager] Error al sincronizar nota:', nota.codigo_legado, error);
-          await db.notas.update(nota.id, { sync_status: 'error' });
+          if (this.esErrorFkNoRecuperable(error)) {
+            console.warn(`[SyncManager] Violación FK/409 en nota ${nota.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(nota.id);
+            await db.notas.update(nota.id, { sync_status: 'quarantined' });
+          } else {
+            console.error('[SyncManager] Error al sincronizar nota:', nota.codigo_legado, error);
+            await db.notas.update(nota.id, { sync_status: 'error' });
+          }
           result.failed++;
         } else {
           await db.notas.update(nota.id, {
@@ -1010,9 +1305,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err) {
-        console.error('[SyncManager] Excepción al sincronizar nota:', nota.codigo_legado, err);
-        await db.notas.update(nota.id, { sync_status: 'error' });
+      } catch (err: any) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          console.warn(`[SyncManager] Excepción FK/409 en nota ${nota.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(nota.id);
+          await db.notas.update(nota.id, { sync_status: 'quarantined' });
+        } else {
+          console.error('[SyncManager] Excepción al sincronizar nota:', nota.codigo_legado, err);
+          await db.notas.update(nota.id, { sync_status: 'error' });
+        }
         result.failed++;
       }
     }
@@ -1266,11 +1567,22 @@ class SyncManager {
       { tabla: 'notas', refDexie: db.notas }
     ] as const;
 
-    const configuracionesFiltradas = tablasFiltro && tablasFiltro.length > 0
-      ? configuraciones.filter((c) => tablasFiltro.includes(c.tabla))
-      : configuraciones;
+    const configuracionesFiltradas = configuraciones.filter((c) => {
+      if (tablasFiltro && tablasFiltro.length > 0) {
+        return tablasFiltro.includes(c.tabla);
+      }
+      // REQ-WEB-01: Suprimir peticiones a tablas inexistentes en Supabase ('gastos', 'ingresos', 'cuotas' 404)
+      if (this.tablasInexistentesSupabase.has(c.tabla) && !this.syncFinanzasRemotoHabilitado) {
+        return false;
+      }
+      return true;
+    });
 
     for (const { tabla, refDexie } of configuracionesFiltradas) {
+      if (this.tablasInexistentesSupabase.has(tabla) && !this.syncFinanzasRemotoHabilitado && (!tablasFiltro || !tablasFiltro.includes(tabla))) {
+        continue;
+      }
+
       try {
         let query: any = this.supabase.from(tabla).select('*');
 
@@ -1284,7 +1596,21 @@ class SyncManager {
         const { data, error } = await query;
 
         if (error) {
-          console.warn(`[SyncManager] Aviso al descargar tabla remota ${tabla}:`, error.message);
+          const msg = String(error.message || '').toLowerCase();
+          const code = String(error.code || '');
+          const status = Number(error.status || error.statusCode || 0);
+
+          if (
+            status === 404 ||
+            code === 'PGRST205' ||
+            msg.includes('schema cache') ||
+            msg.includes('could not find the table')
+          ) {
+            console.warn(`[SyncManager] Tabla ${tabla} inexistente en Supabase (404/PGRST205). Suprimiendo futuras consultas.`);
+            this.tablasInexistentesSupabase.add(tabla);
+          } else {
+            console.warn(`[SyncManager] Aviso al descargar tabla remota ${tabla}:`, error.message);
+          }
           summary.fallidos++;
           continue;
         }
@@ -1303,13 +1629,15 @@ class SyncManager {
           // Fallback defensivo
         }
 
-        // Indexar registros locales actuales por código canónico (codigo_legado) para evitar duplicar semillas
+        // Indexar registros locales actuales por código canónico (codigo_legado) y por ID para evitar duplicar semillas
         const mapaLocalPorCodigo = new Map<string, any>();
+        const mapaLocalPorId = new Map<string, any>();
         try {
           if (typeof (refDexie as any).toArray === 'function') {
             const actuales = await (refDexie as any).toArray();
             if (Array.isArray(actuales)) {
               for (const loc of actuales) {
+                if (loc.id) mapaLocalPorId.set(String(loc.id), loc);
                 const cod = extraerCodigoCanonico(loc);
                 if (cod) mapaLocalPorCodigo.set(cod, loc);
               }
@@ -1329,8 +1657,10 @@ class SyncManager {
 
           const codRemoto = extraerCodigoCanonico(item);
           const existentePorCodigo = codRemoto ? mapaLocalPorCodigo.get(codRemoto) : undefined;
+          const existentePorId = mapaLocalPorId.get(idStr);
+          const localPrevio = existentePorCodigo || existentePorId;
 
-          if (existentePorCodigo && (existentePorCodigo.sync_status === 'pending' || existentePorCodigo.sync_status === 'error')) {
+          if (localPrevio && (localPrevio.sync_status === 'pending' || localPrevio.sync_status === 'error')) {
             continue;
           }
 
@@ -1339,12 +1669,19 @@ class SyncManager {
             sync_status: 'synced' as const
           };
 
-          if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
+          if (tabla === 'actividades_personales') {
+            registroFinal = sanitizarActividadInbound(item, localPrevio);
+          } else if (tabla === 'subtareas_pasos') {
+            registroFinal = sanitizarSubtareaInbound(item, localPrevio);
+          } else if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
             registroFinal = {
               ...fusionarRegistrosDuplicados(existentePorCodigo, registroFinal),
               id: item.id,
               sync_status: 'synced' as const
             };
+          }
+
+          if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
             idsObsoletosAEliminar.push(String(existentePorCodigo.id));
           }
 

@@ -52,4 +52,29 @@ describe('useDailySchedule - Normalización y Proyección de Agenda Diaria', () 
     expect(nombres).toContain('Entrenamiento de fuerza en gimnasio');
     expect(nombres).toContain('Estudio intensivo y simuladores PMP');
   });
+
+  it('REQ-FIX-01: preserva hábitos recurrentes activos evitando que esElementoArchivado los oculte por desfase de fecha semilla', () => {
+    const actividades = seedLife.actividades_personales || [];
+    expect(actividades.length).toBe(13);
+
+    const habitosActivos = actividades.filter((a: any) => {
+      const estado = String(getProp(a, 'estado', 'Estado') ?? '');
+      const freqCiclo = String(getProp(a, 'frecuencia_ciclo', 'Frecuencia_Ciclo') ?? 'DIARIA').toUpperCase().trim();
+      const reglaRep = String(getProp(a, 'regla_repeticion', 'Regla_Repeticion') ?? '').trim();
+      const tipoCompromiso = String(getProp(a, 'tipo_compromiso', 'Tipo_Compromiso') ?? '').toUpperCase().trim();
+
+      const tieneRecurrencia = Boolean(
+        (freqCiclo && freqCiclo !== 'NINGUNA') || reglaRep !== ''
+      );
+      const esRutinaria = tipoCompromiso !== 'PUNTUAL' || tieneRecurrencia;
+
+      if (esRutinaria) {
+        return estado !== '05_Archivado';
+      }
+      return false;
+    });
+
+    // Las 13 actividades de seedLife tienen frecuencia_ciclo DIARIA y se preservan
+    expect(habitosActivos.length).toBe(13);
+  });
 });

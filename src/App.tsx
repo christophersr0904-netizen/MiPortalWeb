@@ -299,21 +299,27 @@ export const App: React.FC = () => {
     document.documentElement.setAttribute('data-theme', sabor);
   };
 
-  // Garantizar fondo 100% transparente en Electron para widget frameless
-  // Si no está en modo widget, restablecer background de forma segura
+  // Soporte de ventana transparente y silueta orgánica para widget flotante (REQ-DESKTOP-05)
+  // En modo widget, el contenedor tiene tamaño exacto sin áreas muertas
   useEffect(() => {
     if (esModoHud || esWidgetNativo) {
-      document.documentElement.classList.remove('bg-[#020617]', 'bg-[#040711]', 'bg-slate-50');
       document.documentElement.style.backgroundColor = 'transparent';
-      document.body.classList.remove('bg-[#020617]', 'bg-[#040711]', 'bg-slate-50');
       document.body.style.backgroundColor = 'transparent';
       const root = document.getElementById('root');
-      if (root) root.style.backgroundColor = 'transparent';
+      if (root) {
+        root.style.backgroundColor = 'transparent';
+        root.style.overflow = 'hidden';
+      }
+      document.body.style.overflow = 'hidden';
     } else {
       document.documentElement.style.backgroundColor = '';
       document.body.style.backgroundColor = '';
       const root = document.getElementById('root');
-      if (root) root.style.backgroundColor = '';
+      if (root) {
+        root.style.backgroundColor = '';
+        root.style.overflow = '';
+      }
+      document.body.style.overflow = '';
     }
   }, [esModoHud, esWidgetNativo]);
 
@@ -321,7 +327,7 @@ export const App: React.FC = () => {
   if (esModoHud || esWidgetNativo) {
     return (
       <CockpitErrorBoundary>
-        <div className="h-screen w-screen bg-transparent p-0 overflow-hidden flex flex-col font-sans select-none">
+        <div className="w-full h-full bg-transparent p-0 overflow-hidden flex flex-col font-sans select-none">
           <DailyCockpit
             modoForzadoDesacoplado={true}
             onCerrarDesacoplado={() => {
@@ -488,10 +494,7 @@ export const App: React.FC = () => {
         proyectoIdSeleccionado={proyectoSeleccionadoId}
       />
 
-      {/* 8. Cápsula Flotante y Cockpit Diario Global */}
-      <DailyCockpit />
-
-      {/* 9. Notificaciones y Búfer Global de Deshacer */}
+      {/* 8. Notificaciones y Búfer Global de Deshacer */}
       <UndoToastContainer />
     </div>
   </UndoDeleteProvider>

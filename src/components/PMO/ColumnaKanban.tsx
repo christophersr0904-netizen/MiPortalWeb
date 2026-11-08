@@ -73,13 +73,31 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
   onEliminarTarea,
   onAbrirModalNuevaTarea
 }) => {
+  // Borde superior acentuado de 2px según fase canónica
+  const borderTopColor =
+    col.id === '01_Backlog'
+      ? 'border-t-slate-500'
+      : col.id === '02_Por_Hacer'
+      ? 'border-t-sky-500'
+      : col.id === '03_En_Proceso'
+      ? 'border-t-amber-500'
+      : col.id === '04_Completado'
+      ? 'border-t-emerald-500'
+      : 'border-t-slate-600';
+
+  // Esfuerzo horario total estimado de la columna
+  const totalHorasColumna = tareasColumna.reduce((acc, t) => acc + (Number(t.horas_estimadas) || 0), 0);
+  const totalHorasStr = totalHorasColumna > 0
+    ? `${totalHorasColumna % 1 === 0 ? totalHorasColumna : totalHorasColumna.toFixed(1)}h`
+    : null;
+
   return (
     <div
       id={col.domId}
       data-state={col.id}
       className={`kanban-col-container ${
         isActivaMovil === false ? 'hidden md:flex' : 'flex'
-      } flex-col rounded-xl md:rounded-2xl border p-2 md:p-3.5 h-full min-h-0 w-full transition-all duration-200 ease-out shadow-2xs select-none ${
+      } flex-col rounded-xl md:rounded-2xl border border-t-2 ${borderTopColor} p-2 md:p-3 h-full min-h-0 w-full transition-all duration-200 ease-out shadow-2xs select-none ${
         isOverThisCol
           ? 'kanban-dropzone-active bg-sky-950/20 border-sky-500/40 shadow-[0_0_20px_rgba(56,189,248,0.15)] ring-1 ring-sky-400/30'
           : 'portal-surface bg-slate-200/50 dark:bg-[#0D1526]/80 border-slate-300/60 dark:border-slate-800/40'
@@ -88,11 +106,11 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
       onDragLeave={onDragLeave}
       onDrop={(e) => onDrop(e, col.id)}
     >
-      {/* Cabecera de Columna (Oculta en móvil REQ-PWA-05 para dar máxima visibilidad a tarjetas) */}
-      <div className="mb-1.5 md:mb-2.5 md:space-y-2 shrink-0">
-        <div className="hidden md:flex justify-between items-center px-1">
-          <div className="flex items-center gap-2">
-            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-semibold ${col.iconoColor} relative`}>
+      {/* Cabecera de Columna (Elevación Bento Cobalt con micro-botón y horas) */}
+      <div className="mb-2 shrink-0">
+        <div className="hidden md:flex justify-between items-center px-0.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-semibold ${col.iconoColor} relative shrink-0`}>
               {col.headerGlow && (
                 <span className="animate-ping absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 opacity-75"></span>
               )}
@@ -101,28 +119,47 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
               {col.id === '03_En_Proceso' && <Zap className="w-3.5 h-3.5 text-amber-400" strokeWidth={1.75} />}
               {col.id === '04_Completado' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" strokeWidth={1.75} />}
             </span>
-            <span className={`text-xs font-bold uppercase tracking-wider ${col.tituloColor}`}>
+            <span className={`text-xs font-bold uppercase tracking-wider truncate ${col.tituloColor}`}>
               {col.titulo}
             </span>
-          </div>
-          <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold font-mono tabular-nums ${col.badgeColor}`}>
-            {cargandoDatosIniciales ? (
-              <span className="inline-block w-4 h-3 bg-slate-700/60 rounded animate-pulse" />
-            ) : (
-              tareasColumna.length
+            {totalHorasStr && (
+              <span className="font-mono tabular-nums text-[10px] text-slate-400 shrink-0" title={`Esfuerzo total estimado: ${totalHorasStr}`}>
+                · {totalHorasStr}
+              </span>
             )}
-          </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`text-xs px-2 py-0.5 rounded-full font-bold font-mono tabular-nums ${col.badgeColor}`}>
+              {cargandoDatosIniciales ? (
+                <span className="inline-block w-4 h-3 bg-slate-700/60 rounded animate-pulse" />
+              ) : (
+                tareasColumna.length
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => onAbrirModalNuevaTarea(col.id)}
+              className="w-6 h-6 rounded-md hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-700/60"
+              title={`Añadir tarea a ${col.titulo}`}
+              aria-label={`Añadir tarea a ${col.titulo}`}
+            >
+              <Plus className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+            </button>
+          </div>
         </div>
 
-        {/* Botón "+ Añadir Tarea" Compacto en móvil (REQ-PWA-05) */}
-        <button
-          type="button"
-          onClick={() => onAbrirModalNuevaTarea(col.id)}
-          className="w-full h-7 md:min-h-[38px] md:h-auto py-1 md:py-2 px-2.5 md:px-3 border border-dashed border-slate-300 dark:border-slate-700/80 hover:border-sky-500/50 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-sky-300 rounded-lg md:rounded-xl text-xs font-semibold md:font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
-        >
-          <Plus className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
-          <span>Añadir Tarea</span>
-        </button>
+        {/* Botón "+ Añadir Tarea" Compacto solo en móvil (REQ-PWA-05) */}
+        <div className="md:hidden">
+          <button
+            type="button"
+            onClick={() => onAbrirModalNuevaTarea(col.id)}
+            className="w-full h-7 py-1 px-2.5 border border-dashed border-slate-300 dark:border-slate-700/80 hover:border-sky-500/50 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-sky-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+          >
+            <Plus className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+            <span>Añadir Tarea</span>
+          </button>
+        </div>
       </div>
 
       {/* Lista de Tarjetas Scrollable */}
