@@ -14,7 +14,8 @@ import {
   AlertTriangle,
   Info,
   XCircle,
-  X
+  X,
+  BookOpen
 } from 'lucide-react';
 import { useUndoDelete, type TipoEntidadUndo } from '../../hooks/useUndoDelete';
 import type { ToastCobaltPayload } from '../../utils/toastCobalt';
@@ -39,6 +40,8 @@ const obtenerIconoTipo = (tipo: TipoEntidadUndo) => {
       return <Award className="w-4 h-4 text-amber-400 shrink-0" strokeWidth={1.75} />;
     case 'NOTA':
       return <FileText className="w-4 h-4 text-cyan-400 shrink-0" strokeWidth={1.75} />;
+    case 'CUADERNO':
+      return <BookOpen className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />;
     default:
       return <Trash2 className="w-4 h-4 text-slate-400 shrink-0" strokeWidth={1.75} />;
   }

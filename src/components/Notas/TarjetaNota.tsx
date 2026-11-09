@@ -149,6 +149,30 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
   const estilo = PALETA_COLORES[nota.color_tema] || PALETA_COLORES.default;
 
   const [copiado, setCopiado] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Manejadores Drag and Drop Nativo (Arrastrar nota hacia Cuadernos Temáticos)
+  const handleDragStart = (e: React.DragEvent) => {
+    const target = e.target as HTMLElement;
+    // Inhibir si el arrastre se origina en botones, enlaces, inputs o zonas no arrastrables
+    if (target.closest('button, a, input, textarea, [role="button"], .not-draggable')) {
+      e.preventDefault();
+      return;
+    }
+    // Inhibir si el usuario está seleccionando texto
+    if (typeof window !== 'undefined' && window.getSelection()?.toString().trim()) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData('application/x-miportal-nota-id', nota.id);
+    e.dataTransfer.setData('text/plain', nota.id);
+    e.dataTransfer.effectAllowed = 'move';
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
 
   // Copiado omnicanal al portapapeles con serializador canónico
   const handleCopiarNota = (e: React.MouseEvent) => {
@@ -267,8 +291,13 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
   if (modoVista === 'lista') {
     return (
       <div
+        draggable={true}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
         onClick={() => onEditar(nota)}
-        className="h-12 w-full px-3.5 py-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-800/60 hover:border-slate-700/80 bg-[#0D1526] hover:bg-[#0D1526]/90 transition-all cursor-pointer group select-none shadow-cobalt-1"
+        className={`h-12 w-full px-3.5 py-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-800/60 bg-[#0D1526] kinetic-card-lista cursor-grab active:cursor-grabbing group select-none shadow-cobalt-1 ${
+          isDragging ? 'opacity-40 scale-[0.98] border-dashed border-sky-500/50' : ''
+        }`}
       >
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <span className="font-mono tabular-nums text-[10px] text-slate-500 font-bold shrink-0">
@@ -305,10 +334,10 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             type="button"
             onClick={handleCopiarNota}
             title="Copiar texto plano al portapapeles"
-            className="p-1 text-slate-400 hover:text-sky-300 rounded transition-colors cursor-pointer"
+            className="p-1 text-slate-400 hover:text-sky-300 rounded transition-all duration-150 active:scale-90 cursor-pointer"
           >
             {copiado ? (
-              <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={1.75} />
+              <Check className="w-3.5 h-3.5 text-emerald-400 kinetic-pop-bounce" strokeWidth={1.75} />
             ) : (
               <Copy className="w-3.5 h-3.5" strokeWidth={1.75} />
             )}
@@ -317,7 +346,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             type="button"
             onClick={handleEliminarDirecto}
             title="Eliminar Nota"
-            className="p-1 text-slate-400 hover:text-rose-400 rounded transition-colors cursor-pointer"
+            className="p-1 text-slate-400 hover:text-rose-400 rounded transition-all duration-150 active:scale-90 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
@@ -328,8 +357,13 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
 
   return (
     <div
+      draggable={true}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       onClick={() => onEditar(nota)}
-      className={`nota-card ${nota.es_fijada ? 'nota-card-pinned' : ''} break-inside-avoid mb-4 p-4 flex flex-col justify-between rounded-2xl transform-gpu transition-[transform,opacity,border-color] duration-150 will-change-[transform,opacity] cursor-pointer bg-[#0D1526] ${estilo.card} border ${estilo.border} shadow-cobalt-1 group relative`}
+      className={`nota-card ${nota.es_fijada ? 'nota-card-pinned' : ''} break-inside-avoid mb-4 p-4 flex flex-col justify-between rounded-2xl kinetic-card-mosaico cursor-grab active:cursor-grabbing bg-[#0D1526] ${estilo.card} border ${estilo.border} shadow-cobalt-1 group relative ${
+        isDragging ? 'opacity-40 scale-[0.98] border-dashed border-sky-500/50' : ''
+      }`}
     >
       {/* Botón Pin Flotante Canónico */}
       <button
@@ -337,13 +371,13 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
         id="btn-pin-nota"
         onClick={handleTogglePin}
         title={nota.es_fijada ? 'Desfijar nota' : 'Fijar nota en la parte superior'}
-        className={`absolute top-2.5 right-2.5 p-2 sm:p-1.5 rounded-lg transition-transform active:scale-90 cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center ${
+        className={`absolute top-2.5 right-2.5 p-2 sm:p-1.5 rounded-lg transition-all duration-200 active:scale-90 cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center ${
           nota.es_fijada
             ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 opacity-100 shadow-xs'
             : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800 opacity-80 sm:opacity-0 sm:group-hover:opacity-100'
         }`}
       >
-        <Pin className={`w-3.5 h-3.5 ${nota.es_fijada ? 'fill-amber-400 rotate-45' : ''}`} />
+        <Pin className={`w-3.5 h-3.5 transition-transform duration-200 ease-out hover:-rotate-12 ${nota.es_fijada ? 'fill-amber-400 rotate-45' : ''}`} />
       </button>
 
       {/* Header: Código Legado + Block Badge + Badges de Tipo */}
@@ -398,7 +432,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
 
         {/* 2. Sección Checklist Interactiva si contiene items */}
         {tieneChecklist && (
-          <div className="space-y-1.5 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60">
+          <div className="space-y-1.5 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60 not-draggable">
             {/* Barra de progreso de subtareas */}
             <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mb-1">
               <span>Progreso</span>
@@ -419,9 +453,9 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
               >
                 <div className="mt-0.5 text-sky-400 shrink-0">
                   {chk.completado ? (
-                    <CheckSquare className="w-4 h-4 text-emerald-400 fill-emerald-500/20" />
+                    <CheckSquare className="w-4 h-4 text-emerald-400 fill-emerald-500/20 kinetic-pop-bounce" />
                   ) : (
-                    <Square className="w-4 h-4 text-slate-500 group-hover/item:text-slate-300" />
+                    <Square className="w-4 h-4 text-slate-500 group-hover/item:text-slate-300 transition-colors" />
                   )}
                 </div>
                 <span
@@ -440,7 +474,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
 
         {/* 3. Bloque Wishlist Canónico Blindado */}
         {tieneWishlistValido && nota.wishlist_json && (
-          <div className="bg-purple-950/30 border border-purple-500/30 rounded-xl p-3 space-y-2 text-xs font-mono">
+          <div className="bg-purple-950/30 border border-purple-500/30 rounded-xl p-3 space-y-2 text-xs font-mono not-draggable">
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-purple-300 flex items-center gap-1 font-sans font-bold">
                 <DollarSign className="w-3.5 h-3.5" /> Meta de Ahorro:
@@ -576,10 +610,10 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             type="button"
             onClick={handleCopiarNota}
             title="Copiar texto plano al portapapeles"
-            className="p-1.5 sm:p-1 hover:text-sky-300 rounded transition-colors cursor-pointer"
+            className="p-1.5 sm:p-1 hover:text-sky-300 rounded transition-all duration-150 active:scale-90 cursor-pointer"
           >
             {copiado ? (
-              <Check className="w-3.5 h-3.5 text-emerald-400" strokeWidth={1.75} />
+              <Check className="w-3.5 h-3.5 text-emerald-400 kinetic-pop-bounce" strokeWidth={1.75} />
             ) : (
               <Copy className="w-3.5 h-3.5" strokeWidth={1.75} />
             )}
@@ -591,7 +625,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
               onEditar(nota);
             }}
             title="Editar Nota"
-            className="p-1.5 sm:p-1 hover:text-sky-400 rounded transition-colors cursor-pointer"
+            className="p-1.5 sm:p-1 hover:text-sky-400 rounded transition-all duration-150 active:scale-90 cursor-pointer"
           >
             <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
@@ -599,7 +633,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             type="button"
             onClick={handleEliminarDirecto}
             title="Eliminar Nota"
-            className="p-1.5 sm:p-1 hover:text-rose-400 rounded transition-colors cursor-pointer"
+            className="p-1.5 sm:p-1 hover:text-rose-400 rounded transition-all duration-150 active:scale-90 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>

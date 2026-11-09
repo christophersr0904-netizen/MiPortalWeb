@@ -211,8 +211,8 @@ export function normalizeTarea(raw: any): CanonicalTarea {
     estado,
     estado_label,
     prioridad: String(getProp(raw, 'prioridad_eisenhower', 'Prioridad_Eisenhower', 'prioridad') ?? '02_P2_Media'),
-    proyecto_codigo: String(getProp(raw, 'proyecto_codigo', 'ID_Proyecto', 'idProyecto') ?? ''),
-    hito_codigo: getProp(raw, 'hito_codigo', 'ID_Hito', 'idHito'),
+    proyecto_codigo: String(getProp(raw, 'proyecto_codigo', 'ID_Proyecto', 'idProyecto', 'proyecto_id') ?? ''),
+    hito_codigo: getProp(raw, 'hito_codigo', 'ID_Hito', 'idHito', 'hito_id'),
     nivel_energia: getProp(raw, 'nivel_energia_requerido', 'Nivel_Energia_Requerido'),
     horas_estimadas: Number(getProp(raw, 'horas_estimadas', 'Horas_Estimadas') ?? 0),
     horas_reales: Number(getProp(raw, 'horas_reales', 'Horas_Reales') ?? 0),
@@ -639,20 +639,21 @@ export function calcularAvancesProyectoCanonica(
 ): { avanceReal: number; avanceTotalProyectado: number } {
   if (!proyecto) return { avanceReal: 0, avanceTotalProyectado: 0 };
   const proyCode = String(proyecto.codigo_legado || proyecto.id || proyecto.ID_Proyecto || '').trim().toUpperCase();
+  const proyId = String(proyecto.id || '').trim().toUpperCase();
 
-  // Filtrar hitos del proyecto
+  // Filtrar hitos del proyecto (resolución biunívoca código legado + UUID)
   const hitosProy = hitos.filter((h) => {
     const pCode = String(h.proyecto_codigo || h.proyecto_id || h.id_proyecto || h.ID_Proyecto || '').trim().toUpperCase();
-    return pCode === proyCode;
+    return pCode === proyCode || (proyId !== '' && pCode === proyId);
   });
 
   const hitosIds = new Set(hitosProy.map((h) => String(h.codigo_legado || h.id || h.ID_Hito || '').trim().toUpperCase()));
 
-  // Filtrar tareas del proyecto
+  // Filtrar tareas del proyecto (resolución biunívoca código legado + UUID + hitos asociados)
   const tareasProy = tareas.filter((t) => {
     const tProy = String(t.proyecto_codigo || t.proyecto_id || t.id_proyecto || t.ID_Proyecto || '').trim().toUpperCase();
     const tHito = String(t.hito_codigo || t.id_hito || t.ID_Hito || '').trim().toUpperCase();
-    return tProy === proyCode || hitosIds.has(tHito) || (tHito && tHito.startsWith(proyCode));
+    return tProy === proyCode || (proyId !== '' && tProy === proyId) || hitosIds.has(tHito) || (tHito && tHito.startsWith(proyCode));
   });
 
   // Caso 1: Proyecto con Hitos WBS

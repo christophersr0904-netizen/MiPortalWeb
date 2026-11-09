@@ -10,7 +10,8 @@ export type TipoEntidadUndo =
   | 'INGRESO'
   | 'ACTIVIDAD'
   | 'META'
-  | 'NOTA';
+  | 'NOTA'
+  | 'CUADERNO';
 
 export interface PendingDelete {
   key: string; // `${tabla}:${id}`
@@ -116,7 +117,12 @@ export class UndoDeleteManager {
 
     const commitConTombstone = async () => {
       try {
-        if (typeof db !== 'undefined' && db?.tombstones && typeof db.tombstones.put === 'function') {
+        if (
+          tabla !== 'cuadernos' &&
+          typeof db !== 'undefined' &&
+          db?.tombstones &&
+          typeof db.tombstones.put === 'function'
+        ) {
           const p = db.tombstones.put({
             id,
             tabla,

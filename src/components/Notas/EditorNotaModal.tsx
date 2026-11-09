@@ -345,7 +345,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
               placeholder="Título de la nota..."
-              className="w-full bg-slate-950/70 border border-slate-800 rounded-xl px-3.5 py-2 text-slate-100 placeholder-slate-500 font-bold text-base focus:outline-none focus:border-sky-500/60 transition-colors"
+              className="w-full bg-slate-950/70 border border-slate-800 rounded-xl px-3.5 py-2 text-slate-100 placeholder-slate-500 font-bold text-base focus:outline-none kinetic-input-spotlight transition-all"
             />
           </div>
 
@@ -364,7 +364,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                   value={blockNombre}
                   onChange={(e) => setBlockNombre(e.target.value)}
                   placeholder="Ej. General, Proyectos, Personal..."
-                  className="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-sky-500"
+                  className="w-full bg-slate-900 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none kinetic-input-spotlight transition-all"
                 />
                 <datalist id="lista-blocks-disponibles">
                   {blocksDisponibles.map((b) => (
@@ -386,8 +386,10 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                       key={col}
                       type="button"
                       onClick={() => setColorTema(col)}
-                      className={`w-6 h-6 rounded-full border transition-transform cursor-pointer ${
-                        colorTema === col ? 'scale-125 ring-2 ring-white/40' : 'opacity-70 hover:opacity-100'
+                      className={`w-6 h-6 rounded-full border transition-all duration-150 active:scale-90 hover:scale-110 cursor-pointer ${
+                        colorTema === col
+                          ? 'scale-125 ring-2 ring-white/60 shadow-[0_0_12px_rgba(255,255,255,0.4)]'
+                          : 'opacity-70 hover:opacity-100 hover:scale-110'
                       } ${
                         col === 'sky'
                           ? 'bg-sky-500 border-sky-400'
@@ -484,7 +486,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                     value={contenidoMarkdown}
                     onChange={(e) => setContenidoMarkdown(e.target.value)}
                     placeholder="Redacta en Markdown... usa @PROY-XXX o @TAR-XXX para vincular con proyectos y tareas..."
-                    className="w-full bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 text-slate-200 font-mono text-xs leading-relaxed focus:outline-none focus:border-sky-500/60 resize-none transition-colors custom-scrollbar"
+                    className="w-full bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 text-slate-200 font-mono text-xs leading-relaxed focus:outline-none kinetic-input-spotlight resize-none transition-all custom-scrollbar"
                   />
                 ) : (
                   <div className="min-h-[160px] max-h-[280px] overflow-y-auto bg-slate-950/50 border border-slate-800 rounded-xl p-4 prose prose-invert prose-sky max-w-none text-xs leading-relaxed custom-scrollbar">
@@ -755,7 +757,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
               value={tagsInput}
               onChange={(e) => setTagsInput(e.target.value)}
               placeholder="ej. arquitectura, roadmap, compras, personal..."
-              className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3.5 py-2 text-slate-200 font-mono text-xs focus:outline-none focus:border-sky-500/60 transition-colors"
+              className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3.5 py-2 text-slate-200 font-mono text-xs focus:outline-none kinetic-input-spotlight transition-all"
             />
           </div>
 
@@ -764,13 +766,13 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all active:scale-95 cursor-pointer"
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all kinetic-btn-tactile cursor-pointer"
             >
               {nota ? 'Guardar Cambios' : 'Crear Nota'}
             </button>

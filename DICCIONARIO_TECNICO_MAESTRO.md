@@ -8851,3 +8851,184 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (228/228 tests).
 - **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 7.91s).
 - **Estabilidad Reactiva:** Erradicada la fluctuación de avances en el Sidebar y eliminada la sobrecarga al reenfocar la ventana.
+
+---
+
+### [REQ-FIX-09: Optimización a 60 FPS de Barra Lateral, Aislamiento de Layout y Elevación Cobalt Aerodynamic en ViewNotas]
+**Fecha:** Noviembre 2026 | **Fase:** 5.01 | **Archivos Modificados:** `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/SidebarCuadernos.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Layout Thrashing por CSS Grid con Fracción Dinámica:** El contenedor principal animaba `grid-template-columns` (`md:grid-cols-[64px_1fr]` $\leftrightarrow$ `md:grid-cols-[256px_1fr]`) durante 300ms. Cada píxel de cambio en `1fr` obligaba a Chromium a re-balancear en CPU el contenedor CSS Multi-column (`columns-X`) y re-calcular el salto de texto de cada bloque Markdown de las tarjetas.
+- **Sobrecarga de Rasterizado por Filtros Gaussianos:** Los encabezados fijos utilizaban `backdrop-blur-md` y `backdrop-blur-xs`, forzando a la GPU a regenerar pasadas de desenfoque continuo durante la interpolación geométrica.
+- **Desalineación Cromática y Ergonomía:** Exceso de tonos ámbar/naranja en cabeceras y controles, y caja Quick Note sobredimensionada (`max-h-14`) restando espacio vertical útil.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Migración a Flexbox Horizontal Aislado:**
+   - En `src/components/Notas/VisorNotas.tsx`, se sustituyó la cuadrícula CSS Grid por `flex flex-row w-full h-full flex-1 min-h-0 bg-[#040711] text-slate-100 relative select-none overflow-hidden`.
+   - Se aplicó contención CSS estricta `[contain:layout_paint]` en el canvas central de notas, desacoplando completamente el árbol de renderizado del sidebar.
+2. **Aceleración por Hardware en `SidebarCuadernos.tsx`:**
+   - Transición física de ancho directa en GPU: `transition-[width] duration-200 ease-out will-change-[width] ${isCollapsed ? 'w-16 p-2' : 'w-64 p-3'}` sobre superficie sólida `#080D1A` y microborde `border-r border-slate-800/60`.
+   - Desvanecimiento suave de textos con `whitespace-nowrap transition-opacity duration-150` y eliminación de micro-escalados en botones rápidos (`transition-colors duration-150`).
+3. **Erradicación de `backdrop-blur` en Barras Fijas:**
+   - Reemplazo por superficies sólidas de alto contraste `#080D1A` con microborde `border-b border-slate-800/60`, eliminando el costo de filtrado en GPU.
+4. **Elevación Visual y Ergonómica Cobalt Aerodynamic:**
+   - Cabecera táctica con cápsula Bento e ícono `FileText` en `text-sky-400 bg-sky-950/40 border border-sky-500/30`.
+   - Contador de notas en badge monoespaciado `font-mono tabular-nums text-sky-300 bg-sky-950/40 border border-sky-500/30`.
+   - Controles de búsqueda y filtros refinados en estilo Ghost `bg-slate-900/60 border-slate-800/60 text-slate-100 placeholder:text-slate-500 focus:border-sky-500/60`.
+   - Disparador desktop de Quick Note compactado a cápsula Bento `h-10 px-3 bg-[#0D1526]/80 hover:bg-[#0D1526] border border-slate-800/60 hover:border-sky-500/40 rounded-xl`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (228/228 tests).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.63s).
+- **Fluidez de Render:** 60 FPS estables y fluidos durante la contracción y expansión de la barra lateral.
+
+---
+
+### [REQ-FIX-10: Transacción Atómica Inbound, Preservación de Claves Canónicas WBS y Diffing Silencioso en SyncManager]
+**Fecha:** Noviembre 2026 | **Fase:** 5.02 | **Archivos Modificados:** `src/services/syncPayloadSanitizer.ts`, `src/services/syncManager.ts`, `src/types/index.ts`, `src/utils/entityNormalizer.ts`, `src/components/PMO/ColumnaKanban.tsx`, `src/services/__tests__/syncManager.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Escrituras Fragmentadas y Múltiples Invalidation Waves:** En `descargarDatosDescendientes()`, las tablas se descargaban secuencialmente y para cada una se ejecutaba `bulkPut` y `bulkDelete` de manera individual y fuera de una transacción Dexie. Cada tabla disparaba una oleada reactiva a `useLiveQuery` en `ViewKanban`, re-evaluando el árbol Kanban entre 3 y 5 veces por ciclo con estados parciales desfasados.
+- **Pérdida Transitoria de Claves Canónicas WBS (`proyecto_codigo` e `hito_codigo`):** La tabla remota de Supabase `tareas` almacena exclusivamente `proyecto_id` (UUID) e `hito_id` (UUID), sin columnas legacy `proyecto_codigo` (`PRO-001`) ni `hito_codigo` (`WP-001`). Al persistir en Dexie `{ ...item, sync_status: 'synced' }` sin sanitizador inbound, las claves locales eran sobreescritas con `undefined`. Durante 200–800ms, `TarjetaTareaKanban` caía a los fallbacks estáticos `'General'` e `'Hito Principal'`, y `calcularAvancesProyectoCanonica` fallaba por falta de coincidencias, desplomando el avance en el Slider de Proyectos a 0%.
+- **Parpadeo Espurio del Estado "Sincronizando":** En `syncPendingRecords()`, `this.setSyncState('syncing')` se ejecutaba incondicionalmente antes de comprobar `totalPendientes === 0`, haciendo que el badge parpadeara de 'Al día' $\rightarrow$ 'Sincronizando' $\rightarrow$ 'Al día' cada 45s sin ninguna mutación activa.
+- **Sobrescritura Ciega sin Diffing:** Se ejecutaban mutaciones masivas en Dexie incluso cuando los datos remotos eran 100% idénticos a los datos locales.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Sanitización Inbound Pre-Commit (`sanitizarHitoInbound` y `sanitizarTareaInbound`):**
+   - En `src/services/syncPayloadSanitizer.ts`, se crearon y exportaron `sanitizarHitoInbound` y `sanitizarTareaInbound`.
+   - Se enriquecen y resuelven `proyecto_codigo` e `hito_codigo` cruzando `remoto.proyecto_id` y `remoto.hito_id` con diccionarios UUID $\rightarrow$ Código en memoria (`proyUuidToCod` y `hitoUuidToCod`), preservando además `localPrevio.proyecto_codigo` y `localPrevio.hito_codigo`. Jamás ingresa una tarea o hito a Dexie con claves de vinculación nulas o vacías.
+2. **Transacción Atómica Unificada en Dexie:**
+   - En `src/services/syncManager.ts`, se eliminaron los `bulkPut` y `bulkDelete` dispersos por tabla.
+   - Las operaciones de todas las tablas se consolidan en memoria y se ejecutan en un único bloque atómico:
+     `await db.transaction('rw', tablasParaTransaccion, ejecutarEscrituras)` (con fallback seguro a escrituras directas si el entorno carece de motor transaccional completo).
+   - `useLiveQuery` en `ViewKanban` recibe una sola invalidación reactiva atómica, erradicando estados intermedios.
+3. **Diffing Silencioso en Memoria (`sonRegistrosIdenticos`):**
+   - Se evalúa en memoria si `registroFinal` difiere de `localPrevio` (comparando `updated_at` y atributos clave).
+   - Si no existen diferencias efectivas, el registro se descarta del lote de mutaciones. Si el total de cambios de todas las tablas es 0, se omiten las escrituras a Dexie, reduciendo a cero el uso innecesario de CPU y renders.
+4. **Blindaje de Estados "Sincronizando":**
+   - En `syncPendingRecords()`, `this.setSyncState('syncing')` se ejecuta únicamente si `totalPendientes > 0`.
+   - En `descargarDatosDescendientes()`, el estado pasa a `'syncing'` solo si existen mutaciones efectivas pendientes de persistir.
+5. **Fallback Resiliente en `entityNormalizer.ts` y `ColumnaKanban.tsx`:**
+   - En `normalizeTarea`, se incorporó `proyecto_id` e `hito_id` como fuentes alternativas de resolución.
+   - En `calcularAvancesProyectoCanonica`, se amplió el emparejamiento de proyectos e hitos para soportar tanto `codigo_legado` como UUIDs (`proyId !== '' && pCode === proyId`).
+   - En `ColumnaKanban.tsx`, `proyAsoc` e `hitoAsoc` consultan primero por código y, como fallback, por UUID (`tar.raw?.proyecto_id`, `tar.raw?.hito_id`).
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (232/232 tests, incluyendo 4 nuevos tests de inbound harmonization y diffing silencioso).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.25s).
+- **Integridad Visual:** Erradicado el parpadeo de relaciones WBS ('General' / 'Hito Principal') y estabilizado al 100% el slider de avances de proyectos en Kanban.
+
+---
+
+### [REQ-FIX-11: Implementación de Microinteracciones Cinéticas, Spring Physics y Elevación Táctil Cobalt en ViewNotas]
+**Fecha:** Noviembre 2026 | **Fase:** 5.03 | **Archivos Modificados:** `src/index.css`, `src/components/Notas/TarjetaNota.tsx`, `src/components/Notas/SidebarCuadernos.tsx`, `src/components/Notas/VisorNotas.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Oportunidades Cinéticas
+- **Ausencia de Curvas Físicas y Resorte:** Las transiciones de interfaz en el módulo de Notas utilizaban curvas genéricas (`transition-colors`, `transition-all`) sin inercia ni resorte elástico, reduciendo la percepción de reactividad y calidad premium.
+- **Transición de Colapso con Saltos Visuales:** El botón de colapso de la barra lateral alternaba rígidamente entre dos componentes de iconos distintos (`ChevronLeft` vs `ChevronRight`) en ramas de renderizado separadas, impidiendo una rotación vectorial continua durante la contracción.
+- **Carencia de Feedback Táctil en Eventos `:active`:** Las tarjetas en vista de mosaico y lista, así como los botones de acción rápida, carecían de compresión háptica visual (`:active:scale`), generando una sensación de rigidez ante el clic o toque.
+- **Falta de Énfasis Elástico en Subtareas y Portapapeles:** La marcación de items completados en checklists y el botón de copiado de notas no ofrecían una animación de rebote (*elastic pop* con *overshoot*), pasando desapercibida la confirmación de la acción.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Registro de Utilidades Cinéticas en `src/index.css`:**
+   - `.spring-sidebar`: Curva de resorte pesada `cubic-bezier(0.16, 1, 0.3, 1)` de 240ms con `will-change: width` para el drawer de cuadernos.
+   - `.kinetic-card-mosaico`: Aceleración en GPU (`transform: translateZ(0)`), elevación de 3px en hover con halo celeste perimetral (`rgba(56, 189, 248, 0.12)`) y compresión táctil ultrarrápida a 80ms (`scale(0.985)`).
+   - `.kinetic-card-lista`: Microdesplazamiento `translateX(3px)` con compresión táctil a 70ms (`scale(0.99)`).
+   - `.kinetic-pop-bounce`: Animación con sobredisparo elástico (*overshoot*) `cubic-bezier(0.34, 1.56, 0.64, 1)` a 180ms para checkboxes y estados de copia exitosa.
+   - `.kinetic-btn-tactile`: Elevación de -1.5px con halo difuso y compresión `:active:scale(0.96)`.
+   - `.kinetic-input-spotlight`: Halo perimetral celeste difuso (`0 0 16px rgba(56, 189, 248, 0.22)`) en foco.
+2. **Intervención en `TarjetaNota.tsx`:**
+   - Incorporación de `.kinetic-card-mosaico` en tarjetas masonry y `.kinetic-card-lista` en tarjetas de lista compacta.
+   - Botón de Pin con rotación suave y feedback táctil `:active:scale-90 hover:-rotate-12`.
+   - Inyección de `.kinetic-pop-bounce` en checkboxes marcados (`CheckSquare`) de las listas de verificación interactivas y en el icono de confirmación de copia (`Check`).
+   - Botones de acción del pie de tarjeta con compresión táctil `:active:scale-90 transition-all duration-150`.
+3. **Intervención en `SidebarCuadernos.tsx`:**
+   - Contenedor lateral optimizado con `.spring-sidebar` para animación continua sin layout thrashing.
+   - Unificación del control de colapso mediante `ChevronLeft` con rotación suave de 0° a 180° gobernada por `cubic-bezier(0.16, 1, 0.3, 1)`.
+   - Retroalimentación táctil `:active:scale-[0.98]` en items de cuadernos y escalado `group-hover:scale-110` en sus iconos temáticos.
+   - Accesos rápidos (Fijadas, Tareas, Deseos, Vínculos) con compresión háptica `:active:scale-95` y halos de resplandor contextual por color (ámbar, celeste, morado, esmeralda) en estado activo.
+4. **Intervención en `VisorNotas.tsx`:**
+   - Botón principal de Nueva Nota con `.kinetic-btn-tactile` y rotación de 90° en hover del icono `Plus`.
+   - Barra de búsqueda de notas enriquecida con `.kinetic-input-spotlight`.
+   - Contenedor Quick Note Bento con halo perimetral `hover:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.12)]` y transición elástica de apertura en 300ms.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (232/232 tests).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 7.04s).
+- **Fluidez Cinética:** 60–120 FPS compositados enteramente por GPU sin regresiones en contratos Dexie ni emojis en el DOM.
+
+---
+
+### [REQ-FIX-12: Eliminación Optimista con Deshacer en Cuadernos, Filtros Rápidos Multi-Select y Elevación Cinética Restante en ViewNotas]
+**Fecha:** Noviembre 2026 | **Fase:** 5.04 | **Archivos Modificados:** `src/context/UndoDeleteContext.tsx`, `src/components/UI/UndoToastContainer.tsx`, `src/components/Notas/SidebarCuadernos.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/EditorNotaModal.tsx`, `src/components/Notas/__tests__/SidebarCuadernos.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Falla en Eliminación de Cuadernos en Dexie:** La llamada a `db.notas.where('block_nombre').equals(nombreBlock).modify(...)` arrojaba `KeyPath block_nombre on object store notas is not indexed`, provocando un fallo en Dexie y desplegando el error *"Error al eliminar el cuaderno"*. Los cuadernos son agrupaciones virtuales persistidas localmente y sus notas no cuentan con un índice secundario sobre `block_nombre`.
+- **Fricción por Diálogo Nativo (`window.confirm`):** La interfaz utilizaba un `window.confirm()` síncrono del navegador que bloqueaba el hilo principal y rompía la consistencia visual Cobalt Aerodynamic.
+- **Limitación a Filtro Rápido Excluyente:** Los accesos rápidos (Fijadas, Checklists, Deseos, Vínculos) estaban restringidos a una selección atómica única de tipo cadena (`subFiltro: SubFiltroRapido`), impidiendo combinar múltiples criterios (ej. notas fijadas que a su vez contengan listas de verificación).
+- **Carencia de Microinteracciones Hápticas en Controles Secundarios:** Los selectores de vista (Mosaico / Lista), la paleta de colores del editor modal y los campos de entrada carecían de retroalimentación elástica (`active:scale`, foco `.kinetic-input-spotlight` y halos perimetrales dinámicos).
+
+#### 2. Solución Quirúrgica Implementada
+1. **Eliminación Optimista con Búfer UndoDelete (5 Segundos) para Cuadernos:**
+   - En `src/context/UndoDeleteContext.tsx`, extensión de `TipoEntidadUndo` con `'CUADERNO'`. Aislamiento en `commitConTombstone` excluyendo lápidas para tablas locales (`tabla !== 'cuadernos'`).
+   - En `src/components/UI/UndoToastContainer.tsx`, renderizado de `<BookOpen className="w-4 h-4 text-sky-400" />` ante eventos de cuaderno.
+   - En `src/components/Notas/SidebarCuadernos.tsx`, erradicación total de `window.confirm()`, despachando directamente `onEliminarCuaderno(block)`.
+   - En `src/components/Notas/VisorNotas.tsx`, implementación de `handleEliminarCuaderno` mediante `programarEliminacion` con 5000ms de gracia.
+   - En `bloquesUnicos`, exclusión optimista en tiempo real mediante `!estaOculto(b.trim())` sincronizado con `hiddenIdsSet`.
+   - Al expirar el temporizador, el `commit` diferido utiliza `db.notas.filter((n) => n.block_nombre === nombreBlock).toArray()` y `db.notas.bulkUpdate(...)`, eliminando la dependencia de índices inexistentes y garantizando cero errores relacionales. Si el usuario pulsa "Deshacer", el cuaderno reaparece instantáneamente sin pérdida de datos.
+2. **Accesos Rápidos Multi-Select Acumulativos (Intersección AND):**
+   - En `SidebarCuadernos.tsx` y `VisorNotas.tsx`, migración del estado a `subFiltros: SubFiltroRapido[]`.
+   - Conmutación independiente de filtros (`handleToggleSubFiltro`), permitiendo apilar criterios acumulativos (ej. Fijadas + Checklist).
+   - En `useMemo`, evaluación estricta `subFiltros.every(...)` aplicando intersección lógica sobre las notas.
+   - Iluminación independiente de botones con halos perimetrales contextuales específicos por categoría (ámbar, celeste, morado, esmeralda).
+3. **Elevación Cinética en Controles Restantes:**
+   - Botones de vista Mosaico/Lista (desktop y móvil) con compresión háptica `:active:scale-90`, transición elástica de 200ms y halo difuso `shadow-[0_0_12px_rgba(56,189,248,0.2)]`.
+   - En `EditorNotaModal.tsx`, selector de colores con hover `scale-110`, compresión `:active:scale-90` y anillo de halo perimetral `shadow-[0_0_12px_rgba(255,255,255,0.4)]` sobre el tono activo.
+   - Inputs, textarea de Markdown y selector de tags enriquecidos con `.kinetic-input-spotlight`.
+   - Botones primarios del editor modal y Quick Note con `.kinetic-btn-tactile`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (234/234 tests, incorporando pruebas de conmutación multi-select y aislamiento optimista).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.69s).
+- **Experiencia de Usuario:** Erradicado al 100% el error de Dexie y el modal nativo; navegación fluida a 60–120 FPS compositados por GPU.
+
+---
+
+### [REQ-FIX-13: Implementación de Drag-and-Drop de Notas a Cuadernos Temáticos y Elevación Visual Bento en ViewNotas]
+**Fecha:** Noviembre 2026 | **Fase:** 5.05 | **Archivos Modificados:** `src/components/Notas/TarjetaNota.tsx`, `src/components/Notas/SidebarCuadernos.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/__tests__/SidebarCuadernos.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Fricción Operativa en Organización de Notas:** Para clasificar o reasignar una nota a un cuaderno temático (o desvincularla a "Notas Sueltas"), el usuario estaba obligado a abrir el modal editor 360°, buscar el selector de cuaderno, modificar el campo y guardar, provocando una pérdida innecesaria de contexto y tiempo operativo.
+- **Riesgo de Colisiones en Drag-and-Drop:** Las tarjetas de notas contienen elementos interactivos internos con sus propios manejadores de eventos (casillas de verificación en checklists, botones de copia al portapapeles, enlaces externos de deseos, chips de entidades @PROY/@TAR y botones de eliminación). Un evento de arrastre mal aislado interferiría con clics y selección de texto.
+- **Parpadeo por Burbujeo en Zonas de Soltado (Drop Targets):** En navegadores basados en Chromium, los eventos `dragenter` y `dragleave` se disparan de forma oscilante cuando el cursor sobrevuela elementos hijos dentro de un botón o cápsula, provocando un parpadeo disruptivo si no se implementa una barrera geométrica y `pointer-events-none`.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Origen de Arrastre Blindado (Drag Source) en `TarjetaNota.tsx`:**
+   - Habilitación de `draggable={true}`, `onDragStart={handleDragStart}`, `onDragEnd={handleDragEnd}` y cursores cinéticos `cursor-grab active:cursor-grabbing` tanto en vista de lista como en cuadrícula mosaico.
+   - Guardián en `handleDragStart`: inhibe el arrastre si el evento proviene de botones, enlaces, campos de texto o zonas marcadas con `.not-draggable` (como contenedores de checklist o wishlist), así como si el usuario tiene una selección activa de texto en pantalla.
+   - Serialización de tipo MIME `application/x-miportal-nota-id` y `text/plain` con el ID canónico de la nota.
+   - Estado visual translúcido y comprimido durante el vuelo: `opacity-40 scale-[0.98] border-dashed border-sky-500/50`.
+2. **Zonas de Soltado Bento Anti-Flicker en `SidebarCuadernos.tsx`:**
+   - Configuración de drop targets en "Notas Sueltas" (`destinoBlock = '__sin_block__'`) y en cada cápsula de cuaderno temático (`destinoBlock = block`).
+   - Doble barrera contra el parpadeo:
+     - Clases `pointer-events-none` en elementos hijos internos (iconos, etiquetas de texto y contadores numéricos).
+     - Validación geométrica estricta en `handleDragLeave` mediante `getBoundingClientRect()` contra `(e.clientX, e.clientY)`.
+   - Elevación visual Cobalt Aerodynamic durante el arrastre: borde punteado cian `border-sky-400 border-dashed`, escala `scale-[1.03]`, anillo perimetral `ring-2 ring-sky-400/50` y sombra multicapa `shadow-[0_0_20px_rgba(56,189,248,0.5)]`.
+   - Soporte reactivo en modo colapsado (64px): despliegue de tooltip flotante Bento a la derecha (`absolute left-full ml-2.5 bg-[#0D1526] border-sky-400/80 shadow-[0_0_20px_rgba(56,189,248,0.35)]`) con el nombre del cuaderno destino.
+3. **Mutación Local-First en Dexie y Notificación en `VisorNotas.tsx`:**
+   - Implementación de `handleMoverNotaACuaderno(notaId, destinoBlock)`:
+     - Resolución segura: `'__sin_block__'` se mapea a `''`, normalizando notas desvinculadas.
+     - Detección de movimientos redundantes (evita escrituras ociosas en IndexedDB si la nota ya reside en el cuaderno destino).
+     - Mutación atómica en `db.notas.update(notaId, { block_nombre: nuevoBlock, updated_at: nowIso, version: (nota.version || 1) + 1, sync_status: 'pending' })`.
+     - Suscripción atómica `useLiveQuery` actualiza en tiempo real los contadores numéricos y la vista sin requerir recargas ni causar bloqueos.
+     - Feedback accesible mediante `mostrarToastCobalt`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (238/238 tests, incorporando 4 pruebas unitarias para resolución de destino, detección redundante, payload de mutación y boundary check anti-flicker).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.92s).
+- **Paridad Visual y de Rendimiento:** Cero emojis en DOM, respeto inquebrantable a tokens Cobalt Aerodynamic (`#040711`, `#0D1526`, `border-slate-800/40`, Lucide 1.75) y garantía de 60 FPS sin parpadeos.

@@ -17,7 +17,9 @@ import {
   sanitizarHitoPlanPayload,
   sanitizarVinculoPayload,
   sanitizarActividadInbound,
-  sanitizarSubtareaInbound
+  sanitizarSubtareaInbound,
+  sanitizarHitoInbound,
+  sanitizarTareaInbound
 } from './syncPayloadSanitizer';
 import type { TombstoneRecord } from '../types';
 
@@ -26,6 +28,47 @@ export type SyncState = 'synced' | 'syncing' | 'offline' | 'error' | 'reconnecti
 export interface SyncResult {
   success: number;
   failed: number;
+}
+
+/**
+ * Diffing en memoria para sincronización silenciosa (REQ-FIX-10).
+ * Compara un registro inbound ya sanitizado contra el registro local previo en Dexie.
+ * Retorna true si ambos registros son idénticos en valores significativos,
+ * evitando escrituras redundantes en Dexie que despierten useLiveQuery innecesariamente.
+ */
+function sonRegistrosIdenticos(remoto: any, local: any): boolean {
+  if (!local || !remoto) return false;
+  if (String(remoto.id) !== String(local.id)) return false;
+
+  // Si ambos tienen updated_at, comparar timestamp ISO
+  if (remoto.updated_at && local.updated_at) {
+    const tRemoto = new Date(remoto.updated_at).getTime();
+    const tLocal = new Date(local.updated_at).getTime();
+    if (!isNaN(tRemoto) && !isNaN(tLocal) && tRemoto !== tLocal) {
+      return false;
+    }
+  }
+
+  // Comparar campos significativos
+  const keys = Object.keys(remoto);
+  for (const k of keys) {
+    if (k === 'sync_status' || k === 'updated_at') continue;
+    const valR = remoto[k];
+    const valL = local[k];
+    if (valR === valL) continue;
+
+    // Normalizar null, undefined y string vacío como equivalentes
+    const rFalsy = valR === null || valR === undefined || valR === '';
+    const lFalsy = valL === null || valL === undefined || valL === '';
+    if (rFalsy && lFalsy) continue;
+
+    // Comparar tolerancias numéricas para decimales/porcentajes
+    if (typeof valR === 'number' && typeof valL === 'number' && Math.abs(valR - valL) < 0.0001) continue;
+
+    return false;
+  }
+
+  return true;
 }
 
 class SyncManager {
@@ -1411,9 +1454,6 @@ class SyncManager {
       return;
     }
 
-    this.isSyncing = true;
-    this.setSyncState('syncing');
-
     try {
       // 1. Verificar registros pendientes en IndexedDB a través de las 13 entidades (incluyendo tombstones)
       const pendingCounts = await Promise.all([
@@ -1435,10 +1475,14 @@ class SyncManager {
       const totalPendientes = pendingCounts.reduce((acc, c) => acc + c, 0);
 
       if (totalPendientes === 0) {
-        this.setSyncState('synced');
-        this.isSyncing = false;
+        if (this.syncState !== 'synced') {
+          this.setSyncState('synced');
+        }
         return;
       }
+
+      this.isSyncing = true;
+      this.setSyncState('syncing');
 
       // PASO 0: Lápidas (Tombstones) - Borrado prioritario remoto para evitar colisiones
       const resTomb = await this.sincronizarTombstones();
@@ -1552,6 +1596,44 @@ class SyncManager {
       // Tolerancia defensiva ante entornos sin IndexedDB
     }
 
+    // Pre-cargar mapas UUID -> Código de Proyectos e Hitos existentes en Dexie (REQ-FIX-10)
+    const proyUuidToCod = new Map<string, string>();
+    const hitoUuidToCod = new Map<string, string>();
+    try {
+      if (db.proyectos && typeof (db.proyectos as any).toArray === 'function') {
+        const locProys = await (db.proyectos as any).toArray();
+        if (Array.isArray(locProys)) {
+          locProys.forEach((p: any) => {
+            const cod = extraerCodigoCanonico(p);
+            if (cod) {
+              if (p.id) {
+                proyUuidToCod.set(String(p.id), cod);
+                proyUuidToCod.set(String(p.id).toUpperCase(), cod);
+              }
+              proyUuidToCod.set(cod, cod);
+            }
+          });
+        }
+      }
+      if (db.hitos_wbs && typeof (db.hitos_wbs as any).toArray === 'function') {
+        const locHitos = await (db.hitos_wbs as any).toArray();
+        if (Array.isArray(locHitos)) {
+          locHitos.forEach((h: any) => {
+            const cod = extraerCodigoCanonico(h);
+            if (cod) {
+              if (h.id) {
+                hitoUuidToCod.set(String(h.id), cod);
+                hitoUuidToCod.set(String(h.id).toUpperCase(), cod);
+              }
+              hitoUuidToCod.set(cod, cod);
+            }
+          });
+        }
+      }
+    } catch {
+      // Fallback defensivo ante entornos sin IndexedDB
+    }
+
     const configuraciones = [
       { tabla: 'proyectos', refDexie: db.proyectos },
       { tabla: 'hitos_wbs', refDexie: db.hitos_wbs },
@@ -1577,6 +1659,14 @@ class SyncManager {
       }
       return true;
     });
+
+    // Buffer de mutaciones en memoria para ejecución en transacción atómica unificada (REQ-FIX-10)
+    const mutacionesPorTabla: Array<{
+      tabla: string;
+      refDexie: any;
+      eliminar: string[];
+      actualizar: any[];
+    }> = [];
 
     for (const { tabla, refDexie } of configuracionesFiltradas) {
       if (this.tablasInexistentesSupabase.has(tabla) && !this.syncFinanzasRemotoHabilitado && (!tablasFiltro || !tablasFiltro.includes(tabla))) {
@@ -1616,6 +1706,23 @@ class SyncManager {
         }
 
         if (!data || data.length === 0) continue;
+
+        // Enriquecer mapas UUID -> Código con datos remotos frescos (REQ-FIX-10)
+        if (tabla === 'proyectos') {
+          for (const item of data) {
+            if (item.id && item.codigo_legado) {
+              proyUuidToCod.set(String(item.id), item.codigo_legado);
+              proyUuidToCod.set(String(item.id).toUpperCase(), item.codigo_legado);
+            }
+          }
+        } else if (tabla === 'hitos_wbs') {
+          for (const item of data) {
+            if (item.id && item.codigo_legado) {
+              hitoUuidToCod.set(String(item.id), item.codigo_legado);
+              hitoUuidToCod.set(String(item.id).toUpperCase(), item.codigo_legado);
+            }
+          }
+        }
 
         // Recuperar IDs pendientes o en error en local para proteger cambios sin sincronizar
         const idsPendientesLocales = new Set<string>();
@@ -1673,6 +1780,10 @@ class SyncManager {
             registroFinal = sanitizarActividadInbound(item, localPrevio);
           } else if (tabla === 'subtareas_pasos') {
             registroFinal = sanitizarSubtareaInbound(item, localPrevio);
+          } else if (tabla === 'hitos_wbs') {
+            registroFinal = sanitizarHitoInbound(item, localPrevio, proyUuidToCod);
+          } else if (tabla === 'tareas') {
+            registroFinal = sanitizarTareaInbound(item, localPrevio, proyUuidToCod, hitoUuidToCod);
           } else if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
             registroFinal = {
               ...fusionarRegistrosDuplicados(existentePorCodigo, registroFinal),
@@ -1685,16 +1796,23 @@ class SyncManager {
             idsObsoletosAEliminar.push(String(existentePorCodigo.id));
           }
 
+          // Diffing Silencioso en Memoria: Si es idéntico al local previo, no mutar Dexie
+          if (localPrevio && !idsObsoletosAEliminar.includes(String(localPrevio.id))) {
+            if (sonRegistrosIdenticos(registroFinal, localPrevio)) {
+              continue;
+            }
+          }
+
           registrosParaActualizar.push(registroFinal);
         }
 
-        if (idsObsoletosAEliminar.length > 0 && typeof (refDexie as any).bulkDelete === 'function') {
-          await (refDexie as any).bulkDelete(idsObsoletosAEliminar);
-        }
-
-        if (registrosParaActualizar.length > 0) {
-          await (refDexie as any).bulkPut(registrosParaActualizar);
-          summary.descargados += registrosParaActualizar.length;
+        if (idsObsoletosAEliminar.length > 0 || registrosParaActualizar.length > 0) {
+          mutacionesPorTabla.push({
+            tabla,
+            refDexie,
+            eliminar: idsObsoletosAEliminar,
+            actualizar: registrosParaActualizar
+          });
         }
       } catch (err) {
         console.warn(`[SyncManager] Error al sincronizar tabla descendente ${tabla}:`, err);
@@ -1702,8 +1820,46 @@ class SyncManager {
       }
     }
 
-    if (summary.descargados > 0) {
-      await sanearDuplicadosDexie();
+    const totalMutaciones = mutacionesPorTabla.reduce(
+      (acc, m) => acc + m.actualizar.length + m.eliminar.length,
+      0
+    );
+
+    if (totalMutaciones > 0) {
+      this.setSyncState('syncing');
+
+      const tablasParaTransaccion = mutacionesPorTabla
+        .map((m) => m.refDexie)
+        .filter((ref) => ref && typeof ref.bulkPut === 'function');
+
+      const ejecutarEscrituras = async () => {
+        for (const m of mutacionesPorTabla) {
+          if (m.eliminar.length > 0 && typeof (m.refDexie as any).bulkDelete === 'function') {
+            await (m.refDexie as any).bulkDelete(m.eliminar);
+          }
+          if (m.actualizar.length > 0 && typeof (m.refDexie as any).bulkPut === 'function') {
+            await (m.refDexie as any).bulkPut(m.actualizar);
+            summary.descargados += m.actualizar.length;
+          }
+        }
+      };
+
+      try {
+        if (typeof (db as any).transaction === 'function' && tablasParaTransaccion.length > 0) {
+          await (db as any).transaction('rw', tablasParaTransaccion, ejecutarEscrituras);
+        } else {
+          await ejecutarEscrituras();
+        }
+      } catch (txErr) {
+        console.warn('[SyncManager] Fallback a escrituras directas tras error en transacción:', txErr);
+        await ejecutarEscrituras();
+      }
+
+      if (summary.descargados > 0) {
+        await sanearDuplicadosDexie();
+      }
+
+      this.setSyncState('synced');
     }
 
     return summary;

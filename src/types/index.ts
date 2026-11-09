@@ -277,13 +277,17 @@ export interface HitoWbsRecord {
   user_id: string;
   codigo_legado: string; // 'WP-001' o 'HIT-001'
   proyecto_id: string;
+  proyecto_codigo?: string;
+  nombre_hito?: string;
   tipo_elemento_wbs: TipoElementoWBS;
   wbs_code: string; // ej. '1.1', '1.2.1'
   fase_asociada: string; // '01_INICIACION', '02_PLANIFICACION', etc.
   nombre_elemento: string;
   estado: EstadoHito;
   peso_pct: number; // 0.00 a 1.00 (suma fase = 1.0)
+  peso_ponderado_pct?: number;
   fecha_limite: string; // YYYY-MM-DD
+  fecha_limite_plan?: string;
   fecha_real_fin?: string;
   presupuesto_asignado: number;
   duracion_estimada_dias?: number;
@@ -473,6 +477,8 @@ export interface TareaRecord {
   codigo_legado: string; // TAR-XXX
   proyecto_codigo?: string;
   hito_codigo?: string;
+  proyecto_id?: string;
+  hito_id?: string;
   nombre_tarea_actividad: string;
   estado_tarea: '01_Backlog' | '02_Por_Hacer' | '03_En_Proceso' | '04_Completado' | '05_Archivado' | string;
   prioridad_eisenhower?: string;

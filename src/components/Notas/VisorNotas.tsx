@@ -53,10 +53,17 @@ const TONOS_16 = [
 export const VisorNotas: React.FC = () => {
   const [modoVista, setModoVista] = useState<ModoVista>('masonry');
   const [busqueda, setBusqueda] = useState('');
-  const [subFiltro, setSubFiltro] = useState<SubFiltroRapido>('');
+  const [subFiltros, setSubFiltros] = useState<SubFiltroRapido[]>([]);
   const [tagsSeleccionados, setTagsSeleccionados] = useState<string[]>([]);
   const [colorFiltro, setColorFiltro] = useState<string>('');
   const [filtrosNotasAbiertos, setFiltrosNotasAbiertos] = useState(false);
+
+  // Conmutador Multi-Select para Accesos Rápidos
+  const handleToggleSubFiltro = useCallback((filtro: SubFiltroRapido) => {
+    setSubFiltros((prev) =>
+      prev.includes(filtro) ? prev.filter((f) => f !== filtro) : [...prev, filtro]
+    );
+  }, []);
 
   // Blocks Dinámicos
   const [blockActivo, setBlockActivo] = useState<string | null>(null); // null = todas, '__sin_block__' = sueltas
@@ -137,7 +144,7 @@ export const VisorNotas: React.FC = () => {
   const deferredBusqueda = useDeferredValue(busqueda);
 
   // UndoDelete Integration y Toast Reactivo
-  const { programarEliminacion, estaOculto } = useUndoDelete();
+  const { programarEliminacion, estaOculto, hiddenIdsSet } = useUndoDelete();
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // Carga reactiva de notas con normalizador tolerante a fallos y filtro de exclusión reactiva UndoDelete
@@ -211,16 +218,21 @@ export const VisorNotas: React.FC = () => {
     setNotaParaConvertirGasto(null);
   }, [notaParaConvertirGasto]);
 
-  // Catálogo unificado de blocks únicos
+  // Catálogo unificado de blocks únicos (respetando exclusión optimista de UndoDelete)
   const bloquesUnicos = useMemo(() => {
-    const set = new Set<string>(blocksLocales);
+    const set = new Set<string>();
+    blocksLocales.forEach((b) => {
+      if (b && typeof b === 'string' && b.trim() && !estaOculto(b.trim())) {
+        set.add(b.trim());
+      }
+    });
     notasRaw.forEach((n) => {
-      if (n.block_nombre && n.block_nombre.trim()) {
+      if (n.block_nombre && n.block_nombre.trim() && !estaOculto(n.block_nombre.trim())) {
         set.add(n.block_nombre.trim());
       }
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [notasRaw, blocksLocales]);
+  }, [notasRaw, blocksLocales, estaOculto, hiddenIdsSet]);
 
   // Asegurar que cada block único tenga representación en cuadernosMeta con fallback resiliente
   const catalogoCuadernosMeta = useMemo(() => {
@@ -312,48 +324,96 @@ export const VisorNotas: React.FC = () => {
     setBlockActivo(nombre);
   };
 
-  // Eliminación de cuaderno y desvinculación atómica en Dexie para notas huérfanas
+  // Eliminación optimista de cuaderno con Snackbar de Deshacer (Undo) 5s y desvinculación en Dexie
   const handleEliminarCuaderno = useCallback(
-    async (nombreBlock: string) => {
-      try {
-        const nowIso = new Date().toISOString();
-        // 1. Desvincular en Dexie para evitar resurrección de notas huérfanas en bloquesUnicos
-        await db.notas.where('block_nombre').equals(nombreBlock).modify({
-          block_nombre: '',
-          updated_at: nowIso,
-          sync_status: 'pending'
-        });
-
-        // 2. Limpiar de blocksLocales
-        const nuevosBlocks = blocksLocales.filter((b) => b !== nombreBlock);
-        setBlocksLocales(nuevosBlocks);
-        try {
-          localStorage.setItem('pmo_notas_blocks_custom', JSON.stringify(nuevosBlocks));
-        } catch {
-          // ignore storage error
-        }
-
-        // 3. Limpiar de cuadernosMeta
-        const nuevosMeta = { ...cuadernosMeta };
-        delete nuevosMeta[nombreBlock];
-        setCuadernosMeta(nuevosMeta);
-        try {
-          localStorage.setItem('pmo_notas_cuadernos_meta', JSON.stringify(nuevosMeta));
-        } catch {
-          // ignore storage error
-        }
-
-        if (blockActivo === nombreBlock) {
-          setBlockActivo(null);
-        }
-
-        mostrarToastCobalt(`Cuaderno "${nombreBlock}" eliminado. Sus notas pasaron a Sueltas.`, 'success');
-      } catch (err) {
-        console.error('Error al eliminar cuaderno:', err);
-        mostrarToastCobalt('Error al eliminar el cuaderno', 'error');
+    (nombreBlock: string) => {
+      if (blockActivo === nombreBlock) {
+        setBlockActivo(null);
       }
+
+      programarEliminacion({
+        tabla: 'cuadernos',
+        id: nombreBlock,
+        etiqueta: `Cuaderno: ${nombreBlock}`,
+        tipo: 'CUADERNO',
+        duracionMs: 5000,
+        commit: async () => {
+          try {
+            const nowIso = new Date().toISOString();
+            // Desvincular en Dexie de forma tolerante a esquemas no indexados
+            const notasAModificar = await db.notas
+              .filter((n) => n.block_nombre === nombreBlock)
+              .toArray();
+
+            if (notasAModificar.length > 0) {
+              await db.notas.bulkUpdate(
+                notasAModificar.map((n) => ({
+                  key: n.id,
+                  changes: {
+                    block_nombre: '',
+                    updated_at: nowIso,
+                    sync_status: 'pending'
+                  }
+                }))
+              );
+            }
+
+            // Limpiar de blocksLocales
+            setBlocksLocales((prev) => {
+              const nuevos = prev.filter((b) => b !== nombreBlock);
+              try {
+                localStorage.setItem('pmo_notas_blocks_custom', JSON.stringify(nuevos));
+              } catch {}
+              return nuevos;
+            });
+
+            // Limpiar de cuadernosMeta
+            setCuadernosMeta((prev) => {
+              const nuevos = { ...prev };
+              delete nuevos[nombreBlock];
+              try {
+                localStorage.setItem('pmo_notas_cuadernos_meta', JSON.stringify(nuevos));
+              } catch {}
+              return nuevos;
+            });
+          } catch (err) {
+            console.error('Error al ejecutar commit diferido de eliminación de cuaderno:', err);
+            mostrarToastCobalt('Error al persistir eliminación del cuaderno', 'error');
+          }
+        }
+      });
     },
-    [blocksLocales, cuadernosMeta, blockActivo]
+    [blockActivo, programarEliminacion]
+  );
+
+  // Mover nota hacia otro cuaderno temático o hacia Notas Sueltas vía Drag and Drop
+  const handleMoverNotaACuaderno = useCallback(
+    async (notaId: string, destinoBlock: string) => {
+      const nuevoBlock = destinoBlock === '__sin_block__' ? '' : destinoBlock;
+      const notaActual = await db.notas.get(notaId);
+      if (!notaActual) return;
+
+      const blockActual = notaActual.block_nombre || '';
+      if (blockActual === nuevoBlock) {
+        mostrarToastCobalt(
+          nuevoBlock ? `La nota ya está en el cuaderno "${nuevoBlock}"` : 'La nota ya es una nota suelta',
+          'info'
+        );
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      await db.notas.update(notaId, {
+        block_nombre: nuevoBlock,
+        updated_at: nowIso,
+        version: (notaActual.version || 1) + 1,
+        sync_status: 'pending'
+      });
+
+      const mensajeDestino = nuevoBlock ? `al cuaderno "${nuevoBlock}"` : 'a Notas Sueltas';
+      mostrarToastCobalt(`Nota movida ${mensajeDestino}`, 'success');
+    },
+    []
   );
 
   // Filtrado reactivo de notas
@@ -367,21 +427,34 @@ export const VisorNotas: React.FC = () => {
       resultado = resultado.filter((n) => n.block_nombre === blockActivo);
     }
 
-    // 2. Subfiltros Rápidos
-    if (subFiltro === 'FIJADAS') {
-      resultado = resultado.filter((n) => n.es_fijada);
-    } else if (subFiltro === 'ADJUNTOS') {
-      resultado = resultado.filter((n) => n.adjuntos_drive_json && n.adjuntos_drive_json.length > 0);
-    } else if (subFiltro === 'VINCULADAS') {
-      resultado = resultado.filter(
-        (n) => (n.enlaces_entidades_json && n.enlaces_entidades_json.length > 0) || (n.contenido_markdown || '').includes('@')
-      );
-    } else if (subFiltro === 'CHECKLIST') {
-      resultado = resultado.filter(
-        (n) => n.tipo_nota === 'CHECKLIST' || (n.checklists_json && n.checklists_json.length > 0)
-      );
-    } else if (subFiltro === 'WISHLIST') {
-      resultado = resultado.filter((n) => n.tipo_nota === 'WISHLIST' || (n.wishlist_json && (n.wishlist_json.costoEstimado || 0) > 0));
+    // 2. Subfiltros Rápidos Multi-Select (Intersección Lógica AND)
+    if (subFiltros.length > 0) {
+      resultado = resultado.filter((n) => {
+        return subFiltros.every((filtro) => {
+          switch (filtro) {
+            case 'FIJADAS':
+              return Boolean(n.es_fijada);
+            case 'ADJUNTOS':
+              return Boolean(n.adjuntos_drive_json && n.adjuntos_drive_json.length > 0);
+            case 'VINCULADAS':
+              return Boolean(
+                (n.enlaces_entidades_json && n.enlaces_entidades_json.length > 0) ||
+                (n.contenido_markdown || '').includes('@')
+              );
+            case 'CHECKLIST':
+              return Boolean(
+                n.tipo_nota === 'CHECKLIST' || (n.checklists_json && n.checklists_json.length > 0)
+              );
+            case 'WISHLIST':
+              return Boolean(
+                n.tipo_nota === 'WISHLIST' ||
+                (n.wishlist_json && (n.wishlist_json.costoEstimado || 0) > 0)
+              );
+            default:
+              return true;
+          }
+        });
+      });
     }
 
     // 3. Filtro por Color
@@ -424,7 +497,7 @@ export const VisorNotas: React.FC = () => {
       notasOtras: activos.filter((n) => !n.es_fijada),
       notasConseguidasWishlist: conseguidos
     };
-  }, [notasRaw, blockActivo, subFiltro, colorFiltro, tagsSeleccionados, deferredBusqueda]);
+  }, [notasRaw, blockActivo, subFiltros, colorFiltro, tagsSeleccionados, deferredBusqueda]);
 
   // Manejo de Quick Note (Inyecta blockActivo automáticamente)
   const handleGuardarQuickNota = async () => {
@@ -510,20 +583,23 @@ export const VisorNotas: React.FC = () => {
 
   const limpiarTodosLosFiltros = () => {
     setBusqueda('');
-    setSubFiltro('');
+    setSubFiltros([]);
     setTagsSeleccionados([]);
     setColorFiltro('');
     setBlockActivo(null);
   };
 
-  const hayFiltrosActivos = busqueda || subFiltro || tagsSeleccionados.length > 0 || colorFiltro || blockActivo !== null;
+  const hayFiltrosActivos =
+    Boolean(busqueda) ||
+    subFiltros.length > 0 ||
+    tagsSeleccionados.length > 0 ||
+    Boolean(colorFiltro) ||
+    blockActivo !== null;
 
   return (
     <div
       id="visor-notas-main"
-      className={`grid grid-cols-1 ${
-        isSidebarCollapsed ? 'md:grid-cols-[64px_1fr]' : 'md:grid-cols-[256px_1fr]'
-      } transition-[grid-template-columns] duration-300 ease-out w-full h-full flex-1 min-h-0 bg-[#040711] text-slate-100 relative select-none overflow-hidden`}
+      className="flex flex-row w-full h-full flex-1 min-h-0 bg-[#040711] text-slate-100 relative select-none overflow-hidden"
     >
       {/* ===================================================================== */}
       {/* 1. SIDEBAR DE BLOCKS (CUADERNOS) - DESKTOP                           */}
@@ -533,11 +609,12 @@ export const VisorNotas: React.FC = () => {
         setBlockActivo={setBlockActivo}
         bloquesUnicos={bloquesUnicos}
         conteoPorBlock={conteoPorBlock}
-        subFiltro={subFiltro}
-        setSubFiltro={setSubFiltro}
+        subFiltros={subFiltros}
+        onToggleSubFiltro={handleToggleSubFiltro}
         cuadernosMeta={catalogoCuadernosMeta}
         onAbrirModalCrear={() => setModalCrearCuadernoAbierto(true)}
         onEliminarCuaderno={handleEliminarCuaderno}
+        onMoverNotaACuaderno={handleMoverNotaACuaderno}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={handleToggleSidebar}
       />
@@ -545,13 +622,13 @@ export const VisorNotas: React.FC = () => {
       {/* ===================================================================== */}
       {/* 2. ÁREA CENTRAL: CANVAS DE NOTAS, HERRAMIENTAS Y QUICK NOTE           */}
       {/* ===================================================================== */}
-      <div className="flex-1 flex flex-col min-h-0 h-full overflow-hidden">
-        {/* BARRA SUPERIOR DE HERRAMIENTAS */}
-        <div className="shrink-0 bg-[#0D1526]/85 backdrop-blur-md border-b border-slate-800/40 px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2 shadow-cobalt-1 z-10 h-10 sm:h-auto">
+      <div className="flex-1 flex flex-col min-h-0 h-full min-w-0 overflow-hidden [contain:layout_paint]">
+        {/* BARRA SUPERIOR DE HERRAMIENTAS (Cobalt Aerodynamic) */}
+        <div className="shrink-0 bg-[#080D1A] border-b border-slate-800/60 px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2 shadow-cobalt-1 z-10 h-10 sm:h-auto">
           {/* Lado Izquierdo: Título y Block Activo */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
-            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-gradient-to-tr from-amber-500 via-amber-400 to-orange-500 flex items-center justify-center font-bold text-white shadow-md shadow-amber-500/20 ring-1 ring-white/20 shrink-0">
-              <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-sky-950/40 border border-sky-500/30 flex items-center justify-center text-sky-400 shadow-xs shrink-0">
+              <FileText className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 sm:gap-2">
@@ -564,7 +641,7 @@ export const VisorNotas: React.FC = () => {
                 </h2>
                 <span
                   id="badge-total-notas"
-                  className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[9px] sm:text-[10px] font-mono tabular-nums font-bold bg-amber-950/60 text-amber-300 border border-amber-500/30 shrink-0"
+                  className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono tabular-nums font-bold bg-sky-950/40 text-sky-300 border border-sky-500/30 shrink-0"
                 >
                   {notasRaw.length}
                 </span>
@@ -583,27 +660,27 @@ export const VisorNotas: React.FC = () => {
                 type="button"
                 id="btn-vista-notas-masonry"
                 onClick={() => setModoVista('masonry')}
-                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                className={`p-1.5 rounded-lg transition-all duration-200 active:scale-90 cursor-pointer ${
                   modoVista === 'masonry'
-                    ? 'text-sky-300 bg-sky-950/40 border border-sky-500/30 shadow-2xs'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'text-sky-300 bg-sky-950/50 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
                 }`}
                 title="Vista Mosaico Dinámico (Masonry Grid)"
               >
-                <Layers className="w-4 h-4" />
+                <Layers className="w-4 h-4" strokeWidth={1.75} />
               </button>
               <button
                 type="button"
                 id="btn-vista-notas-lista"
                 onClick={() => setModoVista('lista')}
-                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                className={`p-1.5 rounded-lg transition-all duration-200 active:scale-90 cursor-pointer ${
                   modoVista === 'lista'
-                    ? 'text-sky-300 bg-sky-950/40 border border-sky-500/30 shadow-2xs'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'text-sky-300 bg-sky-950/50 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
                 }`}
                 title="Vista Lista Compacta"
               >
-                <FileText className="w-4 h-4" />
+                <FileText className="w-4 h-4" strokeWidth={1.75} />
               </button>
             </div>
 
@@ -615,28 +692,28 @@ export const VisorNotas: React.FC = () => {
                 setNotaEnEdicion(null);
                 setModalAbierto(true);
               }}
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl font-bold text-xs bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 transition shadow-sm shadow-amber-500/20 cursor-pointer h-7 sm:h-auto"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl font-bold text-xs bg-sky-500 hover:bg-sky-400 kinetic-btn-tactile text-slate-950 shadow-sm shadow-sky-500/20 cursor-pointer h-7 sm:h-auto group"
               title="Crear nota detallada con modal 360°"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <Plus className="w-3.5 h-3.5 stroke-[2.5] group-hover:rotate-90 transition-transform duration-200 ease-out" />
               <span className="text-[11px] sm:text-xs">Nueva Nota</span>
             </button>
           </div>
         </div>
 
         {/* NIVEL SECUNDARIO: Búsqueda Rápida y Filtros de Refinamiento */}
-        <div className="shrink-0 bg-[#0D1526]/50 backdrop-blur-xs border-b border-slate-800/40 px-3 sm:px-6 py-1.5 sm:py-2 flex flex-col md:flex-row md:items-center justify-between gap-2 z-10">
+        <div className="shrink-0 bg-[#080D1A] border-b border-slate-800/60 px-3 sm:px-6 py-1.5 sm:py-2 flex flex-col md:flex-row md:items-center justify-between gap-2 z-10">
           {/* Fila compacta de búsqueda + botón de filtros móvil */}
           <div className="flex items-center gap-2 w-full md:max-w-md">
             <div className="relative flex-1">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.75} />
               <input
                 type="text"
                 id="input-busqueda-notas"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar notas, checklists o #tags..."
-                className="w-full h-8 pl-8 pr-7 text-xs rounded-xl bg-slate-900/90 border border-slate-800 text-slate-100 placeholder-slate-500 focus:ring-1 focus:ring-sky-500 focus:border-sky-500/60 transition-all outline-none"
+                className="w-full h-8 pl-8 pr-7 text-xs rounded-lg bg-slate-900/60 border border-slate-800/60 text-slate-100 placeholder:text-slate-500 kinetic-input-spotlight transition-all outline-none"
               />
               {busqueda && (
                 <button
@@ -653,16 +730,16 @@ export const VisorNotas: React.FC = () => {
             <button
               type="button"
               onClick={() => setFiltrosNotasAbiertos(!filtrosNotasAbiertos)}
-              className={`h-8 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 md:hidden ${
+              className={`h-8 px-2.5 rounded-lg border flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 md:hidden ${
                 (tagsSeleccionados.length > 0 || colorFiltro) || filtrosNotasAbiertos
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white'
+                  ? 'bg-sky-950/40 text-sky-300 border-sky-500/40'
+                  : 'bg-slate-900/60 border-slate-800/60 text-slate-400 hover:text-white'
               }`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Filtros</span>
               {(tagsSeleccionados.length > 0 || colorFiltro) && (
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
               )}
             </button>
           </div>
@@ -670,26 +747,26 @@ export const VisorNotas: React.FC = () => {
           {/* Refinamiento: Tags, Color y Limpieza (Desplegable en móvil, visible en md:) */}
           <div className={`${filtrosNotasAbiertos ? 'flex' : 'hidden md:flex'} flex-wrap items-center gap-1.5 justify-start md:justify-end pt-1 md:pt-0 border-t md:border-t-0 border-slate-800/40`}>
             {/* Conmutador de vista en móvil cuando se abren filtros */}
-            <div className="flex sm:hidden items-center p-0.5 bg-slate-900/80 rounded-xl border border-slate-800/80">
+            <div className="flex sm:hidden items-center p-0.5 bg-slate-900/80 rounded-lg border border-slate-800/60">
               <button
                 type="button"
                 onClick={() => setModoVista('masonry')}
-                className={`p-1 rounded-lg transition ${
-                  modoVista === 'masonry' ? 'text-sky-300 bg-sky-950/40' : 'text-slate-400'
+                className={`p-1 rounded-md transition-all duration-150 active:scale-90 ${
+                  modoVista === 'masonry' ? 'text-sky-300 bg-sky-950/50 shadow-2xs' : 'text-slate-400'
                 }`}
                 title="Vista Mosaico"
               >
-                <Layers className="w-3.5 h-3.5" />
+                <Layers className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
               <button
                 type="button"
                 onClick={() => setModoVista('lista')}
-                className={`p-1 rounded-lg transition ${
-                  modoVista === 'lista' ? 'text-sky-300 bg-sky-950/40' : 'text-slate-400'
+                className={`p-1 rounded-md transition-all duration-150 active:scale-90 ${
+                  modoVista === 'lista' ? 'text-sky-300 bg-sky-950/50 shadow-2xs' : 'text-slate-400'
                 }`}
                 title="Vista Lista"
               >
-                <FileText className="w-3.5 h-3.5" />
+                <FileText className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
             </div>
             {/* Selector de Filtro de Etiquetas */}
@@ -698,17 +775,17 @@ export const VisorNotas: React.FC = () => {
                 type="button"
                 id="btn-filtro-etiquetas-notas"
                 onClick={() => setDropdownTagsAbierto(!dropdownTagsAbierto)}
-                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 bg-slate-900/80 border border-slate-800 transition flex items-center gap-1.5 cursor-pointer"
+                className="h-8 px-2.5 rounded-lg text-xs font-medium text-slate-300 hover:text-sky-300 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/60 transition flex items-center gap-1.5 cursor-pointer"
                 title="Filtrar por etiqueta"
               >
-                <Tag className="w-3.5 h-3.5 text-amber-500" />
+                <Tag className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
                 <span id="label-filtro-etiqueta-activa" className="hidden sm:inline">Tags</span>
                 {tagsSeleccionados.length > 0 && (
-                  <span id="badge-filtro-etiqueta-activa" className="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold bg-amber-500 text-slate-950">
+                  <span id="badge-filtro-etiqueta-activa" className="px-1.5 py-0.2 rounded-full text-[10px] font-mono tabular-nums font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
                     {tagsSeleccionados.length}
                   </span>
                 )}
-                <ChevronDown className="w-3 h-3 text-slate-400" />
+                <ChevronDown className="w-3 h-3 text-slate-400" strokeWidth={1.75} />
               </button>
 
               {/* Dropdown flotante de etiquetas con buscador */}
@@ -792,13 +869,13 @@ export const VisorNotas: React.FC = () => {
                         setColorFiltro(tono.id);
                         setDropdownColorAbierto(false);
                       }}
-                      className={`w-full text-left px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-2 transition cursor-pointer ${
+                      className={`w-full text-left px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all duration-150 active:scale-95 cursor-pointer ${
                         colorFiltro === tono.id
-                          ? 'bg-amber-500/15 text-amber-300 font-bold'
+                          ? 'bg-amber-500/15 text-amber-300 font-bold shadow-[0_0_10px_rgba(245,158,11,0.2)]'
                           : 'hover:bg-slate-800 text-slate-300'
                       }`}
                     >
-                      <span className={`w-3 h-3 rounded-full ${tono.dot}`}></span>
+                      <span className={`w-3 h-3 rounded-full ${tono.dot} group-hover:scale-110 transition-transform`}></span>
                       <span>{tono.label}</span>
                     </button>
                   ))}
@@ -858,12 +935,12 @@ export const VisorNotas: React.FC = () => {
           </button>
         </div>
 
-        {/* CONTENEDOR EXPANDIBLE DE CREACIÓN RÁPIDA (GOOGLE KEEP STYLE - DESKTOP) */}
-        <div className="hidden md:block shrink-0 w-full max-w-2xl mx-auto px-4 pt-3 pb-1 z-10 min-h-[4rem]">
+        {/* CONTENEDOR EXPANDIBLE DE CREACIÓN RÁPIDA (Bento Capsule - DESKTOP) */}
+        <div className="hidden md:block shrink-0 w-full max-w-2xl mx-auto px-4 pt-2 pb-1 z-10">
           <div
             id="quick-note-box"
-            className={`bg-[#0D1526] rounded-2xl border border-slate-800/80 shadow-cobalt-1 relative overflow-hidden group ${
-              quickExpanded ? 'max-h-[700px]' : 'max-h-14'
+            className={`bg-[#0D1526]/80 hover:bg-[#0D1526] rounded-xl border border-slate-800/60 hover:border-sky-500/40 shadow-cobalt-1 hover:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.12)] relative overflow-hidden group transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              quickExpanded ? 'max-h-[700px]' : 'h-10'
             }`}
           >
             {/* ESTADO COLAPSADO */}
@@ -871,11 +948,11 @@ export const VisorNotas: React.FC = () => {
               <div
                 id="quick-note-collapsed"
                 onClick={() => setQuickExpanded(true)}
-                className="p-3 flex items-center justify-between gap-3 cursor-text"
+                className="h-10 px-3 flex items-center justify-between gap-3 cursor-pointer"
               >
                 <div className="flex items-center gap-2.5 text-slate-400 text-xs font-medium flex-1">
-                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>
+                  <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">
                     {blockActivo && blockActivo !== '__sin_block__'
                       ? `Tomar nota en Block "${blockActivo}"...`
                       : 'Tomar una nota rápida, checklist o escribe @...'}
@@ -889,10 +966,10 @@ export const VisorNotas: React.FC = () => {
                       setQuickTipo('checklist');
                       setQuickExpanded(true);
                     }}
-                    className="p-1.5 rounded-lg hover:bg-slate-800 hover:text-slate-200 transition cursor-pointer"
+                    className="p-1 rounded-lg hover:bg-slate-800/80 hover:text-sky-300 transition-colors cursor-pointer"
                     title="Nueva lista de verificación"
                   >
-                    <CheckSquare className="w-4 h-4 text-sky-400" />
+                    <CheckSquare className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
                   </button>
                   <button
                     type="button"
@@ -901,10 +978,10 @@ export const VisorNotas: React.FC = () => {
                       setQuickTipo('wishlist');
                       setQuickExpanded(true);
                     }}
-                    className="p-1.5 rounded-lg hover:bg-slate-800 hover:text-slate-200 transition cursor-pointer"
+                    className="p-1 rounded-lg hover:bg-slate-800/80 hover:text-purple-300 transition-colors cursor-pointer"
                     title="Nuevo deseo / wishlist"
                   >
-                    <DollarSign className="w-4 h-4 text-purple-400" />
+                    <DollarSign className="w-3.5 h-3.5 text-purple-400" strokeWidth={1.75} />
                   </button>
                 </div>
               </div>
@@ -1183,9 +1260,9 @@ export const VisorNotas: React.FC = () => {
                                 setQuickColor(col);
                                 setQuickColorPickerAbierto(false);
                               }}
-                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-800 transition-all duration-150 active:scale-90 hover:scale-110 cursor-pointer"
                             >
-                              <span className={`w-5 h-5 rounded-full border border-slate-600 ${col === 'default' ? 'bg-slate-900' : `bg-${col}-500`}`} />
+                              <span className={`w-5 h-5 rounded-full border border-slate-600 transition-transform ${col === 'default' ? 'bg-slate-900' : `bg-${col}-500`} ${quickColor === col ? 'ring-2 ring-white/60 scale-110 shadow-xs' : ''}`} />
                               <span className="text-[9px] text-slate-400 capitalize">{col.slice(0, 4)}</span>
                             </button>
                           ))}
@@ -1198,14 +1275,14 @@ export const VisorNotas: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setQuickExpanded(false)}
-                      className="px-3 py-1 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+                      className="px-3 py-1 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
                     >
                       Cerrar
                     </button>
                     <button
                       type="button"
                       onClick={handleGuardarQuickNota}
-                      className="px-4 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 shadow-sm transition cursor-pointer"
+                      className="px-4 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm kinetic-btn-tactile cursor-pointer"
                     >
                       Guardar
                     </button>

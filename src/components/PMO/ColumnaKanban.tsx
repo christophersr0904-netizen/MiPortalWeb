@@ -197,9 +197,11 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
         ) : (
           tareasColumna.map((tar) => {
             const subsTarea = subtareasPorTarea.get(tar.codigo_legado) || [];
-            const proyAsoc = tar.proyecto_codigo ? proyectosMap.get(tar.proyecto_codigo) : undefined;
+            const proyAsoc = (tar.proyecto_codigo ? proyectosMap.get(tar.proyecto_codigo) : undefined) ||
+              (tar.raw?.proyecto_id ? proyectosMap.get(tar.raw.proyecto_id) : undefined);
             const nombreProyecto = proyAsoc?.nombre || tar.proyecto_codigo || 'General';
-            const hitoAsoc = tar.hito_codigo ? hitosMap.get(tar.hito_codigo) : undefined;
+            const hitoAsoc = (tar.hito_codigo ? hitosMap.get(tar.hito_codigo) : undefined) ||
+              (tar.raw?.hito_id ? hitosMap.get(tar.raw.hito_id) : undefined);
             const nombreHito = (hitoAsoc as any)?.nombre || (hitoAsoc as any)?.nombre_hito || (hitoAsoc as any)?.nombre_elemento || tar.hito_codigo || 'Hito Principal';
 
             const isHovered = hoveredTaskId === tar.codigo_legado;

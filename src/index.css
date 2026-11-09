@@ -260,4 +260,90 @@ html, body {
   animation: shrinkWidth 4s linear forwards;
 }
 
+/* ============================================================================
+ * MICROINTERACCIONES CINÉTICAS COBALT AERODYNAMIC (REQ-FIX-11)
+ * ============================================================================ */
+.spring-sidebar {
+  transition: width 240ms cubic-bezier(0.16, 1, 0.3, 1),
+              padding 240ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+  will-change: width;
+}
+
+.kinetic-card-mosaico {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 150ms ease-out,
+              background-color 150ms ease-out !important;
+  will-change: transform, box-shadow;
+  transform: translateZ(0);
+}
+
+.kinetic-card-mosaico:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px -4px rgba(2, 6, 23, 0.85),
+              0 0 20px rgba(56, 189, 248, 0.12) !important;
+  border-color: rgba(56, 189, 248, 0.45) !important;
+}
+
+.kinetic-card-mosaico:active {
+  transform: translateY(-1px) scale(0.985);
+  box-shadow: 0 6px 16px -2px rgba(2, 6, 23, 0.9),
+              0 0 10px rgba(56, 189, 248, 0.18) !important;
+  transition-duration: 80ms !important;
+}
+
+.kinetic-card-lista {
+  transition: transform 150ms cubic-bezier(0.2, 0, 0, 1),
+              border-color 150ms ease-out,
+              box-shadow 150ms ease-out,
+              background-color 150ms ease-out !important;
+  will-change: transform;
+}
+
+.kinetic-card-lista:hover {
+  transform: translateX(3px);
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  box-shadow: 0 4px 14px rgba(2, 6, 23, 0.7),
+              0 0 12px rgba(56, 189, 248, 0.08) !important;
+}
+
+.kinetic-card-lista:active {
+  transform: translateX(1px) scale(0.99);
+  transition-duration: 70ms !important;
+}
+
+.kinetic-pop-bounce {
+  animation: kineticPop 180ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes kineticPop {
+  0% { transform: scale(0.7); opacity: 0.5; }
+  60% { transform: scale(1.22); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.kinetic-btn-tactile {
+  transition: transform 150ms cubic-bezier(0.2, 0, 0, 1),
+              box-shadow 150ms cubic-bezier(0.2, 0, 0, 1),
+              background-color 150ms ease-out !important;
+  will-change: transform;
+}
+
+.kinetic-btn-tactile:hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 8px 20px -3px rgba(56, 189, 248, 0.35) !important;
+}
+
+.kinetic-btn-tactile:active {
+  transform: translateY(0) scale(0.96);
+  transition-duration: 70ms !important;
+}
+
+.kinetic-input-spotlight:focus {
+  border-color: rgba(56, 189, 248, 0.6) !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.22) !important;
+  background-color: rgba(15, 23, 42, 0.95) !important;
+}
+
+
 

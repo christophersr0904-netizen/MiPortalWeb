@@ -217,6 +217,92 @@ export function sanitizarHitoPayload(
   };
 }
 
+/**
+ * Normalizador inverso Inbound para hitos_wbs (Supabase -> Dexie)
+ * Resuelve y preserva proyecto_codigo cruzando proyecto_id con mapas en memoria
+ * o localPrevio, armonizando atributos de peso, fecha y criterios DoD.
+ */
+export function sanitizarHitoInbound(
+  remoto: any,
+  localPrevio?: any,
+  proyUuidToCod?: Map<string, string>
+): HitoWbsRecord {
+  const proyUuid = remoto.proyecto_id || localPrevio?.proyecto_id;
+  const resolvedProyCod =
+    localPrevio?.proyecto_codigo ||
+    (proyUuid && proyUuidToCod
+      ? proyUuidToCod.get(String(proyUuid).toUpperCase()) || proyUuidToCod.get(String(proyUuid))
+      : undefined) ||
+    remoto.proyecto_codigo ||
+    '';
+
+  const rawPeso =
+    remoto.peso_pct !== undefined
+      ? Number(remoto.peso_pct)
+      : remoto.peso_ponderado_pct !== undefined
+        ? Number(remoto.peso_ponderado_pct)
+        : Number(localPrevio?.peso_pct ?? localPrevio?.peso_ponderado_pct ?? 0);
+  const peso_pct = rawPeso > 1 ? Number((rawPeso / 100).toFixed(4)) : Number(rawPeso.toFixed(4));
+
+  const esMarcador = (remoto.tipo_elemento_wbs || localPrevio?.tipo_elemento_wbs) === 'HITO_MARCADOR';
+
+  return {
+    ...localPrevio,
+    ...remoto,
+    id: remoto.id || localPrevio?.id,
+    user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
+    codigo_legado: remoto.codigo_legado || localPrevio?.codigo_legado || '',
+    proyecto_id: proyUuid || '',
+    proyecto_codigo: resolvedProyCod,
+    tipo_elemento_wbs: esMarcador ? 'HITO_MARCADOR' : 'PAQUETE_TRABAJO',
+    wbs_code: remoto.wbs_code || localPrevio?.wbs_code || '1.1',
+    fase_asociada: normalizarFaseAsociada(remoto.fase_asociada || localPrevio?.fase_asociada),
+    nombre_elemento:
+      remoto.nombre_elemento ||
+      remoto.nombre_hito ||
+      localPrevio?.nombre_elemento ||
+      localPrevio?.nombre_hito ||
+      'Elemento sin nombre',
+    nombre_hito:
+      remoto.nombre_hito ||
+      remoto.nombre_elemento ||
+      localPrevio?.nombre_hito ||
+      localPrevio?.nombre_elemento ||
+      'Elemento sin nombre',
+    estado: remoto.estado || localPrevio?.estado || '01_Pendiente',
+    peso_pct,
+    peso_ponderado_pct: remoto.peso_ponderado_pct ?? (peso_pct > 0 && peso_pct <= 1 ? peso_pct * 100 : peso_pct),
+    fecha_limite:
+      sanitizeDate(remoto.fecha_limite) ||
+      sanitizeDate(remoto.fecha_limite_plan) ||
+      sanitizeDate(localPrevio?.fecha_limite) ||
+      '',
+    fecha_limite_plan:
+      sanitizeDate(remoto.fecha_limite_plan) ||
+      sanitizeDate(remoto.fecha_limite) ||
+      sanitizeDate(localPrevio?.fecha_limite_plan) ||
+      null,
+    fecha_real_fin: sanitizeDate(remoto.fecha_real_fin) || sanitizeDate(localPrevio?.fecha_real_fin) || null,
+    presupuesto_asignado: esMarcador
+      ? 0.00
+      : Math.max(0, Number(remoto.presupuesto_asignado ?? localPrevio?.presupuesto_asignado ?? 0)),
+    criterio_dod:
+      remoto.criterio_dod?.trim() ||
+      remoto.criterio_aceptacion_dod?.trim() ||
+      localPrevio?.criterio_dod?.trim() ||
+      null,
+    dependencia_hito_id: remoto.dependencia_hito_id || localPrevio?.dependencia_hito_id || null,
+    entregable_link:
+      remoto.entregable_link?.trim() ||
+      remoto.entregable_verificable_link?.trim() ||
+      localPrevio?.entregable_link?.trim() ||
+      null,
+    version: remoto.version ?? localPrevio?.version ?? 1,
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(remoto.updated_at) || localPrevio?.updated_at || new Date().toISOString()
+  };
+}
+
 // ============================================================================
 // 3. SANITIZADOR DE TAREAS WBS
 // ============================================================================
@@ -272,6 +358,75 @@ export function sanitizarTareaPayload(
     notas_impedimentos: raw.notas_impedimentos?.trim() || null,
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+/**
+ * Normalizador inverso Inbound para tareas (Supabase -> Dexie)
+ * Resuelve y preserva obligatoriamente proyecto_codigo e hito_codigo
+ * a partir de mapas en memoria o localPrevio, evitando campos vacíos.
+ */
+export function sanitizarTareaInbound(
+  remoto: any,
+  localPrevio?: any,
+  proyUuidToCod?: Map<string, string>,
+  hitoUuidToCod?: Map<string, string>
+): TareaRecord {
+  const proyUuid = remoto.proyecto_id || localPrevio?.proyecto_id;
+  const hitoUuid = remoto.hito_id || localPrevio?.hito_id;
+
+  const resolvedProyCod =
+    localPrevio?.proyecto_codigo ||
+    (proyUuid && proyUuidToCod
+      ? proyUuidToCod.get(String(proyUuid).toUpperCase()) || proyUuidToCod.get(String(proyUuid))
+      : undefined) ||
+    remoto.proyecto_codigo ||
+    '';
+
+  const resolvedHitoCod =
+    localPrevio?.hito_codigo ||
+    (hitoUuid && hitoUuidToCod
+      ? hitoUuidToCod.get(String(hitoUuid).toUpperCase()) || hitoUuidToCod.get(String(hitoUuid))
+      : undefined) ||
+    remoto.hito_codigo ||
+    '';
+
+  return {
+    ...localPrevio,
+    ...remoto,
+    id: remoto.id || localPrevio?.id,
+    user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
+    codigo_legado: remoto.codigo_legado || localPrevio?.codigo_legado || '',
+    proyecto_id: proyUuid || '',
+    hito_id: hitoUuid || '',
+    proyecto_codigo: resolvedProyCod,
+    hito_codigo: resolvedHitoCod,
+    nombre_tarea_actividad:
+      remoto.nombre_tarea_actividad ||
+      remoto.nombre_tarea ||
+      localPrevio?.nombre_tarea_actividad ||
+      'Tarea sin nombre',
+    estado_tarea: normalizarEstadoTarea(remoto.estado_tarea || localPrevio?.estado_tarea),
+    prioridad_eisenhower: remoto.prioridad_eisenhower || localPrevio?.prioridad_eisenhower || '02_P2_Media',
+    nivel_energia_requerido: remoto.nivel_energia_requerido || localPrevio?.nivel_energia_requerido || 'Media_Operativa',
+    horas_estimadas: Math.max(0, Number(remoto.horas_estimadas ?? localPrevio?.horas_estimadas ?? 1.0)),
+    horas_reales: Math.max(0, Number(remoto.horas_reales ?? localPrevio?.horas_reales ?? 0.0)),
+    fecha_programada: sanitizeDate(remoto.fecha_programada) || sanitizeDate(localPrevio?.fecha_programada) || null,
+    hora_inicio: remoto.hora_inicio || localPrevio?.hora_inicio || null,
+    agendado_calendar:
+      remoto.agendado_calendar ||
+      (remoto.agendado_en_calendar === 'Sí' ? 'Sí' : 'No') ||
+      localPrevio?.agendado_calendar ||
+      'No',
+    id_dependencia: remoto.id_dependencia || remoto.dependencia_tarea_id || localPrevio?.id_dependencia || null,
+    responsable_ejecutor:
+      remoto.responsable_ejecutor?.trim() || localPrevio?.responsable_ejecutor?.trim() || 'Christopher',
+    notas_impedimentos: remoto.notas_impedimentos?.trim() ?? localPrevio?.notas_impedimentos ?? null,
+    es_mav: Boolean(remoto.es_mav ?? localPrevio?.es_mav ?? false),
+    costo_real_pen: Math.max(0, Number(remoto.costo_real_pen ?? localPrevio?.costo_real_pen ?? 0)),
+    archivado: Boolean(remoto.archivado ?? localPrevio?.archivado ?? false),
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(remoto.updated_at) || localPrevio?.updated_at || new Date().toISOString()
   };
 }
 

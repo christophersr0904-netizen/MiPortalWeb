@@ -20,7 +20,6 @@ import {
   Link2,
   FolderPlus,
   ChevronLeft,
-  ChevronRight,
   Plus,
   Trash2,
   type LucideIcon
@@ -48,18 +47,21 @@ export function resolverIconoCuaderno(nombreIcono?: string): LucideIcon {
   return MAPA_ICONOS_CUADERNO[nombreIcono] || Folder;
 }
 
-export type SubFiltroRapido = '' | 'FIJADAS' | 'ADJUNTOS' | 'VINCULADAS' | 'CHECKLIST' | 'WISHLIST';
+export type SubFiltroRapido = 'FIJADAS' | 'ADJUNTOS' | 'VINCULADAS' | 'CHECKLIST' | 'WISHLIST';
 
 export interface SidebarCuadernosProps {
   blockActivo: string | null;
   setBlockActivo: (block: string | null) => void;
   bloquesUnicos: string[];
   conteoPorBlock: Record<string, number>;
-  subFiltro: SubFiltroRapido;
-  setSubFiltro: (filtro: SubFiltroRapido) => void;
+  subFiltros?: SubFiltroRapido[];
+  onToggleSubFiltro?: (filtro: SubFiltroRapido) => void;
+  subFiltro?: SubFiltroRapido | '' | SubFiltroRapido[];
+  setSubFiltro?: (filtro: any) => void;
   cuadernosMeta: Record<string, CuadernoMeta>;
   onAbrirModalCrear: () => void;
   onEliminarCuaderno?: (nombreBlock: string) => void;
+  onMoverNotaACuaderno?: (notaId: string, destinoBlock: string) => Promise<void> | void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -69,14 +71,36 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
   setBlockActivo,
   bloquesUnicos,
   conteoPorBlock,
+  subFiltros,
+  onToggleSubFiltro,
   subFiltro,
   setSubFiltro,
   cuadernosMeta,
   onAbrirModalCrear,
   onEliminarCuaderno,
+  onMoverNotaACuaderno,
   isCollapsed: propIsCollapsed,
   onToggleCollapse
 }) => {
+  const filtrosActivos: SubFiltroRapido[] = Array.isArray(subFiltros)
+    ? subFiltros
+    : Array.isArray(subFiltro)
+    ? (subFiltro as SubFiltroRapido[])
+    : subFiltro && (subFiltro as unknown as string) !== ''
+    ? [subFiltro as SubFiltroRapido]
+    : [];
+
+  const handleToggleFiltro = (filtro: SubFiltroRapido) => {
+    if (onToggleSubFiltro) {
+      onToggleSubFiltro(filtro);
+    } else if (setSubFiltro) {
+      if (filtrosActivos.includes(filtro)) {
+        setSubFiltro('');
+      } else {
+        setSubFiltro(filtro);
+      }
+    }
+  };
   const [internalCollapsed, setInternalCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('pmo_notas_sidebar_collapsed') === 'true';
@@ -103,26 +127,68 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
     }
   };
 
+  // Estado y manejadores de Drag and Drop para soltar notas en cuadernos
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+
+  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+    if (
+      e.dataTransfer.types.includes('application/x-miportal-nota-id') ||
+      e.dataTransfer.types.includes('text/plain')
+    ) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragOverTarget !== targetId) {
+        setDragOverTarget(targetId);
+      }
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, targetId: string) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+      if (dragOverTarget === targetId) {
+        setDragOverTarget(null);
+      }
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, destinoBlock: string) => {
+    e.preventDefault();
+    setDragOverTarget(null);
+    const notaId =
+      e.dataTransfer.getData('application/x-miportal-nota-id') ||
+      e.dataTransfer.getData('text/plain');
+    if (!notaId) return;
+
+    if (onMoverNotaACuaderno) {
+      await onMoverNotaACuaderno(notaId, destinoBlock);
+    }
+  };
+
   return (
     <aside
       id="sidebar-blocks-notas"
-      className="hidden md:flex flex-col shrink-0 w-full h-full bg-[#0D1526]/90 border-r border-slate-800/40 p-3 justify-between overflow-y-auto custom-scrollbar select-none"
+      className={`hidden md:flex flex-col shrink-0 h-full bg-[#080D1A] border-r border-slate-800/60 justify-between overflow-y-auto custom-scrollbar select-none spring-sidebar ${
+        isCollapsed ? 'w-16 p-2' : 'w-64 p-3'
+      }`}
     >
       <div className="space-y-4">
         {/* Cabecera de Blocks & Control de Colapso */}
         <div className={`flex items-center ${isCollapsed ? 'flex-col gap-2' : 'justify-between'}`}>
           {!isCollapsed ? (
             <>
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400 min-w-0">
                 <BookOpen className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
-                <span className="truncate">Blocks & Cuadernos</span>
+                <span className="truncate whitespace-nowrap transition-opacity duration-150">Blocks & Cuadernos</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
                   id="btn-crear-nuevo-block"
                   onClick={onAbrirModalCrear}
-                  className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700/60 transition cursor-pointer"
+                  className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700/60 transition-all duration-150 active:scale-90 cursor-pointer"
                   title="Crear Nuevo Cuaderno"
                 >
                   <FolderPlus className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -131,10 +197,10 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                   type="button"
                   id="btn-colapsar-sidebar"
                   onClick={toggleCollapse}
-                  className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-slate-400 hover:text-slate-200 border border-slate-700/60 transition cursor-pointer"
+                  className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 hover:text-slate-200 border border-slate-700/60 transition-all duration-150 active:scale-90 cursor-pointer"
                   title="Colapsar menú lateral"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  <ChevronLeft className="w-3.5 h-3.5 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] rotate-0" strokeWidth={1.75} />
                 </button>
               </div>
             </>
@@ -144,15 +210,15 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                 type="button"
                 id="btn-expandir-sidebar"
                 onClick={toggleCollapse}
-                className="p-2 rounded-xl bg-slate-800/80 hover:bg-sky-500/20 text-slate-400 hover:text-sky-300 border border-slate-700/60 transition cursor-pointer"
+                className="p-2 rounded-xl bg-slate-800/60 hover:bg-sky-500/20 text-slate-400 hover:text-sky-300 border border-slate-700/60 transition-all duration-150 active:scale-90 cursor-pointer"
                 title="Expandir menú lateral"
               >
-                <ChevronRight className="w-4 h-4" strokeWidth={1.75} />
+                <ChevronLeft className="w-4 h-4 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] rotate-180" strokeWidth={1.75} />
               </button>
               <button
                 type="button"
                 onClick={onAbrirModalCrear}
-                className="p-2 rounded-xl bg-slate-800/80 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700/60 transition cursor-pointer"
+                className="p-2 rounded-xl bg-slate-800/60 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700/60 transition-all duration-150 active:scale-90 cursor-pointer"
                 title="Crear Nuevo Cuaderno"
               >
                 <FolderPlus className="w-4 h-4" strokeWidth={1.75} />
@@ -170,18 +236,18 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
             title={isCollapsed ? `Todas las Notas (${conteoPorBlock.__todas__ || 0})` : undefined}
             className={`w-full flex items-center ${
               isCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2'
-            } rounded-xl text-xs font-semibold transition cursor-pointer ${
+            } rounded-xl text-xs font-semibold transition-all duration-150 active:scale-[0.98] cursor-pointer ${
               blockActivo === null
                 ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
             }`}
           >
-            <div className={`flex items-center gap-2.5 ${isCollapsed ? 'justify-center' : ''}`}>
+            <div className={`flex items-center gap-2.5 ${isCollapsed ? 'justify-center' : 'min-w-0'}`}>
               <Layers className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
-              {!isCollapsed && <span className="truncate">Todas las Notas</span>}
+              {!isCollapsed && <span className="truncate whitespace-nowrap transition-opacity duration-150">Todas las Notas</span>}
             </div>
             {!isCollapsed && (
-              <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
+              <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 shrink-0">
                 {conteoPorBlock.__todas__ || 0}
               </span>
             )}
@@ -191,23 +257,35 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
           <button
             type="button"
             onClick={() => setBlockActivo('__sin_block__')}
+            onDragOver={(e) => handleDragOver(e, '__sin_block__')}
+            onDragLeave={(e) => handleDragLeave(e, '__sin_block__')}
+            onDrop={(e) => handleDrop(e, '__sin_block__')}
             title={isCollapsed ? `Notas Sueltas (${conteoPorBlock.__sin_block__ || 0})` : undefined}
             className={`w-full flex items-center ${
               isCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2'
-            } rounded-xl text-xs font-semibold transition cursor-pointer ${
-              blockActivo === '__sin_block__'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            } rounded-xl text-xs font-semibold transition-all duration-150 active:scale-[0.98] cursor-pointer relative ${
+              dragOverTarget === '__sin_block__'
+                ? 'bg-sky-950/70 border-2 border-sky-400 border-dashed scale-[1.03] shadow-[0_0_20px_rgba(56,189,248,0.45)] ring-2 ring-sky-400/50 text-sky-200'
+                : blockActivo === '__sin_block__'
+                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
             }`}
           >
-            <div className={`flex items-center gap-2.5 ${isCollapsed ? 'justify-center' : ''}`}>
-              <FileText className="w-4 h-4 text-amber-400 shrink-0" strokeWidth={1.75} />
-              {!isCollapsed && <span className="truncate">Notas Sueltas</span>}
+            <div className={`flex items-center gap-2.5 pointer-events-none ${isCollapsed ? 'justify-center' : 'min-w-0'}`}>
+              <FileText className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
+              {!isCollapsed && <span className="truncate whitespace-nowrap transition-opacity duration-150">Notas Sueltas</span>}
             </div>
             {!isCollapsed && (
-              <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300">
+              <span className="font-mono tabular-nums text-[11px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 shrink-0 pointer-events-none">
                 {conteoPorBlock.__sin_block__ || 0}
               </span>
+            )}
+            {/* Tooltip Bento flotante al arrastrar en modo colapsado */}
+            {isCollapsed && dragOverTarget === '__sin_block__' && (
+              <div className="absolute left-full ml-2.5 px-3 py-1.5 rounded-xl bg-[#0D1526] border border-sky-400/80 shadow-[0_0_20px_rgba(56,189,248,0.35)] text-xs text-sky-200 font-bold whitespace-nowrap z-50 pointer-events-none flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+                <span>Mover a Notas Sueltas</span>
+              </div>
             )}
           </button>
         </nav>
@@ -228,6 +306,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
           >
             {bloquesUnicos.map((block) => {
               const activo = blockActivo === block;
+              const isDragOver = dragOverTarget === block;
               const total = conteoPorBlock[block] || 0;
               const meta = cuadernosMeta[block];
               const IconoComponent = resolverIconoCuaderno(meta?.icono);
@@ -245,29 +324,34 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                       setBlockActivo(activo ? null : block);
                     }
                   }}
+                  onDragOver={(e) => handleDragOver(e, block)}
+                  onDragLeave={(e) => handleDragLeave(e, block)}
+                  onDrop={(e) => handleDrop(e, block)}
                   title={tooltipTexto}
                   className={`w-full flex items-center ${
                     isCollapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-1.5'
-                  } rounded-xl text-xs font-medium transition cursor-pointer group relative ${
-                    activo
+                  } rounded-xl text-xs font-medium transition-all duration-150 active:scale-[0.98] cursor-pointer group relative ${
+                    isDragOver
+                      ? 'bg-sky-950/80 border-2 border-sky-400 border-dashed scale-[1.03] shadow-[0_0_20px_rgba(56,189,248,0.5)] ring-2 ring-sky-400/50 z-20 text-sky-200'
+                      : activo
                       ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40 shadow-xs font-semibold before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:bg-sky-400 before:rounded-r before:shadow-[0_0_12px_#38bdf8]'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
                   }`}
                 >
-                  <div className={`flex items-center gap-2 ${isCollapsed ? 'justify-center' : 'truncate'}`}>
+                  <div className={`flex items-center gap-2 pointer-events-none ${isCollapsed ? 'justify-center' : 'min-w-0'}`}>
                     <IconoComponent
-                      className={`w-3.5 h-3.5 shrink-0 ${
-                        activo ? 'text-sky-400' : 'text-slate-500 group-hover:text-slate-300'
+                      className={`w-3.5 h-3.5 shrink-0 transition-transform duration-150 ${
+                        isDragOver ? 'scale-125 text-sky-300' : activo ? 'text-sky-400' : 'text-slate-500 group-hover:text-slate-300 group-hover:scale-110'
                       }`}
                       strokeWidth={1.75}
                     />
-                    {!isCollapsed && <span className="truncate">{block}</span>}
+                    {!isCollapsed && <span className="truncate whitespace-nowrap transition-opacity duration-150">{block}</span>}
                   </div>
                   {!isCollapsed && (
                     <div className="flex items-center gap-1 shrink-0">
                       <span
-                        className={`font-mono tabular-nums text-[10.5px] px-1.5 py-0.2 rounded-full bg-slate-900/80 text-slate-400 ${
-                          onEliminarCuaderno ? 'group-hover:hidden' : ''
+                        className={`font-mono tabular-nums text-[10.5px] px-1.5 py-0.2 rounded-full bg-slate-900/80 text-slate-400 pointer-events-none ${
+                          onEliminarCuaderno && !isDragOver ? 'group-hover:hidden' : ''
                         }`}
                       >
                         {total}
@@ -277,16 +361,21 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`¿Eliminar el cuaderno "${block}"? Las notas pasarán a Notas Sueltas.`)) {
-                              onEliminarCuaderno(block);
-                            }
+                            onEliminarCuaderno(block);
                           }}
                           title={`Eliminar cuaderno "${block}"`}
-                          className="hidden group-hover:flex items-center justify-center p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          className="hidden group-hover:flex items-center justify-center p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 active:scale-90 cursor-pointer pointer-events-auto not-draggable"
                         >
                           <Trash2 className="w-3 h-3" strokeWidth={1.75} />
                         </button>
                       )}
+                    </div>
+                  )}
+                  {/* Tooltip Bento flotante al arrastrar en modo colapsado */}
+                  {isCollapsed && isDragOver && (
+                    <div className="absolute left-full ml-2.5 px-3 py-1.5 rounded-xl bg-[#0D1526] border border-sky-400/80 shadow-[0_0_20px_rgba(56,189,248,0.35)] text-xs text-sky-200 font-bold whitespace-nowrap z-50 pointer-events-none flex items-center gap-1.5">
+                      <IconoComponent className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+                      <span>Mover a {block}</span>
                     </div>
                   )}
                 </div>
@@ -296,7 +385,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
         </div>
       </div>
 
-      {/* Flanco Inferior: Accesos Rápidos Elásticos */}
+      {/* Flanco Inferior: Accesos Rápidos Elásticos Multi-Select */}
       <div className="pt-3 border-t border-slate-800/60 space-y-2">
         {!isCollapsed && (
           <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
@@ -311,69 +400,69 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
           {/* 1. Fijadas */}
           <button
             type="button"
-            onClick={() => setSubFiltro(subFiltro === 'FIJADAS' ? '' : 'FIJADAS')}
+            onClick={() => handleToggleFiltro('FIJADAS')}
             title="Fijadas"
-            className={`p-2 rounded-xl text-left border flex items-center gap-1.5 cursor-pointer active:scale-[0.96] hover:scale-[1.02] hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-200 ${
+            className={`p-2 rounded-xl text-left border flex items-center gap-1.5 cursor-pointer hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-150 active:scale-95 ${
               isCollapsed ? 'justify-center w-full' : ''
             } ${
-              subFiltro === 'FIJADAS'
-                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+              filtrosActivos.includes('FIJADAS')
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
                 : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200'
             }`}
           >
             <Pin className="w-3.5 h-3.5 rotate-45 text-amber-400 shrink-0" strokeWidth={1.75} />
-            {!isCollapsed && <span>Fijadas</span>}
+            {!isCollapsed && <span className="whitespace-nowrap transition-opacity duration-150">Fijadas</span>}
           </button>
 
           {/* 2. Tareas */}
           <button
             type="button"
-            onClick={() => setSubFiltro(subFiltro === 'CHECKLIST' ? '' : 'CHECKLIST')}
+            onClick={() => handleToggleFiltro('CHECKLIST')}
             title="Tareas"
-            className={`p-2 rounded-xl text-left border flex items-center gap-1.5 cursor-pointer active:scale-[0.96] hover:scale-[1.02] hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-200 ${
+            className={`p-2 rounded-xl text-left border flex items-center gap-1.5 cursor-pointer hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-150 active:scale-95 ${
               isCollapsed ? 'justify-center w-full' : ''
             } ${
-              subFiltro === 'CHECKLIST'
-                ? 'bg-sky-500/20 border-sky-500/40 text-sky-300'
+              filtrosActivos.includes('CHECKLIST')
+                ? 'bg-sky-500/20 border-sky-500/40 text-sky-300 shadow-[0_0_12px_rgba(56,189,248,0.2)]'
                 : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200'
             }`}
           >
             <CheckSquare className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
-            {!isCollapsed && <span>Tareas</span>}
+            {!isCollapsed && <span className="whitespace-nowrap transition-opacity duration-150">Tareas</span>}
           </button>
 
           {/* 3. Deseos */}
           <button
             type="button"
-            onClick={() => setSubFiltro(subFiltro === 'WISHLIST' ? '' : 'WISHLIST')}
+            onClick={() => handleToggleFiltro('WISHLIST')}
             title="Deseos"
-            className={`p-2 rounded-xl text-left border flex items-center gap-1.5 cursor-pointer active:scale-[0.96] hover:scale-[1.02] hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-200 ${
+            className={`p-2 rounded-xl text-left border flex items-center gap-1.5 cursor-pointer hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-150 active:scale-95 ${
               isCollapsed ? 'justify-center w-full' : ''
             } ${
-              subFiltro === 'WISHLIST'
-                ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+              filtrosActivos.includes('WISHLIST')
+                ? 'bg-purple-500/20 border-purple-500/40 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.2)]'
                 : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200'
             }`}
           >
             <DollarSign className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} />
-            {!isCollapsed && <span>Deseos</span>}
+            {!isCollapsed && <span className="whitespace-nowrap transition-opacity duration-150">Deseos</span>}
           </button>
 
           {/* 4. Vínculos */}
           <button
             type="button"
-            onClick={() => setSubFiltro(subFiltro === 'VINCULADAS' ? '' : 'VINCULADAS')}
+            onClick={() => handleToggleFiltro('VINCULADAS')}
             title="Vínculos"
-            className={`p-2 rounded-xl text-left border flex items-center gap-1.5 cursor-pointer active:scale-[0.96] hover:scale-[1.02] hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-200 ${
+            className={`p-2 rounded-xl text-left border flex items-center gap-1.5 cursor-pointer hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-150 active:scale-95 ${
               isCollapsed ? 'justify-center w-full' : ''
             } ${
-              subFiltro === 'VINCULADAS'
-                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+              filtrosActivos.includes('VINCULADAS')
+                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
                 : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:text-slate-200'
             }`}
           >
             <Link2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} />
-            {!isCollapsed && <span>Vínculos</span>}
+            {!isCollapsed && <span className="whitespace-nowrap transition-opacity duration-150">Vínculos</span>}
           </button>
         </div>
       </div>

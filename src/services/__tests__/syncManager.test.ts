@@ -10,6 +10,8 @@ import {
   sanitizarSubtareaPayload,
   sanitizarActividadInbound,
   sanitizarSubtareaInbound,
+  sanitizarHitoInbound,
+  sanitizarTareaInbound,
   sanitizeDate,
   isUuid
 } from '../syncPayloadSanitizer';
@@ -863,5 +865,119 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
 
     const pendientes = await syncManager.obtenerRegistrosPendientes(mockTable);
     expect(pendientes.map((p: any) => p.id)).toEqual(['item-1', 'item-3']);
+  });
+
+  describe('REQ-FIX-10: Inbound Harmonization, Claves Canónicas y Diffing Silencioso', () => {
+    it('sanitizarHitoInbound resuelve proyecto_codigo a partir del mapa proyUuidToCod', () => {
+      const proyUuidMap = new Map<string, string>([
+        ['550E8400-E29B-41D4-A716-446655440001', 'PRO-001']
+      ]);
+
+      const remoto = {
+        id: '660e8400-e29b-41d4-a716-446655440002',
+        codigo_legado: 'WP-001',
+        proyecto_id: '550e8400-e29b-41d4-a716-446655440001',
+        nombre_elemento: 'Entregable Arquitectura',
+        tipo_elemento_wbs: 'PAQUETE_TRABAJO',
+        peso_ponderado_pct: 25.0
+      };
+
+      const result = sanitizarHitoInbound(remoto, undefined, proyUuidMap);
+      expect(result.proyecto_codigo).toBe('PRO-001');
+      expect(result.peso_pct).toBe(0.25);
+      expect(result.sync_status).toBe('synced');
+    });
+
+    it('sanitizarTareaInbound resuelve proyecto_codigo e hito_codigo desde mapas en memoria', () => {
+      const proyUuidMap = new Map<string, string>([
+        ['550E8400-E29B-41D4-A716-446655440001', 'PRO-001']
+      ]);
+      const hitoUuidMap = new Map<string, string>([
+        ['660E8400-E29B-41D4-A716-446655440002', 'WP-001']
+      ]);
+
+      const remoto = {
+        id: '770e8400-e29b-41d4-a716-446655440003',
+        codigo_legado: 'TAR-001',
+        proyecto_id: '550e8400-e29b-41d4-a716-446655440001',
+        hito_id: '660e8400-e29b-41d4-a716-446655440002',
+        nombre_tarea_actividad: 'Diseñar Diagrama C4',
+        estado_tarea: '03_En_Proceso'
+      };
+
+      const result = sanitizarTareaInbound(remoto, undefined, proyUuidMap, hitoUuidMap);
+      expect(result.proyecto_codigo).toBe('PRO-001');
+      expect(result.hito_codigo).toBe('WP-001');
+      expect(result.sync_status).toBe('synced');
+    });
+
+    it('sanitizarTareaInbound preserva proyecto_codigo e hito_codigo de localPrevio', () => {
+      const localPrevio = {
+        id: '770e8400-e29b-41d4-a716-446655440003',
+        codigo_legado: 'TAR-001',
+        proyecto_codigo: 'PRO-PREVIO',
+        hito_codigo: 'WP-PREVIO',
+        sync_status: 'synced'
+      };
+
+      const remoto = {
+        id: '770e8400-e29b-41d4-a716-446655440003',
+        codigo_legado: 'TAR-001',
+        nombre_tarea_actividad: 'Actualizado'
+      };
+
+      const result = sanitizarTareaInbound(remoto, localPrevio);
+      expect(result.proyecto_codigo).toBe('PRO-PREVIO');
+      expect(result.hito_codigo).toBe('WP-PREVIO');
+    });
+
+    it('descargarDatosDescendientes aplica diffing silencioso y omite escrituras si datos locales son idénticos', async () => {
+      const mockRecord = {
+        id: 't-identical-1',
+        user_id: '00000000-0000-0000-0000-000000000001',
+        codigo_legado: 'TAR-IDEN-1',
+        nombre_tarea_actividad: 'Tarea Idéntica',
+        estado_tarea: '01_Backlog',
+        prioridad_eisenhower: '02_P2_Media',
+        nivel_energia_requerido: 'Media_Operativa',
+        horas_estimadas: 1.0,
+        horas_reales: 0.0,
+        fecha_programada: null,
+        hora_inicio: null,
+        agendado_calendar: 'No' as const,
+        id_dependencia: null,
+        responsable_ejecutor: 'Christopher',
+        notas_impedimentos: null,
+        es_mav: false,
+        costo_real_pen: 0,
+        archivado: false,
+        proyecto_id: '',
+        hito_id: '',
+        proyecto_codigo: '',
+        hito_codigo: '',
+        updated_at: '2026-11-01T10:00:00.000Z',
+        sync_status: 'synced' as const
+      };
+
+      const fromSpy = vi.fn().mockImplementation((table: string) => ({
+        select: vi.fn().mockResolvedValue({
+          data: table === 'tareas' ? [mockRecord] : [],
+          error: null
+        })
+      }));
+      (syncManager as any).supabase = { from: fromSpy };
+
+      // Local tiene exactamente los mismos datos
+      vi.spyOn(db.tareas, 'toArray').mockResolvedValue([mockRecord] as any);
+      vi.spyOn(db.tareas, 'where').mockReturnValue({
+        equals: () => ({ primaryKeys: async () => [] })
+      } as any);
+
+      const bulkPutSpy = vi.spyOn(db.tareas, 'bulkPut');
+
+      const res = await syncManager.descargarDatosDescendientes(['tareas']);
+      expect(res.descargados).toBe(0);
+      expect(bulkPutSpy).not.toHaveBeenCalled();
+    });
   });
 });
