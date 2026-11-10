@@ -9122,3 +9122,29 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (251/251 tests: +6 en `entityNormalizer.test.ts` y +3 en `syncManager.test.ts`).
 - **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.77s).
+
+---
+
+### [REQ-FIX-18: Auto-Actualización Inmediata y Cache-Busting del Service Worker en Producción PWA]
+**Fecha:** Noviembre 2026 | **Fase:** 5.09 | **Archivos Modificados:** `public/sw.js`, `src/main.tsx`, `dist/sw.js` (generado por build), `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+1. **Pestañas Abiertas Ancladas a Controladores Antiguos en Producción:**
+   - `src/main.tsx` registraba `/sw.js` sin `{ updateViaCache: 'none' }` y carecía de listeners `updatefound` y `controllerchange`, por lo que al desplegar un nuevo build en Cloudflare Pages las pestañas ya cargadas podían seguir operando contra manifiestos/chunks obsoletos (`ViewKanban-b-Ykmki4.js`) hasta una recarga manual.
+2. **Cache-Busting de Versión y Blindaje contra MIME Fallback HTML en `public/sw.js`:**
+   - `CACHE_NAME` permanecía en `'pmo-cache-v2.6-rescue-network-first'` y las peticiones `.js`/`.mjs`/`.css` no validaban si una respuesta `200 OK` del host SPA correspondía a `text/html` (fallback 404 de chunks eliminados).
+
+#### 2. Solución Quirúrgica Implementada
+1. **Ciclo de Vida Agresivo y Sanitización de Caché en `public/sw.js`:**
+   - Incremento de `CACHE_NAME` a `'pmo-cache-v2.7-bento-kanban'`.
+   - `install` ejecuta `self.skipWaiting()` de forma inmediata tras abrir caché y precargar `STATIC_ASSETS`.
+   - `activate` filtra y elimina toda caché distinta de `CACHE_NAME` (purga huérfana de `v2.6` y previas) antes de ejecutar `self.clients.claim()`.
+   - Extracción de `obtenerFallbackNavegacion(req)` y `respuestaOffline(...)`: las navegaciones (`request.mode === 'navigate'`, `/`, `.html`) ejecutan **Network-First** estricto verificando `contentType.includes('text/html')` antes de cachear; las peticiones `/sw.js` se omiten del interceptor y los módulos `.js`/`.mjs`/`.css` que reciban `text/html` retornan `404` sin envenenar `CACHE_NAME` (disparando `vite:preloadError` $\rightarrow$ reload limpio).
+2. **Listeners `updatefound`, `controllerchange` y `updateViaCache: 'none'` en `src/main.tsx`:**
+   - Centralización en `inicializarServiceWorker()`: en entorno productivo fuera de `localhost`/`127.0.0.1`/Desktop HUD, registra `/sw.js` (y fallback `./sw.js`) con `{ updateViaCache: 'none' }`, fuerza `registration.update()` al arrancar, intercepta `updatefound` $\rightarrow$ `statechange === 'installed'` para despachar `SKIP_WAITING` cuando existe controlador activo, y recarga vía `window.location.reload()` ante `controllerchange` cuando un controlador previo fue reemplazado (evitando doble recarga en primera visita limpia o bucles mediante guardia booleana).
+
+#### 3. Certificación QA
+- **Sintaxis Service Worker:** `node --check public/sw.js` $\rightarrow$ Exit Code 0.
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (251/251 tests).
+- **Compilación de Producción y Paridad `dist/sw.js`:** `npm run build` $\rightarrow$ Exit Code 0 (`2495` módulos transformados en `7.07s`; `dist/sw.js` verificado con `pmo-cache-v2.7-bento-kanban`, `self.skipWaiting()` y `self.clients.claim()`).

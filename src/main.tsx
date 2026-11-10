@@ -163,32 +163,65 @@ window.addEventListener('vite:preloadError', (event) => {
   window.location.reload();
 });
 
-// Registro de Service Worker PWA ÚNICAMENTE en producción remota (nunca en localhost / 127.0.0.1 / Electron loopback)
-if ('serviceWorker' in navigator) {
-  if (import.meta.env.PROD && !esHostnameLocal) {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((reg) => {
-        console.log('[PWA] Service Worker registrado exitosamente:', reg.scope);
-        reg.update().catch((err) => {
-          console.warn('[PWA] Error en reg.update():', err);
-        });
-        if (reg.waiting) {
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        }
-      })
-      .catch(() => {
-        navigator.serviceWorker
-          .register('./sw.js')
-          .then((reg) => {
-            reg.update().catch(() => {});
-          })
-          .catch((err) => {
-            console.warn('[PWA] Error al registrar Service Worker:', err);
-          });
-      });
-  } else {
+function inicializarServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+
+  // Registro de Service Worker PWA ÚNICAMENTE en producción remota (nunca en localhost / 127.0.0.1 / Electron loopback)
+  if (!import.meta.env.PROD || esHostnameLocal) {
     purgarServiceWorkersYCachesLocales();
+    return;
   }
+
+  let controladorPrevio = navigator.serviceWorker.controller;
+  let recargandoPorControlador = false;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (recargandoPorControlador) return;
+    if (!controladorPrevio) {
+      // Primera activación sobre cliente inicialmente sin controlador: registrar sin recarga redundante
+      controladorPrevio = navigator.serviceWorker.controller;
+      return;
+    }
+    recargandoPorControlador = true;
+    // Recargar automáticamente para cargar los nuevos assets cuando el nuevo SW tome el control
+    window.location.reload();
+  });
+
+  const vincularCicloActualizacion = (registration: ServiceWorkerRegistration) => {
+    console.log('[PWA] Service Worker registrado exitosamente:', registration.scope);
+
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+
+    registration.addEventListener('updatefound', () => {
+      const nuevoWorker = registration.installing;
+      if (!nuevoWorker) return;
+
+      nuevoWorker.addEventListener('statechange', () => {
+        if (nuevoWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          nuevoWorker.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+    });
+
+    registration.update().catch((err) => {
+      console.warn('[PWA] Error en registration.update():', err);
+    });
+  };
+
+  navigator.serviceWorker
+    .register('/sw.js', { updateViaCache: 'none' })
+    .then(vincularCicloActualizacion)
+    .catch(() => {
+      navigator.serviceWorker
+        .register('./sw.js', { updateViaCache: 'none' })
+        .then(vincularCicloActualizacion)
+        .catch((err) => {
+          console.warn('[PWA] Error al registrar Service Worker:', err);
+        });
+    });
 }
+
+inicializarServiceWorker();
 

@@ -1,15 +1,32 @@
 /**
  * Service Worker Canónico para Suite PMO Personal & Life OS
- * Estrategia: Stale-While-Revalidate para recursos estáticos y Cache-First con fallback offline
+ * Estrategia: Network-First para navegación HTML, Cache-First para fuentes y Stale-While-Revalidate para assets validados
  */
 
-const CACHE_NAME = 'pmo-cache-v2.6-rescue-network-first';
+const CACHE_NAME = 'pmo-cache-v2.7-bento-kanban';
 const STATIC_ASSETS = [
   './manifest.webmanifest',
   './favicon.svg',
   './icon-192.png',
   './icon-512.png'
 ];
+
+async function obtenerFallbackNavegacion(req) {
+  return (
+    (req ? await caches.match(req) : undefined) ||
+    (await caches.match('./')) ||
+    (await caches.match('./index.html')) ||
+    (await caches.match('/index.html'))
+  );
+}
+
+function respuestaOffline(mensaje, status = 503, statusText = 'Service Unavailable') {
+  return new Response(mensaje, {
+    status,
+    statusText,
+    headers: new Headers({ 'Content-Type': 'text/plain; charset=utf-8' })
+  });
+}
 
 // Escuchar mensaje para forzar activación inmediata
 self.addEventListener('message', (event) => {
@@ -30,23 +47,26 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// 2. Activación: Purgar versiones antiguas y reclamar clientes de inmediato
+// 2. Activación: Purgar cachés huérfanas de versiones previas y reclamar clientes de inmediato
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            console.log('[SW] Purgando caché obsoleta:', key);
-            return caches.delete(key);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key !== CACHE_NAME)
+            .map((key) => {
+              console.log('[SW] Purgando caché obsoleta:', key);
+              return caches.delete(key);
+            })
+        )
+      )
+      .then(() => self.clients.claim())
   );
 });
 
-// 3. Fetch: Interceptación con Stale-While-Revalidate y Cache-First para fuentes
+// 3. Fetch: Interceptación con Network-First en navegación HTML y Stale-While-Revalidate en assets estáticos
 self.addEventListener('fetch', (event) => {
   const req = event.request;
 
@@ -79,8 +99,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Ignorar llamadas a Supabase, extensiones del navegador o entorno de desarrollo local (Vite HMR)
+  // Ignorar el propio script SW, llamadas a Supabase, extensiones o entorno local (Vite HMR)
   if (
+    url.pathname.endsWith('/sw.js') ||
     url.hostname.includes('supabase.co') ||
     url.protocol.startsWith('chrome-extension') ||
     url.hostname === 'localhost' ||
@@ -92,12 +113,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navegación HTML siempre Network-First para evitar servir index.html obsoleto con hashes de assets eliminados
+  // Navegación HTML siempre Network-First para descargar siempre referencias frescas de bundles
   if (req.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
     event.respondWith(
       fetch(req)
         .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
+          const contentType = networkResponse?.headers?.get('content-type') || '';
+          if (networkResponse && networkResponse.status === 200 && contentType.includes('text/html')) {
             const clone = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(req, clone);
@@ -106,28 +128,28 @@ self.addEventListener('fetch', (event) => {
           return networkResponse;
         })
         .catch(async () => {
-          const fallback =
-            (await caches.match(req)) ||
-            (await caches.match('./')) ||
-            (await caches.match('./index.html')) ||
-            (await caches.match('/index.html'));
+          const fallback = await obtenerFallbackNavegacion(req);
           if (fallback) return fallback;
-          return new Response('PMO Offline - Documento no disponible en caché', {
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: new Headers({ 'Content-Type': 'text/plain; charset=utf-8' })
-          });
+          return respuestaOffline('PMO Offline - Documento no disponible en caché');
         })
     );
     return;
   }
 
-  // Interceptar assets locales con Stale-While-Revalidate
+  // Interceptar assets locales con Stale-While-Revalidate (protegido contra MIME fallback HTML de chunks antiguos)
+  const esScriptOCss =
+    url.pathname.endsWith('.js') || url.pathname.endsWith('.mjs') || url.pathname.endsWith('.css');
+
   event.respondWith(
     caches.match(req).then((cachedResponse) => {
       const fetchPromise = fetch(req)
         .then((networkResponse) => {
-          // Almacenar copia si es válida (HTTP 200 y mismo origen o fuentes)
+          const contentType = networkResponse?.headers?.get('content-type') || '';
+          if (esScriptOCss && contentType.includes('text/html')) {
+            return respuestaOffline('Chunk obsoleto no disponible', 404, 'Chunk Outdated');
+          }
+
+          // Almacenar copia si es válida (HTTP 200 y mismo origen o CORS)
           if (
             networkResponse &&
             networkResponse.status === 200 &&
@@ -141,21 +163,12 @@ self.addEventListener('fetch', (event) => {
           return networkResponse;
         })
         .catch(async () => {
-          // Si estamos offline y es navegación, entregar index.html en caché
           if (req.mode === 'navigate') {
-            const fallback =
-              (await caches.match('./')) ||
-              (await caches.match('./index.html')) ||
-              (await caches.match('/index.html'));
+            const fallback = await obtenerFallbackNavegacion();
             if (fallback) return fallback;
           }
-          // Si no hay respuesta en caché ni red, retornar respuesta de error válida (nunca undefined)
           if (cachedResponse) return cachedResponse;
-          return new Response('PMO Offline - Recurso no disponible en caché', {
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: new Headers({ 'Content-Type': 'text/plain; charset=utf-8' })
-          });
+          return respuestaOffline('PMO Offline - Recurso no disponible en caché');
         });
 
       // Devolver inmediatamente desde caché si existe (0 ms), o esperar red
