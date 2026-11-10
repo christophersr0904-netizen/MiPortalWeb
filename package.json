@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "prebuild": "node -e \"const fs=require('fs'),f='public/sw.js',q=String.fromCharCode(39),rx=new RegExp('const[ ]+CACHE_NAME[ ]*=[ ]*'+q+'pmo-cache-[^'+q+']+'+q+';'),s=fs.readFileSync(f,'utf8');if(!rx.test(s))throw new Error('CACHE_NAME no encontrado en public/sw.js');const n='pmo-cache-'+Date.now();fs.writeFileSync(f,s.replace(rx,'const CACHE_NAME = '+q+n+q+';'));console.log('[prebuild] SW CACHE_NAME -> '+n);\"",
+    "build": "npm run prebuild && tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

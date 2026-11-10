@@ -3,7 +3,7 @@
  * Estrategia: Network-First para navegación HTML, Cache-First para fuentes y Stale-While-Revalidate para assets validados
  */
 
-const CACHE_NAME = 'pmo-cache-v2.7-bento-kanban';
+const CACHE_NAME = 'pmo-cache-1794353275435';
 const STATIC_ASSETS = [
   './manifest.webmanifest',
   './favicon.svg',

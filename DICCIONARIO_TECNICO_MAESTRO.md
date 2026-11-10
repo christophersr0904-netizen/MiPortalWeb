@@ -9148,3 +9148,29 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (251/251 tests).
 - **Compilación de Producción y Paridad `dist/sw.js`:** `npm run build` $\rightarrow$ Exit Code 0 (`2495` módulos transformados en `7.07s`; `dist/sw.js` verificado con `pmo-cache-v2.7-bento-kanban`, `self.skipWaiting()` y `self.clients.claim()`).
+
+---
+
+### [REQ-OPS-19: Automatización de Cache-Busting en Build y Blindaje de Configuración Cloudflare Pages]
+**Fecha:** Noviembre 2026 | **Fase:** 5.10 | **Archivos Modificados:** `wrangler.toml`, `package.json`, `public/sw.js`, `dist/sw.js`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+1. **Versionado Manual de `CACHE_NAME` en Despliegues:**
+   - `public/sw.js` dependía de incrementos manuales en `CACHE_NAME` para invalidar cachés huérfanas tras un despliegue, existiendo riesgo de olvidar el bump en ciclos de CI/CD.
+2. **Ausencia de Manifiesto Declarativo de Salida para Cloudflare Pages:**
+   - El repositorio carecía de `wrangler.toml` en la raíz para fijar explícitamente el directorio de compilación (`pages_build_output_dir = "dist"`), exponiendo el despliegue a desconfiguraciones manuales en el panel web.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Infraestructura Declarativa en `wrangler.toml`:**
+   - Creación de `wrangler.toml` en la raíz con `name = "miportalweb"`, `compatibility_date = "2026-11-01"` y `pages_build_output_dir = "dist"`.
+2. **Hook `prebuild` y Cadena `build` Idempotente en `package.json`:**
+   - Incorporación de `prebuild` multiplataforma (`node -e` sin escapes `$` ni comillas anidadas dependientes del shell) con regex idempotente sobre `const CACHE_NAME = 'pmo-cache-...';` en `public/sw.js`, generando `'pmo-cache-' + Date.now()` antes de `tsc && vite build` (y validando error explícito si falta `CACHE_NAME`).
+   - Actualización de `build` a `"npm run prebuild && tsc && vite build"`.
+3. **Validación de Ciclo de Vida en `public/sw.js` y Paridad `dist/sw.js`:**
+   - Confirmación de `self.skipWaiting()` en `install`, purga de toda caché `key !== CACHE_NAME` y `self.clients.claim()` en `activate`, y copia consistente hacia `dist/sw.js`.
+
+#### 3. Certificación QA
+- **Build con Auto-Bump (`npm run build`):** Exit Code 0 (`[prebuild] SW CACHE_NAME -> pmo-cache-1794353275435`; `2495` módulos transformados en `6.59s`); paridad confirmada en `public/sw.js` y `dist/sw.js`.
+- **Sintaxis Service Worker:** `node --check public/sw.js` $\rightarrow$ Exit Code 0.
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (251/251 tests).
