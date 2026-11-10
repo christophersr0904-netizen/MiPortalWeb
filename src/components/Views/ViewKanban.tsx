@@ -42,7 +42,8 @@ import {
   validarDoDSubtareas,
   evaluarFiltroTemporal,
   evaluarFiltroPlazo,
-  calcularAvancesProyectoCanonica
+  calcularAvancesProyectoCanonica,
+  resolverDependenciasTarea
 } from '../../utils/entityNormalizer';
 import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
@@ -217,6 +218,25 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     () => (rawTareasLive ?? []).filter((t: any) => !estaOculto(t.id) && !estaOculto(t.codigo_legado) && !estaOculto(t.proyecto_codigo) && !estaOculto(t.proyecto_id)),
     [rawTareasLive, estaOculto]
   );
+  const tareasLookupMap = useMemo(() => {
+    const map = new Map<string, { codigo: string; nombre: string }>();
+    rawTareas.forEach((t: any) => {
+      const codigo = String(t.codigo_legado || t.id_tarea || t.ID_Tarea || t.id || '').trim().toUpperCase();
+      const nombre = String(t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad || t.nombre_tarea || t.nombre || 'Tarea sin nombre').trim();
+      const entry = { codigo, nombre };
+      if (codigo) {
+        map.set(codigo, entry);
+      }
+      if (t.id) {
+        const idStr = String(t.id).trim();
+        if (idStr) {
+          map.set(idStr.toLowerCase(), entry);
+          map.set(idStr.toUpperCase(), entry);
+        }
+      }
+    });
+    return map;
+  }, [rawTareas]);
   const rawSubtareas = useMemo(
     () => (rawSubtareasLive ?? []).filter((s: any) => !estaOculto(s.id) && !estaOculto(s.codigo_legado) && !estaOculto(s.id_padre_vinculado)),
     [rawSubtareasLive, estaOculto]
@@ -584,7 +604,11 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
       // 8. Filtro por Dependencias
       if (filtroDependencia) {
-        const tieneDep = Boolean(t.raw?.id_dependencia || t.raw?.ID_Dependencia);
+        const depsResueltas = resolverDependenciasTarea(
+          t.id_dependencia || t.raw?.id_dependencia || t.raw?.ID_Dependencia || t.raw?.dependencia_tarea_id,
+          tareasLookupMap
+        );
+        const tieneDep = depsResueltas.length > 0;
         if (filtroDependencia === 'con_dep' && !tieneDep) return false;
         if (filtroDependencia === 'sin_dep' && tieneDep) return false;
       }
@@ -601,7 +625,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     filtroEnergia,
     filtroPlazo,
     filtroDependencia,
-    proyectos
+    proyectos,
+    tareasLookupMap
   ]);
 
   // Motor de dependencias reactivo: predecesoras, sucesoras y detección de tareas ocultas
@@ -621,14 +646,12 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     const depMap = new Map<string, string[]>();
     rawTareas.forEach((t: any) => {
       const tCode = String(t.codigo_legado || t.id_tarea || t.ID_Tarea || '').trim().toUpperCase();
-      const rawDep = String(t.id_dependencia || t.ID_Dependencia || t.raw?.id_dependencia || t.raw?.ID_Dependencia || '').trim().toUpperCase();
+      const rawDep = String(
+        t.id_dependencia || t.ID_Dependencia || t.dependencia_tarea_id || t.raw?.id_dependencia || t.raw?.ID_Dependencia || ''
+      ).trim();
       if (tCode) {
-        if (rawDep && !rawDep.includes('@GOOGLE.COM')) {
-          const parts = rawDep.split(/[,;]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
-          depMap.set(tCode, parts);
-        } else {
-          depMap.set(tCode, []);
-        }
+        const resueltas = resolverDependenciasTarea(rawDep, tareasLookupMap);
+        depMap.set(tCode, resueltas.map((d) => d.codigo));
       }
     });
 
@@ -680,7 +703,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
       predecesorasOcultas: predOcultas,
       sucesorasOcultas: sucOcultas
     };
-  }, [hoveredTaskId, rawTareas, tareasFiltradas]);
+  }, [hoveredTaskId, rawTareas, tareasFiltradas, tareasLookupMap]);
 
   // Columnas Kanban Canónicas
   const columnas = [
@@ -2059,6 +2082,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   proyectosMap={proyectosMap}
                   hitosMap={hitosMap}
                   gastosPorTarea={gastosPorTarea}
+                  tareasLookupMap={tareasLookupMap}
                   onDragOver={handleDragOverCol}
                   onDragLeave={handleDragLeaveCol}
                   onDrop={handleDropCol}

@@ -3,14 +3,17 @@ import { HeaderMaestro, type VistaGlobal, type ModoColor, type SaborTema } from 
 import { BottomNavMobile } from './components/Layout/BottomNavMobile';
 import { WidgetIdeasBubble } from './components/Ideas/WidgetIdeasBubble';
 
-// ErrorBoundary para blindar el Cockpit contra pantallas blancas en Electron
+// ErrorBoundary global para blindar tanto el Cockpit como el Portal contra pantallas azules vacías
 interface ErrorBoundaryState {
   hasError: boolean;
   error?: Error;
 }
 
-class CockpitErrorBoundary extends React.Component<{ children: React.ReactNode }, ErrorBoundaryState> {
-  constructor(props: { children: React.ReactNode }) {
+class CockpitErrorBoundary extends React.Component<
+  { children: React.ReactNode; scope?: 'Cockpit' | 'Portal' },
+  ErrorBoundaryState
+> {
+  constructor(props: { children: React.ReactNode; scope?: 'Cockpit' | 'Portal' }) {
     super(props);
     this.state = { hasError: false };
   }
@@ -20,24 +23,49 @@ class CockpitErrorBoundary extends React.Component<{ children: React.ReactNode }
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[Cockpit ErrorBoundary]', error, info);
+    console.error(`[${this.props.scope || 'Cockpit'} ErrorBoundary]`, error, info);
   }
 
   render() {
     if (this.state.hasError) {
+      const scopeLabel = this.props.scope === 'Portal' ? 'el Portal Principal' : 'el Cockpit';
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-[#070C18] text-rose-300 font-sans text-xs select-none">
-          <p className="font-bold text-sm mb-2 text-rose-400">Error al montar el Cockpit</p>
-          <pre className="p-3 rounded-lg bg-black/50 border border-rose-500/30 text-[10px] font-mono text-left max-w-full overflow-auto">
-            {this.state.error?.message || 'Error desconocido'}
-          </pre>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="mt-4 px-3 py-1.5 rounded-lg bg-sky-600 text-white font-bold cursor-pointer"
-          >
-            Reintentar
-          </button>
+        <div className="w-full h-full min-h-screen flex flex-col items-center justify-center p-6 bg-[#040711] text-slate-200 font-sans text-xs select-none">
+          <div className="max-w-xl w-full p-5 rounded-2xl bg-[#0D1526] border border-rose-500/40 shadow-2xl space-y-3">
+            <p className="font-bold text-sm text-rose-400">Error al montar {scopeLabel}</p>
+            <pre className="p-3 rounded-lg bg-[#020617] border border-rose-500/30 text-[11px] font-mono text-rose-200 text-left max-w-full max-h-60 overflow-auto whitespace-pre-wrap break-words">
+              {this.state.error?.stack || this.state.error?.message || 'Error desconocido'}
+            </pre>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="px-3.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 font-bold cursor-pointer"
+              >
+                Reintentar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    if ('serviceWorker' in navigator) {
+                      const regs = await navigator.serviceWorker.getRegistrations();
+                      await Promise.all(regs.map((r) => r.unregister()));
+                    }
+                    if ('caches' in window) {
+                      const keys = await caches.keys();
+                      await Promise.all(keys.map((k) => caches.delete(k)));
+                    }
+                  } finally {
+                    window.location.reload();
+                  }
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 font-bold cursor-pointer"
+              >
+                Limpiar Caché SW y Recargar
+              </button>
+            </div>
+          </div>
         </div>
       );
     }
@@ -348,8 +376,9 @@ export const App: React.FC = () => {
   }
 
   return (
-    <UndoDeleteProvider>
-      <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden bg-slate-50 dark:bg-[#040711] text-slate-800 dark:text-slate-200 antialiased font-sans safe-area-insets">
+    <CockpitErrorBoundary scope="Portal">
+      <UndoDeleteProvider>
+        <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden bg-slate-50 dark:bg-[#040711] text-slate-800 dark:text-slate-200 antialiased font-sans safe-area-insets">
         {/* 1. Header Maestro Global */}
         <HeaderMaestro
           vistaActiva={vistaActiva}
@@ -498,5 +527,6 @@ export const App: React.FC = () => {
       <UndoToastContainer />
     </div>
   </UndoDeleteProvider>
+    </CockpitErrorBoundary>
   );
 };

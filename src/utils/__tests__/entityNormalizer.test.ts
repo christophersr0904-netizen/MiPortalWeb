@@ -16,7 +16,8 @@ import {
   deduplicarPorCodigoCanonico,
   deduplicarMetasPlanes,
   deduplicarHitosPlan,
-  deduplicarVinculosMeta
+  deduplicarVinculosMeta,
+  resolverDependenciasTarea
 } from '../entityNormalizer';
 import initialSeed from '../../db/initialSeed.json';
 
@@ -453,6 +454,87 @@ describe('REQ-1TO1-001: EntityNormalizer and Seed Integrity', () => {
       const vinculosUnicos = deduplicarVinculosMeta([v1, v2]);
       expect(vinculosUnicos).toHaveLength(1);
       expect(vinculosUnicos[0].peso_contribucion).toBe(2.5);
+    });
+  });
+
+  describe('REQ-FIX-17: resolverDependenciasTarea y sanitización de id_dependencia', () => {
+    const lookup = new Map<string, { codigo: string; nombre: string }>([
+      ['TAR-001', { codigo: 'TAR-001', nombre: 'Definir arquitectura' }],
+      ['TAR-002', { codigo: 'TAR-002', nombre: 'Crear esquema SQL' }],
+      ['TAR-014', { codigo: 'TAR-014', nombre: 'Integrar Supabase Sync' }],
+      ['84baab4f-dda8-45ca-aac8-d00000000014', { codigo: 'TAR-014', nombre: 'Integrar Supabase Sync' }],
+      ['84BAAB4F-DDA8-45CA-AAC8-D00000000014', { codigo: 'TAR-014', nombre: 'Integrar Supabase Sync' }],
+      ['550e8400-e29b-41d4-a716-446655440003', { codigo: 'TAR-003', nombre: 'Configurar Dexie v6' }],
+    ]);
+
+    it('traduce un UUID válido mediante tareasLookupMap a código TAR-XXX y nombre', () => {
+      const res = resolverDependenciasTarea('84baab4f-dda8-45ca-aac8-d00000000014', lookup);
+      expect(res).toEqual([
+        { codigo: 'TAR-014', nombre: 'Integrar Supabase Sync' }
+      ]);
+    });
+
+    it('divide múltiples dependencias separadas por coma, punto y coma y pipe deduplicando resultados', () => {
+      const res = resolverDependenciasTarea(
+        'tar-001, TAR-002; 550e8400-e29b-41d4-a716-446655440003 | TAR-001',
+        lookup
+      );
+      expect(res).toEqual([
+        { codigo: 'TAR-001', nombre: 'Definir arquitectura' },
+        { codigo: 'TAR-002', nombre: 'Crear esquema SQL' },
+        { codigo: 'TAR-003', nombre: 'Configurar Dexie v6' },
+      ]);
+    });
+
+    it('filtra tokens inválidos o de ruido (Ninguno, 0, -, N/A, correos)', () => {
+      expect(resolverDependenciasTarea('Ninguno', lookup)).toEqual([]);
+      expect(resolverDependenciasTarea('ninguna, 0; - | N/A, user@google.com', lookup)).toEqual([]);
+      expect(resolverDependenciasTarea(null, lookup)).toEqual([]);
+      expect(resolverDependenciasTarea(undefined, lookup)).toEqual([]);
+    });
+
+    it('mantiene códigos legados no presentes en vista activa con tooltip contextual', () => {
+      const res = resolverDependenciasTarea('tar-099', lookup);
+      expect(res).toEqual([
+        { codigo: 'TAR-099', nombre: 'Tarea predecesora (no en vista activa)' }
+      ]);
+    });
+
+    it('suprime UUIDs hexadecimales huérfanos no registrados en lookup y conserva códigos válidos', () => {
+      const res = resolverDependenciasTarea(
+        '99999999-aaaa-4bbb-8ccc-111111111111, TAR-002',
+        lookup
+      );
+      expect(res).toEqual([
+        { codigo: 'TAR-002', nombre: 'Crear esquema SQL' }
+      ]);
+      expect(resolverDependenciasTarea('99999999-aaaa-4bbb-8ccc-111111111111', lookup)).toEqual([]);
+    });
+
+    it('normalizeTarea expone id_dependencia limpio y cae en dependencia_tarea_id', () => {
+      const conRuido = normalizeTarea({
+        id: 't-1',
+        codigo_legado: 'TAR-100',
+        nombre_tarea_actividad: 'Limpieza',
+        id_dependencia: 'Ninguno',
+      });
+      expect(conRuido.id_dependencia).toBeUndefined();
+
+      const desdeRemotoUuid = normalizeTarea({
+        id: 't-2',
+        codigo_legado: 'TAR-101',
+        nombre_tarea_actividad: 'Desde Supabase',
+        dependencia_tarea_id: '84baab4f-dda8-45ca-aac8-d00000000014',
+      });
+      expect(desdeRemotoUuid.id_dependencia).toBe('84baab4f-dda8-45ca-aac8-d00000000014');
+
+      const multiple = normalizeTarea({
+        id: 't-3',
+        codigo_legado: 'TAR-102',
+        nombre_tarea_actividad: 'Múltiple',
+        id_dependencia: 'tar-001; TAR-014, user@google.com',
+      });
+      expect(multiple.id_dependencia).toBe('TAR-001, TAR-014');
     });
   });
 });

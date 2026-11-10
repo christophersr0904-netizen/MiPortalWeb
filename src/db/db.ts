@@ -458,6 +458,16 @@ export async function sanearDuplicadosDexie(): Promise<number> {
       await db.hitos_wbs.bulkPut(hitosModificados);
     }
 
+    const tareaUuidToCod = new Map<string, string>();
+    tareasActuales.forEach((t: any) => {
+      const tId = String(t.id || '').trim().toUpperCase();
+      const tCod = String(t.codigo_legado || t.ID_Tarea || t.id_tarea || '').trim().toUpperCase();
+      if (tId && tCod) {
+        tareaUuidToCod.set(tId, tCod);
+        tareaUuidToCod.set(tCod, tCod);
+      }
+    });
+
     const tareasModificadas: TareaRecord[] = [];
     tareasActuales.forEach((t: any) => {
       let mutado = false;
@@ -475,6 +485,17 @@ export async function sanearDuplicadosDexie(): Promise<number> {
       if (resolvedHitoCod && copia.hito_codigo !== resolvedHitoCod) {
         copia.hito_codigo = resolvedHitoCod;
         mutado = true;
+      }
+
+      const rawDepStr = String(copia.id_dependencia || copia.dependencia_tarea_id || copia.ID_Dependencia || '').trim();
+      if (rawDepStr) {
+        const tokens = rawDepStr.split(/[,;|]+/).map((tok) => tok.trim()).filter(Boolean);
+        const resueltos = tokens.map((tok) => tareaUuidToCod.get(tok.toUpperCase()) || tok);
+        const depNormalizada = resueltos.join(', ');
+        if (depNormalizada && copia.id_dependencia !== depNormalizada && resueltos.some((r, idx) => r !== tokens[idx])) {
+          copia.id_dependencia = depNormalizada;
+          mutado = true;
+        }
       }
 
       if (!copia.agendado_calendar && copia.agendado_en_calendar) {

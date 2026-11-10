@@ -67,6 +67,7 @@ export interface CanonicalTarea {
   costo_real: number;
   responsable?: string;
   notas?: string;
+  id_dependencia?: string;
   raw: any;
 }
 
@@ -221,6 +222,7 @@ export function normalizeTarea(raw: any): CanonicalTarea {
     costo_real: Number(getProp(raw, 'costo_real_pen', 'Costo_Real_PEN') ?? 0),
     responsable: getProp(raw, 'responsable_ejecutor', 'Responsable_Ejecutor'),
     notas: getProp(raw, 'notas_impedimentos', 'Notas_Impedimentos'),
+    id_dependencia: sanitizarDependenciaRaw(getProp(raw, 'id_dependencia', 'ID_Dependencia', 'dependencia_tarea_id')),
     raw
   };
 }
@@ -1274,6 +1276,105 @@ export function serializarNotaATextoPlano(nota: any): string {
   }
 
   return bloques.join('\n\n');
+}
+
+export interface DependenciaResuelta {
+  codigo: string;
+  nombre: string;
+}
+
+const UUID_DEPENDENCIA_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TOKENS_DEPENDENCIA_INVALIDOS = new Set([
+  '',
+  'NINGUNO',
+  'NINGUNA',
+  '0',
+  '-',
+  '—',
+  'N/A',
+  'NA',
+  'NULL',
+  'UNDEFINED',
+  'NONE',
+]);
+
+function limpiarTokensDependencia(rawDep?: unknown): string[] {
+  if (rawDep === null || rawDep === undefined) return [];
+  const rawStr = String(rawDep).trim();
+  if (!rawStr) return [];
+
+  const tokens = rawStr
+    .split(/[,;|]+/)
+    .map((t) => t.trim())
+    .filter((t) => {
+      if (!t || t.includes('@')) return false;
+      return !TOKENS_DEPENDENCIA_INVALIDOS.has(t.toUpperCase());
+    });
+
+  const vistos = new Set<string>();
+  const unicos: string[] = [];
+  for (const token of tokens) {
+    const key = UUID_DEPENDENCIA_REGEX.test(token) ? token.toLowerCase() : token.toUpperCase();
+    if (!vistos.has(key)) {
+      vistos.add(key);
+      unicos.push(UUID_DEPENDENCIA_REGEX.test(token) ? token.toLowerCase() : token.toUpperCase());
+    }
+  }
+  return unicos;
+}
+
+function sanitizarDependenciaRaw(rawDep?: unknown): string | undefined {
+  const tokens = limpiarTokensDependencia(rawDep);
+  return tokens.length > 0 ? tokens.join(', ') : undefined;
+}
+
+/**
+ * Resuelve tokens de dependencias (códigos TAR-XXX o UUIDs heredados) a objetos
+ * canónicos { codigo, nombre }, filtrando ruido y suprimiendo UUIDs huérfanos.
+ */
+export function resolverDependenciasTarea(
+  rawDep?: string | null,
+  tareasLookupMap?: Map<string, { codigo: string; nombre: string }>
+): DependenciaResuelta[] {
+  const tokens = limpiarTokensDependencia(rawDep);
+  if (tokens.length === 0) return [];
+
+  const resueltas: DependenciaResuelta[] = [];
+  const codigosVistos = new Set<string>();
+
+  for (const token of tokens) {
+    const esUuid = UUID_DEPENDENCIA_REGEX.test(token);
+    const encontrado =
+      tareasLookupMap?.get(token) ??
+      tareasLookupMap?.get(token.toUpperCase()) ??
+      tareasLookupMap?.get(token.toLowerCase());
+
+    if (encontrado) {
+      const codNorm = encontrado.codigo.trim().toUpperCase();
+      if (codNorm && !codigosVistos.has(codNorm)) {
+        codigosVistos.add(codNorm);
+        resueltas.push({
+          codigo: codNorm,
+          nombre: encontrado.nombre || 'Tarea sin nombre',
+        });
+      }
+      continue;
+    }
+
+    // Jamás exponer un UUID hexadecimal huérfano en la UI
+    if (esUuid) continue;
+
+    const codFallback = token.toUpperCase();
+    if (!codigosVistos.has(codFallback)) {
+      codigosVistos.add(codFallback);
+      resueltas.push({
+        codigo: codFallback,
+        nombre: 'Tarea predecesora (no en vista activa)',
+      });
+    }
+  }
+
+  return resueltas;
 }
 
 

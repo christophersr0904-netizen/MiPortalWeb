@@ -9032,3 +9032,93 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (238/238 tests, incorporando 4 pruebas unitarias para resolución de destino, detección redundante, payload de mutación y boundary check anti-flicker).
 - **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.92s).
 - **Paridad Visual y de Rendimiento:** Cero emojis en DOM, respeto inquebrantable a tokens Cobalt Aerodynamic (`#040711`, `#0D1526`, `border-slate-800/40`, Lucide 1.75) y garantía de 60 FPS sin parpadeos.
+
+---
+
+### [REQ-DEBUG-14: Desbloqueo de DevTools/F12, Blindaje de Arranque en Frontend y Purga de Caché Service Worker]
+**Fecha:** Noviembre 2026 | **Fase:** 5.06 | **Archivos Modificados:** `desktop/main.js`, `src/main.tsx`, `src/App.tsx`, `public/sw.js`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Forense & Causa Raíz
+1. **Bloqueo de DevTools / F12 en Electron (`desktop/main.js`):**
+   - `webPreferences` no declaraba explícitamente `devTools: true`, `mainWindow.webContents.openDevTools({ mode: 'detach' })` permanecía comentado (L418) y la ventana `frame: false` carecía de menú de aplicación y listener `before-input-event` para `F12` / `Ctrl+Shift+I`.
+2. **Estado del Bundle Vite / CSS / Runtime Frontend:**
+   - Validación directa sobre `src/index.css` (`233,637` bytes transformados por Vite), `npx tsc --noEmit` (`0` errores) y navegación automatizada vía Chrome DevTools Protocol sobre todas las vistas (`#kanban`, `#portafolio`, `#habitos`, `#financiero`, `#notas`, `#detalle`, `/?widget=desktop`) en `http://localhost:3000` y `http://127.0.0.1:48123`: **0 excepciones no capturadas (`Runtime.exceptionThrown = []`)**.
+   - El puerto `http://localhost:5173` no está activo; `vite.config.ts` fija estrictamente `port: 3000, strictPort: true`.
+3. **Causa Raíz de Pantalla Azul (`#040711`) y Puntos de Fragilidad Detectados:**
+   - **Caché Obsoleta de Service Worker (`%APPDATA%\Electron\Service Worker\CacheStorage` fechado `06/11/2026`):** `public/sw.js` conservó el mismo `CACHE_NAME = 'pmo-cache-v2.5-cockpit-restore'` tras cambios de estrategia (`c01c711`) y re-hasheo de chunks en `dist/assets/` (`5493dc9`), provocando que clientes con caché previa sirvieran un `index.html` obsoleto contra chunks eliminados (`404 Asset not found`), impidiendo ejecutar `src/main.tsx` y dejando `<body class="bg-[#040711]">` vacío.
+   - **Ausencia de Captura Global de Bootstrap (`src/main.tsx` y `src/App.tsx`):** `ReactDOM.createRoot` carecía de `try/catch` y listeners `error`/`unhandledrejection`, y `CockpitErrorBoundary` protegía únicamente el modo HUD, dejando el portal web (`<UndoDeleteProvider>`) sin ErrorBoundary ante fallos de montaje o Dexie (`db.open()`).
+
+#### 2. Solución Implementada
+1. **Desbloqueo Permanente de DevTools en Desarrollo (`desktop/main.js`):**
+   - `devTools: true` explícito en `webPreferences`.
+   - Listener `before-input-event` habilitado en desarrollo (`!app.isPackaged || useDevServer || --devtools`) para conmutar `openDevTools({ mode: 'detach' })` con **F12**, **Ctrl+Shift+I** y **Ctrl+Shift+J**.
+   - Opción `"Abrir / Cerrar DevTools (F12)"` en el menú del System Tray, apertura automática con `--dev-server` / `--devtools` / `ELECTRON_OPEN_DEVTOOLS=1` o ante `did-fail-load` / `render-process-gone`, y reenvío de `[Renderer Error]` al terminal Node.
+   - Purga exclusiva de `serviceworkers`, `cachestorage` y caché HTTP en `app.whenReady()` (preservando intactos `IndexedDB` y `LocalStorage`).
+2. **Rescate Visual de Emergencia en `src/main.tsx` y `src/App.tsx`:**
+   - Incorporación de `renderizarPantallaEmergencia` (DOM seguro con `textContent`), `try/catch` alrededor de `ReactDOM.createRoot`, verificación `db.open().catch(...)` y vigilantes globales `error` / `unhandledrejection` cuando `#root` quede vacío.
+   - Extensión de `CockpitErrorBoundary` con `scope="Portal"` envolviendo `<UndoDeleteProvider>` y la app web completa, con botones de recarga y purga de Service Worker.
+   - Omisión de registro de `/sw.js` en `localhost` / `127.0.0.1` / Electron loopback.
+3. **Estrategia Network-First para Navegación en `public/sw.js`:**
+   - Actualización de `CACHE_NAME` a `'pmo-cache-v2.6-rescue-network-first'` y política Network-First con fallback a caché para peticiones `navigate` / `.html`.
+
+#### 3. Certificación QA
+- **Sintaxis Electron:** `node --check desktop/main.js` $\rightarrow$ Exit Code 0.
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (238/238 tests).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.57s).
+- **Auditoría Runtime CDP Post-Edición:** Todas las vistas en `http://localhost:3000/` y `http://127.0.0.1:48123/` renderizadas con `Exceptions: []` y `rootLen` válido (`~166 KB – 682 KB`).
+
+---
+
+### [REQ-FIX-16: Desregistro Forzado de Service Worker en Localhost y Blindaje de Tablas Financieras en SyncManager]
+**Fecha:** Noviembre 2026 | **Fase:** 5.07 | **Archivos Modificados:** `src/main.tsx`, `src/services/syncManager.ts`, `src/services/__tests__/syncManager.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Interferencia de Service Workers Foráneos/Residuales en Local:** En entornos de desarrollo o loopback (`localhost`, `127.0.0.1`, Electron), la purga de registros PWA ocurría al final del ciclo de arranque y dependía de ramas separadas, pudiendo coexistir temporalmente caché previa de Cloudflare Pages / PWA con assets recién compilados.
+- **Fugas de Peticiones 404 / PGRST205 en Tablas Financieras Opcionales (`syncManager.ts`):** Aunque `tablasInexistentesSupabase` contenía por defecto `'gastos'`, `'ingresos'` y `'cuotas'`, aún existían vectores de fuga:
+  1. `descargarDatosSelectivos` (Realtime) reenviaba eventos de tablas financieras sin filtrar `tablasInexistentesSupabase`.
+  2. `sincronizarTombstones` intentaba ejecutar `.delete()` remoto sobre `'gastos'`, `'ingresos'` y `'cuotas'` provocando 404 y reintentos infinitos en error.
+  3. `sincronizarGastos`, `sincronizarIngresos`, `sincronizarCuotas` y `esRemotoMasReciente` no capturaban errores `404 / PGRST205` cuando `syncFinanzasRemotoHabilitado` se activaba contra un schema remoto sin tablas financieras.
+  4. `syncPendingRecords` contabilizaba registros locales pendientes de tablas financieras deshabilitadas, disparando ciclos de sincronización innecesarios cada 45s.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Desregistro e Inhabilitación Radical en `src/main.tsx`:**
+   - Centralización de la detección local `esHostnameLocal` (`localhost`, `127.0.0.1`, `IS_DESKTOP_WIDGET === true`) y el helper `purgarServiceWorkersYCachesLocales()`.
+   - Ejecución inmediata al inicio del bootstrap (`unregister()` de todo `navigator.serviceWorker.getRegistrations()` + `caches.delete()` de todo `caches.keys()`) antes de montar el DOM raíz.
+   - Bloqueo estricto de `navigator.serviceWorker.register` cuando `esHostnameLocal === true` o `!import.meta.env.PROD`.
+2. **Aislamiento Integral de Tablas Financieras y Captura `404 / PGRST205` en `src/services/syncManager.ts`:**
+   - Incorporación de `esErrorTablaInexistente(error)` (detecta `status === 404`, `code === 'PGRST205'`, `schema cache` y `could not find the table`), `registrarTablaInexistente(tabla)` y `debeOmitirTablaRemota(tabla)`.
+   - Consolidación de `sincronizarGastos()`, `sincronizarIngresos()` y `sincronizarCuotas()` sobre el helper compartido `sincronizarTablaFinancieraOpcional`, capturando `404 / PGRST205` sin marcar `sync_status: 'error'` ni registrar fallos en Dexie.
+   - Blindaje de `sincronizarTombstones()`, `esRemotoMasReciente()`, `descargarDatosSelectivos()`, `syncPendingRecords()` (`pendingCounts`) y `descargarDatosDescendientes()` para silenciar llamadas remotas a tablas no desplegadas y mantener intacta la persistencia Local-First en Dexie.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (242/242 tests, incorporando 4 nuevos tests en `syncManager.test.ts` para `esErrorTablaInexistente`, `descargarDatosSelectivos`, captura `404/PGRST205` en `sincronizarGastos` y tombstones locales).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.50s).
+
+---
+
+### [REQ-FIX-17: Resolución Canónica de Dependencias WBS (Req: TAR-XXX), Inbound Sanitization y Renderizado Bento en Tarjetas Kanban]
+**Fecha:** Noviembre 2026 | **Fase:** 5.08 | **Archivos Modificados:** `src/services/syncPayloadSanitizer.ts`, `src/services/syncManager.ts`, `src/db/db.ts`, `src/utils/entityNormalizer.ts`, `src/components/Views/ViewKanban.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/utils/__tests__/entityNormalizer.test.ts`, `src/services/__tests__/syncManager.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+1. **Desajuste UUID $\leftrightarrow$ `TAR-XXX` en Frontera Supabase/Dexie:**
+   - `sanitizarTareaInbound` copiaba `remoto.dependencia_tarea_id` (UUID relacional en Supabase) directamente sin traducirlo a `codigo_legado` (`TAR-XXX`), mientras `sanitizarTareaPayload` emitía `null` cuando `id_dependencia` contenía códigos `TAR-XXX` y `sanearDuplicadosDexie` no reconciliaba UUIDs residuales en `id_dependencia`.
+2. **Renderizado Crudo en Tarjetas Kanban:**
+   - `TarjetaTareaKanban.tsx` imprimía `tar.raw?.id_dependencia || tar.raw?.ID_Dependencia` literalmente en una sola píldora truncada sin prefijo `Req:`, sin `dependencia_tarea_id`, sin separar múltiples dependencias (`,`, `;`, `|`), sin diccionario de nombres (`tareasLookupMap`) y exponiendo potencialmente UUIDs hexadecimales o valores de ruido (`Ninguno`, `0`, `-`, `@`).
+
+#### 2. Solución Quirúrgica Implementada
+1. **Traducción Bidireccional en `syncPayloadSanitizer.ts`, `syncManager.ts` y `db.ts`:**
+   - `sanitizarTareaPayload`: parámetro opcional `tareaUuidMap?: Map<string, string>` para resolver códigos `TAR-XXX` hacia `dependencia_tarea_id` UUID en Push outbound (`sincronizarTareas` mediante `construirMapaTareas`).
+   - `sanitizarTareaInbound`: parámetro opcional `tareaUuidToCod?: Map<string, string>` para traducir `dependencia_tarea_id` / `id_dependencia` UUID a códigos `TAR-XXX`, preservando `localPrevio?.id_dependencia`, filtrando tokens de ruido (`Ninguno`, `0`, `-`, `N/A`, correos `@`) y omitiendo UUIDs huérfanos en `id_dependencia` (mientras `descargarDatosDescendientes` precarga y enriquece `tareaUuidToCod` y `sanearDuplicadosDexie` normaliza UUIDs existentes en Dexie).
+2. **Normalizador y Motor de Resolución en `entityNormalizer.ts`:**
+   - Adición de `id_dependencia?: string` en `CanonicalTarea` y extracción sanitizada en `normalizeTarea`.
+   - Exportación de `DependenciaResuelta` y `resolverDependenciasTarea(rawDep, tareasLookupMap)`: divide por `,`, `;` o `|`, elimina ruido/correos, resuelve UUIDs o códigos a `{ codigo, nombre }`, conserva códigos legados no visibles con fallback contextual y suprime UUIDs hexadecimales huérfanos.
+3. **Propagación Lookup y Píldoras Bento en Kanban (`ViewKanban.tsx`, `ColumnaKanban.tsx`, `TarjetaTareaKanban.tsx`):**
+   - Construcción de `tareasLookupMap` memoizado en `ViewKanban.tsx` indexado por código `TAR-XXX` y UUID `id`, actualización de `filtroDependencia` y del motor hover `depMap`, y propagación hacia `ColumnaKanban` y `TarjetaTareaKanban`.
+   - Renderizado en `TarjetaTareaKanban.tsx` de una píldora Bento ámbar independiente por requisito previo con `<Lock className="w-3 h-3 text-amber-400 shrink-0" strokeWidth={1.75} />`, texto `Req: {dep.codigo}` en `font-mono tabular-nums text-[10px]` y tooltip nativo `Requiere: ${dep.codigo} · ${dep.nombre}`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (251/251 tests: +6 en `entityNormalizer.test.ts` y +3 en `syncManager.test.ts`).
+- **Compilación de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,495 módulos transformados en 6.77s).

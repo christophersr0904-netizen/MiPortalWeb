@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import type { CanonicalTarea } from '../../utils/entityNormalizer';
+import { resolverDependenciasTarea, type CanonicalTarea } from '../../utils/entityNormalizer';
 import type { SubtareaPaso } from '../../types';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
 import {
@@ -36,6 +36,7 @@ export interface TarjetaTareaKanbanProps {
   nombreProyecto: string;
   nombreHito: string;
   costoGasto: number;
+  tareasLookupMap?: Map<string, { codigo: string; nombre: string }>;
   onDragStart: (e: React.DragEvent, id: string) => void;
   onDragEnd: () => void;
   onMouseEnter: (codigo: string) => void;
@@ -60,6 +61,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
   nombreProyecto,
   nombreHito,
   costoGasto,
+  tareasLookupMap,
   onDragStart,
   onDragEnd,
   onMouseEnter,
@@ -105,8 +107,9 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
     return clean;
   };
 
-  const rawDep = String(tar.raw?.id_dependencia || tar.raw?.ID_Dependencia || '').trim();
-  const tieneDep = Boolean(rawDep && !rawDep.includes('@google.com'));
+  const rawDep = tar.id_dependencia || tar.raw?.id_dependencia || tar.raw?.ID_Dependencia || tar.raw?.dependencia_tarea_id;
+  const dependenciasResueltas = resolverDependenciasTarea(rawDep, tareasLookupMap);
+  const tieneDep = dependenciasResueltas.length > 0;
   const costoTotalPen = costoGasto > 0 ? costoGasto : (tar.costo_real || Number(tar.raw?.costo_real_pen || tar.raw?.Costo_Real_PEN || 0));
 
   return (
@@ -269,15 +272,16 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
       {/* 4. Dependencias y Costo */}
       {(tieneDep || costoTotalPen > 0) && (
         <div className="flex items-center flex-wrap gap-1.5 pt-0.5">
-          {tieneDep && (
+          {dependenciasResueltas.map((dep) => (
             <span
-              className="px-1.5 py-0.5 text-[9.5px] font-mono tabular-nums font-medium rounded bg-amber-500/15 text-amber-300 border border-amber-500/40 flex items-center gap-1 shadow-2xs truncate max-w-[150px]"
-              title={`Requiere: ${rawDep}`}
+              key={dep.codigo}
+              className="px-1.5 py-0.5 text-[10px] font-mono tabular-nums font-medium rounded bg-amber-500/15 text-amber-300 border border-amber-500/40 inline-flex items-center gap-1 shadow-2xs max-w-full"
+              title={`Requiere: ${dep.codigo} · ${dep.nombre}`}
             >
-              <Lock className="w-2.5 h-2.5 text-amber-400 shrink-0" strokeWidth={1.75} />
-              <span className="truncate">{rawDep}</span>
+              <Lock className="w-3 h-3 text-amber-400 shrink-0" strokeWidth={1.75} />
+              <span className="truncate">Req: {dep.codigo}</span>
             </span>
-          )}
+          ))}
           {costoTotalPen > 0 && (
             <span className="px-1.5 py-0.5 text-[9.5px] font-mono tabular-nums font-medium text-emerald-400 bg-emerald-500/10 rounded border border-emerald-500/25">
               S/ {costoTotalPen.toFixed(2)}

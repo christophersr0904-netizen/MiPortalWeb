@@ -3,10 +3,8 @@
  * Estrategia: Stale-While-Revalidate para recursos estáticos y Cache-First con fallback offline
  */
 
-const CACHE_NAME = 'pmo-cache-v2.5-cockpit-restore';
+const CACHE_NAME = 'pmo-cache-v2.6-rescue-network-first';
 const STATIC_ASSETS = [
-  './',
-  './index.html',
   './manifest.webmanifest',
   './favicon.svg',
   './icon-192.png',
@@ -94,7 +92,37 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Interceptar navegación y assets locales
+  // Navegación HTML siempre Network-First para evitar servir index.html obsoleto con hashes de assets eliminados
+  if (req.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    event.respondWith(
+      fetch(req)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(req, clone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const fallback =
+            (await caches.match(req)) ||
+            (await caches.match('./')) ||
+            (await caches.match('./index.html')) ||
+            (await caches.match('/index.html'));
+          if (fallback) return fallback;
+          return new Response('PMO Offline - Documento no disponible en caché', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: new Headers({ 'Content-Type': 'text/plain; charset=utf-8' })
+          });
+        })
+    );
+    return;
+  }
+
+  // Interceptar assets locales con Stale-While-Revalidate
   event.respondWith(
     caches.match(req).then((cachedResponse) => {
       const fetchPromise = fetch(req)

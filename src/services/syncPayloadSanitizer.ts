@@ -311,7 +311,8 @@ export function sanitizarTareaPayload(
   raw: TareaRecord,
   proyectoUuidMap: Map<string, string>,
   hitoUuidMap: Map<string, string>,
-  userId: string = DEFAULT_USER_ID
+  userId: string = DEFAULT_USER_ID,
+  tareaUuidMap?: Map<string, string>
 ) {
   let resolvedProyectoUuid: string | null = null;
   if (raw.proyecto_codigo) {
@@ -328,6 +329,19 @@ export function sanitizarTareaPayload(
       resolvedHitoUuid = hitoUuidMap.get(raw.hito_codigo)!;
     } else if (isUuid(raw.hito_codigo)) {
       resolvedHitoUuid = raw.hito_codigo;
+    }
+  }
+
+  let resolvedDependenciaUuid: string | null = null;
+  const rawDepToken = String(raw.id_dependencia || '').split(/[,;|]+/)[0]?.trim() || '';
+  if (rawDepToken) {
+    if (isUuid(rawDepToken)) {
+      resolvedDependenciaUuid = rawDepToken;
+    } else if (tareaUuidMap) {
+      const depCandidate = tareaUuidMap.get(rawDepToken) || tareaUuidMap.get(rawDepToken.toUpperCase());
+      if (depCandidate && isUuid(depCandidate)) {
+        resolvedDependenciaUuid = depCandidate;
+      }
     }
   }
 
@@ -353,7 +367,7 @@ export function sanitizarTareaPayload(
     horas_reales: Math.max(0, Number(raw.horas_reales) || 0.00),
     fecha_programada: sanitizeDate(raw.fecha_programada),
     agendado_en_calendar: raw.agendado_calendar === 'Sí' ? 'Sí' : 'No',
-    dependencia_tarea_id: isUuid(raw.id_dependencia) ? raw.id_dependencia : null,
+    dependencia_tarea_id: resolvedDependenciaUuid,
     responsable_ejecutor: raw.responsable_ejecutor?.trim() || 'Christopher',
     notas_impedimentos: raw.notas_impedimentos?.trim() || null,
     sync_status: 'synced',
@@ -363,14 +377,15 @@ export function sanitizarTareaPayload(
 
 /**
  * Normalizador inverso Inbound para tareas (Supabase -> Dexie)
- * Resuelve y preserva obligatoriamente proyecto_codigo e hito_codigo
- * a partir de mapas en memoria o localPrevio, evitando campos vacíos.
+ * Resuelve y preserva obligatoriamente proyecto_codigo, hito_codigo e id_dependencia (TAR-XXX)
+ * a partir de mapas en memoria o localPrevio, evitando UUIDs crudos o campos vacíos.
  */
 export function sanitizarTareaInbound(
   remoto: any,
   localPrevio?: any,
   proyUuidToCod?: Map<string, string>,
-  hitoUuidToCod?: Map<string, string>
+  hitoUuidToCod?: Map<string, string>,
+  tareaUuidToCod?: Map<string, string>
 ): TareaRecord {
   const proyUuid = remoto.proyecto_id || localPrevio?.proyecto_id;
   const hitoUuid = remoto.hito_id || localPrevio?.hito_id;
@@ -390,6 +405,40 @@ export function sanitizarTareaInbound(
       : undefined) ||
     remoto.hito_codigo ||
     '';
+
+  const rawDepEntrada =
+    remoto.id_dependencia ||
+    remoto.dependencia_tarea_id ||
+    localPrevio?.id_dependencia ||
+    null;
+
+  const NOISE_DEP_TOKENS = new Set(['', 'NINGUNO', 'NINGUNA', '0', '-', '—', 'N/A', 'NA', 'NULL', 'UNDEFINED', 'NONE']);
+  let resolvedIdDependencia: string | null = null;
+  if (rawDepEntrada) {
+    const tokens = String(rawDepEntrada)
+      .split(/[,;|]+/)
+      .map((t) => t.trim())
+      .filter((t) => Boolean(t) && !t.includes('@') && !NOISE_DEP_TOKENS.has(t.toUpperCase()));
+    const traducidos = tokens
+      .map((token) => {
+        if (isUuid(token)) {
+          if (tareaUuidToCod) {
+            const cod =
+              tareaUuidToCod.get(token) ||
+              tareaUuidToCod.get(token.toLowerCase()) ||
+              tareaUuidToCod.get(token.toUpperCase());
+            if (cod) return cod.trim().toUpperCase();
+          }
+          if (localPrevio?.id_dependencia && !isUuid(String(localPrevio.id_dependencia))) {
+            return String(localPrevio.id_dependencia).trim().toUpperCase();
+          }
+          return null;
+        }
+        return token.toUpperCase();
+      })
+      .filter((t): t is string => Boolean(t));
+    resolvedIdDependencia = traducidos.length > 0 ? Array.from(new Set(traducidos)).join(', ') : null;
+  }
 
   return {
     ...localPrevio,
@@ -418,7 +467,7 @@ export function sanitizarTareaInbound(
       (remoto.agendado_en_calendar === 'Sí' ? 'Sí' : 'No') ||
       localPrevio?.agendado_calendar ||
       'No',
-    id_dependencia: remoto.id_dependencia || remoto.dependencia_tarea_id || localPrevio?.id_dependencia || null,
+    id_dependencia: resolvedIdDependencia ?? undefined,
     responsable_ejecutor:
       remoto.responsable_ejecutor?.trim() || localPrevio?.responsable_ejecutor?.trim() || 'Christopher',
     notas_impedimentos: remoto.notas_impedimentos?.trim() ?? localPrevio?.notas_impedimentos ?? null,

@@ -12,7 +12,7 @@ if (process.env.ELECTRON_RUN_AS_NODE || typeof require('electron') === 'string')
   child.on('close', (code) => process.exit(code || 0));
 } else {
   const electron = require('electron');
-  const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, shell, globalShortcut } = electron;
+  const { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, shell, globalShortcut, session } = electron;
 
 // Para soporte de ventana transparente en Windows es necesario hardware acceleration o software rasterizer compatible
 // No deshabilitamos forzosamente toda aceleración cuando se requiere transparencia DWM en Windows
@@ -366,7 +366,8 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
-      allowRunningInsecureContent: true
+      allowRunningInsecureContent: true,
+      devTools: true // Habilitado explícitamente para diagnóstico en desarrollo (REQ-DEBUG-14)
     }
   });
   widgetWin = mainWindow;
@@ -409,13 +410,55 @@ function createWindow() {
   // Servido nativo mediante HTTP loopback en 127.0.0.1:48123 (elimina restricciones de file:// y ES Modules de Vite)
   const loopbackUrl = 'http://127.0.0.1:48123/?widget=desktop';
   const useDevServer = process.argv.includes('--dev-server') || Boolean(process.env.WIDGET_DEV);
+  const isDevMode = !app.isPackaged || useDevServer || process.argv.includes('--devtools') || process.env.NODE_ENV === 'development';
   const targetUrl = useDevServer ? 'http://localhost:3000/?widget=desktop' : loopbackUrl;
+
+  const toggleDevToolsWindow = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.webContents.closeDevTools();
+    } else {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
+  };
+
+  // Atajos permanentes de desarrollo para DevTools (F12 / Ctrl+Shift+I / Ctrl+Shift+J) (REQ-DEBUG-14)
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (!isDevMode) return;
+    const isF12 = input.type === 'keyDown' && input.key === 'F12';
+    const isCtrlShiftIJ =
+      input.type === 'keyDown' &&
+      (input.control || input.meta) &&
+      input.shift &&
+      (input.key.toUpperCase() === 'I' || input.key.toUpperCase() === 'J');
+
+    if (isF12 || isCtrlShiftIJ) {
+      event.preventDefault();
+      toggleDevToolsWindow();
+    }
+  });
+
+  // Redireccionar errores fatales del renderer Chromium al terminal de Node
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    if (level >= 3) {
+      console.error(`[Renderer Error] ${message} (${sourceId}:${line})`);
+    }
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Electron] Proceso renderer terminado inesperadamente:', details);
+    if (isDevMode && mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
+  });
 
   console.log('[Electron] Cargando URL:', targetUrl);
   mainWindow.loadURL(targetUrl);
 
-  // DevTools desactivadas para arranque limpio en producción (REQ-DESKTOP-11)
-  // mainWindow.webContents.openDevTools({ mode: 'detach' });
+  // Apertura automática en modo dev-server o con bandera --devtools / ELECTRON_OPEN_DEVTOOLS=1
+  if (useDevServer || process.argv.includes('--devtools') || process.env.ELECTRON_OPEN_DEVTOOLS === '1') {
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  }
 
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[Electron] Carga finalizada con éxito');
@@ -435,6 +478,9 @@ function createWindow() {
     console.error(
       `[Electron] Error de carga: Código: ${errorCode} | "${errorDescription}" | URL: ${validatedURL}`
     );
+    if (isDevMode && mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
     if (validatedURL.includes('localhost:3000')) {
       console.warn('[Electron] Dev server en puerto 3000 no disponible, redirigiendo a loopback http://127.0.0.1:48123/?widget=desktop...');
       mainWindow.loadURL(loopbackUrl);
@@ -475,6 +521,14 @@ function createWindow() {
           label: 'Mostrar / Ocultar Widget (Alt+Shift+C)',
           click: () => toggleWidgetVisibility()
         },
+        ...(isDevMode
+          ? [
+              {
+                label: 'Abrir / Cerrar DevTools (F12)',
+                click: () => toggleDevToolsWindow()
+              }
+            ]
+          : []),
         { type: 'separator' },
         {
           label: 'Abrir Portal Web en Navegador (http://localhost:3000)',
@@ -572,7 +626,19 @@ function createWindow() {
 }
 
 if (gotTheLock) {
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // Limpiar únicamente Service Workers y CacheStorage obsoletos del loopback HTTP para evitar 404 en assets con hash nuevo (REQ-DEBUG-14)
+    // Preserva intactos IndexedDB y LocalStorage del usuario.
+    try {
+      await session.defaultSession.clearStorageData({
+        storages: ['serviceworkers', 'cachestorage']
+      });
+      await session.defaultSession.clearCache();
+      console.log('[Electron] Caché HTTP y Service Workers residuales depurados limpiamente.');
+    } catch (err) {
+      console.warn('[Electron] No se pudo limpiar CacheStorage previo:', err);
+    }
+
     createWindow();
 
     // Registro de Atajo Global Alt+Shift+C (REQ-DESKTOP-16 Paso 2)

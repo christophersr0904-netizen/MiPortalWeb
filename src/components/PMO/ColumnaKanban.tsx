@@ -30,6 +30,7 @@ export interface ColumnaKanbanProps {
   proyectosMap: Map<string, any>;
   hitosMap: Map<string, any>;
   gastosPorTarea: Map<string, number>;
+  tareasLookupMap?: Map<string, { codigo: string; nombre: string }>;
   onDragOver: (e: React.DragEvent, colId: string) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, colId: string) => void;
@@ -60,6 +61,7 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
   proyectosMap,
   hitosMap,
   gastosPorTarea,
+  tareasLookupMap,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -231,6 +233,7 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
                 nombreProyecto={nombreProyecto}
                 nombreHito={nombreHito}
                 costoGasto={costoGasto}
+                tareasLookupMap={tareasLookupMap}
                 onDragStart={onDragStartTask}
                 onDragEnd={onDragEndTask}
                 onMouseEnter={onMouseEnterTask}

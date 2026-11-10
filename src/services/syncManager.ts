@@ -180,6 +180,38 @@ class SyncManager {
     return this.tablasInexistentesSupabase.has(tabla);
   }
 
+  /**
+   * Detecta errores 404 / PGRST205 de PostgREST cuando una tabla no está desplegada en el schema remoto.
+   */
+  public esErrorTablaInexistente(error: any): boolean {
+    if (!error) return false;
+    const status = Number(error.status || error.statusCode || 0);
+    const code = String(error.code || '').toUpperCase();
+    const msg = String(error.message || '').toLowerCase();
+    const details = String(error.details || '').toLowerCase();
+    return (
+      status === 404 ||
+      code === 'PGRST205' ||
+      msg.includes('schema cache') ||
+      msg.includes('could not find the table') ||
+      details.includes('could not find the table')
+    );
+  }
+
+  private registrarTablaInexistente(tabla: string): void {
+    this.tablasInexistentesSupabase.add(tabla);
+    if (tabla === 'gastos' || tabla === 'ingresos' || tabla === 'cuotas') {
+      this.syncFinanzasRemotoHabilitado = false;
+    }
+  }
+
+  private debeOmitirTablaRemota(tabla: string): boolean {
+    if (tabla === 'gastos' || tabla === 'ingresos' || tabla === 'cuotas') {
+      return !this.syncFinanzasRemotoHabilitado && this.tablasInexistentesSupabase.has(tabla);
+    }
+    return this.tablasInexistentesSupabase.has(tabla);
+  }
+
   public limpiarCuarentenaFk(): void {
     this.registrosFkCuarentena.clear();
   }
@@ -436,6 +468,7 @@ class SyncManager {
   ): Promise<boolean> {
     if (!this.supabase || !codigoLegado || !updatedAtLocal) return false;
     if (import.meta.env.VITE_SUPABASE_URL?.includes('mock')) return false;
+    if (this.debeOmitirTablaRemota(tabla)) return false;
 
     try {
       const tableQuery = this.supabase.from(tabla);
@@ -446,7 +479,13 @@ class SyncManager {
         .eq('codigo_legado', codigoLegado)
         .maybeSingle();
 
-      if (error || !remoto?.updated_at) return false;
+      if (error) {
+        if (this.esErrorTablaInexistente(error)) {
+          this.registrarTablaInexistente(tabla);
+        }
+        return false;
+      }
+      if (!remoto?.updated_at) return false;
 
       const remoteTime = new Date(remoto.updated_at).getTime();
       const localTime = new Date(updatedAtLocal).getTime();
@@ -485,6 +524,11 @@ class SyncManager {
     }
 
     for (const tombstone of pending) {
+      if (this.debeOmitirTablaRemota(tombstone.tabla)) {
+        await db.tombstones.update(tombstone.id, { sync_status: 'synced' });
+        result.success++;
+        continue;
+      }
       try {
         this.registrarPushedId(tombstone.id);
         const { error } = await this.supabase
@@ -493,23 +537,35 @@ class SyncManager {
           .eq('id', tombstone.id);
 
         if (error) {
-          console.error(
-            `[SyncManager] Error al sincronizar tombstone en Supabase (${tombstone.tabla}:${tombstone.id}):`,
-            error
-          );
-          await db.tombstones.update(tombstone.id, { sync_status: 'error' });
-          result.failed++;
+          if (this.esErrorTablaInexistente(error)) {
+            this.registrarTablaInexistente(tombstone.tabla);
+            await db.tombstones.update(tombstone.id, { sync_status: 'synced' });
+            result.success++;
+          } else {
+            console.error(
+              `[SyncManager] Error al sincronizar tombstone en Supabase (${tombstone.tabla}:${tombstone.id}):`,
+              error
+            );
+            await db.tombstones.update(tombstone.id, { sync_status: 'error' });
+            result.failed++;
+          }
         } else {
           await db.tombstones.update(tombstone.id, { sync_status: 'synced' });
           result.success++;
         }
       } catch (err) {
-        console.error(
-          `[SyncManager] Excepción al sincronizar tombstone (${tombstone.tabla}:${tombstone.id}):`,
-          err
-        );
-        await db.tombstones.update(tombstone.id, { sync_status: 'error' });
-        result.failed++;
+        if (this.esErrorTablaInexistente(err)) {
+          this.registrarTablaInexistente(tombstone.tabla);
+          await db.tombstones.update(tombstone.id, { sync_status: 'synced' });
+          result.success++;
+        } else {
+          console.error(
+            `[SyncManager] Excepción al sincronizar tombstone (${tombstone.tabla}:${tombstone.id}):`,
+            err
+          );
+          await db.tombstones.update(tombstone.id, { sync_status: 'error' });
+          result.failed++;
+        }
       }
     }
 
@@ -673,6 +729,7 @@ class SyncManager {
 
     const pMap = proyectoMap || (await this.construirMapaProyectos());
     const hMap = hitoMap || (await this.construirMapaHitos());
+    const tMap = await this.construirMapaTareas().catch(() => new Map<string, string>());
 
     for (const tarea of pending) {
       if (this.registrosFkCuarentena.has(tarea.id)) {
@@ -685,7 +742,7 @@ class SyncManager {
           continue;
         }
 
-        const payload = sanitizarTareaPayload(tarea, pMap, hMap, this.currentUserId);
+        const payload = sanitizarTareaPayload(tarea, pMap, hMap, this.currentUserId, tMap);
         if (!payload.proyecto_id || !payload.hito_id) {
           console.warn('[SyncManager] Tarea sin proyecto_id o hito_id UUID resuelto, cuarentena en Dexie:', tarea.codigo_legado);
           this.registrosFkCuarentena.add(tarea.id);
@@ -1094,210 +1151,106 @@ class SyncManager {
   }
 
   /**
-   * 9. Sincroniza gastos financieros con LWW
+   * Helper compartido para tablas financieras opcionales ('gastos', 'ingresos', 'cuotas')
+   * con aislamiento automático ante 404 / PGRST205 y preservación local-first en Dexie.
    */
-  public async sincronizarGastos(): Promise<SyncResult> {
+  private async sincronizarTablaFinancieraOpcional(
+    tabla: 'gastos' | 'ingresos' | 'cuotas',
+    etiquetaSingular: string,
+    refDexie: any,
+    sanitizar: (item: any, userId: string) => any
+  ): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
-    // REQ-WEB-01: Suprimir push hacia Supabase si la tabla no existe en el schema remoto (404)
-    if (!this.syncFinanzasRemotoHabilitado && this.tablasInexistentesSupabase.has('gastos')) {
+    if (this.debeOmitirTablaRemota(tabla)) {
       return result;
     }
 
-    const pending = await this.obtenerRegistrosPendientes<any>(db.gastos);
+    const pending = await this.obtenerRegistrosPendientes<any>(refDexie);
     if (pending.length === 0) return result;
 
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
-      await Promise.all(pending.map((g) => db.gastos.update(g.id, { sync_status: 'synced' })));
+      await Promise.all(pending.map((item) => refDexie.update(item.id, { sync_status: 'synced' })));
       result.success = pending.length;
       return result;
     }
 
-    for (const gasto of pending) {
-      if (this.registrosFkCuarentena.has(gasto.id)) {
+    for (const item of pending) {
+      if (this.registrosFkCuarentena.has(item.id)) {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente('gastos', gasto.codigo_legado, gasto.updated_at)) {
-          await db.gastos.update(gasto.id, { sync_status: 'synced' });
+        if (await this.esRemotoMasReciente(tabla, item.codigo_legado, item.updated_at)) {
+          await refDexie.update(item.id, { sync_status: 'synced' });
           result.success++;
           continue;
         }
 
-        const payload = sanitizarGastoPayload(gasto, this.currentUserId);
-        this.registrarPushedId(gasto.id);
+        const payload = sanitizar(item, this.currentUserId);
+        this.registrarPushedId(item.id);
         const { error } = await this.supabase
-          .from('gastos')
+          .from(tabla)
           .upsert(payload, { onConflict: 'codigo_legado' });
 
         if (error) {
+          if (this.esErrorTablaInexistente(error)) {
+            this.registrarTablaInexistente(tabla);
+            break;
+          }
           if (this.esErrorFkNoRecuperable(error)) {
-            console.warn(`[SyncManager] Violación FK/409 en gasto ${gasto.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
-            this.registrosFkCuarentena.add(gasto.id);
-            await db.gastos.update(gasto.id, { sync_status: 'quarantined' });
+            console.warn(`[SyncManager] Violación FK/409 en ${etiquetaSingular} ${item.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
+            this.registrosFkCuarentena.add(item.id);
+            await refDexie.update(item.id, { sync_status: 'quarantined' });
           } else {
-            console.error('[SyncManager] Error al sincronizar gasto:', gasto.codigo_legado, error);
-            await db.gastos.update(gasto.id, { sync_status: 'error' });
+            console.error(`[SyncManager] Error al sincronizar ${etiquetaSingular}:`, item.codigo_legado, error);
+            await refDexie.update(item.id, { sync_status: 'error' });
           }
           result.failed++;
         } else {
-          await db.gastos.update(gasto.id, {
+          await refDexie.update(item.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
           });
           result.success++;
         }
       } catch (err: any) {
+        if (this.esErrorTablaInexistente(err)) {
+          this.registrarTablaInexistente(tabla);
+          break;
+        }
         if (this.esErrorFkNoRecuperable(err)) {
-          console.warn(`[SyncManager] Excepción FK/409 en gasto ${gasto.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
-          this.registrosFkCuarentena.add(gasto.id);
-          await db.gastos.update(gasto.id, { sync_status: 'quarantined' });
+          console.warn(`[SyncManager] Excepción FK/409 en ${etiquetaSingular} ${item.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
+          this.registrosFkCuarentena.add(item.id);
+          await refDexie.update(item.id, { sync_status: 'quarantined' });
         } else {
-          console.error('[SyncManager] Excepción al sincronizar gasto:', gasto.codigo_legado, err);
-          await db.gastos.update(gasto.id, { sync_status: 'error' });
+          console.error(`[SyncManager] Excepción al sincronizar ${etiquetaSingular}:`, item.codigo_legado, err);
+          await refDexie.update(item.id, { sync_status: 'error' });
         }
         result.failed++;
       }
     }
 
     return result;
+  }
+
+  /**
+   * 9. Sincroniza gastos financieros con LWW
+   */
+  public sincronizarGastos(): Promise<SyncResult> {
+    return this.sincronizarTablaFinancieraOpcional('gastos', 'gasto', db.gastos, sanitizarGastoPayload);
   }
 
   /**
    * 10. Sincroniza ingresos financieros con LWW
    */
-  public async sincronizarIngresos(): Promise<SyncResult> {
-    const result: SyncResult = { success: 0, failed: 0 };
-    // REQ-WEB-01: Suprimir push hacia Supabase si la tabla no existe en el schema remoto (404)
-    if (!this.syncFinanzasRemotoHabilitado && this.tablasInexistentesSupabase.has('ingresos')) {
-      return result;
-    }
-
-    const pending = await this.obtenerRegistrosPendientes<any>(db.ingresos);
-    if (pending.length === 0) return result;
-
-    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
-      await Promise.all(pending.map((i) => db.ingresos.update(i.id, { sync_status: 'synced' })));
-      result.success = pending.length;
-      return result;
-    }
-
-    for (const ingreso of pending) {
-      if (this.registrosFkCuarentena.has(ingreso.id)) {
-        continue;
-      }
-      try {
-        if (await this.esRemotoMasReciente('ingresos', ingreso.codigo_legado, ingreso.updated_at)) {
-          await db.ingresos.update(ingreso.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarIngresoPayload(ingreso, this.currentUserId);
-        this.registrarPushedId(ingreso.id);
-        const { error } = await this.supabase
-          .from('ingresos')
-          .upsert(payload, { onConflict: 'codigo_legado' });
-
-        if (error) {
-          if (this.esErrorFkNoRecuperable(error)) {
-            console.warn(`[SyncManager] Violación FK/409 en ingreso ${ingreso.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
-            this.registrosFkCuarentena.add(ingreso.id);
-            await db.ingresos.update(ingreso.id, { sync_status: 'quarantined' });
-          } else {
-            console.error('[SyncManager] Error al sincronizar ingreso:', ingreso.codigo_legado, error);
-            await db.ingresos.update(ingreso.id, { sync_status: 'error' });
-          }
-          result.failed++;
-        } else {
-          await db.ingresos.update(ingreso.id, {
-            sync_status: 'synced',
-            updated_at: new Date().toISOString()
-          });
-          result.success++;
-        }
-      } catch (err: any) {
-        if (this.esErrorFkNoRecuperable(err)) {
-          console.warn(`[SyncManager] Excepción FK/409 en ingreso ${ingreso.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
-          this.registrosFkCuarentena.add(ingreso.id);
-          await db.ingresos.update(ingreso.id, { sync_status: 'quarantined' });
-        } else {
-          console.error('[SyncManager] Excepción al sincronizar ingreso:', ingreso.codigo_legado, err);
-          await db.ingresos.update(ingreso.id, { sync_status: 'error' });
-        }
-        result.failed++;
-      }
-    }
-
-    return result;
+  public sincronizarIngresos(): Promise<SyncResult> {
+    return this.sincronizarTablaFinancieraOpcional('ingresos', 'ingreso', db.ingresos, sanitizarIngresoPayload);
   }
 
   /**
    * 11. Sincroniza cuotas y compromisos de financiamiento con LWW
    */
-  public async sincronizarCuotas(): Promise<SyncResult> {
-    const result: SyncResult = { success: 0, failed: 0 };
-    // REQ-WEB-01: Suprimir push hacia Supabase si la tabla no existe en el schema remoto (404)
-    if (!this.syncFinanzasRemotoHabilitado && this.tablasInexistentesSupabase.has('cuotas')) {
-      return result;
-    }
-
-    const pending = await this.obtenerRegistrosPendientes<any>(db.cuotas);
-    if (pending.length === 0) return result;
-
-    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
-      await Promise.all(pending.map((c) => db.cuotas.update(c.id, { sync_status: 'synced' })));
-      result.success = pending.length;
-      return result;
-    }
-
-    for (const cuota of pending) {
-      if (this.registrosFkCuarentena.has(cuota.id)) {
-        continue;
-      }
-      try {
-        if (await this.esRemotoMasReciente('cuotas', cuota.codigo_legado, cuota.updated_at)) {
-          await db.cuotas.update(cuota.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarCuotaPayload(cuota, this.currentUserId);
-        this.registrarPushedId(cuota.id);
-        const { error } = await this.supabase
-          .from('cuotas')
-          .upsert(payload, { onConflict: 'codigo_legado' });
-
-        if (error) {
-          if (this.esErrorFkNoRecuperable(error)) {
-            console.warn(`[SyncManager] Violación FK/409 en cuota ${cuota.codigo_legado}. Cuarentena definitiva en Dexie:`, error.message);
-            this.registrosFkCuarentena.add(cuota.id);
-            await db.cuotas.update(cuota.id, { sync_status: 'quarantined' });
-          } else {
-            console.error('[SyncManager] Error al sincronizar cuota:', cuota.codigo_legado, error);
-            await db.cuotas.update(cuota.id, { sync_status: 'error' });
-          }
-          result.failed++;
-        } else {
-          await db.cuotas.update(cuota.id, {
-            sync_status: 'synced',
-            updated_at: new Date().toISOString()
-          });
-          result.success++;
-        }
-      } catch (err: any) {
-        if (this.esErrorFkNoRecuperable(err)) {
-          console.warn(`[SyncManager] Excepción FK/409 en cuota ${cuota.codigo_legado}. Cuarentena definitiva en Dexie:`, err?.message);
-          this.registrosFkCuarentena.add(cuota.id);
-          await db.cuotas.update(cuota.id, { sync_status: 'quarantined' });
-        } else {
-          console.error('[SyncManager] Excepción al sincronizar cuota:', cuota.codigo_legado, err);
-          await db.cuotas.update(cuota.id, { sync_status: 'error' });
-        }
-        result.failed++;
-      }
-    }
-
-    return result;
+  public sincronizarCuotas(): Promise<SyncResult> {
+    return this.sincronizarTablaFinancieraOpcional('cuotas', 'cuota', db.cuotas, sanitizarCuotaPayload);
   }
 
   /**
@@ -1398,6 +1351,7 @@ class SyncManager {
     for (const t of tareas) {
       if (t.codigo_legado && isUuid(t.id)) {
         map.set(t.codigo_legado, t.id);
+        map.set(t.codigo_legado.toUpperCase(), t.id);
         map.set(t.id, t.id);
       }
     }
@@ -1466,9 +1420,9 @@ class SyncManager {
         this.contarPendientes(db.metas_planes),
         this.contarPendientes(db.planes_accion_hitos),
         this.contarPendientes(db.habitos_metas_vinculos),
-        this.contarPendientes(db.gastos),
-        this.contarPendientes(db.ingresos),
-        this.contarPendientes(db.cuotas),
+        this.debeOmitirTablaRemota('gastos') ? Promise.resolve(0) : this.contarPendientes(db.gastos),
+        this.debeOmitirTablaRemota('ingresos') ? Promise.resolve(0) : this.contarPendientes(db.ingresos),
+        this.debeOmitirTablaRemota('cuotas') ? Promise.resolve(0) : this.contarPendientes(db.cuotas),
         this.contarPendientes(db.notas)
       ]);
 
@@ -1566,10 +1520,15 @@ class SyncManager {
   }
 
   /**
-   * Descarga selectiva en caliente para eventos Realtime acotados a tablas específicas
+   * Descarga selectiva en caliente para eventos Realtime acotados a tablas específicas.
+   * Excluye automáticamente tablas inexistentes o locales ('gastos', 'ingresos', 'cuotas') salvo habilitación explícita.
    */
   public async descargarDatosSelectivos(tablas: string[]): Promise<{ descargados: number; fallidos: number }> {
-    return this.descargarDatosDescendientes(tablas);
+    const tablasActivas = tablas.filter((t) => !this.debeOmitirTablaRemota(t));
+    if (tablasActivas.length === 0) {
+      return { descargados: 0, fallidos: 0 };
+    }
+    return this.descargarDatosDescendientes(tablasActivas);
   }
 
   /**
@@ -1596,9 +1555,10 @@ class SyncManager {
       // Tolerancia defensiva ante entornos sin IndexedDB
     }
 
-    // Pre-cargar mapas UUID -> Código de Proyectos e Hitos existentes en Dexie (REQ-FIX-10)
+    // Pre-cargar mapas UUID -> Código de Proyectos, Hitos y Tareas existentes en Dexie (REQ-FIX-10 / REQ-FIX-17)
     const proyUuidToCod = new Map<string, string>();
     const hitoUuidToCod = new Map<string, string>();
+    const tareaUuidToCod = new Map<string, string>();
     try {
       if (db.proyectos && typeof (db.proyectos as any).toArray === 'function') {
         const locProys = await (db.proyectos as any).toArray();
@@ -1630,6 +1590,21 @@ class SyncManager {
           });
         }
       }
+      if (db.tareas && typeof (db.tareas as any).toArray === 'function') {
+        const locTareas = await (db.tareas as any).toArray();
+        if (Array.isArray(locTareas)) {
+          locTareas.forEach((t: any) => {
+            const cod = extraerCodigoCanonico(t);
+            if (cod) {
+              if (t.id) {
+                tareaUuidToCod.set(String(t.id), cod);
+                tareaUuidToCod.set(String(t.id).toUpperCase(), cod);
+              }
+              tareaUuidToCod.set(cod, cod);
+            }
+          });
+        }
+      }
     } catch {
       // Fallback defensivo ante entornos sin IndexedDB
     }
@@ -1653,11 +1628,8 @@ class SyncManager {
       if (tablasFiltro && tablasFiltro.length > 0) {
         return tablasFiltro.includes(c.tabla);
       }
-      // REQ-WEB-01: Suprimir peticiones a tablas inexistentes en Supabase ('gastos', 'ingresos', 'cuotas' 404)
-      if (this.tablasInexistentesSupabase.has(c.tabla) && !this.syncFinanzasRemotoHabilitado) {
-        return false;
-      }
-      return true;
+      // REQ-WEB-01 / REQ-FIX-16: Suprimir peticiones a tablas inexistentes en Supabase ('gastos', 'ingresos', 'cuotas' 404)
+      return !this.debeOmitirTablaRemota(c.tabla);
     });
 
     // Buffer de mutaciones en memoria para ejecución en transacción atómica unificada (REQ-FIX-10)
@@ -1669,7 +1641,7 @@ class SyncManager {
     }> = [];
 
     for (const { tabla, refDexie } of configuracionesFiltradas) {
-      if (this.tablasInexistentesSupabase.has(tabla) && !this.syncFinanzasRemotoHabilitado && (!tablasFiltro || !tablasFiltro.includes(tabla))) {
+      if (!tablasFiltro?.includes(tabla) && this.debeOmitirTablaRemota(tabla)) {
         continue;
       }
 
@@ -1686,28 +1658,18 @@ class SyncManager {
         const { data, error } = await query;
 
         if (error) {
-          const msg = String(error.message || '').toLowerCase();
-          const code = String(error.code || '');
-          const status = Number(error.status || error.statusCode || 0);
-
-          if (
-            status === 404 ||
-            code === 'PGRST205' ||
-            msg.includes('schema cache') ||
-            msg.includes('could not find the table')
-          ) {
-            console.warn(`[SyncManager] Tabla ${tabla} inexistente en Supabase (404/PGRST205). Suprimiendo futuras consultas.`);
-            this.tablasInexistentesSupabase.add(tabla);
+          if (this.esErrorTablaInexistente(error)) {
+            this.registrarTablaInexistente(tabla);
           } else {
             console.warn(`[SyncManager] Aviso al descargar tabla remota ${tabla}:`, error.message);
+            summary.fallidos++;
           }
-          summary.fallidos++;
           continue;
         }
 
         if (!data || data.length === 0) continue;
 
-        // Enriquecer mapas UUID -> Código con datos remotos frescos (REQ-FIX-10)
+        // Enriquecer mapas UUID -> Código con datos remotos frescos (REQ-FIX-10 / REQ-FIX-17)
         if (tabla === 'proyectos') {
           for (const item of data) {
             if (item.id && item.codigo_legado) {
@@ -1720,6 +1682,14 @@ class SyncManager {
             if (item.id && item.codigo_legado) {
               hitoUuidToCod.set(String(item.id), item.codigo_legado);
               hitoUuidToCod.set(String(item.id).toUpperCase(), item.codigo_legado);
+            }
+          }
+        } else if (tabla === 'tareas') {
+          for (const item of data) {
+            const cod = extraerCodigoCanonico(item);
+            if (item.id && cod) {
+              tareaUuidToCod.set(String(item.id), cod);
+              tareaUuidToCod.set(String(item.id).toUpperCase(), cod);
             }
           }
         }
@@ -1783,7 +1753,7 @@ class SyncManager {
           } else if (tabla === 'hitos_wbs') {
             registroFinal = sanitizarHitoInbound(item, localPrevio, proyUuidToCod);
           } else if (tabla === 'tareas') {
-            registroFinal = sanitizarTareaInbound(item, localPrevio, proyUuidToCod, hitoUuidToCod);
+            registroFinal = sanitizarTareaInbound(item, localPrevio, proyUuidToCod, hitoUuidToCod, tareaUuidToCod);
           } else if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
             registroFinal = {
               ...fusionarRegistrosDuplicados(existentePorCodigo, registroFinal),
@@ -1815,8 +1785,12 @@ class SyncManager {
           });
         }
       } catch (err) {
-        console.warn(`[SyncManager] Error al sincronizar tabla descendente ${tabla}:`, err);
-        summary.fallidos++;
+        if (this.esErrorTablaInexistente(err)) {
+          this.registrarTablaInexistente(tabla);
+        } else {
+          console.warn(`[SyncManager] Error al sincronizar tabla descendente ${tabla}:`, err);
+          summary.fallidos++;
+        }
       }
     }
 

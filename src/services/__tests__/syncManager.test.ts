@@ -980,4 +980,182 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       expect(bulkPutSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('REQ-FIX-16: Blindaje de Tablas Financieras y Captura 404 / PGRST205', () => {
+    it('detecta correctamente errores 404 y PGRST205 en esErrorTablaInexistente', () => {
+      expect(syncManager.esErrorTablaInexistente({ status: 404 })).toBe(true);
+      expect(syncManager.esErrorTablaInexistente({ code: 'PGRST205', message: 'Not found' })).toBe(true);
+      expect(
+        syncManager.esErrorTablaInexistente({
+          message: "Could not find the table 'public.gastos' in the schema cache"
+        })
+      ).toBe(true);
+      expect(syncManager.esErrorTablaInexistente({ code: '23503', message: 'foreign key' })).toBe(false);
+    });
+
+    it('descargarDatosSelectivos omite tablas financieras locales (gastos, ingresos, cuotas) cuando no están habilitadas', async () => {
+      syncManager.habilitarSyncFinanzasRemoto(false);
+      const pullSpy = vi
+        .spyOn(syncManager, 'descargarDatosDescendientes')
+        .mockResolvedValue({ descargados: 0, fallidos: 0 });
+
+      const resSoloFinanzas = await syncManager.descargarDatosSelectivos(['gastos', 'ingresos', 'cuotas']);
+      expect(resSoloFinanzas).toEqual({ descargados: 0, fallidos: 0 });
+      expect(pullSpy).not.toHaveBeenCalled();
+
+      await syncManager.descargarDatosSelectivos(['tareas', 'gastos']);
+      expect(pullSpy).toHaveBeenCalledWith(['tareas']);
+    });
+
+    it('sincronizarGastos captura 404/PGRST205 sin marcar error en Dexie y desactiva futuros intentos remotos', async () => {
+      syncManager.habilitarSyncFinanzasRemoto(true);
+      const mockGasto = {
+        id: 'gas-404-01',
+        codigo_legado: 'GAS-404',
+        monto_pen: 50,
+        updated_at: '2026-11-10T09:00:00.000Z',
+        sync_status: 'pending'
+      };
+
+      vi.spyOn(db.gastos, 'where').mockReturnValue({
+        anyOf: () => ({ toArray: async () => [mockGasto] }),
+        equals: () => ({ toArray: async () => [mockGasto] })
+      } as any);
+      const updateSpy = vi.spyOn(db.gastos, 'update').mockResolvedValue(1);
+
+      const upsertSpy = vi.fn().mockResolvedValue({
+        error: {
+          status: 404,
+          code: 'PGRST205',
+          message: "Could not find the table 'public.gastos' in the schema cache"
+        }
+      });
+      (syncManager as any).supabase = {
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: async () => ({ data: null, error: null })
+            })
+          }),
+          upsert: upsertSpy
+        })
+      };
+
+      const res = await syncManager.sincronizarGastos();
+      expect(res.failed).toBe(0);
+      expect(syncManager.esTablaInexistenteSupabase('gastos')).toBe(true);
+      expect(syncManager.syncFinanzasRemotoHabilitado).toBe(false);
+      expect(updateSpy).not.toHaveBeenCalledWith('gas-404-01', { sync_status: 'error' });
+
+      syncManager.habilitarSyncFinanzasRemoto(false);
+    });
+
+    it('sincronizarTombstones omite DELETE remoto en tablas locales (gastos, ingresos, cuotas) y marca synced localmente', async () => {
+      syncManager.habilitarSyncFinanzasRemoto(false);
+      const mockTomb = {
+        id: 'gas-del-01',
+        tabla: 'gastos',
+        deleted_at: '2026-11-10T09:00:00.000Z',
+        sync_status: 'pending'
+      };
+
+      vi.spyOn(db.tombstones, 'where').mockReturnValue({
+        anyOf: () => ({ toArray: async () => [mockTomb] }),
+        equals: () => ({ toArray: async () => [mockTomb] })
+      } as any);
+      const tombUpdateSpy = vi.spyOn(db.tombstones, 'update').mockResolvedValue(1);
+      const deleteSpy = vi.fn();
+      (syncManager as any).supabase = {
+        from: vi.fn().mockReturnValue({ delete: deleteSpy })
+      };
+
+      const res = await syncManager.sincronizarTombstones();
+      expect(res.success).toBe(1);
+      expect(res.failed).toBe(0);
+      expect(deleteSpy).not.toHaveBeenCalled();
+      expect(tombUpdateSpy).toHaveBeenCalledWith('gas-del-01', { sync_status: 'synced' });
+    });
+  });
+
+  describe('REQ-FIX-17: Traducción UUID <-> TAR-XXX de dependencias de tareas en syncPayloadSanitizer', () => {
+    it('sanitizarTareaInbound traduce dependencia_tarea_id UUID usando tareaUuidToCod', () => {
+      const proyUuidMap = new Map<string, string>([
+        ['550e8400-e29b-41d4-a716-446655440001', 'PRO-001'],
+      ]);
+      const hitoUuidMap = new Map<string, string>();
+      const tareaUuidToCod = new Map<string, string>([
+        ['84baab4f-dda8-45ca-aac8-d00000000014', 'TAR-014'],
+      ]);
+
+      const remoto = {
+        id: '770e8400-e29b-41d4-a716-446655440020',
+        codigo_legado: 'TAR-020',
+        proyecto_id: '550e8400-e29b-41d4-a716-446655440001',
+        nombre_tarea_actividad: 'Ejecutar deploy',
+        estado_tarea: '02_Por_Hacer',
+        dependencia_tarea_id: '84baab4f-dda8-45ca-aac8-d00000000014',
+      };
+
+      const res = sanitizarTareaInbound(remoto, undefined, proyUuidMap, hitoUuidMap, tareaUuidToCod);
+      expect(res.id_dependencia).toBe('TAR-014');
+      expect(res.proyecto_codigo).toBe('PRO-001');
+    });
+
+    it('sanitizarTareaInbound preserva localPrevio.id_dependencia legible y omite UUID huérfano sin fallback', () => {
+      const remoto = {
+        id: '770e8400-e29b-41d4-a716-446655440021',
+        codigo_legado: 'TAR-021',
+        nombre_tarea_actividad: 'Tarea con localPrevio',
+        dependencia_tarea_id: '99999999-aaaa-4bbb-8ccc-111111111111',
+      };
+      const localPrevio = {
+        id: '770e8400-e29b-41d4-a716-446655440021',
+        codigo_legado: 'TAR-021',
+        proyecto_codigo: 'PRO-001',
+        id_dependencia: 'TAR-009',
+      };
+
+      const resPreservado = sanitizarTareaInbound(remoto, localPrevio);
+      expect(resPreservado.id_dependencia).toBe('TAR-009');
+
+      const resSinFallback = sanitizarTareaInbound(remoto, undefined, undefined, undefined, new Map());
+      expect(resSinFallback.id_dependencia).toBeUndefined();
+    });
+
+    it('sanitizarTareaPayload resuelve TAR-XXX -> UUID en dependencia_tarea_id cuando recibe tareaUuidMap', () => {
+      const dummyUser = '11111111-1111-1111-1111-111111111111';
+      const proyMap = new Map<string, string>([
+        ['PRO-001', '550e8400-e29b-41d4-a716-446655440001'],
+      ]);
+      const hitoMap = new Map<string, string>();
+      const tareaUuidMap = new Map<string, string>([
+        ['TAR-014', '84baab4f-dda8-45ca-aac8-d00000000014'],
+      ]);
+
+      const payload = sanitizarTareaPayload(
+        {
+          id: '770e8400-e29b-41d4-a716-446655440020',
+          user_id: dummyUser,
+          codigo_legado: 'TAR-020',
+          proyecto_codigo: 'PRO-001',
+          nombre_tarea_actividad: 'Desplegar servicio',
+          estado_tarea: '02_Por_Hacer',
+          prioridad_eisenhower: '01_P1_Alta',
+          nivel_energia_requerido: 'Alta_Cognitiva_DeepWork',
+          horas_estimadas: 2,
+          horas_reales: 0,
+          agendado_calendar: 'No',
+          id_dependencia: 'tar-014, TAR-015',
+          sync_status: 'pending',
+          updated_at: '2026-11-10T10:00:00.000Z',
+        },
+        proyMap,
+        hitoMap,
+        dummyUser,
+        tareaUuidMap
+      );
+
+      expect(payload.dependencia_tarea_id).toBe('84baab4f-dda8-45ca-aac8-d00000000014');
+    });
+  });
 });
