@@ -41,16 +41,17 @@ export const ModalDoDAdvertencia: React.FC<ModalDoDAdvertenciaProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-150"
     >
       <div
         id="modal-dod-advertencia-card"
-        className="w-full max-w-md bg-[#0D1526] border border-amber-500/40 rounded-2xl p-5 shadow-[0_10px_35px_-5px_rgba(2,6,23,0.9),0_0_20px_rgba(245,158,11,0.15)] animate-in fade-in zoom-in-95 duration-150 space-y-4 text-slate-100 relative select-none"
+        className="w-full max-w-md bg-[#0D1526] border border-amber-500/40 rounded-t-3xl sm:rounded-2xl p-5 shadow-[0_10px_35px_-5px_rgba(2,6,23,0.9),0_0_20px_rgba(245,158,11,0.15)] transform-gpu transition-[transform,opacity] duration-150 space-y-4 text-slate-100 relative select-none"
       >
+        <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto -mt-1 mb-2 block sm:hidden shrink-0" />
         {/* Cabecera con Ícono Semántico */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0 shadow-xs">
+            <span className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0 shadow-sm">
               <AlertTriangle className="w-5 h-5" strokeWidth={1.75} />
             </span>
             <div>
@@ -63,7 +64,7 @@ export const ModalDoDAdvertencia: React.FC<ModalDoDAdvertenciaProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-2 sm:p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer"
             title="Cerrar (Esc)"
           >
             <X className="w-4 h-4" strokeWidth={1.75} />

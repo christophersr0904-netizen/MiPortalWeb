@@ -520,7 +520,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             {menuTemaAbierto && (
               <div
                 id="menu-theme-dropdown"
-                className="absolute right-0 mt-2 w-60 rounded-2xl bg-white/95 dark:bg-[#0D1526]/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/60 shadow-2xl p-3 z-50 space-y-3 animate-in fade-in zoom-in-95 duration-150"
+                className="absolute right-0 mt-2 w-60 rounded-2xl bg-white/95 dark:bg-[#0D1526]/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/60 shadow-2xl p-3 z-50 space-y-3"
               >
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
                   <div className="flex items-center gap-1.5">
@@ -670,7 +670,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
           <button
             type="button"
             onClick={() => setDrawerAbierto(false)}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform active:scale-95 cursor-pointer"
+            className="min-w-[44px] min-h-[44px] p-2.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform active:scale-95 cursor-pointer"
             title="Cerrar Bóveda (Esc)"
           >
             <X className="w-5 h-5" strokeWidth={1.75} />
@@ -694,7 +694,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                 type="button"
                 id="btn-clear-busqueda-drawer"
                 onClick={() => setBusquedaArchivados('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
+                className="absolute inset-y-0 right-0 min-w-[44px] md:min-w-0 pr-3 flex items-center justify-end text-slate-400 hover:text-slate-200 cursor-pointer"
                 title="Limpiar búsqueda"
               >
                 <X className="w-3.5 h-3.5" strokeWidth={1.75} />

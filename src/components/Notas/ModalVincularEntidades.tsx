@@ -158,7 +158,7 @@ export const ModalVincularEntidades: React.FC<ModalVincularEntidadesProps> = ({
   return typeof document !== 'undefined'
     ? createPortal(
         <div
-          className="fixed inset-0 z-[100001] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150"
+          className="fixed inset-0 z-[100001] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm transition-opacity duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               onClose();
@@ -166,7 +166,7 @@ export const ModalVincularEntidades: React.FC<ModalVincularEntidadesProps> = ({
           }}
         >
           <div
-            className="w-full max-w-2xl bg-[#0B132B] border border-slate-700/70 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150 ease-out"
+            className="w-full max-w-2xl bg-[#0B132B] border border-slate-700/70 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transform-gpu transition-[transform,opacity] duration-150 ease-out"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Cabecera */}
@@ -182,7 +182,7 @@ export const ModalVincularEntidades: React.FC<ModalVincularEntidadesProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-2 sm:p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
                 title="Cerrar (Esc)"
               >
                 <X className="w-4 h-4" strokeWidth={1.75} />

@@ -52,6 +52,41 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.95 — Ergonomía de Pulgar 44px, Compactación de Cabeceras Móviles y Transiciones Cinéticas (REQ-OPS-22B)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/PMO/TarjetaProyecto.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/PMO/FiltrosPortafolio.tsx`, `src/components/Views/ViewKanban.tsx`, `src/components/Views/ViewPortafolio.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `src/components/Layout/BottomNavMobile.tsx`, `src/components/Modals/{ModalTareaFlow,ModalMetaPlanFlow,ModalActividadFlow,ModalGasto,ModalIngreso,ModalNuevoProyecto,ModalAtajosTeclado,ModalExportarPdf,ModalNuevoPlanCuotas,ModalDoDAdvertencia,ModalConvertirWishlistGasto,ModalAlcanceRecurrencia,ModalNuevoHito,ModalTechosPresupuesto}.tsx`, `src/components/Notas/{EditorNotaModal,ModalCrearCuaderno,ModalVincularEntidades,PopoverPreviewNotas}.tsx`, `src/components/IA/AsistenteIaModal.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Ergonomía Táctil Móvil (≥ 44px / 40px Compacto):**
+   - `TarjetaTareaKanban.tsx`: escalado de botones de avance/retroceso a `h-10 px-3 md:h-6 md:px-2` (`w-10 h-10 md:w-6 md:h-6` en flechas de retroceso) y visibilidad táctil continua de Archivar/Eliminar (`opacity-75 md:opacity-0 md:group-hover:opacity-100`).
+   - `TarjetaProyecto.tsx`: controles inferiores (`Ver Detalle 360°`, `+`, Editar, Eliminar) escalados a `min-h-[44px] sm:min-h-0` y `min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0`.
+   - Botones de cierre (`X`) normalizados a `min-w-[44px] min-h-[44px]` en móvil en `HeaderMaestro.tsx` (`#drawer-archivados`), `ModalTareaFlow.tsx`, `ModalMetaPlanFlow.tsx`, `ModalActividadFlow.tsx`, `ModalGasto.tsx`, `ModalIngreso.tsx`, `ModalNuevoProyecto.tsx`, `ModalAtajosTeclado.tsx`, `ModalExportarPdf.tsx`, `ModalNuevoPlanCuotas.tsx`, `ModalDoDAdvertencia.tsx`, `ModalConvertirWishlistGasto.tsx`, `ModalNuevoHito.tsx`, `EditorNotaModal.tsx`, `AsistenteIaModal.tsx`, `ModalCrearCuaderno.tsx` y `ModalVincularEntidades.tsx`.
+2. **Compactación de Cabeceras Móviles (< sm / < md):**
+   - `ViewKanban.tsx`: lupa expandible (`#btn-toggle-busqueda-kanban-movil`) y toggle de filtros (`#btn-toggle-filtros-movil`) integrados en `#carrusel-proyectos-movil`; `<header>` colapsado (`hidden md:flex`) cuando no hay búsqueda ni filtros activos para recuperar altura útil en viewport compacto; pestañas `#selector-columnas-kanban-movil` escaladas a `h-10 md:h-7` con `snap-x` y popovers acotados con `max-w-[calc(100vw-20px)]`.
+   - `ColumnaKanban.tsx`: botón móvil *Añadir Tarea* escalado a `h-10 md:h-7`.
+   - `VisorNotas.tsx`: compactación de barra superior (`py-1.5 md:py-2.5`), filtros (`py-1.5 md:py-3`, `#input-busqueda-notas` `h-9 md:h-8`) y disparador de nota rápida (`h-10 md:h-8`).
+3. **Limpieza Visual de Portafolio y Supresión de Dependencias Hover:**
+   - `ViewPortafolio.tsx`: KPIs en `grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4`, subtítulo y líneas secundarias ocultas en `< sm`, `animate-ping` restringido a `countBloqueado > 0`, filtro *Cartera* con tira horizontal táctil en `< sm` + toggle `onClick` en `sm+` (sin `:hover` flyout), y modal de eliminación en cascada convertido a Bottom Sheet (`max-h-[92dvh]`, `rounded-t-3xl sm:rounded-2xl`).
+   - `TarjetaProyecto.tsx`: ocultamiento en `< sm` de badges redundantes (`tipo_iniciativa`, North Star OKR, `p.estado`, `Varianza`, `Saldo`) e `animate-ping` exclusivo de `isCrit`.
+4. **Transiciones Aceleradas por Hardware e Higiene Tailwind v3:**
+   - Sustitución de clases inexistentes en Tailwind v3.4 (`backdrop-blur-xs`, `animate-in`, `animate-fadeIn`, `animate-scaleUp`, `shadow-2xs`) por `backdrop-blur-sm`, `shadow-sm`, `transform-gpu`, `transition-[transform,opacity]` y `motion/react`.
+   - Sin alteraciones en `src/db/db.ts` ni `src/types/index.ts`.
+
+---
+
+### FASE 4.94 — Reestructuración de Chasis, Z-Index y Bottom Sheets en Móvil (REQ-OPS-22A)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/UI/UndoToastContainer.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/Views/ViewPortafolio.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Modals/ModalRegistroAvanceHabito.tsx`, `src/components/Notas/EditorNotaModal.tsx`, `src/components/IA/AsistenteIaModal.tsx`, `src/components/Modals/ModalMetaPlanFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Desacople de Toasts y Z-Index (`UndoToastContainer.tsx`):**
+   - Contenedor `#undo-toast-container` reposicionado en móvil arriba (`fixed top-14 left-3 right-3 sm:top-auto sm:bottom-4 sm:right-4 sm:left-auto z-[10010] flex flex-col gap-2`), eliminando la colisión con el botón *Más* de `BottomNavMobile` (`z-[9999]`) y garantizando visibilidad por encima de modales (`z-[10000]`).
+2. **Despeje Inferior frente al FAB de Ideas y BottomNav:**
+   - Actualización del padding inferior scrollable a `pb-28 md:pb-8` en `#body-${col.domId}` (`ColumnaKanban.tsx`), `#vista-portafolio-wrapper` (`ViewPortafolio.tsx`) y `#contenedor-scroll-notas` (`VisorNotas.tsx`), evitando obstrucciones sobre la última tarjeta en viewports de `360px`–`412px`.
+3. **Estandarización Universal de Modales a Bottom Sheet Móvil:**
+   - Migración de `ModalRegistroAvanceHabito.tsx`, `EditorNotaModal.tsx`, `AsistenteIaModal.tsx` y `ModalMetaPlanFlow.tsx` al patrón canónico: overlay `fixed inset-0 z-[10000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm`, contenedor `w-full max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-[#0D1526] border-t sm:border border-slate-700/60 overflow-hidden flex flex-col`, drag handle superior `sm:hidden` y barra inferior de acciones fijada con `sticky bottom-0 bg-[#0D1526]/95 backdrop-blur-md p-3 border-t border-slate-800/80`.
+   - Preservación integral de `db.ts` y contratos de persistencia.
+
+---
+
 ### FASE 4.93 — Integración Canónica de VoicePill (React Bits) en Captura Rápida de Ideas (REQ-UI-20)
 **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/VoicePill.tsx` (Nuevo vía `@reactbits-starter/VoicePill-TS-TW`), `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 

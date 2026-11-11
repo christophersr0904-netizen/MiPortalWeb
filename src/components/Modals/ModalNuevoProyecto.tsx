@@ -481,11 +481,11 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onCerrar();
       }}
-      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200"
+      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200"
     >
       <div
         id="modal-proyecto-wizard-card"
-        className="w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-800/60 shadow-cobalt-2 relative animate-in fade-in zoom-in-95 duration-200 bg-[#0D1526] text-slate-100"
+        className="w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-800/60 shadow-cobalt-2 relative transform-gpu transition-[transform,opacity] duration-200 bg-[#0D1526] text-slate-100"
       >
         {/* Drag handle móvil */}
         <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
@@ -527,7 +527,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             <button
               type="button"
               onClick={onCerrar}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer"
               title="Cerrar ventana"
             >
               <X className="w-5 h-5" />

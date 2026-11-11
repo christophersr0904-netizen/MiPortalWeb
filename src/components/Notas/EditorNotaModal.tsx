@@ -278,7 +278,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
   return typeof document !== 'undefined'
     ? createPortal(
         <div
-          className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               onClose();
@@ -286,9 +286,11 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
           }}
         >
           <div
-            className="w-full max-w-3xl max-h-[85vh] flex flex-col bg-[#0B132B] border border-slate-700/70 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 ease-out"
+            className="w-full max-w-3xl max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-[#0D1526] border-t sm:border border-slate-700/60 shadow-2xl overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto my-2 sm:hidden flex-shrink-0" />
+
             {/* Encabezado del Modal */}
             <div className="px-5 py-3.5 border-b border-slate-800/60 flex items-center justify-between bg-slate-950/60 shrink-0">
               <div className="flex items-center gap-2.5">
@@ -328,7 +330,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+                  className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
                   title="Cerrar modal (Esc)"
                 >
                   <X className="w-4 h-4" strokeWidth={1.75} />
@@ -337,7 +339,8 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
             </div>
 
             {/* Formulario con scroll interno limpio */}
-            <form onSubmit={handleGuardar} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+            <form onSubmit={handleGuardar} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4 custom-scrollbar">
           {/* Título de la Nota */}
           <div>
             <input
@@ -761,23 +764,25 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
             />
           </div>
 
-          {/* Footer de Acciones */}
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all kinetic-btn-tactile cursor-pointer"
-            >
-              {nota ? 'Guardar Cambios' : 'Crear Nota'}
-            </button>
-          </div>
-        </form>
+              </div>
+
+              {/* Footer de Acciones */}
+              <div className="sticky bottom-0 shrink-0 bg-[#0D1526]/95 backdrop-blur-md p-3 border-t border-slate-800/80 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all kinetic-btn-tactile cursor-pointer"
+                >
+                  {nota ? 'Guardar Cambios' : 'Crear Nota'}
+                </button>
+              </div>
+            </form>
       </div>
 
       {/* Modal de Gestión de Vínculos de Entidades */}

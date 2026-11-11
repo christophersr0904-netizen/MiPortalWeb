@@ -182,7 +182,7 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
         <div
           id="bottom-sheet-backdrop"
           onClick={cerrarSheets}
-          className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[99990] md:hidden animate-in fade-in duration-200"
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-[99990] md:hidden transition-opacity duration-200"
         />
       )}
 
@@ -190,7 +190,7 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
       {sheetAccionAbierto && (
         <div
           id="bottom-sheet-accion-rapida"
-          className="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 safe-area-bottom shadow-2xl md:hidden flex flex-col animate-in slide-in-from-bottom duration-250"
+          className="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 safe-area-bottom shadow-2xl md:hidden flex flex-col transform-gpu transition-[transform,opacity] duration-200 ease-out"
           style={{
             paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom, 0px))'
           }}
@@ -296,7 +296,7 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
       {sheetMasAbierto && (
         <div
           id="bottom-sheet-mas"
-          className="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 safe-area-bottom shadow-2xl md:hidden flex flex-col animate-in slide-in-from-bottom duration-250"
+          className="fixed inset-x-0 bottom-0 z-[99995] bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/80 rounded-t-3xl p-5 safe-area-bottom shadow-2xl md:hidden flex flex-col transform-gpu transition-[transform,opacity] duration-200 ease-out"
           style={{
             paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom, 0px))'
           }}

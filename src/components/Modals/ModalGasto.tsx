@@ -224,7 +224,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
   return createPortal(
     <div
       id="modal-gasto"
-      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn"
+      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -239,12 +239,12 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
         {/* Cabecera Dinámica */}
         <div
           id="modal-gasto-header"
-          className="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-800 flex justify-between items-center bg-[#0D1526]/80 backdrop-blur-xs"
+          className="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-800 flex justify-between items-center bg-[#0D1526]/80 backdrop-blur-sm"
         >
           <div className="flex items-center gap-2">
             <span
               id="badge-gasto-header-dot"
-              className={`w-3 h-3 rounded-full shadow-xs ${
+              className={`w-3 h-3 rounded-full shadow-sm ${
                 modoDual === 'REAL' ? 'bg-emerald-500' : 'bg-amber-500'
               }`}
             />
@@ -273,7 +273,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+              className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
               title="Cerrar (Esc)"
             >
               <X className="w-4 h-4" />
@@ -539,7 +539,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
             {modoDual === 'PROGRAMADO' && (
               <div
                 id="bloque-gasto-programado"
-                className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-800/60 space-y-3 animate-fadeIn"
+                className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-800/60 space-y-3 transform-gpu transition-opacity duration-200"
               >
                 <div className="flex items-center gap-2 text-amber-200 font-bold text-xs">
                   <Clock className="w-4 h-4 text-amber-400" />

@@ -219,7 +219,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-nuevo-hito-titulo"
-      className="fixed inset-0 z-[10000] flex items-center justify-center p-3 md:p-6 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-3 md:p-6 bg-slate-950/80 backdrop-blur-sm transition-opacity duration-200"
     >
       <div
         className="relative w-full max-w-2xl max-h-[92vh] flex flex-col rounded-3xl bg-[#0D1526] border border-slate-800/80 shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(30,58,138,0.18)] overflow-hidden"
@@ -251,7 +251,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
           <button
             type="button"
             onClick={cerrar}
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition cursor-pointer"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-8 sm:h-8 p-2 sm:p-0 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-colors cursor-pointer"
             aria-label="Cerrar modal"
           >
             <X className="w-4 h-4" strokeWidth={1.75} />

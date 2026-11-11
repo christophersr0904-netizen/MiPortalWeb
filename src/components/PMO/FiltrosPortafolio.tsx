@@ -271,7 +271,7 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
 
         {openSalud && (
           <div
-            className="absolute left-0 top-full mt-1.5 z-50 w-52 p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-2xl space-y-1 animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150 origin-top"
+            className="absolute left-0 top-full mt-1.5 z-50 w-52 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-2xl space-y-1 transform-gpu transition-[transform,opacity] duration-150 origin-top"
           >
             {OPCIONES_SALUD.map((item) => {
               const isSelected = filtroSalud === item.key;
@@ -318,7 +318,7 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
           type="button"
           onClick={() => setOpenOrden(!openOrden)}
           title={itemActualOrden.tooltip}
-          className="px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer bg-slate-900/60 border border-slate-700/70 text-slate-300 hover:border-slate-500 hover:text-white shadow-2xs active:scale-[0.96] hover:scale-[1.02] transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] group"
+          className="px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer bg-slate-900/60 border border-slate-700/70 text-slate-300 hover:border-slate-500 hover:text-white shadow-sm active:scale-[0.96] hover:scale-[1.02] transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] group"
         >
           <IconOrden className="w-3.5 h-3.5 text-sky-400 group-hover:text-sky-300 shrink-0" strokeWidth={1.75} />
           <span className="hidden sm:inline-block">{itemActualOrden.label}</span>
@@ -332,7 +332,7 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
 
         {openOrden && (
           <div
-            className="absolute left-0 top-full mt-1.5 z-50 w-48 p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-2xl space-y-1 animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150 origin-top"
+            className="absolute left-0 top-full mt-1.5 z-50 w-48 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-2xl space-y-1 transform-gpu transition-[transform,opacity] duration-150 origin-top"
           >
             {OPCIONES_ORDEN.map((o) => {
               const isSelected = filtroOrden === o.key;

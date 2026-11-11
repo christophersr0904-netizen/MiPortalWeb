@@ -87,13 +87,13 @@ export const UndoToastContainer: React.FC = () => {
   return (
     <div
       id="undo-toast-container"
-      className="fixed bottom-4 right-4 z-[9999] flex flex-col-reverse gap-2 pointer-events-none select-none max-w-[calc(100vw-32px)]"
+      className="fixed top-14 left-3 right-3 sm:top-auto sm:bottom-4 sm:right-4 sm:left-auto z-[10010] flex flex-col gap-2 pointer-events-none select-none"
     >
       {/* 1. Toasts Declarativos Cobalt */}
       {activeToasts.map((t) => (
         <div
           key={t.id}
-          className="pointer-events-auto bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/80 shadow-[0_10px_35px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.15)] rounded-xl p-3 min-w-[280px] sm:min-w-[320px] max-w-[380px] overflow-hidden relative flex items-center justify-between gap-3 animate-fadeIn"
+          className="pointer-events-auto bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/80 shadow-[0_10px_35px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.15)] rounded-xl p-3 w-full sm:w-auto sm:min-w-[320px] sm:max-w-[380px] overflow-hidden relative flex items-center justify-between gap-3"
         >
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50">
@@ -133,7 +133,7 @@ export const UndoToastContainer: React.FC = () => {
       {pendingList?.map((item) => (
         <div
           key={item.key}
-          className="pointer-events-auto bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/80 shadow-[0_10px_35px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.15)] rounded-xl p-3 min-w-[280px] sm:min-w-[320px] max-w-[380px] overflow-hidden relative flex items-center justify-between gap-3 animate-fadeIn"
+          className="pointer-events-auto bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/80 shadow-[0_10px_35px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.15)] rounded-xl p-3 w-full sm:w-auto sm:min-w-[320px] sm:max-w-[380px] overflow-hidden relative flex items-center justify-between gap-3"
         >
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50">

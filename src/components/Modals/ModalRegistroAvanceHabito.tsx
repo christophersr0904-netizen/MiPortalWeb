@@ -88,15 +88,17 @@ export const ModalRegistroAvanceHabito: React.FC<ModalRegistroAvanceHabitoProps>
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-avance-titulo"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+      className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-[#0D1526] border border-cyan-500/40 rounded-2xl shadow-[0_10px_35px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(6,182,212,0.15)] overflow-hidden transform transition-all animate-scaleUp"
+        className="w-full max-w-md max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-[#0D1526] border-t sm:border border-slate-700/60 shadow-[0_10px_35px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(6,182,212,0.15)] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto my-2 sm:hidden flex-shrink-0" />
+
         {/* Header Bento */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-800/80 bg-slate-900/40">
+        <div className="flex items-center justify-between p-4 border-b border-slate-800/80 bg-slate-900/40 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-cyan-950/60 border border-cyan-800/60 flex items-center justify-center text-cyan-400">
               <PlusCircle className="w-4 h-4" strokeWidth={1.75} />
@@ -113,7 +115,7 @@ export const ModalRegistroAvanceHabito: React.FC<ModalRegistroAvanceHabitoProps>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 flex items-center justify-center transition-colors cursor-pointer"
             title="Cerrar (Escape)"
           >
             <X className="w-4 h-4" />
@@ -121,7 +123,8 @@ export const ModalRegistroAvanceHabito: React.FC<ModalRegistroAvanceHabitoProps>
         </div>
 
         {/* Cuerpo del Formulario */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 custom-scrollbar">
           {/* Micro-banner de Error */}
           {errorLocal && (
             <div className="flex items-center gap-2 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium">
@@ -205,8 +208,10 @@ export const ModalRegistroAvanceHabito: React.FC<ModalRegistroAvanceHabitoProps>
             </div>
           </div>
 
+          </div>
+
           {/* Acciones */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800/80">
+          <div className="sticky bottom-0 shrink-0 bg-[#0D1526]/95 backdrop-blur-md p-3 border-t border-slate-800/80 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}

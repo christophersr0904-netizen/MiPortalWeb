@@ -133,7 +133,7 @@ export const ModalTechosPresupuesto: React.FC<ModalTechosPresupuestoProps> = ({
   return createPortal(
     <div
       id="modal-techos-backdrop"
-      className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 z-[10001] animate-in fade-in duration-200"
+      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 z-[10001] transition-opacity duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

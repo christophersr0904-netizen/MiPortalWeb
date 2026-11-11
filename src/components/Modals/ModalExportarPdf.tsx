@@ -100,7 +100,7 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) cerrar();
       }}
-      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200"
+      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200"
     >
       <div
         id="modal-exportar-pdf-card"
@@ -110,7 +110,7 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
         <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
 
         {/* Encabezado Cobalt Aerodynamic */}
-        <div className="shrink-0 px-5 sm:px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0D1526]/80 backdrop-blur-xs">
+        <div className="shrink-0 px-5 sm:px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0D1526]/80 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-sky-950/60 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
               <FileText className="w-4 h-4" strokeWidth={1.75} />
@@ -127,7 +127,7 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
           <button
             type="button"
             onClick={cerrar}
-            className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800/60 transition cursor-pointer"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-white p-2 sm:p-1.5 rounded-xl hover:bg-slate-800/60 transition-colors cursor-pointer"
             title="Cerrar modal"
           >
             <X className="w-5 h-5" strokeWidth={1.75} />
@@ -240,7 +240,7 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
           {compiladoListo && (
             <div
               id="box-resultado-pdf"
-              className="p-3 bg-emerald-950/30 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs flex items-center justify-between animate-in fade-in zoom-in-95 duration-150"
+              className="p-3 bg-emerald-950/30 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs flex items-center justify-between transform-gpu transition-opacity duration-150"
             >
               <span className="inline-flex items-center gap-1.5 font-medium">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" strokeWidth={1.75} />

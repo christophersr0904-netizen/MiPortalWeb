@@ -31,6 +31,7 @@ import {
   X,
   SlidersHorizontal
 } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
@@ -92,9 +93,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   const [popoverPlazoAbierto, setPopoverPlazoAbierto] = useState(false);
   const [popoverDepAbierto, setPopoverDepAbierto] = useState(false);
 
-  // Estados para vistas y ergonomía móvil (REQ-PWA-04)
+  // Estados para vistas y ergonomía móvil (REQ-PWA-04 / REQ-OPS-22B)
   const [columnaMovilActiva, setColumnaMovilActiva] = useState<string>('02_Por_Hacer');
   const [drawerFiltrosMovilAbierto, setDrawerFiltrosMovilAbierto] = useState<boolean>(false);
+  const [busquedaMovilAbierta, setBusquedaMovilAbierta] = useState<boolean>(false);
 
   // Hover timers con buffer de delay (140ms) optimizado para evitar fricción háptica (REQ-SYS-003-KANBAN)
   const leaveTimers = useRef<Record<string, number | null>>({});
@@ -1199,20 +1201,20 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         {/* ================================================================= */}
         <div
           id="carrusel-proyectos-movil"
-          className="md:hidden shrink-0 h-9 bg-slate-100/95 dark:bg-[#070C18]/95 border-b border-slate-200 dark:border-slate-800/60 px-2.5 py-1 flex items-center justify-between gap-2 select-none"
+          className="md:hidden shrink-0 min-h-[44px] bg-slate-100/95 dark:bg-[#070C18]/95 border-b border-slate-200 dark:border-slate-800/60 px-2 py-0.5 flex items-center justify-between gap-1.5 select-none"
         >
           {/* Carrusel horizontal de chips de proyecto (Paso 1) */}
           <div className="flex-1 flex items-center gap-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden overscroll-contain min-w-0">
             <button
               type="button"
               onClick={() => setProyectoSeleccionadoCodigo(null)}
-              className={`h-7 px-2.5 py-0.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1 shrink-0 active:scale-95 ${
+              className={`h-9 px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-[transform,colors] cursor-pointer flex items-center gap-1 shrink-0 active:scale-95 ${
                 proyectoSeleccionadoCodigo === null
-                  ? 'bg-sky-500/20 text-sky-400 dark:text-sky-300 border border-sky-500/40 font-bold shadow-xs'
+                  ? 'bg-sky-500/20 text-sky-400 dark:text-sky-300 border border-sky-500/40 font-bold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 bg-white/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <FolderKanban className="w-3 h-3 shrink-0" strokeWidth={1.75} />
+              <FolderKanban className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
               <span>Todos</span>
               <span className="font-mono tabular-nums text-[10px] opacity-75">
                 ({proyectos.length})
@@ -1225,9 +1227,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   key={proy.id}
                   type="button"
                   onClick={() => setProyectoSeleccionadoCodigo(isActivo ? null : proy.codigo_legado)}
-                  className={`h-7 px-2.5 py-0.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1 shrink-0 active:scale-95 ${
+                  className={`h-9 px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-[transform,colors] cursor-pointer flex items-center gap-1 shrink-0 active:scale-95 ${
                     isActivo
-                      ? 'bg-sky-500/20 text-sky-400 dark:text-sky-300 border border-sky-500/40 font-bold shadow-xs'
+                      ? 'bg-sky-500/20 text-sky-400 dark:text-sky-300 border border-sky-500/40 font-bold shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 bg-white/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white'
                   }`}
                   title={proy.nombre}
@@ -1245,30 +1247,81 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 if (onNuevoProyecto) onNuevoProyecto();
                 else setModalNuevoProyectoAbierto(true);
               }}
-              className="h-7 px-2 py-0.5 rounded-lg text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 border border-sky-300 dark:border-sky-500/30 whitespace-nowrap flex items-center gap-1 cursor-pointer shrink-0 active:scale-95"
+              className="h-9 px-2.5 py-1 rounded-xl text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 border border-sky-300 dark:border-sky-500/30 whitespace-nowrap flex items-center gap-1 cursor-pointer shrink-0 active:scale-95"
               title="Crear Nuevo Proyecto"
             >
-              <Plus className="w-3 h-3" strokeWidth={1.75} />
+              <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Proyecto</span>
             </button>
           </div>
 
-          {/* Micro-Badge Integrado de Gasto Contextual en Móvil (REQ-PWA-05) */}
-          <div
-            id="kanban-gasto-presupuesto-box-movil"
-            className="shrink-0 flex items-center gap-1 text-[10px] bg-white/80 dark:bg-slate-900/90 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-800 font-medium"
-            title={proyectoActivo ? `Gasto ${proyectoActivo.codigo_legado}` : 'Gasto Global'}
-          >
-            <span className="text-slate-400 font-mono text-[9px]">PEN</span>
-            <b className="text-slate-800 dark:text-slate-200 font-bold font-mono tabular-nums text-[10.5px]">
-              {gastoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </b>
+          {/* Controles compactos derecho móvil: Gasto + Lupa Búsqueda + Filtros (REQ-OPS-22B) */}
+          <div className="shrink-0 flex items-center gap-1">
+            {/* Micro-Badge Integrado de Gasto Contextual en Móvil (REQ-PWA-05) */}
+            <div
+              id="kanban-gasto-presupuesto-box-movil"
+              className="shrink-0 flex items-center gap-1 text-[10px] bg-white/80 dark:bg-slate-900/90 px-1.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 font-medium"
+              title={proyectoActivo ? `Gasto ${proyectoActivo.codigo_legado}` : 'Gasto Global'}
+            >
+              <span className="text-slate-400 font-mono text-[9px]">PEN</span>
+              <b className="text-slate-800 dark:text-slate-200 font-bold font-mono tabular-nums text-[10.5px]">
+                {gastoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </b>
+            </div>
+
+            {/* Botón Lupa Expandible para Búsqueda Móvil */}
+            <button
+              type="button"
+              id="btn-toggle-busqueda-kanban-movil"
+              onClick={() => setBusquedaMovilAbierta((prev) => !prev)}
+              aria-expanded={busquedaMovilAbierta || busquedaTarea.trim().length > 0}
+              aria-label="Buscar tarea en tablero"
+              title="Buscar tarea"
+              className={`min-w-[40px] min-h-[40px] h-10 w-10 rounded-xl flex items-center justify-center transition-[transform,colors] active:scale-95 cursor-pointer relative shrink-0 ${
+                busquedaMovilAbierta || busquedaTarea.trim().length > 0
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
+                  : 'text-slate-300 bg-slate-900 border border-slate-800 hover:text-white'
+              }`}
+            >
+              <Search className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+              {busquedaTarea.trim().length > 0 && !busquedaMovilAbierta && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-sky-400" />
+              )}
+            </button>
+
+            {/* Botón Desplegable de Filtros Móvil (Mínimo ergonómico 40px) */}
+            <button
+              type="button"
+              id="btn-toggle-filtros-movil"
+              onClick={() => setDrawerFiltrosMovilAbierto((prev) => !prev)}
+              aria-expanded={drawerFiltrosMovilAbierto}
+              aria-label="Mostrar u ocultar filtros Kanban"
+              title="Filtros"
+              className={`min-w-[40px] min-h-[40px] h-10 px-2 rounded-xl text-xs font-semibold transition-[transform,colors] flex items-center justify-center gap-1 cursor-pointer active:scale-95 shrink-0 ${
+                totalFiltrosActivosCount > 0 || drawerFiltrosMovilAbierto
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
+                  : 'text-slate-300 bg-slate-900 border border-slate-800 hover:text-white'
+              }`}
+            >
+              <SlidersHorizontal className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
+              {totalFiltrosActivosCount > 0 && (
+                <span className="font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded-full bg-sky-400 text-slate-950 font-black leading-none">
+                  {totalFiltrosActivosCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
         {/* ================================================================= */}
         {/* HEADER MULTI-FILA CANÓNICO (L81-546 de View_Kanban.html)          */}
         {/* ================================================================= */}
-        <header className="bg-white dark:bg-[#080E1C] border-b border-slate-200 dark:border-slate-800/60 px-2.5 py-1.5 md:px-4 md:py-2 shrink-0 flex flex-col gap-1.5 md:gap-2 shadow-2xs transition-colors overflow-visible relative">
+        <header
+          className={`${
+            busquedaMovilAbierta || drawerFiltrosMovilAbierto || busquedaTarea.trim().length > 0
+              ? 'flex'
+              : 'hidden'
+          } md:flex bg-white dark:bg-[#080E1C] border-b border-slate-200 dark:border-slate-800/60 px-2.5 py-1.5 md:px-4 md:py-2 shrink-0 flex-col gap-1.5 md:gap-2 shadow-sm transition-colors overflow-visible relative`}
+        >
           {/* =============================================================== */}
           {/* FILA 1: CONTEXTO DE PROYECTO, CRONOGRAMA & GASTO GLOBAL          */}
           {/* =============================================================== */}
@@ -1401,7 +1454,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
                 <div
                   id="popover-time-filter"
-                  className={`absolute right-0 top-full mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[160px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                  className={`absolute right-0 top-full mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[160px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transition-[transform,opacity] duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
                     dropdownTiempoAbierto
                       ? 'opacity-100 scale-100 pointer-events-auto visible'
                       : 'opacity-0 scale-95 pointer-events-none invisible'
@@ -1476,63 +1529,63 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
           {/* FILA 2: BARRA DE FILTROS OPERATIVOS KANBAN                       */}
           {/* =============================================================== */}
           <div className="portal-surface p-1.5 md:p-2 rounded-xl flex flex-col gap-1.5 md:gap-2 text-xs overflow-visible relative bg-slate-50/70 dark:bg-[#080E1C]/90 border border-slate-200/80 dark:border-slate-800/70">
-            {/* 1. FILA COMPACTA MÓVIL (< md) - REQ-PWA-05 (h-8 y padding compacto) */}
-            <div className="md:hidden flex items-center gap-1.5 w-full">
-              {/* Buscador de Tareas Móvil */}
-              <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-2.5 top-2 pointer-events-none text-slate-400 w-3.5 h-3.5" strokeWidth={1.75} />
-                <input
-                  type="text"
-                  id="filter-buscar-tarea-mobile"
-                  value={busquedaTarea}
-                  onChange={(e) => setBusquedaTarea(e.target.value)}
-                  placeholder="Buscar tarea..."
-                  className="w-full h-8 bg-slate-100 dark:bg-[#0D1526]/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-xs rounded-lg border border-slate-200 dark:border-slate-800 focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 pl-7 pr-6 py-1 outline-none font-medium"
-                />
-                {busquedaTarea && (
+            {/* 1. FILA COMPACTA EXPANDIBLE MÓVIL (< md) - REQ-OPS-22B */}
+            {(busquedaMovilAbierta || busquedaTarea.trim().length > 0) && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.16, ease: 'easeOut' }}
+                className="md:hidden flex items-center gap-1.5 w-full transform-gpu"
+              >
+                {/* Buscador de Tareas Móvil */}
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 w-4 h-4" strokeWidth={1.75} />
+                  <input
+                    type="text"
+                    id="filter-buscar-tarea-mobile"
+                    value={busquedaTarea}
+                    onChange={(e) => setBusquedaTarea(e.target.value)}
+                    placeholder="Buscar tarea..."
+                    autoFocus={busquedaMovilAbierta}
+                    className="w-full h-10 bg-slate-100 dark:bg-[#0D1526]/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-xs rounded-xl border border-slate-200 dark:border-slate-800 focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 pl-9 pr-11 py-1 outline-none font-medium"
+                  />
+                  {busquedaTarea ? (
+                    <button
+                      type="button"
+                      onClick={() => setBusquedaTarea('')}
+                      className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-200 text-xs font-bold cursor-pointer"
+                      title="Limpiar búsqueda"
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <X className="w-4 h-4" strokeWidth={1.75} />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setBusquedaMovilAbierta(false)}
+                      className="absolute inset-y-0 right-0 min-w-[44px] flex items-center justify-center text-slate-500 hover:text-slate-200 cursor-pointer"
+                      title="Cerrar búsqueda"
+                      aria-label="Cerrar búsqueda"
+                    >
+                      <X className="w-4 h-4" strokeWidth={1.75} />
+                    </button>
+                  )}
+                </div>
+
+                {hayFiltrosActivos && (
                   <button
                     type="button"
-                    onClick={() => setBusquedaTarea('')}
-                    className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-200 text-xs font-bold cursor-pointer"
-                    title="Limpiar búsqueda"
+                    id="btn-limpiar-filtros-movil"
+                    onClick={limpiarTodosLosFiltros}
+                    className="min-w-[44px] min-h-[44px] h-10 w-10 flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-400 bg-slate-900 border border-slate-800 hover:border-rose-500/40 transition-[transform,colors] shrink-0 cursor-pointer active:scale-95"
+                    title="Limpiar todos los filtros"
+                    aria-label="Limpiar todos los filtros"
                   >
-                    <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+                    <RotateCcw className="w-4 h-4" strokeWidth={1.75} />
                   </button>
                 )}
-              </div>
-
-              {/* Botón Desplegable de Filtros Móvil Compacto (h-8) */}
-              <button
-                type="button"
-                id="btn-toggle-filtros-movil"
-                onClick={() => setDrawerFiltrosMovilAbierto(!drawerFiltrosMovilAbierto)}
-                className={`h-8 px-2 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1 cursor-pointer active:scale-95 shrink-0 ${
-                  totalFiltrosActivosCount > 0 || drawerFiltrosMovilAbierto
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-xs'
-                    : 'text-slate-300 bg-slate-900 border border-slate-800 hover:text-white'
-                }`}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
-                <span>Filtros</span>
-                {totalFiltrosActivosCount > 0 && (
-                  <span className="font-mono tabular-nums text-[10px] px-1.5 py-0.2 rounded-full bg-sky-400 text-slate-950 font-black">
-                    {totalFiltrosActivosCount}
-                  </span>
-                )}
-              </button>
-
-              {hayFiltrosActivos && (
-                <button
-                  type="button"
-                  id="btn-limpiar-filtros-movil"
-                  onClick={limpiarTodosLosFiltros}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 bg-slate-900 border border-slate-800 hover:border-rose-500/40 transition shrink-0 cursor-pointer active:scale-95"
-                  title="Limpiar todos los filtros"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.75} />
-                </button>
-              )}
-            </div>
+              </motion.div>
+            )}
 
             {/* 2. CONTENEDOR DESKTOP & DESPLEGABLE MÓVIL DE FILTROS */}
             <div className={`${drawerFiltrosMovilAbierto ? 'flex' : 'hidden'} md:flex items-center gap-2 text-xs overflow-visible relative flex-wrap w-full`}>
@@ -1684,7 +1737,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               </button>
 
               <div
-                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[220px] max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[220px] max-w-[calc(100vw-20px)] max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 text-xs transition-[transform,opacity] duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
                   proyectoSeleccionadoCodigo && popoverHitoAbierto
                     ? 'opacity-100 scale-100 pointer-events-auto visible'
                     : 'opacity-0 scale-95 pointer-events-none invisible'
@@ -1762,7 +1815,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               </button>
 
               <div
-                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transition-[transform,opacity] duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
                   popoverPrioAbierto
                     ? 'opacity-100 scale-100 pointer-events-auto visible'
                     : 'opacity-0 scale-95 pointer-events-none invisible'
@@ -1827,7 +1880,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               </button>
 
               <div
-                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transition-[transform,opacity] duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
                   popoverEnergiaAbierto
                     ? 'opacity-100 scale-100 pointer-events-auto visible'
                     : 'opacity-0 scale-95 pointer-events-none invisible'
@@ -1893,7 +1946,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               </button>
 
               <div
-                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transition-[transform,opacity] duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
                   popoverPlazoAbierto
                     ? 'opacity-100 scale-100 pointer-events-auto visible'
                     : 'opacity-0 scale-95 pointer-events-none invisible'
@@ -1956,7 +2009,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               </button>
 
               <div
-                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] space-y-0.5 text-xs transition-all duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
+                className={`absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transition-[transform,opacity] duration-150 ease-out transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 ${
                   popoverDepAbierto
                     ? 'opacity-100 scale-100 pointer-events-auto visible'
                     : 'opacity-0 scale-95 pointer-events-none invisible'
@@ -2023,7 +2076,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
           id="selector-columnas-kanban-movil"
           role="tablist"
           aria-label="Selector de columnas Kanban"
-          className="md:hidden shrink-0 bg-[#080E1C] border-b border-slate-800/80 px-2 py-1 flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden select-none overscroll-contain"
+          className="md:hidden shrink-0 bg-[#080E1C] border-b border-slate-800/80 px-2 py-1 flex items-center gap-1.5 overflow-x-auto snap-x snap-mandatory [&::-webkit-scrollbar]:hidden select-none overscroll-contain"
         >
           {columnas.map((col) => {
             const count = (tareasAgrupadasPorColumna[col.id] || []).length;
@@ -2036,14 +2089,14 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 aria-selected={isActiva}
                 type="button"
                 onClick={() => setColumnaMovilActiva(col.id)}
-                className={`flex-1 min-w-[68px] h-7 px-1.5 py-0.5 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 ${
+                className={`flex-1 min-w-[78px] snap-start h-10 md:h-7 px-2.5 py-1 rounded-xl text-xs md:text-[11px] font-semibold transition-[transform,colors] flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 ${
                   isActiva
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-xs'
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-sm'
                     : 'text-slate-400 bg-slate-900/60 border border-slate-800 hover:text-slate-200'
                 }`}
               >
                 <span className="truncate">{col.titulo.replace(/^\d+\.\s*/, '')}</span>
-                <span className={`font-mono tabular-nums text-[10px] px-1 py-0.2 rounded-full ${isActiva ? 'bg-sky-400/20 text-sky-200 font-bold' : 'bg-slate-800 text-slate-400'}`}>
+                <span className={`font-mono tabular-nums text-[10px] px-1.5 py-0.5 leading-none rounded-full ${isActiva ? 'bg-sky-400/20 text-sky-200 font-bold' : 'bg-slate-800 text-slate-400'}`}>
                   {count}
                 </span>
               </button>

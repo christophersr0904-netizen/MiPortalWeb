@@ -40,6 +40,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
 
   // Estados de Filtros
   const [filtroTipo, setFiltroTipo] = useState<string>('');
+  const [carteraAbierta, setCarteraAbierta] = useState<boolean>(false);
   const [filtroEstado, setFiltroEstado] = useState<string>('');
   const [filtroSalud, setFiltroSalud] = useState<string>('');
   const [filtroOrden, setFiltroOrden] = useState<string>('avance_desc');
@@ -342,7 +343,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
   return (
     <div
       id="vista-portafolio-wrapper"
-      className="flex-1 flex flex-col h-full w-full overflow-y-auto overscroll-contain p-3 md:p-6 lg:p-8 bg-[#040711] text-slate-100 transition-colors duration-200 custom-scrollbar space-y-4 md:space-y-6"
+      className="flex-1 flex flex-col h-full w-full overflow-y-auto overscroll-contain p-3 md:p-6 lg:p-8 pb-28 md:pb-8 bg-[#040711] text-slate-100 transition-colors duration-200 custom-scrollbar space-y-4 md:space-y-6"
     >
       {/* CABECERA PRINCIPAL DEL PORTAFOLIO */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800">
@@ -359,7 +360,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                 360° Management
               </span>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="hidden sm:block text-xs text-slate-400">
               Control estratégico, avance ponderado, ruta crítica y salud financiera
             </p>
           </div>
@@ -393,26 +394,26 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
       </div>
 
       {/* SECCIÓN 1: KPI CARDS EJECUTIVAS CON MICRO-MÉTRICAS Y BURN RATE */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
         {/* KPI 1: TOTAL PROYECTOS & FASES */}
-        <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Iniciativas Totales
+        <div className="portal-surface bg-[#0D1526] p-3 sm:p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+              Iniciativas
             </span>
-            <span className="w-7 h-7 rounded-xl bg-sky-950/60 text-sky-400 flex items-center justify-center text-xs font-bold">
-              <Layers className="w-4 h-4" strokeWidth={1.75} />
+            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-sky-950/60 text-sky-400 flex items-center justify-center text-xs font-bold shrink-0">
+              <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-2 flex items-baseline gap-2">
-            <div className="text-3xl font-black text-slate-100 font-mono tabular-nums tracking-tight" id="kpi-total-proyectos">
+          <div className="my-1.5 sm:my-2 flex items-baseline gap-1.5 sm:gap-2">
+            <div className="text-2xl sm:text-3xl font-black text-slate-100 font-mono tabular-nums tracking-tight" id="kpi-total-proyectos">
               {totalProyectos}
             </div>
-            <span className="text-[11px] font-medium text-slate-400 font-mono tabular-nums" id="kpi-sub-total-proyectos">
-              {proyEjecucion + proyPlan} activas
+            <span className="text-[10px] sm:text-[11px] font-medium text-slate-400 font-mono tabular-nums" id="kpi-sub-total-proyectos">
+              {proyEjecucion + proyPlan} act.
             </span>
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-800/80 text-[10px] font-semibold text-slate-400 font-mono tabular-nums">
+          <div className="hidden sm:flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-800/80 text-[10px] font-semibold text-slate-400 font-mono tabular-nums">
             <span className="text-emerald-400 font-bold" id="kpi-proy-ejecucion">{proyEjecucion} ejec.</span>
             <span>•</span>
             <span className="text-sky-400 font-bold" id="kpi-proy-plan">{proyPlan} plan.</span>
@@ -422,24 +423,24 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
 
         {/* KPI 2: AVANCE GLOBAL PONDERADO */}
-        <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Avance Global Real
+        <div className="portal-surface bg-[#0D1526] p-3 sm:p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+              Avance Global
             </span>
-            <span className="w-7 h-7 rounded-xl bg-emerald-950/60 text-emerald-400 flex items-center justify-center text-xs font-bold">
-              <Sparkles className="w-4 h-4" strokeWidth={1.75} />
+            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-emerald-950/60 text-emerald-400 flex items-center justify-center text-xs font-bold shrink-0">
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-2 flex items-baseline justify-between">
-            <div className="text-3xl font-black text-sky-400 font-mono tabular-nums tracking-tight" id="kpi-avance-promedio">
+          <div className="my-1.5 sm:my-2 flex items-baseline justify-between gap-1">
+            <div className="text-2xl sm:text-3xl font-black text-sky-400 font-mono tabular-nums tracking-tight" id="kpi-avance-promedio">
               {promReal}%
             </div>
-            <span className="text-[11px] font-medium text-slate-400 font-mono tabular-nums" id="kpi-avance-meta">
+            <span className="hidden sm:inline text-[11px] font-medium text-slate-400 font-mono tabular-nums" id="kpi-avance-meta">
               Meta: {promMeta}%
             </span>
           </div>
-          <div className="space-y-1 pt-2 border-t border-slate-800/80">
+          <div className="hidden sm:block space-y-1 pt-2 border-t border-slate-800/80">
             <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden relative shadow-inner">
               <div
                 id="kpi-avance-meta-bar"
@@ -456,20 +457,20 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
 
         {/* KPI 3: CONSUMO PRESUPUESTARIO (BURN RATE) */}
-        <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Consumo Presupuesto
+        <div className="portal-surface bg-[#0D1526] p-3 sm:p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+              Presupuesto
             </span>
-            <span className="w-7 h-7 rounded-xl bg-amber-950/60 text-amber-400 flex items-center justify-center text-xs font-bold">
-              <Clock className="w-4 h-4" strokeWidth={1.75} />
+            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-amber-950/60 text-amber-400 flex items-center justify-center text-xs font-bold shrink-0">
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-2">
-            <div className="text-2xl font-black text-slate-100 font-mono tabular-nums tracking-tight" id="kpi-gasto-total">
+          <div className="my-1.5 sm:my-2">
+            <div className="text-base sm:text-2xl font-black text-slate-100 font-mono tabular-nums tracking-tight truncate" id="kpi-gasto-total">
               PEN {sumaAC.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="text-[11px] text-slate-400 flex items-center gap-1 font-mono tabular-nums mt-0.5">
+            <div className="hidden sm:flex text-[11px] text-slate-400 items-center gap-1 font-mono tabular-nums mt-0.5">
               <span>de</span>
               <b className="text-slate-300" id="kpi-presupuesto-total">
                 PEN {sumaBAC.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -488,7 +489,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               </span>
             </div>
           </div>
-          <div className="flex justify-between items-center pt-2 border-t border-slate-800/80 text-[10px] font-mono tabular-nums text-slate-400">
+          <div className="hidden sm:flex justify-between items-center pt-2 border-t border-slate-800/80 text-[10px] font-mono tabular-nums text-slate-400">
             <span>Saldo restante:</span>
             <b className="text-emerald-400" id="kpi-saldo-restante">
               PEN {saldoRestante.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -497,31 +498,33 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
 
         {/* KPI 4: SALUD & RIESGOS DEL PORTAFOLIO */}
-        <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Salud & Riesgos
+        <div className="portal-surface bg-[#0D1526] p-3 sm:p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+              Salud
             </span>
-            <span id="kpi-health-icon" className="w-7 h-7 rounded-xl bg-slate-900/80 flex items-center justify-center text-xs font-bold relative">
-              <span className={`animate-ping absolute inline-flex h-4 w-4 rounded-full opacity-60 duration-1000 ${countBloqueado > 0 ? 'bg-rose-500' : countRiesgo > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+            <span id="kpi-health-icon" className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-slate-900/80 flex items-center justify-center text-xs font-bold relative shrink-0">
+              {countBloqueado > 0 && (
+                <span className="animate-ping absolute inline-flex h-4 w-4 rounded-full opacity-60 duration-1000 bg-rose-500" />
+              )}
               <span className={`relative inline-flex rounded-full h-2.5 w-2.5 shadow-[0_0_8px_currentColor] ${countBloqueado > 0 ? 'bg-rose-500 text-rose-500' : countRiesgo > 0 ? 'bg-amber-400 text-amber-400' : 'bg-emerald-400 text-emerald-400'}`} />
             </span>
           </div>
-          <div className="my-2">
-            <div className="text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2 font-mono tabular-nums" id="kpi-alertas-criticas">
+          <div className="my-1.5 sm:my-2">
+            <div className="text-base sm:text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2 font-mono tabular-nums" id="kpi-alertas-criticas">
               {countBloqueado + countRiesgo === 0 ? (
-                <span className="text-emerald-400">0 en riesgo</span>
+                <span className="text-emerald-400">0 riesgo</span>
               ) : (
-                <span className="text-rose-400">{countBloqueado + countRiesgo} en alerta</span>
+                <span className="text-rose-400">{countBloqueado + countRiesgo} alerta</span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5" id="kpi-alertas-desc">
+            <p className="hidden sm:block text-[11px] text-slate-400 mt-0.5" id="kpi-alertas-desc">
               {countBloqueado + countRiesgo === 0
                 ? 'Portafolio operando en rango normal'
                 : `${countBloqueado} bloqueado(s) • ${countRiesgo} en riesgo`}
             </p>
           </div>
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80 text-[10px] font-bold font-mono tabular-nums">
+          <div className="hidden sm:flex items-center gap-2 pt-2 border-t border-slate-800/80 text-[10px] font-bold font-mono tabular-nums">
             <span className="text-emerald-400 flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block mr-1" />
               <span>{countRango}</span>
@@ -661,27 +664,33 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
 
       {/* SECCIÓN 3: BARRA DE FILTROS CRUZADOS, BUSCADOR Y TOGGLE DE VISTA (GRID / TABLE) */}
       <div className="bg-[#0D1526] p-3.5 my-2 space-y-3 rounded-2xl border border-slate-800/40 shadow-xs">
-        {/* FILTRO DE CARTERA CON EXPANSIÓN FLUIDA (GLASSMORPHISM & HOVER / CLICK FLYOUT) */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative group/cartera inline-flex items-center">
+        {/* FILTRO DE CARTERA INTERACTIVO (Tira táctil horizontal en móvil + Toggle Click en Desktop) */}
+        <div className="flex items-center gap-2">
+          <div className="relative inline-flex items-center w-full sm:w-auto">
             <button
               type="button"
-              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-2 cursor-pointer active:scale-95 bg-slate-900/80 border border-slate-700/70 text-slate-200 shadow-sm hover:border-sky-500 hover:text-white"
+              onClick={() => setCarteraAbierta((prev) => !prev)}
+              aria-expanded={carteraAbierta}
+              className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold transition-[border-color,color,transform] duration-200 items-center gap-2 cursor-pointer active:scale-95 bg-slate-900/80 border border-slate-700/70 text-slate-200 shadow-sm hover:border-sky-500 hover:text-white"
             >
               <FolderKanban className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
               <span>Cartera: <b className="text-sky-400 font-extrabold">{filtroTipo || 'Todos'}</b></span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform duration-200 group-hover/cartera:rotate-180" strokeWidth={1.75} />
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${carteraAbierta ? 'rotate-180' : ''}`} strokeWidth={1.75} />
             </button>
 
-            {/* Tira de Opciones Desplegable con Glassmorphism */}
+            {/* Tira horizontal táctil en móvil (< sm) y desplegada por clic en desktop */}
             <div
               id="flyout-cartera-strip"
-              className="flyout-cartera-menu absolute left-0 sm:left-full top-full sm:top-0 mt-1.5 sm:mt-0 sm:ml-2 z-30 flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#0D1526]/95 backdrop-blur-md border border-slate-800 shadow-xl opacity-0 translate-x-[-8px] pointer-events-none group-hover/cartera:opacity-100 group-hover/cartera:translate-x-0 group-hover/cartera:pointer-events-auto transition-all duration-200 flex-wrap sm:flex-nowrap whitespace-nowrap"
+              className={`flyout-cartera-menu flex overflow-x-auto no-scrollbar gap-1.5 pb-1 w-full sm:w-auto sm:pb-1.5 sm:p-1.5 sm:rounded-2xl sm:bg-[#0D1526]/95 sm:backdrop-blur-md sm:border sm:border-slate-800 sm:shadow-xl sm:absolute sm:left-full sm:top-0 sm:ml-2 z-30 transition-[opacity,transform] duration-200 transform-gpu whitespace-nowrap ${
+                carteraAbierta
+                  ? 'sm:opacity-100 sm:translate-x-0 sm:pointer-events-auto'
+                  : 'sm:opacity-0 sm:translate-x-[-8px] sm:pointer-events-none'
+              }`}
             >
               <button
                 type="button"
-                onClick={() => setFiltroTipo('')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                onClick={() => { setFiltroTipo(''); setCarteraAbierta(false); }}
+                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
                   filtroTipo === ''
                     ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
                     : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
@@ -695,8 +704,8 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
 
               <button
                 type="button"
-                onClick={() => setFiltroTipo('Personal')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                onClick={() => { setFiltroTipo('Personal'); setCarteraAbierta(false); }}
+                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
                   filtroTipo === 'Personal'
                     ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
                     : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
@@ -711,8 +720,8 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
 
               <button
                 type="button"
-                onClick={() => setFiltroTipo('Profesional')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                onClick={() => { setFiltroTipo('Profesional'); setCarteraAbierta(false); }}
+                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
                   filtroTipo === 'Profesional'
                     ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
                     : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
@@ -727,8 +736,8 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
 
               <button
                 type="button"
-                onClick={() => setFiltroTipo('Inversiones')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                onClick={() => { setFiltroTipo('Inversiones'); setCarteraAbierta(false); }}
+                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
                   filtroTipo === 'Inversiones'
                     ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
                     : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
@@ -743,8 +752,8 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
 
               <button
                 type="button"
-                onClick={() => setFiltroTipo('Social')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                onClick={() => { setFiltroTipo('Social'); setCarteraAbierta(false); }}
+                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
                   filtroTipo === 'Social'
                     ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
                     : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
@@ -1048,7 +1057,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs select-none animate-in fade-in duration-200"
+          className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm select-none"
           onClick={(e) => {
             if (e.target === e.currentTarget) setProyectoAEliminar(null);
           }}
@@ -1059,7 +1068,8 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             }
           }}
         >
-          <div className="w-full max-w-md bg-[#0D1526] border border-rose-500/40 rounded-2xl shadow-cobalt-2 p-5 text-slate-100 flex flex-col gap-4 relative">
+          <div className="w-full max-w-md max-h-[92dvh] bg-[#0D1526] border-t sm:border border-rose-500/40 rounded-t-3xl sm:rounded-2xl shadow-cobalt-2 p-5 text-slate-100 flex flex-col gap-4 relative overflow-hidden">
+            <div className="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto -mt-2 sm:hidden flex-shrink-0" />
             <div className="flex items-start gap-3">
               <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 shrink-0">
                 <AlertTriangle className="w-5 h-5" strokeWidth={1.75} />
@@ -1080,18 +1090,18 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800/80">
+            <div className="sticky bottom-0 bg-[#0D1526]/95 backdrop-blur-md flex items-center justify-end gap-2 pt-3 border-t border-slate-800/80">
               <button
                 type="button"
                 onClick={() => setProyectoAEliminar(null)}
-                className="px-3.5 py-1.5 rounded-xl border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 text-xs font-semibold transition cursor-pointer"
+                className="min-h-[44px] sm:min-h-0 px-4 py-2 sm:py-1.5 rounded-xl border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 text-xs font-semibold transition cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={() => ejecutarEliminacionCascada(proyectoAEliminar)}
-                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer shadow-sm shadow-rose-900/30"
+                className="min-h-[44px] sm:min-h-0 px-4 py-2 sm:py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer shadow-sm shadow-rose-900/30"
               >
                 Sí, eliminar en cascada
               </button>

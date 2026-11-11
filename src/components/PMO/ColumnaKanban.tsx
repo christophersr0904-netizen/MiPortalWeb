@@ -99,7 +99,7 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
       data-state={col.id}
       className={`kanban-col-container ${
         isActivaMovil === false ? 'hidden md:flex' : 'flex'
-      } flex-col rounded-xl md:rounded-2xl border border-t-2 ${borderTopColor} p-2 md:p-3 h-full min-h-0 w-full transition-all duration-200 ease-out shadow-2xs select-none ${
+      } flex-col rounded-xl md:rounded-2xl border border-t-2 ${borderTopColor} p-2 md:p-3 h-full min-h-0 w-full transition-[transform,opacity,border-color,box-shadow] duration-200 ease-out transform-gpu shadow-sm select-none ${
         isOverThisCol
           ? 'kanban-dropzone-active bg-sky-950/20 border-sky-500/40 shadow-[0_0_20px_rgba(56,189,248,0.15)] ring-1 ring-sky-400/30'
           : 'portal-surface bg-slate-200/50 dark:bg-[#0D1526]/80 border-slate-300/60 dark:border-slate-800/40'
@@ -156,7 +156,7 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
           <button
             type="button"
             onClick={() => onAbrirModalNuevaTarea(col.id)}
-            className="w-full h-7 py-1 px-2.5 border border-dashed border-slate-300 dark:border-slate-700/80 hover:border-sky-500/50 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-sky-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+            className="w-full h-10 md:h-7 py-1 px-3 border border-dashed border-slate-300 dark:border-slate-700/80 hover:border-sky-500/50 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-sky-300 rounded-xl md:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-[transform,colors,border-color] shadow-sm cursor-pointer active:scale-95"
           >
             <Plus className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
             <span>Añadir Tarea</span>
@@ -167,7 +167,7 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
       {/* Lista de Tarjetas Scrollable */}
       <div
         id={`body-${col.domId}`}
-        className="kanban-col-body flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 md:space-y-3 pr-1 custom-scrollbar pb-6 md:pb-8 [&::-webkit-scrollbar]:hidden"
+        className="kanban-col-body flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 md:space-y-3 pr-1 custom-scrollbar pb-28 md:pb-8 [&::-webkit-scrollbar]:hidden"
       >
         {cargandoDatosIniciales ? (
           <div className="space-y-2.5">

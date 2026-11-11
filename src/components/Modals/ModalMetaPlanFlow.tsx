@@ -280,15 +280,17 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
   return createPortal(
     <div
       id="modal-meta-plan-backdrop"
-      className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 z-[10001] animate-in fade-in duration-200"
+      className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm"
     >
       <div
         id="modal-meta-plan-container"
-        className="w-full max-w-3xl bg-[#0D1526] border border-slate-800/80 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100"
+        className="w-full max-w-3xl max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-[#0D1526] border-t sm:border border-slate-700/60 shadow-2xl overflow-hidden flex flex-col text-slate-100"
         style={{
           boxShadow: '0 20px 40px -10px rgba(2, 6, 23, 0.9), 0 10px 20px -5px rgba(30, 58, 138, 0.25)'
         }}
       >
+        <div className="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto my-2 sm:hidden flex-shrink-0" />
+
         {/* CABECERA MODAL BENTO */}
         <div className="px-5 py-4 border-b border-slate-800/70 flex items-center justify-between shrink-0 bg-[#090E1A]">
           <div className="flex items-center gap-3">
@@ -313,7 +315,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 flex items-center justify-center transition-colors cursor-pointer"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:w-8 sm:h-8 p-2 sm:p-0 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 flex items-center justify-center transition-colors cursor-pointer"
             title="Cerrar modal (Esc)"
           >
             <X className="w-4 h-4" strokeWidth={1.75} />
@@ -328,7 +330,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
               onClick={() => setTabActiva('datos')}
               className={`px-3 py-1.5 rounded-xl transition flex items-center gap-2 cursor-pointer ${
                 tabActiva === 'datos'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-xs'
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
@@ -341,7 +343,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
               onClick={() => setTabActiva('hitos')}
               className={`px-3 py-1.5 rounded-xl transition flex items-center gap-2 cursor-pointer ${
                 tabActiva === 'hitos'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-xs'
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
@@ -354,7 +356,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
               onClick={() => setTabActiva('habitos')}
               className={`px-3 py-1.5 rounded-xl transition flex items-center gap-2 cursor-pointer ${
                 tabActiva === 'habitos'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-xs'
+                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
@@ -373,7 +375,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
         <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-thin scrollbar-thumb-slate-800">
           {/* TAB 1: DATOS GENERALES */}
           {tabActiva === 'datos' && (
-            <div className="space-y-4 animate-in fade-in duration-150">
+            <div className="space-y-4 transform-gpu transition-opacity duration-150">
               {/* Título de la Meta */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
@@ -541,7 +543,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
 
           {/* TAB 2: HITOS DEL PLAN */}
           {tabActiva === 'hitos' && (
-            <div className="space-y-4 animate-in fade-in duration-150">
+            <div className="space-y-4 transform-gpu transition-opacity duration-150">
               <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-xs text-slate-400">
                 Los hitos representan etapas verificables y secuenciales para consolidar el plan.
               </div>
@@ -649,7 +651,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
 
           {/* TAB 3: HÁBITOS MOTORES */}
           {tabActiva === 'habitos' && (
-            <div className="space-y-4 animate-in fade-in duration-150">
+            <div className="space-y-4 transform-gpu transition-opacity duration-150">
               <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-xs text-slate-400">
                 Vincula hábitos existentes para que cada sesión o repetición sume automáticamente al avance de la meta.
               </div>
@@ -787,7 +789,7 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
         </div>
 
         {/* PIE DEL MODAL DE ACCIONES */}
-        <div className="px-5 py-3.5 border-t border-slate-800/80 bg-[#090E1A] flex items-center justify-between shrink-0">
+        <div className="sticky bottom-0 shrink-0 bg-[#0D1526]/95 backdrop-blur-md p-3 border-t border-slate-800/80 flex items-center justify-between">
           <div>
             {tabActiva !== 'datos' ? (
               <button

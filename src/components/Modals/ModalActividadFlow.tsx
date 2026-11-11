@@ -876,11 +876,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-[10000] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all"
+      className="fixed inset-0 z-[10000] bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200"
     >
       <div
         id="modal-actividad-flow-card"
-        className="portal-surface elevation-3 w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D1526] shadow-2xl relative transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        className="portal-surface elevation-3 w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D1526] shadow-2xl relative transform-gpu transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
       >
         {/* Drag handle móvil */}
         <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
@@ -926,7 +926,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                   {menuCategoriaAbierto && (
                     <div
                       id="flow-cat-dropdown"
-                      className="absolute left-0 top-full mt-2 w-64 bg-white dark:bg-[#0D1526] rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-2 z-50 space-y-1 animate-in fade-in zoom-in-95"
+                      className="absolute left-0 top-full mt-2 w-64 max-w-[calc(100vw-24px)] bg-white dark:bg-[#0D1526] rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-2 z-50 space-y-1 transform-gpu transition-[transform,opacity] duration-150 ease-out"
                     >
                       <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 py-1 uppercase tracking-wider">
                         Categoría de Vida:
@@ -990,7 +990,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shrink-0 ml-1"
+              className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-1"
               title="Cerrar ventana (Esc)"
             >
               <X className="w-4 h-4" />

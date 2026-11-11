@@ -81,7 +81,7 @@ export const PopoverPreviewNotas: React.FC<PopoverPreviewNotasProps> = ({
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="w-80 sm:w-96 p-3.5 bg-[#0B132B]/95 backdrop-blur-md border border-slate-700/60 rounded-2xl shadow-2xl text-slate-200 text-xs animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-2.5"
+      className="w-80 sm:w-96 max-w-[calc(100vw-24px)] p-3.5 bg-[#0B132B]/95 backdrop-blur-md border border-slate-700/60 rounded-2xl shadow-2xl text-slate-200 text-xs transform-gpu transition-[transform,opacity] duration-150 ease-out flex flex-col gap-2.5"
     >
       {/* Cabecera del Popover */}
       <div className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">

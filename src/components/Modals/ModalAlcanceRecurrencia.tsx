@@ -74,7 +74,7 @@ export const ModalAlcanceRecurrencia: React.FC<ModalAlcanceRecurrenciaProps> = (
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-alcance-titulo"
-      className="fixed inset-0 z-[10002] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-[10002] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm transition-opacity duration-150"
       onClick={onClose}
     >
       <div

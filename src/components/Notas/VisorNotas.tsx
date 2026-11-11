@@ -624,7 +624,7 @@ export const VisorNotas: React.FC = () => {
       {/* ===================================================================== */}
       <div className="flex-1 flex flex-col min-h-0 h-full min-w-0 overflow-hidden [contain:layout_paint]">
         {/* BARRA SUPERIOR DE HERRAMIENTAS (Cobalt Aerodynamic) */}
-        <div className="shrink-0 bg-[#080D1A] border-b border-slate-800/60 px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2 shadow-cobalt-1 z-10 h-10 sm:h-auto">
+        <div className="shrink-0 bg-[#080D1A] border-b border-slate-800/60 px-3 sm:px-6 py-1.5 md:py-2.5 flex items-center justify-between gap-2 shadow-cobalt-1 z-10 h-auto">
           {/* Lado Izquierdo: Título y Block Activo */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-sky-950/40 border border-sky-500/30 flex items-center justify-center text-sky-400 shadow-xs shrink-0">
@@ -692,7 +692,7 @@ export const VisorNotas: React.FC = () => {
                 setNotaEnEdicion(null);
                 setModalAbierto(true);
               }}
-              className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl font-bold text-xs bg-sky-500 hover:bg-sky-400 kinetic-btn-tactile text-slate-950 shadow-sm shadow-sky-500/20 cursor-pointer h-7 sm:h-auto group"
+              className="inline-flex items-center gap-1 sm:gap-1.5 px-3 py-1 sm:py-1.5 rounded-xl font-bold text-xs bg-sky-500 hover:bg-sky-400 kinetic-btn-tactile text-slate-950 shadow-sm shadow-sky-500/20 cursor-pointer h-9 sm:h-auto group"
               title="Crear nota detallada con modal 360°"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5] group-hover:rotate-90 transition-transform duration-200 ease-out" />
@@ -702,7 +702,7 @@ export const VisorNotas: React.FC = () => {
         </div>
 
         {/* NIVEL SECUNDARIO: Búsqueda Rápida y Filtros de Refinamiento */}
-        <div className="shrink-0 bg-[#080D1A] border-b border-slate-800/60 px-3 sm:px-6 py-1.5 sm:py-2 flex flex-col md:flex-row md:items-center justify-between gap-2 z-10">
+        <div className="shrink-0 bg-[#080D1A] border-b border-slate-800/60 px-3 sm:px-6 py-1.5 md:py-3 flex flex-col md:flex-row md:items-center justify-between gap-2 z-10">
           {/* Fila compacta de búsqueda + botón de filtros móvil */}
           <div className="flex items-center gap-2 w-full md:max-w-md">
             <div className="relative flex-1">
@@ -713,14 +713,15 @@ export const VisorNotas: React.FC = () => {
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar notas, checklists o #tags..."
-                className="w-full h-8 pl-8 pr-7 text-xs rounded-lg bg-slate-900/60 border border-slate-800/60 text-slate-100 placeholder:text-slate-500 kinetic-input-spotlight transition-all outline-none"
+                className="w-full h-9 md:h-8 pl-8 pr-10 text-xs rounded-xl md:rounded-lg bg-slate-900/60 border border-slate-800/60 text-slate-100 placeholder:text-slate-500 kinetic-input-spotlight transition-[border-color,box-shadow] outline-none"
               />
               {busqueda && (
                 <button
                   type="button"
                   id="btn-limpiar-busqueda-notas"
                   onClick={() => setBusqueda('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs cursor-pointer"
+                  className="absolute right-0.5 md:right-2 top-1/2 -translate-y-1/2 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center text-slate-500 hover:text-slate-300 text-xs cursor-pointer"
+                  aria-label="Limpiar búsqueda de notas"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -730,7 +731,7 @@ export const VisorNotas: React.FC = () => {
             <button
               type="button"
               onClick={() => setFiltrosNotasAbiertos(!filtrosNotasAbiertos)}
-              className={`h-8 px-2.5 rounded-lg border flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 md:hidden ${
+              className={`h-9 md:h-8 px-3 md:px-2.5 rounded-xl md:rounded-lg border flex items-center gap-1.5 text-xs font-semibold transition-[transform,colors] active:scale-95 cursor-pointer shrink-0 md:hidden ${
                 (tagsSeleccionados.length > 0 || colorFiltro) || filtrosNotasAbiertos
                   ? 'bg-sky-950/40 text-sky-300 border-sky-500/40'
                   : 'bg-slate-900/60 border-slate-800/60 text-slate-400 hover:text-white'
@@ -751,8 +752,8 @@ export const VisorNotas: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setModoVista('masonry')}
-                className={`p-1 rounded-md transition-all duration-150 active:scale-90 ${
-                  modoVista === 'masonry' ? 'text-sky-300 bg-sky-950/50 shadow-2xs' : 'text-slate-400'
+                className={`min-w-[36px] min-h-[36px] flex items-center justify-center rounded-md transition-[transform,colors] duration-150 active:scale-90 ${
+                  modoVista === 'masonry' ? 'text-sky-300 bg-sky-950/50 shadow-sm' : 'text-slate-400'
                 }`}
                 title="Vista Mosaico"
               >
@@ -761,8 +762,8 @@ export const VisorNotas: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setModoVista('lista')}
-                className={`p-1 rounded-md transition-all duration-150 active:scale-90 ${
-                  modoVista === 'lista' ? 'text-sky-300 bg-sky-950/50 shadow-2xs' : 'text-slate-400'
+                className={`min-w-[36px] min-h-[36px] flex items-center justify-center rounded-md transition-[transform,colors] duration-150 active:scale-90 ${
+                  modoVista === 'lista' ? 'text-sky-300 bg-sky-950/50 shadow-sm' : 'text-slate-400'
                 }`}
                 title="Vista Lista"
               >
@@ -792,7 +793,7 @@ export const VisorNotas: React.FC = () => {
               {dropdownTagsAbierto && (
                 <div
                   id="dropdown-etiquetas-notas-menu"
-                  className="absolute right-0 mt-1 w-64 bg-[#0D1526] rounded-2xl shadow-xl border border-slate-800 p-2 z-50 animate-in fade-in zoom-in-95 duration-150"
+                  className="absolute right-0 mt-1 w-64 max-w-[calc(100vw-24px)] bg-[#0D1526] rounded-2xl shadow-xl border border-slate-800 p-2 z-50 transform-gpu transition-[transform,opacity] duration-150 ease-out"
                 >
                   <div className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider flex items-center justify-between">
                     <span>Filtrar por Tags</span>
@@ -856,7 +857,7 @@ export const VisorNotas: React.FC = () => {
               {dropdownColorAbierto && (
                 <div
                   id="dropdown-color-notas-menu"
-                  className="absolute right-0 mt-1 w-56 max-h-80 overflow-y-auto custom-scrollbar bg-[#0D1526] rounded-2xl shadow-xl border border-slate-800 p-2 z-50 animate-in fade-in zoom-in-95 duration-150"
+                  className="absolute right-0 mt-1 w-56 max-w-[calc(100vw-24px)] max-h-80 overflow-y-auto custom-scrollbar bg-[#0D1526] rounded-2xl shadow-xl border border-slate-800 p-2 z-50 transform-gpu transition-[transform,opacity] duration-150 ease-out"
                 >
                   <div className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider">
                     Filtrar por Tono
@@ -917,7 +918,7 @@ export const VisorNotas: React.FC = () => {
               setNotaEnEdicion(null);
               setModalAbierto(true);
             }}
-            className="w-full h-8 text-xs text-slate-400 border border-dashed border-slate-800 hover:border-amber-500/50 hover:text-amber-300 rounded-xl px-3 flex items-center justify-between bg-[#0D1526]/60 active:scale-[0.98] transition cursor-pointer"
+            className="w-full h-10 md:h-8 text-xs text-slate-400 border border-dashed border-slate-800 hover:border-amber-500/50 hover:text-amber-300 rounded-xl px-3 flex items-center justify-between bg-[#0D1526]/60 active:scale-[0.98] transition-[transform,border-color,color] cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
@@ -1248,7 +1249,7 @@ export const VisorNotas: React.FC = () => {
                     {quickColorPickerAbierto && (
                       <div
                         id="quick-note-color-picker-popover"
-                        className="absolute left-0 bottom-full mb-2 w-48 bg-[#0D1526] rounded-2xl shadow-xl border border-slate-800 p-2 z-50 animate-in fade-in zoom-in-95 duration-150"
+                        className="absolute left-0 bottom-full mb-2 w-48 max-w-[calc(100vw-24px)] bg-[#0D1526] rounded-2xl shadow-xl border border-slate-800 p-2 z-50 transform-gpu transition-[transform,opacity] duration-150 ease-out"
                       >
                         <div className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider">Tono de Nota</div>
                         <div className="grid grid-cols-4 gap-1.5 p-1">
@@ -1260,9 +1261,9 @@ export const VisorNotas: React.FC = () => {
                                 setQuickColor(col);
                                 setQuickColorPickerAbierto(false);
                               }}
-                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-800 transition-all duration-150 active:scale-90 hover:scale-110 cursor-pointer"
+                              className="flex flex-col items-center gap-1 p-1 rounded-lg hover:bg-slate-800 transition-transform duration-150 active:scale-90 hover:scale-110 cursor-pointer"
                             >
-                              <span className={`w-5 h-5 rounded-full border border-slate-600 transition-transform ${col === 'default' ? 'bg-slate-900' : `bg-${col}-500`} ${quickColor === col ? 'ring-2 ring-white/60 scale-110 shadow-xs' : ''}`} />
+                              <span className={`w-5 h-5 rounded-full border border-slate-600 transition-transform ${col === 'default' ? 'bg-slate-900' : `bg-${col}-500`} ${quickColor === col ? 'ring-2 ring-white/60 scale-110 shadow-sm' : ''}`} />
                               <span className="text-[9px] text-slate-400 capitalize">{col.slice(0, 4)}</span>
                             </button>
                           ))}
@@ -1294,7 +1295,7 @@ export const VisorNotas: React.FC = () => {
         </div>
 
         {/* CONTENEDOR DE SCROLL: NOTAS FIJADAS Y OTRAS NOTAS */}
-        <div id="contenedor-scroll-notas" className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar px-2.5 sm:px-6 pt-2 sm:pt-3 pb-24 sm:pb-32 space-y-3.5 sm:space-y-6">
+        <div id="contenedor-scroll-notas" className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar px-2.5 sm:px-6 pt-2 sm:pt-3 pb-28 md:pb-8 space-y-3.5 sm:space-y-6">
           {/* SECCIÓN: NOTAS FIJADAS */}
           {notasFijadas.length > 0 && (
             <div id="seccion-notas-fijadas" className="space-y-2.5 sm:space-y-3">
@@ -1478,7 +1479,7 @@ export const VisorNotas: React.FC = () => {
         <div
           role="status"
           aria-live="polite"
-          className="fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#0D1526]/95 border border-emerald-500/40 text-emerald-300 text-xs font-semibold shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-200"
+          className="fixed top-14 sm:top-5 right-3 sm:right-5 left-3 sm:left-auto z-[10010] flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#0D1526]/95 border border-emerald-500/40 text-emerald-300 text-xs font-semibold shadow-xl backdrop-blur-sm transform-gpu transition-[transform,opacity] duration-200 ease-out"
         >
           <Check className="w-4 h-4 text-emerald-400 shrink-0" strokeWidth={2} />
           <span>{toastMsg}</span>

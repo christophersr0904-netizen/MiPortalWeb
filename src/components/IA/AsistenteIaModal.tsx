@@ -141,14 +141,16 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs animate-fadeIn"
+      className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-4xl bg-[#0D1526] border border-slate-800 rounded-2xl shadow-cobalt-3 overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="w-full max-w-4xl max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-[#0D1526] border-t sm:border border-slate-700/60 shadow-cobalt-3 overflow-hidden flex flex-col">
+        <div className="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto my-2 sm:hidden flex-shrink-0" />
+
         {/* Header Modal */}
-        <div className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/60">
+        <div className="px-5 py-3.5 sm:py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/60 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-xs">
               <Sparkles className="w-4 h-4 animate-pulse" />
@@ -168,11 +170,12 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => {
                 reset();
                 onClose();
               }}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -180,7 +183,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
         </div>
 
         {/* Selector de Modo */}
-        <div className="flex border-b border-slate-800/80 bg-[#020617]/50 px-5 pt-3">
+        <div className="flex border-b border-slate-800/80 bg-[#020617]/50 px-4 sm:px-5 pt-2.5 shrink-0 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => {
@@ -215,11 +218,12 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
         </div>
 
         {/* Cuerpo Principal Dividido (Formulario a la Izquierda / Streaming a la Derecha) */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 overflow-y-auto lg:overflow-hidden custom-scrollbar">
           {/* Panel Izquierdo: Inputs */}
           <form
+            id="form-asistente-ia"
             onSubmit={handleSubmit}
-            className="lg:col-span-5 p-5 border-r border-slate-800/80 overflow-y-auto space-y-4 bg-[#0D1526]/50"
+            className="lg:col-span-5 p-4 sm:p-5 border-b lg:border-b-0 lg:border-r border-slate-800/80 lg:overflow-y-auto space-y-4 bg-[#0D1526]/50"
           >
             {modo === 'clarificar_idea' ? (
               <>
@@ -321,13 +325,13 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
               </>
             )}
 
-            {/* Botones de Envío / Control de Stream */}
-            <div className="pt-2">
+            {/* Botones de Envío / Control de Stream (visible en Desktop dentro del panel) */}
+            <div className="hidden lg:block pt-2">
               {status === 'streaming' ? (
                 <button
                   type="button"
                   onClick={abortStream}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition-colors cursor-pointer"
                 >
                   <StopCircle className="w-4 h-4 animate-spin text-rose-400" />
                   Detener Generación
@@ -335,7 +339,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
               ) : (
                 <button
                   type="submit"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
                   {status === 'completed' ? 'Regenerar con IA' : 'Ejecutar Inferencia IA'}
@@ -345,7 +349,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
           </form>
 
           {/* Panel Derecho: Visualizador de Streaming en Vivo */}
-          <div className="lg:col-span-7 flex flex-col bg-[#020617] overflow-hidden">
+          <div className="lg:col-span-7 flex flex-col bg-[#020617] min-h-[220px] lg:min-h-0 lg:overflow-hidden">
             <div className="px-4 py-2.5 border-b border-slate-800/80 bg-slate-950/40 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-mono text-slate-400">
@@ -414,6 +418,42 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Barra de Acciones Inferior Fija (Mobile-First Thumb Zone) */}
+        <div className="sticky bottom-0 shrink-0 bg-[#0D1526]/95 backdrop-blur-md p-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              reset();
+              onClose();
+            }}
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition cursor-pointer"
+          >
+            Cerrar
+          </button>
+
+          <div className="flex items-center gap-2 lg:hidden">
+            {status === 'streaming' ? (
+              <button
+                type="button"
+                onClick={abortStream}
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition-colors cursor-pointer"
+              >
+                <StopCircle className="w-4 h-4 animate-spin text-rose-400" />
+                Detener
+              </button>
+            ) : (
+              <button
+                type="submit"
+                form="form-asistente-ia"
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                {status === 'completed' ? 'Regenerar' : 'Ejecutar IA'}
+              </button>
+            )}
           </div>
         </div>
       </div>

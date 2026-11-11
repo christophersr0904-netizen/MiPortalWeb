@@ -566,11 +566,11 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all animate-in fade-in duration-200"
+      className="fixed inset-0 z-[10000] bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity duration-200"
     >
       <div
         id="modal-tarea-flow-card"
-        className="w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/60 bg-[#0D1526] shadow-cobalt-2 relative animate-in fade-in zoom-in-95 duration-200 ease-out"
+        className="w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/60 bg-[#0D1526] shadow-cobalt-2 relative transform-gpu transition-[transform,opacity] duration-200 ease-out"
       >
         {/* DRAG HANDLE MÓVIL */}
         <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
@@ -679,7 +679,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer shrink-0 ml-1"
+              className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-1"
               title="Cerrar ventana (Esc)"
             >
               <X className="w-4 h-4" />
