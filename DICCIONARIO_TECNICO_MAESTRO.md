@@ -52,6 +52,24 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.93 — Integración Canónica de VoicePill (React Bits) en Captura Rápida de Ideas (REQ-UI-20)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/VoicePill.tsx` (Nuevo vía `@reactbits-starter/VoicePill-TS-TW`), `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Motivación & Alcance
+- Modernizar el disparador rudimentario `#btn-quick-voice-record` dentro del popover `#popover-captura-rapida-idea` de `WidgetIdeasBubble.tsx` con la cápsula cinética `VoicePill` (`@reactbits-starter/VoicePill-TS-TW`), manteniendo intactos `src/hooks/useSpeechRecognition.ts` (Web Speech API) y el esquema/persistencia en `db.ideas` (`IdeaRecord`, `tipo_captura: 'VOZ' | 'TEXTO'`).
+
+#### Solución Implementada
+1. **Componente `src/components/VoicePill.tsx` (`@reactbits-starter/VoicePill-TS-TW`):**
+   - Instalado vía `npx --yes shadcn@latest add @reactbits-starter/VoicePill-TS-TW` (componente Tailwind-only sin hoja `.css` separada).
+   - Extendido quirúrgicamente con props opcionales de sincronización (`id`, `title`, `active`, `resetSignal`), tipografía numérica `font-mono tabular-nums` en el reloj, y bordes Cobalt (`border-slate-700/50` / `border-sky-400/40`) sin alterar sus props originales ni su animación matemática.
+2. **Micro-Cirugía en `src/components/Ideas/WidgetIdeasBubble.tsx`:**
+   - Reubicación de `#btn-quick-voice-record` (`VoicePill`) en el subgrupo derecho junto a `#btn-quick-idea-submit`, con `reactive="simulated"`, `showTime={true}`, `waveform={true}`, `size={32}`, `accentColor="#38bdf8"`, `iconColor="#94a3b8"`, `background="#1e293b"`.
+   - Enlace reactivo: `onStart` (`handleVoiceStart`) preserva el texto previo en `baseTextoVozRef.current`, activa `setFueGrabadoConVoz(true)` e invoca `startListening()`; `onStop` (`handleVoiceStop`) invoca `stopListening()`.
+   - Sincronización bidireccional: `active={isListening}` y `resetSignal={voiceResetSignal}` garantizan el repliegue inmediato de `VoicePill` si `useSpeechRecognition` finaliza externamente (`onend` / `onerror`), si el navegador no soporta Web Speech API, o al ejecutarse `resetFormulario()` (`Escape`, clic fuera o `handleGuardarIdea`).
+   - Ergonomía de contención: durante `isListening`, los botones auxiliares izquierdos (`Adjuntar`, `IA`) aplican `opacity-30 pointer-events-none`, despejando la expansión horizontal (`right-full`) dentro de `#popover-captura-rapida-idea` (`w-80 sm:w-96`) sin colisiones ni desbordamientos.
+
+---
+
 ### FASE 4.92 — Aceleración Reactiva: Suscripción WebSocket Supabase Realtime, Filtro Anti-Eco y Debounce Trailing-Edge (REQ-SYS-010-REALTIME)
 **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/services/syncManager.ts`, `src/components/Layout/HeaderMaestro.tsx`, `src/services/__tests__/syncManagerRealtime.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
 

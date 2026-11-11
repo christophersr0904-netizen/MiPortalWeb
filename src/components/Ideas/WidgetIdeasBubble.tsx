@@ -22,6 +22,7 @@ import { db } from '../../db/db';
 import type { IdeaRecord } from '../../types';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
+import VoicePill from '../VoicePill';
 
 interface WidgetIdeasBubbleProps {
   onAbrirAsistenteIA?: () => void;
@@ -47,6 +48,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const [enunciado, setEnunciado] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [fueGrabadoConVoz, setFueGrabadoConVoz] = useState(false);
+  const [voiceResetSignal, setVoiceResetSignal] = useState(0);
   const baseTextoVozRef = useRef<string>('');
   const popoverRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
@@ -66,6 +68,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     },
     onError: (errorMsg) => {
       mostrarToastCobalt(errorMsg, 'warning');
+      setVoiceResetSignal((n) => n + 1);
     }
   });
 
@@ -74,6 +77,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     setEnunciado('');
     setFueGrabadoConVoz(false);
     baseTextoVozRef.current = '';
+    setVoiceResetSignal((n) => n + 1);
     if (isListening) {
       stopListening();
     }
@@ -136,19 +140,21 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     }
   }, [popoverAbierto, isListening, stopListening]);
 
-  const handleToggleVoz = () => {
+  const handleVoiceStart = useCallback(() => {
     if (!isSupported) {
       mostrarToastCobalt('Tu navegador no soporta reconocimiento de voz nativo. Usa Chrome o Edge.', 'info');
+      setVoiceResetSignal((n) => n + 1);
       return;
     }
 
-    if (!isListening) {
-      baseTextoVozRef.current = enunciado.trim();
-      startListening();
-    } else {
-      stopListening();
-    }
-  };
+    baseTextoVozRef.current = enunciado.trim();
+    setFueGrabadoConVoz(true);
+    startListening();
+  }, [isSupported, enunciado, startListening]);
+
+  const handleVoiceStop = useCallback(() => {
+    stopListening();
+  }, [stopListening]);
 
   // Ventana Flotante Canvas/PiP (Draggable & Resizable)
   const [ventanaAbierta, setVentanaAbierta] = useState(false);
@@ -729,31 +735,11 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
 
             {/* Footer de Controles */}
             <div className="flex items-center justify-between gap-2 pt-0.5">
-              <div className="flex items-center gap-1.5">
-                {/* Botón Compacto de Voz Unificado (REQ-IDEAS-UX-REFINEMENT-22) */}
-                <button
-                  type="button"
-                  id="btn-quick-voice-record"
-                  onClick={handleToggleVoz}
-                  className={
-                    isListening
-                      ? 'bg-rose-500/15 border border-rose-500/30 text-rose-300 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-medium animate-pulse cursor-pointer transition-all'
-                      : 'px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 transition flex items-center gap-1.5 text-xs font-medium cursor-pointer'
-                  }
-                  title={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
-                >
-                  {isListening ? (
-                    <>
-                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
-                      <span className="font-mono text-[11px] font-medium">Escuchando... [Detener]</span>
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
-                      <span className="font-mono text-[11px]">Voz</span>
-                    </>
-                  )}
-                </button>
+              <div
+                className={`flex items-center gap-1.5 transition-opacity duration-200 ${
+                  isListening ? 'opacity-30 pointer-events-none' : ''
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => {
@@ -781,20 +767,41 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                 )}
               </div>
 
-              <button
-                type="button"
-                id="btn-quick-idea-submit"
-                disabled={guardando || !enunciado.trim()}
-                onClick={handleGuardarIdea}
-                className={`px-4 py-1.5 rounded-xl transition-all duration-150 flex items-center gap-1.5 text-xs font-bold shadow-md cursor-pointer ${
-                  enunciado.trim()
-                    ? 'bg-sky-600 hover:bg-sky-500 active:scale-95 text-white shadow-sky-600/30'
-                    : 'bg-slate-800/50 text-slate-600 border border-slate-800 cursor-not-allowed'
-                }`}
-              >
-                <span>{guardando ? 'Guardando...' : 'Guardar'}</span>
-                <Check className="w-3.5 h-3.5" strokeWidth={1.75} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Píldora Cinética React Bits (REQ-UI-20) */}
+                <VoicePill
+                  id="btn-quick-voice-record"
+                  reactive="simulated"
+                  showTime={true}
+                  waveform={true}
+                  size={32}
+                  accentColor="#38bdf8"
+                  iconColor="#94a3b8"
+                  background="#1e293b"
+                  active={isListening}
+                  resetSignal={voiceResetSignal}
+                  disabled={guardando}
+                  ariaLabel={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
+                  title={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
+                  onStart={handleVoiceStart}
+                  onStop={handleVoiceStop}
+                />
+
+                <button
+                  type="button"
+                  id="btn-quick-idea-submit"
+                  disabled={guardando || !enunciado.trim()}
+                  onClick={handleGuardarIdea}
+                  className={`px-4 py-1.5 rounded-xl transition-all duration-150 flex items-center gap-1.5 text-xs font-bold shadow-md cursor-pointer ${
+                    enunciado.trim()
+                      ? 'bg-sky-600 hover:bg-sky-500 active:scale-95 text-white shadow-sky-600/30'
+                      : 'bg-slate-800/50 text-slate-600 border border-slate-800 cursor-not-allowed'
+                  }`}
+                >
+                  <span>{guardando ? 'Guardando...' : 'Guardar'}</span>
+                  <Check className="w-3.5 h-3.5" strokeWidth={1.75} />
+                </button>
+              </div>
             </div>
           </div>
         )}
