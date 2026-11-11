@@ -86,23 +86,23 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
   const [kpisExpandidosMovil, setKpisExpandidosMovil] = useState(false);
 
   return (
-    <div id="vista-fin-tab-general" className="tab-fin-view p-2.5 sm:p-4 md:p-6 space-y-3 sm:space-y-5 flex-1 animate-in fade-in duration-150">
-      {/* 1. RESUMEN TOP: SALDO EN MANO HOY VS PROYECCIÓN FIN DE MES (CARRUSEL MÓVIL SNAP-X DE 1 FILA) */}
-      <div className="flex flex-row overflow-x-auto [&::-webkit-scrollbar]:hidden gap-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-3.5 snap-x overscroll-contain select-none">
+    <div id="vista-fin-tab-general" className="tab-fin-view p-2.5 sm:p-4 md:p-6 space-y-3 sm:space-y-5 flex-1">
+      {/* 1. RESUMEN TOP: SALDO EN MANO HOY VS PROYECCIÓN FIN DE MES (2X2 EN MÓVIL) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5 select-none">
         {/* Card 1: Saldo en Mano Real Hoy */}
         <div
           title="Liquidez disponible y consolidada en cuentas bancarias"
-          className="min-w-[240px] max-w-[270px] sm:min-w-0 sm:max-w-none shrink-0 snap-start p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 relative overflow-hidden flex flex-col justify-between h-[88px] sm:h-auto transform-gpu hover:translate-y-[-2px] transition duration-150"
+          className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526]/90 border border-slate-800/60 shadow-sm relative overflow-hidden flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
         >
-          <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider">Dinero Real Hoy</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" title="Liquidez Real Activa" />
+          <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1 gap-1">
+            <span className="text-[10px] uppercase font-bold tracking-wider truncate">Dinero Real Hoy</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] shrink-0" title="Liquidez Real Activa" />
           </div>
           <div>
-            <div id="kpi-saldo-en-mano" className="text-xl sm:text-2xl font-black font-mono tabular-nums text-emerald-400 truncate tracking-tight">
+            <div id="kpi-saldo-en-mano" className="text-base sm:text-2xl font-bold font-mono tabular-nums text-emerald-400 truncate tracking-tight">
               S/ {saldoEnManoReal.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 mt-0.5 sm:mt-1 font-mono tabular-nums pt-0.5 sm:pt-1 border-t border-slate-800">
+            <div className="hidden sm:flex items-center justify-between text-[11px] text-slate-400 mt-1 font-mono tabular-nums pt-1 border-t border-slate-800">
               <span>
                 Cobrado: <strong id="kpi-sub-ing-real" className="text-emerald-400 font-mono tabular-nums">S/ {realIngresos.toFixed(2)}</strong>
               </span>
@@ -116,17 +116,17 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
         {/* Card 2: Saldo Proyectado a Fin de Mes */}
         <div
           title="Saldo proyectado deduciendo compromisos y cuotas pendientes del mes"
-          className="min-w-[240px] max-w-[270px] sm:min-w-0 sm:max-w-none shrink-0 snap-start p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 relative overflow-hidden flex flex-col justify-between h-[88px] sm:h-auto transform-gpu hover:translate-y-[-2px] transition duration-150"
+          className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526]/90 border border-slate-800/60 shadow-sm relative overflow-hidden flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
         >
-          <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider">Saldo Proyectado Fin de Mes</span>
-            <span className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_8px_#06b6d4]" title="Estimación a Fin de Mes" />
+          <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1 gap-1">
+            <span className="text-[10px] uppercase font-bold tracking-wider truncate">Saldo Proyectado</span>
+            <span className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_8px_#06b6d4] shrink-0" title="Estimación a Fin de Mes" />
           </div>
           <div>
-            <div id="kpi-saldo-proyectado-fin-mes" className="text-xl sm:text-2xl font-black font-mono tabular-nums text-cyan-400 truncate tracking-tight">
+            <div id="kpi-saldo-proyectado-fin-mes" className="text-base sm:text-2xl font-bold font-mono tabular-nums text-cyan-400 truncate tracking-tight">
               S/ {saldoProyectadoFinMes.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="text-[10px] text-slate-400 mt-0.5 sm:mt-1 pt-0.5 sm:pt-1 border-t border-slate-800 font-mono tabular-nums flex items-center justify-between">
+            <div className="hidden sm:flex text-[10px] text-slate-400 mt-1 pt-1 border-t border-slate-800 font-mono tabular-nums items-center justify-between">
               <span>Cobertura Estimada:</span>
               <strong className="text-cyan-300">{diasCobertura} días</strong>
             </div>
@@ -136,19 +136,19 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
         {/* Card 3: Compromisos y Cuotas Pendientes del Mes */}
         <div
           title="Obligaciones financieras programadas pendientes de liquidación en el periodo"
-          className="min-w-[240px] max-w-[270px] sm:min-w-0 sm:max-w-none shrink-0 snap-start p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 flex flex-col justify-between h-[88px] sm:h-auto transform-gpu hover:translate-y-[-2px] transition duration-150"
+          className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526]/90 border border-slate-800/60 shadow-sm flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
         >
-          <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider">Compromisos Pendientes</span>
-            <span className="text-[9px] sm:text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              {cuotasPendientesCount + (otrosGastosPendientes > 0 ? 1 : 0)} Pendientes
+          <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1 gap-1">
+            <span className="text-[10px] uppercase font-bold tracking-wider truncate">Compromisos</span>
+            <span className="text-[9px] sm:text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+              {cuotasPendientesCount + (otrosGastosPendientes > 0 ? 1 : 0)}
             </span>
           </div>
           <div>
-            <div id="kpi-total-compromisos-pendientes" className="text-xl sm:text-2xl font-black font-mono tabular-nums text-amber-400 truncate tracking-tight">
+            <div id="kpi-total-compromisos-pendientes" className="text-base sm:text-2xl font-bold font-mono tabular-nums text-amber-400 truncate tracking-tight">
               S/ {totalCompromisosPendientes.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 mt-0.5 sm:mt-1 font-mono tabular-nums pt-0.5 sm:pt-1 border-t border-slate-800">
+            <div className="hidden sm:flex items-center justify-between text-[11px] text-slate-400 mt-1 font-mono tabular-nums pt-1 border-t border-slate-800">
               <span>
                 Cuotas: <strong id="kpi-sub-cuotas-pend" className="text-violet-400 font-mono tabular-nums">S/ {montoCuotasPendientes.toFixed(2)}</strong>
               </span>
@@ -162,11 +162,11 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
         {/* Card 4: Posición Bimonetaria y TC */}
         <div
           title="Distribución de fondos en Soles (PEN) y Dólares (USD)"
-          className="min-w-[240px] max-w-[270px] sm:min-w-0 sm:max-w-none shrink-0 snap-start p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 flex flex-col justify-between h-[88px] sm:h-auto transform-gpu hover:translate-y-[-2px] transition duration-150"
+          className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526]/90 border border-slate-800/60 shadow-sm flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
         >
-          <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1">
-            <span className="text-[10px] uppercase font-bold tracking-wider">Posición Bimonetaria</span>
-            <span className="text-[9px] sm:text-[10px] font-bold font-mono text-slate-400">PEN / USD</span>
+          <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1 gap-1">
+            <span className="text-[10px] uppercase font-bold tracking-wider truncate">Bimoneda</span>
+            <span className="text-[9px] sm:text-[10px] font-bold font-mono text-slate-400 shrink-0">PEN / USD</span>
           </div>
           <div>
             <div className="flex items-baseline justify-between font-mono tabular-nums text-[11px] sm:text-xs">
@@ -181,7 +181,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
                 $ {posicionBimonetaria.totalUSD.toFixed(2)}
               </span>
             </div>
-            <div className="mt-0.5 sm:mt-1 pt-0.5 sm:pt-1 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+            <div className="hidden sm:flex mt-1 pt-1 border-t border-slate-800 items-center justify-between text-[10px] text-slate-400">
               <span>TC SUNAT:</span>
               <span id="kpi-fin-tc-val" className="font-mono tabular-nums font-bold text-slate-300">
                 {tipoCambioSunat.toFixed(3)}

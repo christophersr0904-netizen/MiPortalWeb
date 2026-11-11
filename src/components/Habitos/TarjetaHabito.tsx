@@ -10,6 +10,17 @@ import {
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 
+/** Formatea ISO YYYY-MM-DD a DD/MM compacto para reducir texto en tarjetas móviles. */
+const formatearFechaCortaHabito = (fechaIso?: string): string => {
+  if (!fechaIso) return 'S/F';
+  const clean = fechaIso.split(/[\sT]/)[0];
+  const partes = clean.split('-');
+  if (partes.length === 3) {
+    return `${partes[2]}/${partes[1]}`;
+  }
+  return clean;
+};
+
 export const renderIconoCategoriaVida = (icono: string, className = "w-3 h-3") => {
   switch (icono) {
     case 'HeartPulse': return <HeartPulse className={className} />;
@@ -180,10 +191,11 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
   return (
     <div
       style={{ contain: 'layout paint' }}
-      className={`group portal-surface p-2.5 pl-3 space-y-1.5 transition-all duration-150 ease-out border rounded-xl relative overflow-hidden will-change-[transform,opacity] ${esCompletada
-          ? 'opacity-65 border-slate-800/40 bg-[#070B14]/90'
-          : 'border-slate-800/40 hover:border-slate-700/80 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/50 bg-[#0D1526]'
-        }`}
+      className={`group portal-surface p-3 pl-3.5 space-y-2 transition-all duration-150 ease-out border rounded-xl relative overflow-hidden will-change-[transform,opacity] shadow-sm ${
+        esCompletada
+          ? 'opacity-70 border-slate-800/40 bg-[#070B14]/90'
+          : 'bg-[#0D1526]/90 border-slate-800/60 hover:border-sky-500/30 hover:-translate-y-0.5'
+      }`}
     >
       {/* Micro-franja lateral de acento semántico por categoría */}
       <div
@@ -191,13 +203,13 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
         title={`Categoría: ${catConfig.nombre}`}
       />
 
-      {/* FILA 1: Metadatos superiores y Acciones Silenciosas */}
+      {/* FILA 1: Metadatos superiores, Racha y Acciones */}
       <div className="flex items-center justify-between gap-1.5">
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           {/* Badge de código canónico */}
           {codigoHabito ? (
             <span
-              className="font-mono text-[10px] font-medium text-sky-400 bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.2 rounded select-none shrink-0 tabular-nums"
+              className="font-mono tabular-nums text-[10px] font-medium text-sky-400 bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.5 rounded select-none shrink-0"
               title={`Código: ${codigoHabito}`}
             >
               {codigoHabito}
@@ -206,42 +218,46 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
 
           {/* Icono de categoría sutil con tooltip */}
           <span
-            className={`inline-flex items-center justify-center w-4 h-4 rounded border ${catConfig.badgeClase} shrink-0`}
+            className={`inline-flex items-center justify-center w-5 h-5 rounded border ${catConfig.badgeClase} shrink-0`}
             title={`Categoría: ${catConfig.nombre}`}
           >
-            {renderIconoCategoriaVida(catConfig.icono, "w-2.5 h-2.5")}
+            {renderIconoCategoriaVida(catConfig.icono, 'w-3 h-3')}
           </span>
 
           {/* Cápsula compacta de mora */}
           {diasMora > 0 && !esCompletada && (
             <span
-              className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[9.5px] font-mono tabular-nums font-semibold shrink-0"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-mono tabular-nums font-semibold shrink-0"
               title={`Retraso acumulado: ${diasMora} día(s)`}
             >
-              <AlertTriangle className="w-2.5 h-2.5 text-rose-400 shrink-0" strokeWidth={1.75} />
+              <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" strokeWidth={1.75} />
               <span>+{diasMora}d</span>
             </span>
           )}
 
           {esHabitual && actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'DIARIA' && (
-            <span className="inline-flex items-center gap-1 px-1 py-0.2 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60 font-mono shrink-0">
+            <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60 font-mono shrink-0">
               {actividad.frecuencia_ciclo}
             </span>
           )}
         </div>
 
-        {/* Racha y Botones de acción rápida con Ley de Silencio Visual (Hover Suave sin Layout Shifts) */}
-        <div className="flex items-center gap-1 shrink-0 ml-auto min-h-[20px]">
+        {/* Racha con Icono Flame + Botones de acción rápida */}
+        <div className="flex items-center gap-1 shrink-0 ml-auto">
           {racha > 0 && (
             <span
-              className={`flex items-center gap-0.5 text-[10px] font-mono border px-1.5 py-0.2 rounded-full shrink-0 ${racha >= 7
-                  ? 'text-amber-300 bg-amber-950/40 border-amber-800/40 shadow-xs'
+              className={`inline-flex items-center gap-1 text-xs font-mono tabular-nums border px-2 py-0.5 rounded-full shrink-0 ${
+                racha >= 7
+                  ? 'text-amber-300 bg-amber-950/40 border-amber-800/40 shadow-sm'
                   : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
-                }`}
-              title={`Racha consecutiva de ${racha} días`}
+              }`}
+              title={`Racha consecutiva: ${racha} días`}
             >
-              <Flame className={`w-2.5 h-2.5 ${racha >= 7 ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} strokeWidth={1.75} />
-              <span className="tabular-nums font-mono">{racha} d</span>
+              <Flame
+                className={`w-3.5 h-3.5 ${racha >= 7 ? 'text-amber-400 fill-amber-400' : 'text-amber-400/80'}`}
+                strokeWidth={1.75}
+              />
+              <span>{racha}d</span>
             </span>
           )}
 
@@ -251,16 +267,17 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
             tituloEntidad={tituloHabito}
           />
 
-          {/* Acciones Secundarias: Visibles en móvil y con Hover suave en Desktop (REQ-PWA-07) */}
-          <div className="flex items-center gap-0.5 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150 shrink-0">
+          {/* Acciones Secundarias ergonómicas (Visibles en móvil, hover suave desktop) */}
+          <div className="flex items-center gap-0.5 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150 shrink-0">
             {onEditar && (
               <button
                 type="button"
                 onClick={handleSolicitarEditar}
-                className="text-slate-400 hover:text-sky-300 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
+                aria-label="Editar hábito"
+                className="min-w-[40px] min-h-[40px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center text-slate-400 hover:text-sky-300 rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
                 title="Editar hábito"
               >
-                <Pencil className="w-3 h-3" strokeWidth={1.75} />
+                <Pencil className="w-3.5 h-3.5 sm:w-3 sm:h-3" strokeWidth={1.75} />
               </button>
             )}
 
@@ -268,53 +285,50 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               <button
                 type="button"
                 onClick={handleSolicitarEliminar}
-                className="text-slate-400 hover:text-rose-400 p-1 rounded hover:bg-slate-800/60 transition-colors cursor-pointer"
+                aria-label="Eliminar hábito"
+                className="min-w-[40px] min-h-[40px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
                 title="Eliminar hábito"
               >
-                <Trash2 className="w-3 h-3" strokeWidth={1.75} />
+                <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" strokeWidth={1.75} />
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* FILA 2: Checkbox Ergonómico Compacto (w-6 h-6) + Título Táctico */}
-      <div className="flex items-start gap-2">
+      {/* FILA 2: Botón Check Táctil 44px + Título Táctico */}
+      <div className="flex items-center gap-2.5">
         <button
           type="button"
           onClick={handleToggleCheck}
-          className="w-6 h-6 p-0 shrink-0 focus:outline-none group/chk active:scale-95 transition-transform cursor-pointer flex items-center justify-center mt-0.5"
+          aria-label={esCompletada ? 'Marcar como pendiente' : 'Completar avance diario'}
+          className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl border active:scale-95 transition-all duration-150 shrink-0 cursor-pointer ${
+            esCompletada
+              ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+              : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+          }`}
           title={esCompletada ? 'Marcar como pendiente' : 'Marcar como completado'}
         >
-          {/* Checkbox Cobalt Aerodynamic con físicas fluidas GPU y cero layout shifts */}
-          <div
-            className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all duration-200 ease-out transform-gpu ${esCompletada
-                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.25)] ring-1 ring-emerald-500/20'
-                : 'border-slate-700 bg-slate-900/80 group-hover/chk:border-slate-500'
-              }`}
-          >
-            <Check
-              className={`w-3 h-3 text-emerald-400 transition-all duration-200 ease-out transform-gpu ${
-                esCompletada ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'
-              }`}
-              strokeWidth={2}
-            />
-          </div>
+          <Check
+            className={`w-4 h-4 transition-transform duration-150 ${
+              esCompletada ? 'scale-110 opacity-100' : 'scale-95 opacity-55'
+            }`}
+            strokeWidth={2.25}
+          />
         </button>
 
         <h4
           onClick={handleSolicitarEditar}
-          className={`text-[12.5px] font-medium leading-snug break-words flex-1 select-none transition-colors line-clamp-2 mb-0 ${esCompletada
-              ? 'line-through text-slate-500'
-              : 'text-slate-100'
-            } ${onEditar ? 'cursor-pointer hover:text-emerald-300' : ''}`}
+          className={`text-xs sm:text-[13px] font-medium leading-snug break-words flex-1 select-none transition-colors line-clamp-2 mb-0 ${
+            esCompletada ? 'line-through text-slate-500' : 'text-slate-100'
+          } ${onEditar ? 'cursor-pointer hover:text-emerald-300' : ''}`}
           title={onEditar ? `${tituloHabito} (Click para editar)` : tituloHabito}
         >
           {tituloHabito}
         </h4>
       </div>
 
-      {/* Badge / Indicador de Meta Vinculada */}
+      {/* Indicador de Meta Vinculada (Icono Target + Título + %) */}
       {(metaAsociada || (actividad.meta_macro_nombre && actividad.meta_macro_nombre.trim() !== '')) && (
         <div
           onClick={(e) => {
@@ -323,45 +337,44 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               onAbrirMeta360(metaAsociada);
             }
           }}
-          className={`flex items-center justify-between gap-1.5 px-2 py-0.5 rounded-md bg-sky-950/25 border border-sky-800/35 text-[10px] transition-all duration-150 ${metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:bg-sky-950/50 hover:border-sky-700/60' : ''
-            }`}
-          title={metaAsociada ? `Meta: ${metaAsociada.nombre_meta}${onAbrirMeta360 ? ' (Clic para abrir Vista 360°)' : ''}` : `Meta: ${actividad.meta_macro_nombre}`}
+          className={`flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/25 border border-sky-800/35 text-xs transition-all duration-150 ${
+            metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:bg-sky-950/50 hover:border-sky-700/60' : ''
+          }`}
+          title={metaAsociada ? `Objetivo: ${metaAsociada.nombre_meta}` : `Objetivo: ${actividad.meta_macro_nombre}`}
         >
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <Target className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.75} />
-            <span className="font-semibold text-sky-200 truncate">
+            <Target className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+            <span className="font-semibold text-sky-200 truncate text-[11px]">
               {metaAsociada?.nombre_meta || actividad.meta_macro_nombre}
             </span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {progresoMetaCalculado !== null ? (
-              <span className="font-mono tabular-nums text-[9px] font-bold text-sky-300 bg-sky-900/50 px-1.5 py-0.2 rounded border border-sky-700/50">
+              <span className="font-mono tabular-nums text-xs font-bold text-sky-300 bg-sky-900/50 px-1.5 py-0.5 rounded border border-sky-700/50">
                 {progresoMetaCalculado}%
               </span>
             ) : metaAsociada?.estado ? (
-              <span className="text-[8.5px] font-mono text-sky-300/80 uppercase">
+              <span className="text-[10px] font-mono text-sky-300/80 uppercase">
                 {metaAsociada.estado.replace(/^\d+_/, '')}
               </span>
             ) : null}
             {metaAsociada && onAbrirMeta360 && (
-              <span className="text-[8.5px] text-sky-400 opacity-70">
-                <ArrowUpRight className="w-2.5 h-2.5" strokeWidth={1.75} />
-              </span>
+              <ArrowUpRight className="w-3 h-3 text-sky-400 opacity-75 shrink-0" strokeWidth={1.75} />
             )}
           </div>
         </div>
       )}
 
-      {/* Resumen / Conteo de Subtareas y Pasos Vinculados */}
+      {/* Resumen / Conteo Compacto de Subtareas */}
       {actividadesAsociadas.length > 0 && (
-        <div className="space-y-1 p-1.5 rounded-lg bg-sky-950/15 border border-sky-800/30 text-[10px]">
-          <div className="flex items-center justify-between gap-1 text-[10px]">
+        <div className="space-y-1 p-2 rounded-lg bg-sky-950/15 border border-sky-800/30 text-[10px]">
+          <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1.5 text-sky-300">
-              <ListTodo className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.75} />
-              <span className="font-semibold">Subtareas / Pasos</span>
+              <ListTodo className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+              <span className="font-semibold hidden sm:inline">Pasos</span>
             </div>
-            <span className="font-mono tabular-nums text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-sky-950/60 text-sky-300 border border-sky-800/60">
-              {actividadesAsociadas.length} {actividadesAsociadas.length === 1 ? 'paso' : 'pasos'}
+            <span className="font-mono tabular-nums text-xs font-bold px-1.5 py-0.5 rounded-full bg-sky-950/60 text-sky-300 border border-sky-800/60">
+              {actividadesAsociadas.length}
             </span>
           </div>
 
@@ -372,10 +385,11 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               return (
                 <span
                   key={actItem.id || idx}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-mono border transition-colors ${completado
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border transition-colors ${
+                    completado
                       ? 'bg-emerald-950/30 text-emerald-300 border-emerald-800/40 line-through opacity-75'
                       : 'bg-slate-900/80 text-slate-300 border-slate-800/80'
-                    }`}
+                  }`}
                   title={nombre}
                 >
                   <span className="truncate max-w-[120px]">{nombre}</span>
@@ -383,8 +397,8 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               );
             })}
             {actividadesAsociadas.length > 3 && (
-              <span className="text-[9px] text-slate-400 font-mono tabular-nums self-center px-0.5">
-                +{actividadesAsociadas.length - 3} más
+              <span className="text-[10px] text-slate-400 font-mono tabular-nums self-center px-0.5">
+                +{actividadesAsociadas.length - 3}
               </span>
             )}
           </div>
@@ -400,11 +414,12 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
         />
       )}
 
-      {/* Barra de Avance Cuantitativo */}
+      {/* Barra de Avance Cuantitativo Desaturada */}
       {(metaTotal > 0 || valorAcum > 0 || actividad.meta_macro_nombre || Boolean(metaAsociada)) && (
-        <div className="space-y-1 p-1.5 rounded-lg bg-cyan-950/20 border border-cyan-800/30 text-[10px]">
-          <div className="flex items-center justify-between gap-1 flex-wrap font-mono">
-            <div className="flex items-center gap-1.5 min-w-0 max-w-[65%]">
+        <div className="space-y-1.5 p-2 rounded-lg bg-cyan-950/20 border border-cyan-800/30 text-xs">
+          <div className="flex items-center justify-between gap-1.5 font-mono tabular-nums">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <Target className="w-3.5 h-3.5 text-cyan-400 shrink-0" strokeWidth={1.75} />
               <span
                 onClick={(e) => {
                   if (metaAsociada && onAbrirMeta360) {
@@ -412,8 +427,9 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
                     onAbrirMeta360(metaAsociada);
                   }
                 }}
-                className={`font-bold text-cyan-200 truncate ${metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:text-sky-300 hover:underline' : ''
-                  }`}
+                className={`font-semibold text-cyan-200 truncate text-[11px] font-sans ${
+                  metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:text-sky-300 hover:underline' : ''
+                }`}
                 title={metaAsociada ? `${metaEfectiva.titulo} (Clic para Vista 360°)` : metaEfectiva.titulo}
               >
                 {metaEfectiva.titulo}
@@ -425,20 +441,20 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
                     e.stopPropagation();
                     if (onAbrirMeta360) onAbrirMeta360(metaAsociada);
                   }}
-                  className="text-[8.5px] px-1 py-0.2 rounded bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-white border border-sky-500/30 font-mono font-bold shrink-0 transition cursor-pointer"
+                  className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-white border border-sky-500/30 font-mono font-bold shrink-0 transition cursor-pointer"
                   title="Abrir Vista Detallada 360° de la Meta"
                 >
                   360°
                 </button>
               )}
             </div>
-            <span className="font-bold text-cyan-300 font-mono tabular-nums text-[9.5px]">
-              {valorAcum}{metaTotal > 0 ? ` / ${metaTotal}` : ''} {uMed}
+            <span className="font-bold text-cyan-300 font-mono tabular-nums text-xs shrink-0">
+              {valorAcum}{metaTotal > 0 ? `/${metaTotal}` : ''} {uMed}
             </span>
           </div>
 
           {metaTotal > 0 && (
-            <div className="w-full bg-cyan-950/60 h-1 rounded-full overflow-hidden">
+            <div className="w-full bg-cyan-950/60 h-1.5 rounded-full overflow-hidden">
               <div
                 className="bg-gradient-to-r from-cyan-500 to-teal-500 h-full rounded-full transition-all duration-300"
                 style={{ width: `${pctAvance}%` }}
@@ -446,57 +462,68 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-1 pt-0.5">
+          <div className="flex items-center justify-between gap-1.5 pt-0.5">
             {rescateMin > 0 && (
-              <span className="inline-flex items-center gap-1 text-[8.5px] px-1 py-0.2 rounded bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 font-semibold font-mono tabular-nums">
-                Rescate: ≥ {rescateMin} {uMed}
+              <span
+                className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 font-semibold font-mono tabular-nums"
+                title={`Nivel mínimo de rescate: ${rescateMin} ${uMed}`}
+              >
+                ≥ {rescateMin} {uMed}
               </span>
             )}
 
             <button
               type="button"
               onClick={handleAbrirAvanceModal}
-              className="ml-auto h-5 px-1.5 py-0 rounded bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-800/60 font-semibold text-[9px] font-mono transition active:scale-95 flex items-center gap-0.5 cursor-pointer"
+              className="ml-auto min-h-[40px] sm:min-h-[30px] px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-semibold text-xs font-mono transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
               title="Registrar avance cuantitativo"
             >
-              <PlusCircle className="w-2.5 h-2.5" />
+              <PlusCircle className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Avance</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Footer de la Tarjeta */}
-      <div className="flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-slate-800/40 text-[9.5px] font-mono tabular-nums text-slate-400">
+      {/* Footer Compacto de Tarjeta (Iconos + DD/MM) */}
+      <div className="flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-slate-800/40 text-xs font-mono tabular-nums text-slate-400">
         <div className="flex items-center gap-2">
           {esCompletada ? (
-            <span className="inline-flex items-center gap-1 text-[9.5px] font-medium px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono tabular-nums">
-              <Calendar className="w-2.5 h-2.5 text-emerald-400" strokeWidth={1.75} />
-              <span>Próx: {actividad.proxima_fecha_programada || 'Mañana'}</span>
+            <span
+              className="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono tabular-nums"
+              title={`Próxima ejecución: ${actividad.proxima_fecha_programada || 'Mañana'}`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} />
+              <span>{actividad.proxima_fecha_programada ? formatearFechaCortaHabito(actividad.proxima_fecha_programada) : 'OK'}</span>
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 font-mono tabular-nums text-[9.5px]">
-              <Calendar className="w-2.5 h-2.5 text-slate-500" strokeWidth={1.75} />
+            <span
+              className="inline-flex items-center gap-1 font-mono tabular-nums text-xs text-slate-400"
+              title={`Fecha programada: ${actividad.proxima_fecha_programada || actividad.fecha_programada || 'Sin fecha'}`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
               <span>
-                {esRutinaria && (actividad.proxima_fecha_programada || actividad.fecha_programada > hoyStr)
-                  ? `Próx: ${actividad.proxima_fecha_programada || actividad.fecha_programada}`
-                  : actividad.fecha_programada}
+                {formatearFechaCortaHabito(
+                  esRutinaria && (actividad.proxima_fecha_programada || actividad.fecha_programada > hoyStr)
+                    ? actividad.proxima_fecha_programada || actividad.fecha_programada
+                    : actividad.fecha_programada
+                )}
               </span>
             </span>
           )}
 
           {actividad.hora_inicio && (
-            <span className="inline-flex items-center gap-1 font-mono tabular-nums text-[9.5px]">
-              <Clock className="w-2.5 h-2.5 text-slate-500" />
+            <span className="inline-flex items-center gap-1 font-mono tabular-nums text-xs text-slate-400">
+              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
               <span>{actividad.hora_inicio}</span>
             </span>
           )}
         </div>
 
         {typeof actividad.monto_gasto_asociado === 'number' && actividad.monto_gasto_asociado > 0 && (
-          <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/50 font-mono tabular-nums font-bold text-[9px]">
-            <DollarSign className="w-2.5 h-2.5" />
-            <span>S/ {actividad.monto_gasto_asociado.toFixed(2)}</span>
+          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/50 font-mono tabular-nums font-bold text-xs">
+            <DollarSign className="w-3 h-3" strokeWidth={1.75} />
+            <span>S/ {actividad.monto_gasto_asociado.toFixed(0)}</span>
           </span>
         )}
       </div>

@@ -132,7 +132,7 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className={`text-xs px-2 py-0.5 rounded-full font-bold font-mono tabular-nums ${col.badgeColor}`}>
+            <span className="text-xs font-mono tabular-nums font-bold bg-slate-800/70 px-2 py-0.5 rounded-full text-slate-300 border border-slate-700/50">
               {cargandoDatosIniciales ? (
                 <span className="inline-block w-4 h-3 bg-slate-700/60 rounded animate-pulse" />
               ) : (
@@ -151,15 +151,16 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
           </div>
         </div>
 
-        {/* Botón "+ Añadir Tarea" Compacto solo en móvil (REQ-PWA-05) */}
+        {/* Botón "+ Añadir" Compacto solo en móvil (REQ-UI-27) */}
         <div className="md:hidden">
           <button
             type="button"
             onClick={() => onAbrirModalNuevaTarea(col.id)}
-            className="w-full h-10 md:h-7 py-1 px-3 border border-dashed border-slate-300 dark:border-slate-700/80 hover:border-sky-500/50 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-sky-300 rounded-xl md:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-[transform,colors,border-color] shadow-sm cursor-pointer active:scale-95"
+            className="w-full h-9 md:h-7 py-1 px-3 border border-dashed border-slate-700/80 hover:border-sky-500/50 hover:bg-slate-800/70 text-slate-300 hover:text-sky-300 rounded-xl md:rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-[transform,colors,border-color] shadow-sm cursor-pointer active:scale-95"
+            aria-label={`Añadir tarea a ${col.titulo}`}
           >
-            <Plus className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
-            <span>Añadir Tarea</span>
+            <Plus className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+            <span>Añadir</span>
           </button>
         </div>
       </div>

@@ -38,16 +38,16 @@ export const ViewHabitos: React.FC = () => {
             </div>
           </div>
 
-          {/* Botón Primario en Móvil (h-7.5 inline) */}
+          {/* Botón Primario en Móvil (40px ergonómico) */}
           <button
             type="button"
             id="btn-nuevo-habito-header-movil"
             onClick={() => setModalActividadAbierto(true)}
-            className="sm:hidden px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-md shadow-emerald-900/30 transition-all duration-200 active:scale-95 cursor-pointer shrink-0"
+            className="sm:hidden min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-900/30 transition-all duration-200 active:scale-95 cursor-pointer shrink-0"
             title="Registrar nuevo hábito"
           >
-            <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
-            <span>+ Hábito</span>
+            <Plus className="w-4 h-4" strokeWidth={1.75} />
+            <span>Hábito</span>
           </button>
         </div>
 

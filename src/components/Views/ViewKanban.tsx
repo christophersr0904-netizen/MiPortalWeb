@@ -51,6 +51,7 @@ import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
 import { ModalDoDAdvertencia } from '../Modals/ModalDoDAdvertencia';
 import { ColumnaKanban } from '../PMO/ColumnaKanban';
+import AnimatedContent from '../AnimatedContent';
 
 interface ViewKanbanProps {
   onSeleccionarProyecto?: (proyectoId: string) => void;
@@ -944,6 +945,50 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
       '04_Completado': ordenarTareas(grupos['04_Completado'])
     };
   }, [tareasFiltradas, criterioOrden]);
+
+  const renderColumnaKanban = (col: (typeof columnas)[number], isActivaMovil: boolean) => (
+    <ColumnaKanban
+      key={col.id}
+      col={col}
+      isActivaMovil={isActivaMovil}
+      tareasColumna={tareasAgrupadasPorColumna[col.id] || []}
+      isOverThisCol={dragOverColId === col.id}
+      cargandoDatosIniciales={cargandoDatosIniciales}
+      draggedTaskId={draggedTaskId}
+      hoveredTaskId={hoveredTaskId}
+      predecesorasHover={predecesorasHover}
+      sucesorasHover={sucesorasHover}
+      predecesorasOcultas={predecesorasOcultas}
+      sucesorasOcultas={sucesorasOcultas}
+      subtareasPorTarea={subtareasPorTarea}
+      proyectosMap={proyectosMap}
+      hitosMap={hitosMap}
+      gastosPorTarea={gastosPorTarea}
+      tareasLookupMap={tareasLookupMap}
+      onDragOver={handleDragOverCol}
+      onDragLeave={handleDragLeaveCol}
+      onDrop={handleDropCol}
+      onDragStartTask={handleDragStartTask}
+      onDragEndTask={handleDragEndTask}
+      onMouseEnterTask={setHoveredTaskId}
+      onMouseLeaveTask={() => setHoveredTaskId(null)}
+      onSeleccionarTarea={(id, estado) => {
+        setTareaSeleccionadaId(id);
+        setColumnaNuevaTarea(estado);
+        setModalTareaFlowAbierto(true);
+      }}
+      onMoverTareaAEstado={moverTareaAEstado}
+      onArchivarTarea={handleArchivarTarea}
+      onEliminarTarea={handleEliminarTarea}
+      onAbrirModalNuevaTarea={(colId) => {
+        setTareaSeleccionadaId(null);
+        setColumnaNuevaTarea(colId);
+        setModalTareaFlowAbierto(true);
+      }}
+    />
+  );
+
+  const columnaMovilSeleccionada = columnas.find((c) => c.id === columnaMovilActiva) ?? columnas[0];
 
   return (
     <div
@@ -1956,54 +2001,25 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
           id="board-kanban-container"
           className="flex-1 min-h-0 overflow-x-hidden md:overflow-x-auto overflow-y-hidden px-2 pt-1.5 pb-2 md:p-4 custom-scrollbar [&::-webkit-scrollbar]:hidden flex flex-col"
         >
-          <div className="flex-1 min-h-0 flex flex-col md:grid md:grid-cols-4 md:gap-4 w-full md:min-w-[1050px] h-full items-start">
-            {columnas.map((col) => {
-              const tareasColumna = tareasAgrupadasPorColumna[col.id] || [];
-              const isOverThisCol = dragOverColId === col.id;
-              const isActivaMovil = columnaMovilActiva === col.id;
+          {/* Vista móvil de columna única con transición horizontal React Bits AnimatedContent (REQ-UI-27) */}
+          {columnaMovilSeleccionada && (
+            <AnimatedContent
+              key={columnaMovilSeleccionada.id}
+              trigger="mount"
+              distance={40}
+              direction="horizontal"
+              reverse={false}
+              duration={0.28}
+              ease="power3.out"
+              className="md:hidden flex-1 min-h-0 w-full h-full flex flex-col"
+            >
+              {renderColumnaKanban(columnaMovilSeleccionada, true)}
+            </AnimatedContent>
+          )}
 
-              return (
-                <ColumnaKanban
-                  key={col.id}
-                  col={col}
-                  isActivaMovil={isActivaMovil}
-                  tareasColumna={tareasColumna}
-                  isOverThisCol={isOverThisCol}
-                  cargandoDatosIniciales={cargandoDatosIniciales}
-                  draggedTaskId={draggedTaskId}
-                  hoveredTaskId={hoveredTaskId}
-                  predecesorasHover={predecesorasHover}
-                  sucesorasHover={sucesorasHover}
-                  predecesorasOcultas={predecesorasOcultas}
-                  sucesorasOcultas={sucesorasOcultas}
-                  subtareasPorTarea={subtareasPorTarea}
-                  proyectosMap={proyectosMap}
-                  hitosMap={hitosMap}
-                  gastosPorTarea={gastosPorTarea}
-                  tareasLookupMap={tareasLookupMap}
-                  onDragOver={handleDragOverCol}
-                  onDragLeave={handleDragLeaveCol}
-                  onDrop={handleDropCol}
-                  onDragStartTask={handleDragStartTask}
-                  onDragEndTask={handleDragEndTask}
-                  onMouseEnterTask={setHoveredTaskId}
-                  onMouseLeaveTask={() => setHoveredTaskId(null)}
-                  onSeleccionarTarea={(id, estado) => {
-                    setTareaSeleccionadaId(id);
-                    setColumnaNuevaTarea(estado);
-                    setModalTareaFlowAbierto(true);
-                  }}
-                  onMoverTareaAEstado={moverTareaAEstado}
-                  onArchivarTarea={handleArchivarTarea}
-                  onEliminarTarea={handleEliminarTarea}
-                  onAbrirModalNuevaTarea={(colId) => {
-                    setTareaSeleccionadaId(null);
-                    setColumnaNuevaTarea(colId);
-                    setModalTareaFlowAbierto(true);
-                  }}
-                />
-              );
-            })}
+          {/* Chasis Desktop de 4 Columnas Simultáneas */}
+          <div className="hidden md:grid md:grid-cols-4 md:gap-4 flex-1 min-h-0 w-full md:min-w-[1050px] h-full items-start">
+            {columnas.map((col) => renderColumnaKanban(col, true))}
           </div>
         </div>
       </main>

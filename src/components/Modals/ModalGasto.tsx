@@ -231,7 +231,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
     >
       <div
         id="modal-gasto-card"
-        className="portal-surface elevation-3 w-full max-w-xl max-h-[92dvh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/60 shadow-cobalt-2 relative bg-[#0D1526] text-slate-100 overflow-hidden"
+        className="portal-surface elevation-3 w-full max-w-xl max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-[#0D1526] border-t sm:border border-slate-700/60 flex flex-col shadow-cobalt-2 relative text-slate-100 overflow-hidden"
       >
         {/* Drag handle móvil */}
         <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
@@ -332,6 +332,45 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
         {/* Formulario */}
         <form onSubmit={handleGuardar} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
+            {/* Monto Hero en Tope (Mobile-First) */}
+            <div className="p-3 rounded-2xl bg-slate-900/70 border border-slate-800/80">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label
+                  htmlFor="input-monto-gasto"
+                  className="font-semibold text-[11px] uppercase tracking-wider text-slate-400"
+                >
+                  Monto del Gasto ({moneda})
+                </label>
+                <select
+                  aria-label="Moneda del gasto"
+                  value={moneda}
+                  onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD' | 'EUR')}
+                  className="bg-slate-950/80 border border-slate-700/70 text-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold outline-none focus:border-sky-500 cursor-pointer"
+                >
+                  <option value="PEN">PEN (S/)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                </select>
+              </div>
+              <input
+                id="input-monto-gasto"
+                type="number"
+                step="0.01"
+                min="0.01"
+                inputMode="decimal"
+                required
+                value={montoOriginal}
+                onChange={(e) => setMontoOriginal(e.target.value)}
+                placeholder="0.00"
+                className="w-full bg-slate-950/60 border border-slate-800/80 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 text-2xl font-mono tabular-nums font-bold text-center py-2 text-slate-100 placeholder-slate-600 outline-none"
+              />
+              {moneda !== 'PEN' && (
+                <div className="mt-1.5 text-center text-[11px] font-mono tabular-nums font-bold text-emerald-400">
+                  ≈ S/ {montoPEN}
+                </div>
+              )}
+            </div>
+
             {/* Concepto */}
             <div>
               <label className="block font-semibold mb-1 text-slate-300">
@@ -441,7 +480,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
               </div>
             )}
 
-            {/* Categoría y Monto */}
+            {/* Categoría y Tipo de Cambio */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold mb-1 text-slate-300">
@@ -462,39 +501,6 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
                   <option value="Alquiler / Servicios">Alquiler / Servicios</option>
                   <option value="Alimentación">Alimentación</option>
                   <option value="Otros">Otros</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-semibold mb-1 text-slate-300">
-                  Monto Original
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  value={montoOriginal}
-                  onChange={(e) => setMontoOriginal(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full h-11 bg-slate-900/60 border border-slate-800 text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 font-mono font-bold text-base outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Moneda y Tipo de Cambio */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold mb-1 text-slate-200">
-                  Moneda
-                </label>
-                <select
-                  value={moneda}
-                  onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD' | 'EUR')}
-                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 outline-none font-medium rounded-xl p-2 focus:border-sky-500"
-                >
-                  <option value="PEN">PEN (S/)</option>
-                  <option value="USD">USD ($)</option>
-                  <option value="EUR">EUR (€)</option>
                 </select>
               </div>
               <div>
@@ -614,14 +620,14 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
           </div>
 
           {/* Footer de Acciones */}
-          <div className="shrink-0 sticky bottom-0 bg-[#0D1526] border-t border-slate-800/60 p-3 sm:px-6 z-10 flex items-center justify-between gap-2.5 shadow-lg">
+          <div className="shrink-0 sticky bottom-0 bg-[#0D1526]/95 backdrop-blur-md p-3 border-t border-slate-800/80 sm:px-6 z-10 flex items-center justify-between gap-2.5 shadow-lg pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
             {gastoEditar ? (
               <button
                 type="button"
                 onClick={handleEliminar}
-                className="px-3.5 py-2 border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 rounded-xl font-bold flex items-center gap-1.5 transition text-xs active:scale-95 cursor-pointer"
+                className="h-11 px-3.5 border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 rounded-xl font-bold flex items-center justify-center gap-1.5 transition text-xs active:scale-95 cursor-pointer"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Eliminar</span>
               </button>
             ) : (
@@ -631,15 +637,15 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition cursor-pointer"
+                className="h-11 px-4 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 flex items-center justify-center transition cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-white rounded-xl font-bold text-xs shadow-md shadow-sky-950/50 transition flex items-center gap-1.5 cursor-pointer active:scale-95 bg-sky-500 hover:bg-sky-400"
+                className="h-11 px-4 text-white rounded-xl font-bold text-xs shadow-md shadow-sky-950/50 transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 bg-sky-500 hover:bg-sky-400"
               >
-                <Save className="w-3.5 h-3.5" />
+                <Save className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>
                   {gastoEditar
                     ? 'Guardar Cambios'

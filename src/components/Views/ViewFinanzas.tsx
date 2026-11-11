@@ -639,7 +639,7 @@ export const ViewFinanzas: React.FC = () => {
   return (
     <div
       id="vista-financiero-wrapper"
-      className="flex-1 bg-[#040711] flex flex-col w-full h-full overflow-y-auto transition-colors duration-200 custom-scrollbar select-none"
+      className="flex-1 bg-[#040711] flex flex-col w-full h-full overflow-y-auto overscroll-contain pb-28 md:pb-8 transition-colors duration-200 custom-scrollbar select-none"
     >
       {/* 1. HEADER FINANCIERO */}
       <header className="bg-[#0D1526]/85 backdrop-blur-md border-b border-slate-800/40 px-3 md:px-6 py-2 md:py-3.5 shrink-0 shadow-cobalt-1 flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-20 transition-colors duration-200">
@@ -820,6 +820,60 @@ export const ViewFinanzas: React.FC = () => {
       </div>
 
       {/* ================================================================= */}
+      {/* RESUMEN FINANCIERO 2X2 EN MÓVIL (< md) / 4 COLUMNAS EN DESKTOP    */}
+      {/* ================================================================= */}
+      <div id="finanzas-resumen-kpi" className="px-2 sm:px-6 pt-2 sm:pt-4 shrink-0">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 p-2 sm:p-0">
+          {[
+            {
+              id: 'resumen-fin-ingresos',
+              label: 'Ingresos',
+              valor: realIngresos,
+              colorClass: 'text-emerald-400',
+              subtexto: 'Ingresos cobrados en el periodo'
+            },
+            {
+              id: 'resumen-fin-gastos',
+              label: 'Gastos',
+              valor: realGastos,
+              colorClass: 'text-rose-400',
+              subtexto: 'Egresos liquidados en el periodo'
+            },
+            {
+              id: 'resumen-fin-balance',
+              label: 'Balance',
+              valor: saldoEnManoReal,
+              colorClass: saldoEnManoReal >= 0 ? 'text-sky-400' : 'text-rose-400',
+              subtexto: 'Saldo neto real en mano hoy'
+            },
+            {
+              id: 'resumen-fin-ahorro',
+              label: 'Ahorro',
+              valor: capacidadAhorro,
+              colorClass: 'text-amber-300',
+              subtexto: `Superávit estimado (${ratioAhorroPct}%)`
+            }
+          ].map((kpi) => (
+            <div
+              key={kpi.id}
+              id={kpi.id}
+              className="bg-[#0D1526]/90 border border-slate-800/60 rounded-xl p-2.5 sm:p-3.5 shadow-sm flex flex-col justify-between"
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {kpi.label}
+              </span>
+              <div className={`text-sm sm:text-lg font-mono tabular-nums font-bold truncate mt-1 ${kpi.colorClass}`}>
+                S/ {kpi.valor.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <p className="hidden sm:block text-[10px] text-slate-400 mt-1 truncate">
+                {kpi.subtexto}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ================================================================= */}
       {/* PESTAÑA 1: VISTA GENERAL & KPIS (DASHBOARD FINANCIERO MEMOIZADO)  */}
       {/* ================================================================= */}
       {tabActiva === 'general' && (
@@ -878,14 +932,14 @@ export const ViewFinanzas: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setModalIngresoAbierto(true)}
-                  className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold shadow-xs transition cursor-pointer"
+                  className="min-h-[40px] sm:min-h-0 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition cursor-pointer flex items-center justify-center"
                 >
                   + Ingreso
                 </button>
                 <button
                   type="button"
                   onClick={() => setModalGastoAbierto(true)}
-                  className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold shadow-xs transition cursor-pointer"
+                  className="min-h-[40px] sm:min-h-0 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition cursor-pointer flex items-center justify-center"
                 >
                   + Gasto
                 </button>
@@ -895,22 +949,23 @@ export const ViewFinanzas: React.FC = () => {
             {/* FILA DE BÚSQUEDA Y BOTÓN DE FILTROS DESPLEGABLE (ESTILO KANBAN) */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" strokeWidth={1.75} />
                 <input
                   type="text"
                   id="input-busqueda-transacciones"
                   value={busquedaTrx}
                   onChange={(e) => setBusquedaTrx(e.target.value)}
                   placeholder="Buscar movimientos..."
-                  className="w-full h-8 pl-8 pr-7 text-xs bg-slate-900/80 border border-slate-800 rounded-xl outline-none focus:ring-1 focus:ring-sky-500 text-slate-100 placeholder:text-slate-500"
+                  className="w-full h-10 sm:h-8 pl-8 pr-10 text-xs bg-slate-900/80 border border-slate-800 rounded-xl outline-none focus:ring-1 focus:ring-sky-500 text-slate-100 placeholder:text-slate-500"
                 />
                 {busquedaTrx && (
                   <button
                     type="button"
                     onClick={() => setBusquedaTrx('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                    aria-label="Limpiar búsqueda"
+                    className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 flex items-center justify-center absolute right-0.5 sm:right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-4 h-4 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
                   </button>
                 )}
               </div>
@@ -918,7 +973,7 @@ export const ViewFinanzas: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setFiltrosTrxAbiertos(!filtrosTrxAbiertos)}
-                className={`h-8 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 md:hidden ${
+                className={`min-h-[40px] px-3 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 md:hidden ${
                   (tipoFlujo !== 'TODOS' || estadoFlujo !== 'TODOS') || filtrosTrxAbiertos
                     ? 'bg-sky-950/40 border-sky-800/60 text-sky-300'
                     : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:text-white'
@@ -1117,7 +1172,7 @@ export const ViewFinanzas: React.FC = () => {
       {toastMsg && (
         <div
           id="toast-finanzas"
-          className="fixed bottom-6 right-6 z-50 bg-[#0D1526] border border-slate-700/60 shadow-cobalt-2 text-slate-200 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 bg-[#0D1526] border border-slate-700/60 shadow-cobalt-2 text-slate-200 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-opacity duration-200"
         >
           <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
           <span>{toastMsg}</span>

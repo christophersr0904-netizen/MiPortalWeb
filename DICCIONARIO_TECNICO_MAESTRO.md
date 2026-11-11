@@ -52,6 +52,92 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 5.02 — Ergonomía Móvil en Hábitos, Registro Financiero Ágil y Consolidación Global (REQ-UI-30)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Views/ViewHabitos.tsx`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Finanzas/DashboardFinanciero.tsx`, `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalIngreso.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Desaturación Visual y Ergonomía de 44px en Hábitos (`TarjetaHabito.tsx`, `TableroHabitos.tsx`, `ViewHabitos.tsx`):**
+   - Superficie Bento compacta: `bg-[#0D1526]/90 border border-slate-800/60 rounded-xl p-3 shadow-sm hover:border-sky-500/30`.
+   - Reemplazo de etiquetas textuales verbosas ("Subtareas / Pasos", "Rescate:", "Próx:") por iconografía calibrada (`Flame`, `Target`, `ListTodo`, `Calendar`, `Clock`, `strokeWidth={1.75}`), formato compacto `DD/MM` (`formatearFechaCortaHabito`) y cifras en `font-mono tabular-nums text-xs`.
+   - Escalamiento del botón de check diario (`handleToggleCheck`) a `min-w-[44px] min-h-[44px] rounded-xl bg-emerald-500/15 text-emerald-400 border-emerald-500/30 active:scale-95`, además de objetivos `40px` en edición/eliminación móvil, botón `+ Avance`, botón móvil `#btn-nuevo-habito-header-movil` y despeje inferior `pb-28 md:pb-4` en `.kanban-col-body`.
+2. **Compactación 2x2 de Dashboard Financiero y Despeje (`ViewFinanzas.tsx`, `DashboardFinanciero.tsx`):**
+   - Incorporación de bloque resumen 2x2 (`#finanzas-resumen-kpi`: Ingresos, Gastos, Balance, Ahorro) en `ViewFinanzas.tsx` con `grid grid-cols-2 lg:grid-cols-4 gap-2 p-2 sm:p-0`, tipografía `font-mono tabular-nums font-bold` y subtextos ocultos en `< sm` con `hidden sm:block`.
+   - Conversión del carrusel superior de `DashboardFinanciero.tsx` a cuadrícula 2x2 sin scroll horizontal atrapado en `< md`, con líneas de detalle secundario ocultas en móvil.
+   - Aseguramiento de `pb-28 md:pb-8` en `#vista-financiero-wrapper` y targets táctiles `min-h-[40px]` para `+ Ingreso`, `+ Gasto`, búsqueda y `Filtros`.
+3. **Bottom Sheets Ágiles con Hero Monto para Gastos e Ingresos (`ModalGasto.tsx`, `ModalIngreso.tsx`):**
+   - Contenedores Bottom Sheet en `< md` (`items-end sm:items-center p-0 sm:p-4`, `max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-[#0D1526] border-t sm:border border-slate-700/60 flex flex-col`).
+   - Promoción del input de Monto al tope del formulario con selector de moneda integrado, teclado decimal móvil (`inputMode="decimal"`) y tipografía `text-2xl font-mono tabular-nums font-bold text-center py-2 text-slate-100`.
+   - Footer fijado `sticky bottom-0 bg-[#0D1526]/95 backdrop-blur-md p-3 border-t border-slate-800/80` con safe area y botones `h-11` (`Eliminar`, `Cancelar`, `Guardar`).
+   - Sin cambios en contratos Dexie (`src/db/db.ts`), tipos (`src/types/index.ts`) ni lógica contable.
+
+---
+
+### FASE 5.01 — Bento Móvil de Proyectos, KPIs 2x2 con CountUp y Ergonomía en Portafolio (REQ-UI-29)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/CountUp.tsx` (Nuevo vía `@reactbits-starter/CountUp-TS-TW`), `package.json`, `package-lock.json`, `src/components/Views/ViewPortafolio.tsx`, `src/components/PMO/TarjetaProyecto.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Integración de `@reactbits-starter/CountUp-TS-TW` y Grid KPI 2x2 Móvil (`ViewPortafolio.tsx`):**
+   - Instalación oficial de `src/components/CountUp.tsx` y montaje en las 4 tarjetas KPI superiores (`Iniciativas`, `Avance Global`, `Presupuesto`, `Salud`) con `duration={1.2}`, `trigger="load"` y tipografía numérica `font-mono font-bold tabular-nums`.
+   - Compactación de cuadrícula móvil (`< md`) a `grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 p-2 sm:p-0`, padding interno `p-2.5 sm:p-4`, iconografía superior derecha `w-4 h-4` y ocultamiento de subtextos y barras secundarias en móvil mediante `hidden sm:inline` / `hidden sm:flex` / `hidden sm:block`, conteniendo el bloque bajo ~130px verticales.
+   - Verificación y preservación del despeje inferior en `#vista-portafolio-wrapper` (`pb-28 md:pb-8`) sobre la navegación inferior móvil y widget flotante.
+2. **Tarjeta de Proyecto Bento Compacta (`TarjetaProyecto.tsx`):**
+   - Rediseño de contenedor Bento: `bg-[#0D1526]/90 border border-slate-800/60 rounded-xl p-3 sm:p-4 shadow-sm hover:border-sky-500/30 transition-all flex flex-col justify-between`.
+   - Cabecera simplificada: pastilla de código violeta/cobalt (`text-[11px] font-mono font-bold bg-violet-500/15 text-violet-300 border-violet-500/30`), semáforo sutil con pulso crítico y título limitado a `line-clamp-2`.
+   - Métricas condensadas: barra de progreso `h-1.5 bg-slate-800 rounded-full` con porcentaje `text-sky-400 font-semibold font-mono tabular-nums`, rango de fechas `Calendar` + `DD/MM - DD/MM` (`formatearFechaDDMM`) y chip presupuestario único `PEN {gasto} / {presupuesto}` (`formatearMontoCompacto` en `< sm`) sin etiquetas verbosas.
+   - Botonera táctica ergonómica: CTA principal `Ver Detalle 360°` (`h-10 bg-sky-500/10 text-sky-400 border-sky-500/20 rounded-lg`) y botones auxiliares (`+ Tarea`, `Editar`, `Eliminar`) con `min-w-[40px] min-h-[40px]`.
+   - Cero alteraciones en `src/db/db.ts`, `src/types/index.ts` ni fórmulas de agregación presupuestal.
+
+---
+
+### FASE 5.00 — Bento Mobile para Tarjetas de Notas, ShinyText y Captura Ergonómica (REQ-UI-28)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/ShinyText.tsx` (Nuevo vía `@reactbits-starter/ShinyText-TS-TW`), `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/TarjetaNota.tsx`, `src/components/Notas/SidebarCuadernos.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Integración de `@reactbits-starter/ShinyText-TS-TW` y Captura Ergonómica (`VisorNotas.tsx`):**
+   - Instalación oficial de `src/components/ShinyText.tsx` y montaje directo en el disparador móvil `#trigger-crear-nota-rapida` y en el encapsulado rápido de escritorio `#quick-note-collapsed` con paleta Cobalt (`color="#94a3b8"`, `shineColor="#38bdf8"`, `speed={3}`).
+   - Calibración táctil de controles auxiliares (búsqueda, conmutadores de vista, etiquetas, color, limpieza, fijar nota rápida y disparadores checklist/wishlist) a superficie mínima ergonómica `min-w-[40px] min-h-[40px]` con iconografía Lucide centrada (`strokeWidth={1.75}`).
+   - Manejo de cierre con tecla `Escape` para el drawer móvil de cuadernos.
+2. **Estética Bento Compacta y Reducción de Densidad en `TarjetaNota.tsx`:**
+   - Rediseño de tarjeta Bento Cobalt: superficie `bg-[#0D1526]/90 border border-slate-800/60 border-l-4` con acento lateral dinámico según `color_tema` / cuaderno (`COLOR_BORDE_ACENTO`), bordes `rounded-xl`, sombra `shadow-sm` y realce `hover:border-sky-500/30`.
+   - Reemplazo de fechas verbosas por icono `<Clock className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.75} />` y formato compacto `DD/MM` (`formatearFechaCortaNota`) en `font-mono tabular-nums text-[11px] text-slate-400`.
+   - Chips de entidades vinculadas en `< sm` limitados a icono + código (`TAR-022`, `PRJ-01`) ocultando el título descriptivo (`hidden sm:inline`), y botones táctiles Pin / Copiar / Editar / Eliminar escalados a `min-w-[44px] min-h-[44px]` en móvil.
+3. **Drawer Bottom Sheet de Cuadernos en Móvil (`SidebarCuadernos.tsx`):**
+   - Extracción compartida de lista de cuadernos y matriz de accesos rápidos (`ACCESOS_RAPIDOS_CONFIG`) reutilizada por el panel desktop (`hidden md:flex`) y un Bottom Sheet nativo en `< md` (`createPortal`, `z-[10000]`, drag handle, badges `font-mono tabular-nums`, acción fija `+ Nuevo Cuaderno` con `FolderPlus` de `h-10`), conectado desde `CarruselCuadernosMovil` (`#btn-abrir-drawer-cuadernos`).
+   - Integridad intacta de `src/db/db.ts`, `src/types/index.ts`, `arePropsEqual`, `resolverIconoCuaderno` y `MAPA_ICONOS_CUADERNO`.
+
+---
+
+### FASE 4.99 — Modernización Visual de Kanban con React Bits, Reducción de Texto e Iconografía Ergonómica (REQ-UI-27)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/AnimatedContent.tsx` (Nuevo vía `@reactbits-starter/AnimatedContent-TS-TW`), `package.json` (`gsap`), `src/components/Views/ViewKanban.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Integración de `@reactbits-starter/AnimatedContent-TS-TW` en `ViewKanban.tsx`:**
+   - Instalación oficial de `src/components/AnimatedContent.tsx` (`gsap@^3.15.1` como motor de animación hardware-accelerated en `@reactbits-starter`).
+   - Envoltorio de la columna activa móvil (`md:hidden`) con `AnimatedContent` (`key={columnaMovilSeleccionada.id}`, `trigger="mount"`, `distance={40}`, `direction="horizontal"`, `reverse={false}`, `duration={0.28}`, `ease="power3.out"`) reutilizando `renderColumnaKanban()` sin duplicación ni desmontaje del chasis desktop (`md:grid-cols-4`). Nota técnica: la distribución instalada de `AnimatedContent-TS-TW` expone props GSAP (`duration`/`ease`/`trigger`) en vez de `config` de Spring.
+2. **Reducción de Texto y Estándar Visual Cobalt en `TarjetaTareaKanban.tsx`:**
+   - Superficie canónica `bg-[#0D1526]/90 border border-slate-800/60 rounded-xl p-3 shadow-sm hover:border-sky-500/30`.
+   - Eliminación de etiquetas verbosas (`Sin fecha`, `Req:`, `pasos`, `h / h`, `A Por Hacer`, `Reabrir tarea`) reemplazadas por iconografía `w-3.5 h-3.5 text-slate-400` y formatos ultracompactos `font-mono tabular-nums text-[11px]` (`DD/MM` ej. `12/10` / `S/F`, y `{real}/{est}h` ej. `0/2h`).
+   - Micro-botonera táctica renovada con altura cómoda móvil (`h-9 px-3 md:h-6 md:px-2`): `Por Hacer` + `ArrowRight`, retroceso compacto con `ArrowLeft`, `Iniciar`, `Completar` y `Reabrir`.
+3. **Simplificación de Contadores y Acciones en `ColumnaKanban.tsx`:**
+   - Botón móvil de creación rápida condensado a icono `Plus` centrado y etiqueta `Añadir`.
+   - Contador de columna estandarizado con `text-xs font-mono tabular-nums font-bold bg-slate-800/70 px-2 py-0.5 rounded-full text-slate-300 border border-slate-700/50`.
+   - Sin alteraciones en `src/db/db.ts`, hooks de estado ni tipos en `src/types/index.ts`.
+
+---
+
+### FASE 4.98 — Automatización de Exposición Local HTTPS y Script Móvil (REQ-OPS-25)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `vite.config.ts`, `package.json`, `iniciar-movil.bat`, `scripts/dev-mobile.bat`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Exposición LAN con HTTPS Autofirmado (`vite.config.ts`, `package.json`):**
+   - Instalación de `@vitejs/plugin-basic-ssl` en `devDependencies` y registro de `basicSsl()` dentro de `plugins` en `vite.config.ts` para habilitar HTTPS autofirmado (`node_modules/.vite/basic-ssl/_cert.pem`) en `server` y `preview`, evitando bloqueos de contexto seguro en móviles reales (`crypto.randomUUID()`, `navigator.mediaDevices` / `VoicePill`, Service Worker).
+   - Configuración explícita de `server: { host: '0.0.0.0', port: 3000, strictPort: true, open: false }` e incorporación del script `"dev:mobile": "vite --host 0.0.0.0 --port 3000"` en `package.json`.
+2. **Automatización de Arranque con Detección de IP (`iniciar-movil.bat`, `scripts/dev-mobile.bat`):**
+   - Creación de lanzadores Windows en raíz (`iniciar-movil.bat`) y en `scripts/dev-mobile.bat` con resolución automática de dirección `IPv4` vía `ipconfig`, impresión directa de `https://%IP%:3000/` y arranque de `npm run dev:mobile`.
+   - Preservación absoluta de `src/components/`, `src/db/db.ts` y contratos de datos.
+
+---
+
 ### FASE 4.97 — Limpieza Estética Radical del Tablero Kanban en Móvil (REQ-UI-24)
 **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewKanban.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 

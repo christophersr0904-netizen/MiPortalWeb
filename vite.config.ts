@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import path from 'path';
 import fs from 'fs';
 
@@ -43,16 +44,16 @@ export default defineConfig({
   define: {
     __BUILD_TIMESTAMP__: JSON.stringify(Date.now().toString())
   },
-  plugins: [react(), capacitorIndexHtmlPlugin()],
+  plugins: [react(), capacitorIndexHtmlPlugin(), basicSsl()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src')
     }
   },
   server: {
+    host: '0.0.0.0',
     port: 3000,
     strictPort: true,
-    host: true,
     open: false
   },
   build: {

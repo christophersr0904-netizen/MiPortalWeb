@@ -21,6 +21,26 @@ export interface TarjetaProyectoProps {
   onEliminarProyecto: (proyecto: CanonicalProyecto) => void;
 }
 
+/** Formatea ISO YYYY-MM-DD a DD/MM compacto para rango de fechas en Bento móvil. */
+const formatearFechaDDMM = (fechaIso?: string): string => {
+  if (!fechaIso) return '';
+  const clean = fechaIso.split('T')[0];
+  const partes = clean.split('-');
+  if (partes.length === 3) {
+    return `${partes[2]}/${partes[1]}`;
+  }
+  return clean;
+};
+
+/** Abrevia importes grandes en móvil (< sm) para chips presupuestarios compactos. */
+const formatearMontoCompacto = (valor: number): string => {
+  if (!Number.isFinite(valor)) return '0';
+  if (Math.abs(valor) >= 1000) {
+    return `${(valor / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  }
+  return String(Math.round(valor));
+};
+
 export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
   ({
     proyecto: p,
@@ -39,7 +59,13 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
     const bac = p.presupuesto || 0;
     const ac = p.costo_real || 0;
     const burn = bac > 0 ? Math.round((ac / bac) * 100) : 0;
-    const varianza = bac > 0 ? bac - ac : 0;
+
+    const fechaInicioCorta = formatearFechaDDMM(p.fecha_inicio);
+    const fechaFinCorta = formatearFechaDDMM(p.fecha_fin);
+    const rangoFechasCompacto =
+      fechaInicioCorta && fechaFinCorta
+        ? `${fechaInicioCorta} - ${fechaFinCorta}`
+        : fechaFinCorta || fechaInicioCorta;
 
     const h = String(p.health_status || '').toLowerCase();
     const isCrit = h.includes('bloqueado') || h.includes('crítico') || h.includes('critico');
@@ -63,18 +89,18 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
     return (
       <div
         onClick={() => onSeleccionarProyecto(p.codigo_legado || p.id)}
-        className="portfolio-card portal-surface bg-[#0D1526] rounded-2xl p-3.5 sm:p-4 sm:pl-4.5 border border-slate-800/40 hover:border-slate-700/60 hover:shadow-lg hover:shadow-sky-500/5 hover:-translate-y-0.5 active:scale-[0.98] active:brightness-105 transform-gpu transition-[transform,border-color,box-shadow] duration-200 ease-out flex flex-col justify-between min-h-0 sm:min-h-[320px] relative group overflow-hidden select-none cursor-pointer"
+        className="portfolio-card portal-surface bg-[#0D1526]/90 border border-slate-800/60 rounded-xl p-3 sm:p-4 pl-3.5 sm:pl-4.5 shadow-sm hover:border-sky-500/30 hover:-translate-y-0.5 active:scale-[0.98] transform-gpu transition-all duration-200 ease-out flex flex-col justify-between relative group overflow-hidden select-none cursor-pointer"
       >
         {/* Barra lateral de salud dinámica */}
         <div
-          className={`absolute left-0 top-0 bottom-0 w-1.5 ${colorBarra} transition-[width] duration-150 group-hover:w-2`}
+          className={`absolute left-0 top-0 bottom-0 w-1 ${colorBarra} transition-[width] duration-150 group-hover:w-1.5`}
         />
 
         <div>
-          {/* Fila superior: ID, Tipo y Badge de Salud */}
-          <div className="flex items-center justify-between gap-1.5 mb-2 sm:mb-2.5 flex-wrap">
+          {/* Cabecera limpia: Código Violet/Cobalt, Tipo/Notas y Semáforo */}
+          <div className="flex items-center justify-between gap-1.5 mb-2 flex-wrap">
             <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-              <span className="font-mono font-bold text-[10px] bg-slate-900/80 text-slate-300 px-2 py-0.5 rounded border border-slate-800">
+              <span className="text-[11px] font-mono font-bold bg-violet-500/15 text-violet-300 px-2 py-0.5 rounded border border-violet-500/30">
                 {p.codigo_legado}
               </span>
               <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-slate-800/80 text-slate-300">
@@ -102,38 +128,33 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
             </div>
           </div>
 
-          {/* Título de Proyecto */}
+          {/* Título de Proyecto limitado a 2 líneas */}
           <h3
-            className="font-bold text-slate-100 text-sm md:text-base leading-snug mb-1 hover:text-sky-300 transition-colors cursor-pointer line-clamp-2"
+            className="text-sm sm:text-base font-semibold text-slate-100 leading-snug mb-1.5 hover:text-sky-300 transition-colors cursor-pointer line-clamp-2"
             title={p.nombre}
           >
             {p.nombre}
           </h3>
 
-          {/* North Star OKR con reserva de altura en desktop */}
-          <div className="hidden sm:block min-h-[20px] mb-2.5">
-            {p.north_star_okr ? (
-              <p className="text-[11px] text-slate-400 italic line-clamp-1 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} />
-                <span className="truncate">{p.north_star_okr}</span>
-              </p>
-            ) : null}
-          </div>
+          {/* North Star OKR compacto en desktop */}
+          {p.north_star_okr && (
+            <p className="hidden sm:flex text-[11px] text-slate-400 italic line-clamp-1 items-center gap-1 mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} />
+              <span className="truncate">{p.north_star_okr}</span>
+            </p>
+          )}
 
-          {/* Doble Barra de Progreso (Meta Proyectada vs Real) */}
-          <div className="space-y-1 my-3">
-            <div className="flex justify-between items-center text-xs font-mono tabular-nums">
-              <span className="text-slate-400 flex items-center gap-2">
-                <span>
-                  Avance Real:{' '}
-                  <b className="text-slate-100 font-bold">{avReal}%</b>
-                </span>
+          {/* Barra de Progreso Delgada + Porcentaje Tabular */}
+          <div className="space-y-1.5 my-2.5">
+            <div className="flex items-center justify-between gap-2 text-xs font-mono tabular-nums">
+              <span className="font-semibold text-sky-400">{avReal}%</span>
+              <span className="hidden sm:inline text-[11px] text-slate-400">
+                Meta {avPlan}%
               </span>
-              <span className="text-[11px] text-slate-400">Proyectado: {avPlan}%</span>
             </div>
-            <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden relative shadow-inner">
+            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden relative">
               <div
-                className="bg-sky-950/60 border border-sky-800/40 h-full rounded-full absolute left-0 top-0"
+                className="bg-sky-950/60 h-full rounded-full absolute left-0 top-0"
                 style={{ width: `${avPlan}%` }}
               />
               <div
@@ -143,10 +164,10 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
             </div>
           </div>
 
-          {/* Fila de Metadatos de Tareas y Plazo */}
-          <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-400 font-medium mb-3 pt-2 border-t border-slate-800/80">
+          {/* Fila de Metadatos Compactos: Tareas + Rango DD/MM - DD/MM */}
+          <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 font-mono tabular-nums mb-2.5 pt-2 border-t border-slate-800/60">
             <span
-              className="inline-flex items-center gap-1.5 bg-slate-900/60 px-2 py-0.5 rounded-md border border-slate-800/60 text-xs font-mono tabular-nums text-slate-300"
+              className="inline-flex items-center gap-1 bg-slate-900/60 px-2 py-0.5 rounded-md border border-slate-800/60 text-slate-300"
               title="Tareas completadas vs totales"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
@@ -155,112 +176,61 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
               </span>
             </span>
 
-            {p.fecha_fin && (
+            {rangoFechasCompacto && (
               <span
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-mono tabular-nums bg-slate-900/60 border border-slate-800/60 text-slate-300"
-                title="Fecha límite"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900/60 border border-slate-800/60 text-slate-400"
+                title={`Plazo: ${p.fecha_inicio || 'S/I'} a ${p.fecha_fin || 'S/F'}`}
               >
                 <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
-                <span>{p.fecha_fin}</span>
+                <span>{rangoFechasCompacto}</span>
               </span>
             )}
 
-            <span className="hidden sm:inline-flex text-[10px] px-2 py-0.5 rounded-full font-semibold ml-auto bg-slate-900/80 border border-slate-800 text-slate-400">
+            <span className="hidden sm:inline-flex text-[10px] px-2 py-0.5 rounded-full font-sans font-semibold ml-auto bg-slate-900/80 border border-slate-800 text-slate-400">
               {p.estado ? p.estado.replace(/^\d+_/, '').replace(/_/g, ' ') : 'Activo'}
             </span>
           </div>
 
-          {/* Bloque Financiero BAC vs AC y Burn Rate */}
-          <div className="bg-slate-950/50 p-2.5 rounded-xl border border-slate-800/60 text-xs font-mono tabular-nums mb-4">
-            <div className="flex justify-between items-center text-slate-400 mb-1.5">
-              <span className="flex items-center gap-1.5">
-                <Wallet className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
-                <span>
-                  BAC:{' '}
-                  <b className="text-slate-200">
-                    PEN{' '}
-                    {bac.toLocaleString('es-PE', {
-                      minimumFractionDigits: 1,
-                      maximumFractionDigits: 1
-                    })}
-                  </b>
+          {/* Chip Único Presupuestario Compacto (PEN gasto / presupuesto) */}
+          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-slate-950/60 border border-slate-800/60 text-xs font-mono tabular-nums mb-3">
+            <span className="inline-flex items-center gap-1.5 min-w-0 truncate">
+              <Wallet className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
+              <span className={ac > bac ? 'text-rose-400 font-bold truncate' : 'text-slate-200 font-semibold truncate'}>
+                PEN{' '}
+                <span className="sm:hidden">
+                  {formatearMontoCompacto(ac)} / {formatearMontoCompacto(bac)}
+                </span>
+                <span className="hidden sm:inline">
+                  {ac.toLocaleString('es-PE', { maximumFractionDigits: 1 })} /{' '}
+                  {bac.toLocaleString('es-PE', { maximumFractionDigits: 1 })}
                 </span>
               </span>
-              <span
-                className={
-                  ac > bac
-                    ? 'text-rose-400 font-black'
-                    : 'text-slate-200 font-bold'
-                }
-              >
-                Real: PEN{' '}
-                {ac.toLocaleString('es-PE', {
-                  minimumFractionDigits: 1,
-                  maximumFractionDigits: 1
-                })}
-              </span>
-            </div>
-            <div className="w-full bg-slate-800/60 h-1.5 rounded-full overflow-hidden relative">
-              <div
-                className={`${
-                  burn > 100 ? 'bg-rose-500' : burn > 85 ? 'bg-amber-500' : 'bg-emerald-400'
-                } h-full rounded-full transition-all duration-500 ease-out`}
-                style={{ width: `${Math.min(burn, 100)}%` }}
-              />
-            </div>
-            <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1.5 flex-wrap gap-1">
-              <span>
-                Consumo:{' '}
-                <b
-                  className={
-                    burn > 100
-                      ? 'text-rose-400 font-bold'
-                      : burn > 85
-                      ? 'text-amber-400 font-bold'
-                      : 'text-emerald-400 font-bold'
-                  }
-                >
-                  {burn}%
-                </b>
-              </span>
-              <span className="hidden sm:inline">
-                Varianza:{' '}
-                <b
-                  className={
-                    varianza >= 0
-                      ? 'text-emerald-400'
-                      : 'text-rose-400'
-                  }
-                >
-                  {bac > 0
-                    ? varianza >= 0
-                      ? `+S/ ${varianza.toFixed(1)}`
-                      : `-S/ ${Math.abs(varianza).toFixed(1)}`
-                    : 'Sin Tope'}
-                </b>
-              </span>
-              <span className="hidden sm:inline">
-                Saldo: PEN{' '}
-                {Math.max(0, bac - ac).toLocaleString('es-PE', {
-                  minimumFractionDigits: 1,
-                  maximumFractionDigits: 1
-                })}
-              </span>
-            </div>
+            </span>
+            <span
+              className={`text-[11px] font-bold shrink-0 ${
+                burn > 100
+                  ? 'text-rose-400'
+                  : burn > 85
+                  ? 'text-amber-400'
+                  : 'text-emerald-400'
+              }`}
+            >
+              {burn}%
+            </span>
           </div>
         </div>
 
-        {/* Botonera Inferior Canónica (44px target en móvil) */}
-        <div className="flex items-center gap-1.5 pt-2 border-t border-slate-800/80">
+        {/* Botonera Táctica Ergonómica (40px-44px targets) */}
+        <div className="flex items-center gap-1.5 pt-2 border-t border-slate-800/60">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onSeleccionarProyecto(p.id);
             }}
-            className="flex-1 min-h-[44px] sm:min-h-0 py-2.5 sm:py-1.5 px-3 bg-sky-500 hover:bg-sky-400 text-white rounded-xl text-xs font-bold shadow-xs shadow-sky-950/40 transition-transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+            className="flex-1 h-10 text-xs font-medium px-3 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 hover:border-sky-500/40 rounded-lg flex items-center justify-center gap-1.5 active:scale-95 transition cursor-pointer"
           >
-            <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} />
+            <ExternalLink className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
             <span>Ver Detalle 360°</span>
           </button>
 
@@ -270,10 +240,11 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
               e.stopPropagation();
               onAñadirTarea(p.codigo_legado || p.id);
             }}
-            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 text-emerald-400 hover:bg-emerald-950/60 rounded-xl border border-emerald-800/60 transition-transform active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg border border-slate-700/60 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/40 active:scale-95 transition shrink-0 cursor-pointer"
             title="Añadir Tarea"
+            aria-label="Añadir Tarea"
           >
-            <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
+            <Plus className="w-4 h-4" strokeWidth={1.75} />
           </button>
 
           <button
@@ -282,10 +253,11 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
               e.stopPropagation();
               onEditarProyecto(p.id);
             }}
-            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 rounded-xl border border-slate-800 transition-transform active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg border border-slate-700/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 active:scale-95 transition shrink-0 cursor-pointer"
             title="Editar Proyecto"
+            aria-label="Editar Proyecto"
           >
-            <Edit3 className="w-4 h-4 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
+            <Edit3 className="w-4 h-4" strokeWidth={1.75} />
           </button>
 
           <button
@@ -294,10 +266,11 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
               e.stopPropagation();
               onEliminarProyecto(p);
             }}
-            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 p-2 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 rounded-xl border border-rose-500/20 hover:border-rose-500/40 transition-transform shrink-0 flex items-center justify-center cursor-pointer"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg border border-slate-700/60 text-slate-400 hover:text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10 active:scale-95 transition shrink-0 cursor-pointer"
             title="Eliminar Proyecto en Cascada"
+            aria-label="Eliminar Proyecto"
           >
-            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
+            <Trash2 className="w-4 h-4" strokeWidth={1.75} />
           </button>
         </div>
       </div>

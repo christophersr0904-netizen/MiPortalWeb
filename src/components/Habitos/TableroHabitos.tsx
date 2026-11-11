@@ -986,7 +986,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
               </div>
 
               {/* Cuerpo de Tarjetas con Scroll Vertical Fluido (Pendientes + Completadas Separadas) */}
-              <div className="kanban-col-body flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 md:p-3 space-y-2.5 md:space-y-3 custom-scrollbar [&::-webkit-scrollbar]:hidden">
+              <div className="kanban-col-body flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 md:p-3 pb-28 md:pb-4 space-y-2.5 md:space-y-3 custom-scrollbar [&::-webkit-scrollbar]:hidden">
                 {cargando ? (
                   /* Skeleton Loader limpio con dimensiones fijas para evitar FOUC y colapso flexbox */
                   <div className="space-y-2.5">

@@ -30,6 +30,7 @@ import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
 import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import { FiltrosPortafolio } from '../PMO/FiltrosPortafolio';
 import { TarjetaProyecto } from '../PMO/TarjetaProyecto';
+import CountUp from '../CountUp';
 
 interface ViewPortafolioProps {
   onSeleccionarProyecto: (proyectoId: string) => void;
@@ -393,23 +394,28 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
       </div>
 
-      {/* SECCIÓN 1: KPI CARDS EJECUTIVAS CON MICRO-MÉTRICAS Y BURN RATE */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+      {/* SECCIÓN 1: KPI CARDS EJECUTIVAS CON COUNTUP Y CUADRÍCULA 2X2 MÓVIL (REQ-UI-29) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 p-2 sm:p-0">
         {/* KPI 1: TOTAL PROYECTOS & FASES */}
-        <div className="portal-surface bg-[#0D1526] p-3 sm:p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-800/60 shadow-sm flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/30 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate leading-none">
               Iniciativas
             </span>
-            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-sky-950/60 text-sky-400 flex items-center justify-center text-xs font-bold shrink-0">
-              <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
+            <span className="sm:w-7 sm:h-7 sm:rounded-xl sm:bg-sky-950/60 text-sky-400 flex items-center justify-center shrink-0">
+              <Layers className="w-4 h-4" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-1.5 sm:my-2 flex items-baseline gap-1.5 sm:gap-2">
-            <div className="text-2xl sm:text-3xl font-black text-slate-100 font-mono tabular-nums tracking-tight" id="kpi-total-proyectos">
-              {totalProyectos}
+          <div className="mt-1 sm:my-2 flex items-baseline gap-1.5 sm:gap-2">
+            <div className="text-lg sm:text-3xl font-bold text-slate-100 font-mono tabular-nums tracking-tight leading-none" id="kpi-total-proyectos">
+              <CountUp
+                to={totalProyectos}
+                duration={1.2}
+                trigger="load"
+                className="font-mono font-bold tabular-nums"
+              />
             </div>
-            <span className="text-[10px] sm:text-[11px] font-medium text-slate-400 font-mono tabular-nums" id="kpi-sub-total-proyectos">
+            <span className="hidden sm:inline text-[11px] font-medium text-slate-400 font-mono tabular-nums" id="kpi-sub-total-proyectos">
               {proyEjecucion + proyPlan} act.
             </span>
           </div>
@@ -423,18 +429,24 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
 
         {/* KPI 2: AVANCE GLOBAL PONDERADO */}
-        <div className="portal-surface bg-[#0D1526] p-3 sm:p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-800/60 shadow-sm flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/30 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate leading-none">
               Avance Global
             </span>
-            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-emerald-950/60 text-emerald-400 flex items-center justify-center text-xs font-bold shrink-0">
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
+            <span className="sm:w-7 sm:h-7 sm:rounded-xl sm:bg-emerald-950/60 text-emerald-400 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-1.5 sm:my-2 flex items-baseline justify-between gap-1">
-            <div className="text-2xl sm:text-3xl font-black text-sky-400 font-mono tabular-nums tracking-tight" id="kpi-avance-promedio">
-              {promReal}%
+          <div className="mt-1 sm:my-2 flex items-baseline justify-between gap-1">
+            <div className="text-lg sm:text-3xl font-bold text-sky-400 font-mono tabular-nums tracking-tight leading-none" id="kpi-avance-promedio">
+              <CountUp
+                to={promReal}
+                duration={1.2}
+                trigger="load"
+                suffix="%"
+                className="font-mono font-bold tabular-nums"
+              />
             </div>
             <span className="hidden sm:inline text-[11px] font-medium text-slate-400 font-mono tabular-nums" id="kpi-avance-meta">
               Meta: {promMeta}%
@@ -457,18 +469,26 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
 
         {/* KPI 3: CONSUMO PRESUPUESTARIO (BURN RATE) */}
-        <div className="portal-surface bg-[#0D1526] p-3 sm:p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-800/60 shadow-sm flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/30 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate leading-none">
               Presupuesto
             </span>
-            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-amber-950/60 text-amber-400 flex items-center justify-center text-xs font-bold shrink-0">
-              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" strokeWidth={1.75} />
+            <span className="sm:w-7 sm:h-7 sm:rounded-xl sm:bg-amber-950/60 text-amber-400 flex items-center justify-center shrink-0">
+              <Clock className="w-4 h-4" strokeWidth={1.75} />
             </span>
           </div>
-          <div className="my-1.5 sm:my-2">
-            <div className="text-base sm:text-2xl font-black text-slate-100 font-mono tabular-nums tracking-tight truncate" id="kpi-gasto-total">
-              PEN {sumaAC.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div className="mt-1 sm:my-2 min-w-0">
+            <div className="text-sm sm:text-2xl font-bold text-slate-100 font-mono tabular-nums tracking-tight truncate leading-none" id="kpi-gasto-total">
+              <CountUp
+                to={sumaAC}
+                duration={1.2}
+                trigger="load"
+                decimals={2}
+                separator=","
+                prefix="PEN "
+                className="font-mono font-bold tabular-nums"
+              />
             </div>
             <div className="hidden sm:flex text-[11px] text-slate-400 items-center gap-1 font-mono tabular-nums mt-0.5">
               <span>de</span>
@@ -477,7 +497,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               </b>
               <span
                 id="kpi-presupuesto-pct"
-                className={`text-[10px] font-bold px-1.5 py-0.2 rounded border font-mono tabular-nums ${
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border font-mono tabular-nums ${
                   pctBurn > 100
                     ? 'bg-rose-950/60 text-rose-300 border-rose-800/60'
                     : pctBurn > 85
@@ -498,24 +518,40 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
 
         {/* KPI 4: SALUD & RIESGOS DEL PORTAFOLIO */}
-        <div className="portal-surface bg-[#0D1526] p-3 sm:p-4 rounded-2xl border border-slate-800/40 shadow-xs flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-800/60 shadow-sm flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/30 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate leading-none">
               Salud
             </span>
-            <span id="kpi-health-icon" className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-slate-900/80 flex items-center justify-center text-xs font-bold relative shrink-0">
+            <span id="kpi-health-icon" className="w-4 h-4 sm:w-7 sm:h-7 sm:rounded-xl sm:bg-slate-900/80 flex items-center justify-center text-xs font-bold relative shrink-0">
               {countBloqueado > 0 && (
                 <span className="animate-ping absolute inline-flex h-4 w-4 rounded-full opacity-60 duration-1000 bg-rose-500" />
               )}
               <span className={`relative inline-flex rounded-full h-2.5 w-2.5 shadow-[0_0_8px_currentColor] ${countBloqueado > 0 ? 'bg-rose-500 text-rose-500' : countRiesgo > 0 ? 'bg-amber-400 text-amber-400' : 'bg-emerald-400 text-emerald-400'}`} />
             </span>
           </div>
-          <div className="my-1.5 sm:my-2">
-            <div className="text-base sm:text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2 font-mono tabular-nums" id="kpi-alertas-criticas">
+          <div className="mt-1 sm:my-2">
+            <div className="text-base sm:text-2xl font-bold text-slate-100 tracking-tight flex items-center gap-1.5 font-mono tabular-nums leading-none" id="kpi-alertas-criticas">
               {countBloqueado + countRiesgo === 0 ? (
-                <span className="text-emerald-400">0 riesgo</span>
+                <span className="text-emerald-400 inline-flex items-baseline gap-1">
+                  <CountUp
+                    to={0}
+                    duration={1.2}
+                    trigger="load"
+                    className="font-mono font-bold tabular-nums"
+                  />
+                  <span className="text-xs sm:text-base font-bold">riesgo</span>
+                </span>
               ) : (
-                <span className="text-rose-400">{countBloqueado + countRiesgo} alerta</span>
+                <span className="text-rose-400 inline-flex items-baseline gap-1">
+                  <CountUp
+                    to={countBloqueado + countRiesgo}
+                    duration={1.2}
+                    trigger="load"
+                    className="font-mono font-bold tabular-nums"
+                  />
+                  <span className="text-xs sm:text-base font-bold">alerta</span>
+                </span>
               )}
             </div>
             <p className="hidden sm:block text-[11px] text-slate-400 mt-0.5" id="kpi-alertas-desc">

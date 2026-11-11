@@ -20,7 +20,8 @@ import {
   Activity,
   Briefcase,
   Copy,
-  Check
+  Check,
+  Clock
 } from 'lucide-react';
 
 export interface TarjetaNotaProps {
@@ -131,11 +132,41 @@ const PALETA_COLORES: Record<string, { card: string; border: string; badge: stri
     dot: 'bg-rose-500'
   },
   default: {
-    card: 'bg-white dark:bg-[#0D1526]',
-    border: 'border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700',
-    badge: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+    card: 'bg-[#0D1526]/90',
+    border: 'border-slate-800/60 hover:border-sky-500/30',
+    badge: 'bg-slate-800 text-slate-300 border-slate-700',
     dot: 'bg-slate-400'
   }
+};
+
+// Acento vertical izquierdo Bento según color de nota/cuaderno (REQ-UI-28)
+const COLOR_BORDE_ACENTO: Record<string, string> = {
+  slate: 'border-l-slate-400',
+  red: 'border-l-red-500',
+  orange: 'border-l-orange-500',
+  amber: 'border-l-amber-500',
+  yellow: 'border-l-yellow-500',
+  lime: 'border-l-lime-500',
+  green: 'border-l-green-500',
+  emerald: 'border-l-emerald-500',
+  teal: 'border-l-teal-500',
+  cyan: 'border-l-cyan-500',
+  sky: 'border-l-sky-500',
+  blue: 'border-l-blue-500',
+  indigo: 'border-l-indigo-500',
+  violet: 'border-l-violet-500',
+  purple: 'border-l-purple-500',
+  rose: 'border-l-rose-500'
+};
+
+/** Formatea ISO a fecha compacta DD/MM para ahorrar anchura cognitiva en Bento móvil. */
+const formatearFechaCortaNota = (fechaIso?: string): string => {
+  if (!fechaIso) return '--/--';
+  const d = new Date(fechaIso);
+  if (Number.isNaN(d.getTime())) return '--/--';
+  const dia = String(d.getDate()).padStart(2, '0');
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dia}/${mes}`;
 };
 
 const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
@@ -146,7 +177,11 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
   onConvertirEnGasto,
   modoVista = 'masonry'
 }) => {
-  const estilo = PALETA_COLORES[nota.color_tema] || PALETA_COLORES.default;
+  const temaColor = nota.color_tema || nota.color || 'default';
+  const estilo = PALETA_COLORES[temaColor] || PALETA_COLORES.default;
+  const bordeAcentoIzquierdo =
+    COLOR_BORDE_ACENTO[temaColor] ||
+    (nota.block_nombre ? 'border-l-sky-500/70' : 'border-l-slate-700');
 
   const [copiado, setCopiado] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -295,7 +330,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onClick={() => onEditar(nota)}
-        className={`h-12 w-full px-3.5 py-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-800/60 bg-[#0D1526] kinetic-card-lista cursor-grab active:cursor-grabbing group select-none shadow-cobalt-1 ${
+        className={`h-12 w-full px-3.5 py-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-800/60 border-l-4 ${bordeAcentoIzquierdo} bg-[#0D1526]/90 hover:border-sky-500/30 kinetic-card-lista cursor-grab active:cursor-grabbing group select-none shadow-sm ${
           isDragging ? 'opacity-40 scale-[0.98] border-dashed border-sky-500/50' : ''
         }`}
       >
@@ -324,17 +359,16 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
               {nota.wishlist_json?.moneda || 'PEN'} {metaWishlist.toFixed(0)}
             </span>
           )}
-          <span className="font-mono tabular-nums text-[10px] text-slate-500 hidden sm:inline-block">
-            {new Date(nota.updated_at).toLocaleDateString('es-PE', {
-              month: 'short',
-              day: 'numeric'
-            })}
+          <span className="hidden sm:inline-flex items-center gap-1 font-mono tabular-nums text-[11px] text-slate-400">
+            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
+            {formatearFechaCortaNota(nota.updated_at)}
           </span>
           <button
             type="button"
             onClick={handleCopiarNota}
             title="Copiar texto plano al portapapeles"
-            className="p-1 text-slate-400 hover:text-sky-300 rounded transition-all duration-150 active:scale-90 cursor-pointer"
+            aria-label="Copiar texto plano"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-sky-300 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
           >
             {copiado ? (
               <Check className="w-3.5 h-3.5 text-emerald-400 kinetic-pop-bounce" strokeWidth={1.75} />
@@ -346,7 +380,8 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             type="button"
             onClick={handleEliminarDirecto}
             title="Eliminar Nota"
-            className="p-1 text-slate-400 hover:text-rose-400 rounded transition-all duration-150 active:scale-90 cursor-pointer"
+            aria-label="Eliminar Nota"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-rose-400 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
@@ -361,7 +396,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onClick={() => onEditar(nota)}
-      className={`nota-card ${nota.es_fijada ? 'nota-card-pinned' : ''} break-inside-avoid mb-4 p-4 flex flex-col justify-between rounded-2xl kinetic-card-mosaico cursor-grab active:cursor-grabbing bg-[#0D1526] ${estilo.card} border ${estilo.border} shadow-cobalt-1 group relative ${
+      className={`nota-card ${nota.es_fijada ? 'nota-card-pinned' : ''} break-inside-avoid mb-3 sm:mb-4 p-3 sm:p-4 flex flex-col justify-between rounded-xl sm:rounded-2xl kinetic-card-mosaico cursor-grab active:cursor-grabbing bg-[#0D1526]/90 ${estilo.card} border border-slate-800/60 ${estilo.border} border-l-4 ${bordeAcentoIzquierdo} shadow-sm hover:border-sky-500/30 group relative ${
         isDragging ? 'opacity-40 scale-[0.98] border-dashed border-sky-500/50' : ''
       }`}
     >
@@ -371,17 +406,17 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
         id="btn-pin-nota"
         onClick={handleTogglePin}
         title={nota.es_fijada ? 'Desfijar nota' : 'Fijar nota en la parte superior'}
-        className={`absolute top-2.5 right-2.5 p-2 sm:p-1.5 rounded-lg transition-all duration-200 active:scale-90 cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center ${
+        className={`absolute top-1.5 right-1.5 sm:top-2.5 sm:right-2.5 rounded-xl sm:rounded-lg transition-all duration-200 active:scale-90 cursor-pointer min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center ${
           nota.es_fijada
-            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 opacity-100 shadow-xs'
-            : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800 opacity-80 sm:opacity-0 sm:group-hover:opacity-100'
+            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 opacity-100 shadow-sm'
+            : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800 opacity-90 sm:opacity-0 sm:group-hover:opacity-100'
         }`}
       >
-        <Pin className={`w-3.5 h-3.5 transition-transform duration-200 ease-out hover:-rotate-12 ${nota.es_fijada ? 'fill-amber-400 rotate-45' : ''}`} />
+        <Pin className={`w-3.5 h-3.5 transition-transform duration-200 ease-out hover:-rotate-12 ${nota.es_fijada ? 'fill-amber-400 rotate-45' : ''}`} strokeWidth={1.75} />
       </button>
 
       {/* Header: Código Legado + Block Badge + Badges de Tipo */}
-      <div className="pr-8 mb-2">
+      <div className="pr-11 sm:pr-9 mb-2">
         <div className="flex flex-wrap items-center gap-1.5 mb-1">
           <span className="font-mono text-[10px] text-slate-400 font-bold block">
             {nota.codigo_legado}
@@ -573,7 +608,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
                 {renderIcono()}
                 <span className="font-bold">{v.codigo}</span>
                 {v.titulo && v.titulo.trim() !== v.codigo.trim() && (
-                  <span className="font-sans font-normal truncate max-w-[110px] opacity-80 text-[9.5px]">
+                  <span className="hidden sm:inline font-sans font-normal truncate max-w-[110px] opacity-80 text-[9.5px]">
                     · {v.titulo}
                   </span>
                 )}
@@ -598,19 +633,18 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
       )}
 
       {/* Footer de Tarjeta con revelación suave en Hover (Ley de Silencio Visual) */}
-      <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-400">
-        <span className="font-mono tabular-nums">
-          {new Date(nota.updated_at).toLocaleDateString('es-PE', {
-            month: 'short',
-            day: 'numeric'
-          })}
+      <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-800/60 text-[11px] text-slate-400">
+        <span className="inline-flex items-center gap-1 font-mono tabular-nums text-[11px] text-slate-400">
+          <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
+          {formatearFechaCortaNota(nota.updated_at)}
         </span>
-        <div className="flex items-center gap-1 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
+        <div className="flex items-center gap-0.5 sm:gap-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
           <button
             type="button"
             onClick={handleCopiarNota}
             title="Copiar texto plano al portapapeles"
-            className="p-1.5 sm:p-1 hover:text-sky-300 rounded transition-all duration-150 active:scale-90 cursor-pointer"
+            aria-label="Copiar texto plano"
+            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] flex items-center justify-center hover:text-sky-300 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
           >
             {copiado ? (
               <Check className="w-3.5 h-3.5 text-emerald-400 kinetic-pop-bounce" strokeWidth={1.75} />
@@ -625,7 +659,8 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
               onEditar(nota);
             }}
             title="Editar Nota"
-            className="p-1.5 sm:p-1 hover:text-sky-400 rounded transition-all duration-150 active:scale-90 cursor-pointer"
+            aria-label="Editar Nota"
+            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] flex items-center justify-center hover:text-sky-400 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
           >
             <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
@@ -633,7 +668,8 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             type="button"
             onClick={handleEliminarDirecto}
             title="Eliminar Nota"
-            className="p-1.5 sm:p-1 hover:text-rose-400 rounded transition-all duration-150 active:scale-90 cursor-pointer"
+            aria-label="Eliminar Nota"
+            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] flex items-center justify-center hover:text-rose-400 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
