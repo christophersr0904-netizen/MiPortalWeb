@@ -52,6 +52,20 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.96 — Blindaje de Despliegue Wrangler v4 para Assets Estáticos (REQ-OPS-23)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `wrangler.toml`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+- **Migración a bloque `[assets]` de Wrangler v4 en `wrangler.toml`:**
+  - Sustitución de la directiva heredada de Pages (`pages_build_output_dir = "dist"`, registrada previamente en `REQ-OPS-19`) por la configuración canónica de assets estáticos:
+    - `name = "miportalweb"`
+    - `compatibility_date = "2026-11-01"`
+    - `[assets]` con `directory = "./dist"`
+  - Permite ejecutar `npx wrangler deploy` directamente con Wrangler `4.160.0` sin requerir un script entrypoint `main` de Worker.
+  - Política de aislamiento respetada: cero cambios en `src/`, `package.json` ni esquemas Dexie.
+
+---
+
 ### FASE 4.95 — Ergonomía de Pulgar 44px, Compactación de Cabeceras Móviles y Transiciones Cinéticas (REQ-OPS-22B)
 **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/PMO/TarjetaProyecto.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/PMO/FiltrosPortafolio.tsx`, `src/components/Views/ViewKanban.tsx`, `src/components/Views/ViewPortafolio.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `src/components/Layout/BottomNavMobile.tsx`, `src/components/Modals/{ModalTareaFlow,ModalMetaPlanFlow,ModalActividadFlow,ModalGasto,ModalIngreso,ModalNuevoProyecto,ModalAtajosTeclado,ModalExportarPdf,ModalNuevoPlanCuotas,ModalDoDAdvertencia,ModalConvertirWishlistGasto,ModalAlcanceRecurrencia,ModalNuevoHito,ModalTechosPresupuesto}.tsx`, `src/components/Notas/{EditorNotaModal,ModalCrearCuaderno,ModalVincularEntidades,PopoverPreviewNotas}.tsx`, `src/components/IA/AsistenteIaModal.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 
