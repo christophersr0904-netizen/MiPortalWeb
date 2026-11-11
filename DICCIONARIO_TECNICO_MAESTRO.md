@@ -52,6 +52,24 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 4.97 — Limpieza Estética Radical del Tablero Kanban en Móvil (REQ-UI-24)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewKanban.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Unificación a Barra Única Limpia en `ViewKanban.tsx` (< md):**
+   - Consolidación de las franjas móviles en una sola barra compacta (`h-11`, `#carrusel-proyectos-movil`) con: selector compacto de proyecto (`#btn-selector-proyecto-movil`), pestañas de columna (`#selector-columnas-kanban-movil`) con `01_Backlog` activo por defecto al frente, y disparador único de filtros (`#btn-toggle-filtros-movil`).
+   - Ocultación completa en móvil del encabezado multipropósito (`<header className="hidden md:flex ...">`), eliminando duplicidad de `"Tablero Kanban"` (`hidden sm:flex`) y suprimiendo en `< md` el bloque de gasto global (`#kanban-gasto-presupuesto-box` con `hidden md:inline-flex` y retiro de `#kanban-gasto-presupuesto-box-movil`).
+   - Migración de búsqueda móvil (`#filter-buscar-tarea-mobile`), selector de proyectos (`#bottom-sheet-proyectos-kanban-movil`) y filtros multidimensionales (`#bottom-sheet-filtros-kanban-movil`) a Bottom Sheets nativos (`z-[10000]`) bajo `createPortal` y `motion/react`.
+2. **Erradicación de Popovers Fantasmas y Cierre Defensivo (`ViewKanban.tsx`, `HeaderMaestro.tsx`):**
+   - Sustitución de contenedores siempre montados (`opacity-0 invisible`) por montaje condicional estricto (`&&`) en los 6 popovers de cabecera desktop (`Tiempo`, `WBS`, `Prioridad`, `Energía`, `Plazo`, `Bloqueos`) y bloqueo de `handlePopoverMouseEnter` en dispositivos táctiles o `< 768px`.
+   - Listener global de clic externo y `Escape` para `#menu-theme-dropdown` (`HeaderMaestro.tsx`), acotado con `max-w-[calc(100vw-24px)]`.
+3. **Despeje Inferior sin Colisión (`WidgetIdeasBubble.tsx`):**
+   - Detección reactiva `matchMedia('(max-width: 767px)')` y reposicionamiento móvil canónico a `bottom-20 right-3 md:bottom-6 md:right-6`, eliminando traslapes con el botón central `+` elevado de `BottomNavMobile`.
+   - Compactación del pill flotante móvil (`hidden md:flex` en grip drag y bandeja expandible hover) y acotación de `#popover-captura-rapida-idea` a `max-w-[calc(100vw-24px)]`.
+   - Sin alteraciones en `src/db/db.ts` ni esquemas de datos.
+
+---
+
 ### FASE 4.96 — Blindaje de Despliegue Wrangler v4 para Assets Estáticos (REQ-OPS-23)
 **Fecha:** Noviembre 2026 | **Archivos modificados:** `wrangler.toml`, `DICCIONARIO_TECNICO_MAESTRO.md`
 

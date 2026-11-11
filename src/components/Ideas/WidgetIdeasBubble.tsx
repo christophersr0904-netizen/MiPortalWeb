@@ -508,8 +508,20 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
-  // Estilo de posición del contenedor (en móvil se ancla por encima de BottomNavMobile)
-  const esMovil = typeof window !== 'undefined' && window.innerWidth < 768;
+  // Detección reactiva de viewport móvil (< 768px) para anclaje despejado sobre BottomNavMobile (REQ-UI-24)
+  const [esMovil, setEsMovil] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const actualizar = () => setEsMovil(mq.matches);
+    actualizar();
+    mq.addEventListener('change', actualizar);
+    return () => mq.removeEventListener('change', actualizar);
+  }, []);
+
   const containerStyle: React.CSSProperties = (posicion && !esMovil)
     ? {
         position: 'fixed',
@@ -662,14 +674,14 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       <div
         id="widget-ideas-bubble-container"
         style={containerStyle}
-        className={`fixed ${(!posicion || esMovil) ? 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6 right-4 md:right-6' : ''} z-[9990] flex flex-col items-end gap-2.5 select-none pointer-events-none`}
+        className={`fixed ${(!posicion || esMovil) ? 'bottom-20 right-3 md:bottom-6 md:right-6' : ''} z-[9990] flex flex-col items-end gap-2 select-none pointer-events-none`}
       >
         {/* POPOVER DE MICRO-CAPTURA RÁPIDA */}
         {popoverAbierto && (
           <div
             ref={popoverRef}
             id="popover-captura-rapida-idea"
-            className="w-80 sm:w-96 p-4 rounded-3xl bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/60 shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_25px_rgba(56,189,248,0.12)] focus-within:border-sky-500/50 focus-within:shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_30px_rgba(56,189,248,0.2)] text-slate-100 flex flex-col gap-3.5 transition-all duration-200 origin-bottom-right animate-in fade-in zoom-in-95 pointer-events-auto"
+            className="w-80 max-w-[calc(100vw-24px)] sm:w-96 p-4 rounded-3xl bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/60 shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_25px_rgba(56,189,248,0.12)] focus-within:border-sky-500/50 focus-within:shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_30px_rgba(56,189,248,0.2)] text-slate-100 flex flex-col gap-3.5 transform-gpu transition-[transform,opacity] duration-200 origin-bottom-right pointer-events-auto"
           >
             {/* Cabecera */}
             <div className="flex items-center justify-between border-b border-slate-800/60 pb-2.5">
@@ -689,7 +701,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                     setVentanaAbierta(true);
                     setVentanaMinimizada(false);
                   }}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-white/5 transition cursor-pointer"
+                  className="min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-white/5 flex items-center justify-center transition cursor-pointer"
                   title="Expandir a Gestión de Ideas"
                 >
                   <Maximize2 className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -697,7 +709,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                 <button
                   type="button"
                   onClick={cerrarPopover}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 transition cursor-pointer"
+                  className="min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 flex items-center justify-center transition cursor-pointer"
                   title="Cerrar Captura"
                 >
                   <X className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -810,13 +822,13 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
         <div
           ref={pillRef}
           id="widget-ideas-pill"
-          className="group flex items-center p-1 rounded-full bg-[#0D1526]/90 backdrop-blur-xl border border-slate-800/60 shadow-2xl transition-all duration-300 ease-out select-none pointer-events-auto"
+          className="group flex items-center p-1 rounded-full bg-[#0D1526]/90 backdrop-blur-xl border border-slate-800/60 shadow-2xl transition-[transform,opacity,box-shadow] duration-200 ease-out transform-gpu select-none pointer-events-auto"
         >
-          {/* 1. Drag Handle interactivo con 6 puntos */}
+          {/* 1. Drag Handle interactivo (solo desktop md+) */}
           <div
             id="widget-ideas-drag-handle"
             onMouseDown={handleMouseDownGrip}
-            className="flex items-center justify-center w-5 h-8 px-1 text-slate-400 hover:text-slate-200 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
+            className="hidden md:flex items-center justify-center w-5 h-8 px-1 text-slate-400 hover:text-slate-200 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
             title="Arrastrar widget de ideas"
           >
             <div className="grid grid-cols-2 gap-0.5">
@@ -834,14 +846,15 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
             type="button"
             id="btn-widget-ideas-add"
             onClick={togglePopover}
-            className="w-8 h-8 rounded-full bg-sky-600 hover:bg-sky-500 text-white flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer border border-sky-400/40 shrink-0"
+            className="w-9 h-9 md:w-8 md:h-8 rounded-full bg-sky-600 hover:bg-sky-500 text-white flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-transform duration-150 transform-gpu cursor-pointer border border-sky-400/40 shrink-0"
             title="Nueva Idea Rápida (+)"
+            aria-label="Nueva Idea Rápida"
           >
             <Plus className="w-4 h-4 pointer-events-none" strokeWidth={1.75} />
           </button>
 
-          {/* 3. Foco + Contador en Hover */}
-          <div className="max-w-0 opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-focus-within:max-w-xs group-focus-within:opacity-100 transition-all duration-300 ease-out flex items-center overflow-hidden pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
+          {/* 3. Foco + Contador en Hover (solo desktop md+, evita expansión lateral sobre Nav en móvil) */}
+          <div className="hidden md:flex max-w-0 opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-focus-within:max-w-xs group-focus-within:opacity-100 transition-all duration-300 ease-out items-center overflow-hidden pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
             <div className="w-[1px] h-4 bg-white/10 mx-1 shrink-0" />
 
             <button
@@ -855,14 +868,14 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
               className="flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer shrink-0"
               title="Abrir Gestión de Ideas"
             >
-              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-400 via-orange-500 to-sky-500 flex items-center justify-center text-white shadow-xs">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-400 via-orange-500 to-sky-500 flex items-center justify-center text-white shadow-sm">
                 <Lightbulb className="w-3.5 h-3.5" strokeWidth={1.75} />
               </div>
 
               {/* Micro-badge contador con pulsación si hay más de 5 ideas pendientes */}
               <span
                 id="badge-contador-ideas-activas"
-                className={`font-mono tabular-nums text-[11px] font-bold px-1.5 py-0.2 rounded-full border ${
+                className={`font-mono tabular-nums text-[11px] font-bold px-1.5 py-0.5 leading-none rounded-full border ${
                   totalIdeasActivas > 5
                     ? 'animate-pulse bg-amber-500/30 text-amber-200 border-amber-400'
                     : 'text-amber-300 bg-amber-500/15 border-amber-500/30'

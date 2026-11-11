@@ -105,6 +105,27 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    if (!menuTemaAbierto) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest('#container-theme-dropdown')) {
+        setMenuTemaAbierto(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuTemaAbierto(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [menuTemaAbierto]);
+
   const estaSincronizando = sincronizando || syncManagerEstado === 'syncing' || recargandoAnim;
 
   // Queries reactivas para badges superiores
@@ -520,7 +541,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             {menuTemaAbierto && (
               <div
                 id="menu-theme-dropdown"
-                className="absolute right-0 mt-2 w-60 rounded-2xl bg-white/95 dark:bg-[#0D1526]/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/60 shadow-2xl p-3 z-50 space-y-3"
+                className="absolute right-0 mt-2 w-60 max-w-[calc(100vw-24px)] rounded-2xl bg-white/95 dark:bg-[#0D1526]/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/60 shadow-2xl p-3 z-50 space-y-3"
               >
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
                   <div className="flex items-center gap-1.5">
