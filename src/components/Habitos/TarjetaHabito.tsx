@@ -1,14 +1,31 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ActividadPersonal, SubtareaPaso, AlcanceRecurrencia, MetaPlanRecord } from '../../types';
 import { CATEGORIAS_VIDA_MAP } from '../../types';
 import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
 import {
-  Check, Flame, Calendar, Clock, DollarSign, PlusCircle, Pencil, Trash2,
+  Check, Flame, Calendar, Clock, Pencil, Trash2,
   HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee, AlertTriangle,
-  Target, ListTodo, ArrowUpRight
+  Target, ListTodo, Repeat, TrendingUp
 } from 'lucide-react';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
+import { esActividadCompletadaHoy } from '../../services/habitosService';
+
+/** Traduce el código técnico de recurrencia a etiqueta humana para tooltips. */
+const formatearCicloLegible = (frecuencia?: string, regla?: string): string => {
+  const f = String(frecuencia || '').toUpperCase().trim();
+  const base =
+    f === 'DIARIA' ? 'Diario' :
+    f === 'DIARIA_LABORAL' ? 'Lunes a Viernes' :
+    f === 'FIN_SEMANA' ? 'Fines de semana' :
+    f === 'SEMANAL' ? 'Semanal' :
+    f === 'QUINCENAL' ? 'Quincenal' :
+    f === 'MENSUAL' ? 'Mensual' :
+    f === 'PERSONALIZADA' ? 'Personalizada' :
+    f ? f.replace(/_/g, ' ').toLowerCase() : 'Recurrente';
+  const r = String(regla || '').trim();
+  return r ? `${base} (${r.replace(/^DIAS:/i, '')})` : base;
+};
 
 /** Formatea ISO YYYY-MM-DD a DD/MM compacto para reducir texto en tarjetas móviles. */
 const formatearFechaCortaHabito = (fechaIso?: string): string => {
@@ -102,22 +119,13 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
   };
   const diasMora = diferenciaEnDias(hoyStr, actividad.fecha_programada);
 
-  const updatedLocalStr = actividad.updated_at
-    ? formatFechaIsoLocal(new Date(actividad.updated_at))
-    : '';
-  const fProgLimpia = (actividad.fecha_programada || '').split(/[\sT]/)[0];
-
-  const esCumplidoHoy = (diasMora === 0 || actividad.estado === '04_Completado') && (
-    actividad.estado === '04_Completado' ||
-    actividad.ultima_fecha_completado === hoyStr ||
-    (updatedLocalStr === hoyStr && (actividad.racha_actual || 0) > 0 && fProgLimpia >= hoyStr) ||
-    (esRutinaria && fProgLimpia > hoyStr && (actividad.racha_actual || 0) > 0)
-  );
+  const esCumplidoHoy = esActividadCompletadaHoy(actividad, hoyStr);
 
   // UI Optimista de completado (0ms) con fallback a la evaluación calculada
   const esCompletada = optimisticCompletado !== undefined ? optimisticCompletado : esCumplidoHoy;
   const esHabitual = actividad.tipo_compromiso === 'HABITUAL';
   const racha = actividad.racha_actual || 0;
+  const [toggleInFlight, setToggleInFlight] = useState(false);
 
   // Handlers de acción
   const handleSolicitarEditar = (e: React.MouseEvent) => {
@@ -140,15 +148,38 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
     onEliminar(actConTitulo);
   };
 
-  // Toggle de check-in con respuesta reactiva optimista instantánea
+  // Toggle de check-in con guard anti doble clic rápido
   const handleToggleCheck = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const nuevoEstadoDeseado = !esCompletada;
-    await onToggleCompletar(actividad, nuevoEstadoDeseado);
+    if (toggleInFlight) return;
+    setToggleInFlight(true);
+    try {
+      const nuevoEstadoDeseado = !esCompletada;
+      await onToggleCompletar(actividad, nuevoEstadoDeseado);
+    } finally {
+      setToggleInFlight(false);
+    }
   };
 
   const metaAsociada = metaVinculada || actividad.metaVinculada;
   const actividadesAsociadas = actividadesVinculadas || actividad.actividadesVinculadas || [];
+
+  // Evitar duplicar pasos ya gestionados en ListaSubtareas (db.subtareas_pasos)
+  const pasosChecklistExclusivos = useMemo(() => {
+    if (!actividadesAsociadas.length) return [];
+    const llavesReales = new Set<string>();
+    for (const s of subtareas || []) {
+      if (s.id) llavesReales.add(String(s.id));
+      if (s.codigo_legado) llavesReales.add(String(s.codigo_legado));
+      if (s.descripcion_paso) llavesReales.add(s.descripcion_paso.trim().toLowerCase());
+    }
+    return actividadesAsociadas.filter((actItem: any) => {
+      const idIt = String(actItem.id || '');
+      const codIt = String(actItem.codigo_legado || '');
+      const nomIt = String(actItem.nombre_actividad || actItem.descripcion_paso || actItem.nombre || '').trim().toLowerCase();
+      return !llavesReales.has(idIt) && !llavesReales.has(codIt) && !llavesReales.has(nomIt);
+    });
+  }, [actividadesAsociadas, subtareas]);
 
   // Normalización unificada de meta
   const metaEfectiva = {
@@ -191,7 +222,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
   return (
     <div
       style={{ contain: 'layout paint' }}
-      className={`group portal-surface p-3 pl-3.5 space-y-2 transition-all duration-150 ease-out border rounded-xl relative overflow-hidden will-change-[transform,opacity] shadow-sm ${
+      className={`group shrink-0 h-auto portal-surface p-3 pl-3.5 space-y-2 transition-all duration-150 ease-out border rounded-xl relative will-change-[transform,opacity] shadow-sm ${
         esCompletada
           ? 'opacity-70 border-slate-800/40 bg-[#070B14]/90'
           : 'bg-[#0D1526]/90 border-slate-800/60 hover:border-sky-500/30 hover:-translate-y-0.5'
@@ -199,12 +230,12 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
     >
       {/* Micro-franja lateral de acento semántico por categoría */}
       <div
-        className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full ${catConfig.colorBarra} opacity-80`}
+        className={`!mt-0 absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${catConfig.colorBarra} opacity-85 pointer-events-none`}
         title={`Categoría: ${catConfig.nombre}`}
       />
 
       {/* FILA 1: Metadatos superiores, Racha y Acciones */}
-      <div className="flex items-center justify-between gap-1.5">
+      <div className="!mt-0 flex items-center justify-between gap-1.5">
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           {/* Badge de código canónico */}
           {codigoHabito ? (
@@ -235,9 +266,12 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
             </span>
           )}
 
-          {esHabitual && actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'DIARIA' && (
-            <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60 font-mono shrink-0">
-              {actividad.frecuencia_ciclo}
+          {(esHabitual || tieneRecurrencia) && ((actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'DIARIA' && actividad.frecuencia_ciclo !== 'NINGUNA') || Boolean(actividad.regla_repeticion && actividad.regla_repeticion.trim())) && (
+            <span
+              className="inline-flex items-center justify-center w-5 h-5 rounded bg-slate-800/70 text-slate-400 border border-slate-700/50 shrink-0"
+              title={`Ciclo: ${formatearCicloLegible(actividad.frecuencia_ciclo, actividad.regla_repeticion)}`}
+            >
+              <Repeat className="w-3 h-3" strokeWidth={1.75} />
             </span>
           )}
         </div>
@@ -296,90 +330,165 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
         </div>
       </div>
 
-      {/* FILA 2: Botón Check Táctil 44px + Título Táctico */}
-      <div className="flex items-center gap-2.5">
+      {/* NIVEL 2: Checkbox Compacto 20x20px con guard anti doble clic + Título Completo */}
+      <div className="flex items-start gap-2.5">
         <button
           type="button"
           onClick={handleToggleCheck}
+          disabled={toggleInFlight}
+          aria-busy={toggleInFlight}
           aria-label={esCompletada ? 'Marcar como pendiente' : 'Completar avance diario'}
-          className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl border active:scale-95 transition-all duration-150 shrink-0 cursor-pointer ${
+          className={`group/chk w-5 h-5 min-w-0 min-h-0 shrink-0 rounded-md flex items-center justify-center mt-0.5 border transition-colors ${
+            toggleInFlight ? 'opacity-60 cursor-wait' : 'cursor-pointer'
+          } ${
             esCompletada
-              ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-              : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+              ? 'bg-emerald-500 border-emerald-500 text-slate-950'
+              : 'border-slate-600/80 bg-slate-900/60 text-transparent hover:border-sky-400/70 hover:bg-slate-800/80'
           }`}
           title={esCompletada ? 'Marcar como pendiente' : 'Marcar como completado'}
         >
           <Check
-            className={`w-4 h-4 transition-transform duration-150 ${
-              esCompletada ? 'scale-110 opacity-100' : 'scale-95 opacity-55'
+            className={`w-3.5 h-3.5 transition-all duration-150 ${
+              esCompletada
+                ? 'scale-100 opacity-100 text-slate-950'
+                : 'scale-90 opacity-0 group-hover/chk:opacity-45 text-slate-400'
             }`}
-            strokeWidth={2.25}
+            strokeWidth={2.75}
           />
         </button>
 
         <h4
           onClick={handleSolicitarEditar}
-          className={`text-xs sm:text-[13px] font-medium leading-snug break-words flex-1 select-none transition-colors line-clamp-2 mb-0 ${
+          className={`text-xs sm:text-[13px] font-medium leading-snug break-words flex-1 select-none transition-colors mb-0 ${
             esCompletada ? 'line-through text-slate-500' : 'text-slate-100'
-          } ${onEditar ? 'cursor-pointer hover:text-emerald-300' : ''}`}
+          } ${onEditar ? 'cursor-pointer hover:text-sky-300' : ''}`}
           title={onEditar ? `${tituloHabito} (Click para editar)` : tituloHabito}
         >
           {tituloHabito}
         </h4>
       </div>
 
-      {/* Indicador de Meta Vinculada (Icono Target + Título + %) */}
-      {(metaAsociada || (actividad.meta_macro_nombre && actividad.meta_macro_nombre.trim() !== '')) && (
-        <div
-          onClick={(e) => {
-            if (metaAsociada && onAbrirMeta360) {
-              e.stopPropagation();
-              onAbrirMeta360(metaAsociada);
-            }
-          }}
-          className={`flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/25 border border-sky-800/35 text-xs transition-all duration-150 ${
-            metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:bg-sky-950/50 hover:border-sky-700/60' : ''
-          }`}
-          title={metaAsociada ? `Objetivo: ${metaAsociada.nombre_meta}` : `Objetivo: ${actividad.meta_macro_nombre}`}
-        >
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <Target className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
-            <span className="font-semibold text-sky-200 truncate text-[11px]">
-              {metaAsociada?.nombre_meta || actividad.meta_macro_nombre}
-            </span>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {progresoMetaCalculado !== null ? (
-              <span className="font-mono tabular-nums text-xs font-bold text-sky-300 bg-sky-900/50 px-1.5 py-0.5 rounded border border-sky-700/50">
-                {progresoMetaCalculado}%
+      {/* NIVEL 3A: Bloque Unificado de Meta Estratégica & Progreso Cuantitativo 360° */}
+      {(metaAsociada || (actividad.meta_macro_nombre && actividad.meta_macro_nombre.trim() !== '') || metaTotal > 0 || valorAcum > 0 || rescateMin > 0) && (
+        <div className="bg-[#070C18] border border-slate-800/70 rounded-lg p-2 space-y-1.5 text-xs">
+          {/* Fila superior: Icono Target + Nombre único de Meta + % global + Botón 360° */}
+          <div className="flex items-center justify-between gap-1.5 min-w-0">
+            <div
+              onClick={(e) => {
+                if (metaAsociada && onAbrirMeta360) {
+                  e.stopPropagation();
+                  onAbrirMeta360(metaAsociada);
+                }
+              }}
+              className={`flex items-center gap-1.5 min-w-0 flex-1 ${
+                metaAsociada && onAbrirMeta360 ? 'cursor-pointer group/meta' : ''
+              }`}
+              title={metaAsociada ? `${metaAsociada.nombre_meta} (Clic para Vista 360°)` : metaEfectiva.titulo}
+            >
+              <Target className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+              <span className={`font-semibold text-slate-200 truncate text-[11px] ${
+                metaAsociada && onAbrirMeta360 ? 'group-hover/meta:text-sky-300 transition-colors' : ''
+              }`}>
+                {metaAsociada?.nombre_meta || actividad.meta_macro_nombre || metaEfectiva.titulo}
               </span>
-            ) : metaAsociada?.estado ? (
-              <span className="text-[10px] font-mono text-sky-300/80 uppercase">
-                {metaAsociada.estado.replace(/^\d+_/, '')}
-              </span>
-            ) : null}
-            {metaAsociada && onAbrirMeta360 && (
-              <ArrowUpRight className="w-3 h-3 text-sky-400 opacity-75 shrink-0" strokeWidth={1.75} />
-            )}
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              {progresoMetaCalculado !== null ? (
+                <span className="font-mono tabular-nums text-[10px] font-semibold text-sky-300 bg-sky-950/50 px-1.5 py-0.5 rounded border border-sky-800/50">
+                  {progresoMetaCalculado}%
+                </span>
+              ) : metaAsociada?.estado ? (
+                <span className="text-[10px] font-mono text-slate-400 uppercase">
+                  {metaAsociada.estado.replace(/^\d+_/, '')}
+                </span>
+              ) : null}
+
+              {metaAsociada && onAbrirMeta360 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAbrirMeta360(metaAsociada);
+                  }}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 hover:bg-sky-500 text-sky-300 hover:text-slate-950 border border-sky-500/30 font-mono font-bold shrink-0 transition cursor-pointer"
+                  title="Abrir Vista Detallada 360° de la Meta"
+                >
+                  360°
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Fila cuantitativa: Ratio tabular + Barra sólida + Rescate mínimo + Botón + Avance */}
+          {(metaTotal > 0 || valorAcum > 0 || rescateMin > 0 || Boolean(onAbrirAvance)) && (
+            <div className="space-y-1.5 pt-0.5 border-t border-slate-800/50">
+              {metaTotal > 0 && (
+                <div className="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      pctAvance >= 100 ? 'bg-emerald-500' : 'bg-sky-500'
+                    }`}
+                    style={{ width: `${pctAvance}%` }}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1.5 min-w-0 font-mono tabular-nums">
+                  <span className="font-semibold text-slate-200 text-[11px]">
+                    {valorAcum}{metaTotal > 0 ? `/${metaTotal}` : ''} {uMed}
+                  </span>
+                  {rescateMin > 0 && (
+                    <span
+                      className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-sky-300 border border-slate-700/60 font-semibold"
+                      title={`Nivel mínimo de rescate: ${rescateMin} ${uMed}`}
+                    >
+                      ≥ {rescateMin} {uMed}
+                    </span>
+                  )}
+                </div>
+
+                {onAbrirAvance && (
+                  <button
+                    type="button"
+                    onClick={handleAbrirAvanceModal}
+                    aria-label="Registrar avance"
+                    className="ml-auto w-7 h-7 rounded-lg border border-sky-500/40 bg-sky-500/10 hover:bg-sky-500 hover:text-slate-950 text-sky-300 inline-flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0"
+                    title="Registrar avance"
+                  >
+                    <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Resumen / Conteo Compacto de Subtareas */}
-      {actividadesAsociadas.length > 0 && (
-        <div className="space-y-1 p-2 rounded-lg bg-sky-950/15 border border-sky-800/30 text-[10px]">
+      {/* NIVEL 3B: Subtareas / Checklist Procedural Unificado (Sin Duplicación) */}
+      {subtareas && subtareas.length > 0 && (
+        <ListaSubtareas
+          idPadre={actividad.codigo_legado}
+          pasos={subtareas}
+          onTogglePaso={onToggleSubtarea}
+        />
+      )}
+
+      {pasosChecklistExclusivos.length > 0 && (
+        <div className="space-y-1 p-2 rounded-lg bg-[#070C18] border border-slate-800/70 text-[10px]">
           <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1.5 text-sky-300">
               <ListTodo className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
-              <span className="font-semibold hidden sm:inline">Pasos</span>
+              <span className="font-semibold hidden sm:inline">Checklist</span>
             </div>
-            <span className="font-mono tabular-nums text-xs font-bold px-1.5 py-0.5 rounded-full bg-sky-950/60 text-sky-300 border border-sky-800/60">
-              {actividadesAsociadas.length}
+            <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800/80 text-sky-300 border border-slate-700/60">
+              {pasosChecklistExclusivos.length}
             </span>
           </div>
 
           <div className="flex flex-wrap gap-1 pt-0.5">
-            {actividadesAsociadas.slice(0, 3).map((actItem: any, idx: number) => {
+            {pasosChecklistExclusivos.slice(0, 3).map((actItem: any, idx: number) => {
               const nombre = actItem.nombre_actividad || actItem.descripcion_paso || actItem.nombre || `Paso ${idx + 1}`;
               const completado = actItem.estado === '04_Completado' || actItem.completado === true;
               return (
@@ -396,96 +505,16 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
                 </span>
               );
             })}
-            {actividadesAsociadas.length > 3 && (
+            {pasosChecklistExclusivos.length > 3 && (
               <span className="text-[10px] text-slate-400 font-mono tabular-nums self-center px-0.5">
-                +{actividadesAsociadas.length - 3}
+                +{pasosChecklistExclusivos.length - 3}
               </span>
             )}
           </div>
         </div>
       )}
 
-      {/* Subtareas / Checklist Procedural */}
-      {subtareas && subtareas.length > 0 && (
-        <ListaSubtareas
-          idPadre={actividad.codigo_legado}
-          pasos={subtareas}
-          onTogglePaso={onToggleSubtarea}
-        />
-      )}
-
-      {/* Barra de Avance Cuantitativo Desaturada */}
-      {(metaTotal > 0 || valorAcum > 0 || actividad.meta_macro_nombre || Boolean(metaAsociada)) && (
-        <div className="space-y-1.5 p-2 rounded-lg bg-cyan-950/20 border border-cyan-800/30 text-xs">
-          <div className="flex items-center justify-between gap-1.5 font-mono tabular-nums">
-            <div className="flex items-center gap-1.5 min-w-0 flex-1">
-              <Target className="w-3.5 h-3.5 text-cyan-400 shrink-0" strokeWidth={1.75} />
-              <span
-                onClick={(e) => {
-                  if (metaAsociada && onAbrirMeta360) {
-                    e.stopPropagation();
-                    onAbrirMeta360(metaAsociada);
-                  }
-                }}
-                className={`font-semibold text-cyan-200 truncate text-[11px] font-sans ${
-                  metaAsociada && onAbrirMeta360 ? 'cursor-pointer hover:text-sky-300 hover:underline' : ''
-                }`}
-                title={metaAsociada ? `${metaEfectiva.titulo} (Clic para Vista 360°)` : metaEfectiva.titulo}
-              >
-                {metaEfectiva.titulo}
-              </span>
-              {metaAsociada && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onAbrirMeta360) onAbrirMeta360(metaAsociada);
-                  }}
-                  className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-white border border-sky-500/30 font-mono font-bold shrink-0 transition cursor-pointer"
-                  title="Abrir Vista Detallada 360° de la Meta"
-                >
-                  360°
-                </button>
-              )}
-            </div>
-            <span className="font-bold text-cyan-300 font-mono tabular-nums text-xs shrink-0">
-              {valorAcum}{metaTotal > 0 ? `/${metaTotal}` : ''} {uMed}
-            </span>
-          </div>
-
-          {metaTotal > 0 && (
-            <div className="w-full bg-cyan-950/60 h-1.5 rounded-full overflow-hidden">
-              <div
-                className="bg-gradient-to-r from-cyan-500 to-teal-500 h-full rounded-full transition-all duration-300"
-                style={{ width: `${pctAvance}%` }}
-              />
-            </div>
-          )}
-
-          <div className="flex items-center justify-between gap-1.5 pt-0.5">
-            {rescateMin > 0 && (
-              <span
-                className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-cyan-950/40 text-cyan-300 border border-cyan-800/60 font-semibold font-mono tabular-nums"
-                title={`Nivel mínimo de rescate: ${rescateMin} ${uMed}`}
-              >
-                ≥ {rescateMin} {uMed}
-              </span>
-            )}
-
-            <button
-              type="button"
-              onClick={handleAbrirAvanceModal}
-              className="ml-auto min-h-[40px] sm:min-h-[30px] px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-semibold text-xs font-mono transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-              title="Registrar avance cuantitativo"
-            >
-              <PlusCircle className="w-3.5 h-3.5" strokeWidth={1.75} />
-              <span>Avance</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Footer Compacto de Tarjeta (Iconos + DD/MM) */}
+      {/* NIVEL 4: Footer Tabular Compacto */}
       <div className="flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-slate-800/40 text-xs font-mono tabular-nums text-slate-400">
         <div className="flex items-center gap-2">
           {esCompletada ? (
@@ -521,9 +550,8 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
         </div>
 
         {typeof actividad.monto_gasto_asociado === 'number' && actividad.monto_gasto_asociado > 0 && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/50 font-mono tabular-nums font-bold text-xs">
-            <DollarSign className="w-3 h-3" strokeWidth={1.75} />
-            <span>S/ {actividad.monto_gasto_asociado.toFixed(0)}</span>
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/50 font-mono tabular-nums font-semibold text-xs">
+            S/ {actividad.monto_gasto_asociado.toFixed(2)}
           </span>
         )}
       </div>

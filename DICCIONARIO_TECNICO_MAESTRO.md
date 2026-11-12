@@ -52,6 +52,331 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 5.27 — Sincronización Real Automática Create / Update / Delete con Google Calendar REST API v3 (REQ-UI-39-GCAL-REAL-SYNC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/services/calendarSyncService.ts`, `src/services/syncManager.ts`, `src/services/habitosService.ts`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Cockpit/DailyCockpit.tsx`, `src/services/__tests__/calendarSyncService.test.ts`, `.env.example`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/services/calendarSyncService.ts` y `syncManager.ts`: Integración directa OAuth2 (`provider_token` de Supabase Auth vía `getSupabaseClient()` + cliente dinámico Google Identity Services `VITE_GOOGLE_CLIENT_ID` con scope `calendar.events`) y persistencia de mapeo `actividadId <-> googleEventId` en `localStorage` (`pmo_gcal_event_map`). Eliminado el no-op optimista silencioso sin token (`requiereAuth: true` y `mode: 'AUTH_REQUIRED'`). Implementadas operaciones reales `sincronizarCreacionCalendar` (`POST`), `sincronizarActualizacionCalendar` (`PATCH` con fallback `POST` ante 404/410) y `sincronizarEliminacionCalendar` (`DELETE` 200/204/410 en `ALL`, `PATCH` con `EXDATE` en `SINGLE` y `PATCH` con `UNTIL` en `FUTURE`).
+  - `habitosService.ts`, `ModalActividadFlow.tsx`, `TableroHabitos.tsx` y `DailyCockpit.tsx`: Conectadas creación, edición (`ALL`/`SINGLE`/`FUTURE`) y eliminación (`ALL`/`SINGLE`/`FUTURE`) con feedback instantáneo vía `mostrarToastCobalt` y botones de conexión Google Calendar (`Conectar Calendar` / `Calendar Conectado`, `OAuth Activo` y `GCal`) con suscripción reactiva de estado.
+  - `src/services/__tests__/calendarSyncService.test.ts`: Suite Vitest de integración con mocks de `fetch` y `localStorage` cubriendo `POST` puntual/recurrente, `PATCH` de actualización, `DELETE ALL`, `PATCH EXDATE` en `SINGLE` y bloqueo sin token (`requiereAuth: true`).
+
+### FASE 5.26 — Edición Diferida con Dirty-Check Real, Botón Iconográfico Avance, Motor Unificado de Recurrencias y Conector Moderno Google Calendar RFC-5545 (REQ-UI-38-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/utils/recurrenceEngine.ts`, `src/utils/__tests__/recurrenceEngine.test.ts`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `src/hooks/useDailySchedule.ts`, `src/services/calendarSyncService.ts`, `.env.example`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/utils/recurrenceEngine.ts`: Nuevo motor puro y pruebas (`recurrenceEngine.test.ts`) para evaluación fiel 1:1 en `evaluarOcurrenciaEnFecha(actividad, fechaIso)` (respetando `fecha_programada`, `fecha_fin`, `excepciones_fechas`, `NINGUNA`, `DIARIA`, `DIARIA_LABORAL`, `FIN_SEMANA`, `SEMANAL`, `QUINCENAL`, `MENSUAL` e `INTERVALO:N:DIAS|SEMANAS|MESES`), generación estándar RFC-5545 (`construirRRuleRFC5545`), payload REST `construirEventoGoogleCalendarV3` (`America/Lima` + `RRULE`/`EXDATE`), plantilla directa `construirUrlGoogleCalendar` (`action=TEMPLATE&ctz=America/Lima&recur=...`) y exportador `.ics` (`generarArchivoICS`).
+  - `TableroHabitos.tsx` y `ModalActividadFlow.tsx`: Eliminada la intercepción anticipada de `ModalAlcanceRecurrencia` al abrir edición; `"¿Cómo deseas aplicar los cambios?"` aparece únicamente al pulsar `"Actualizar Actividad"` cuando `verificarSiHayCambios` (normalizando equivalencias de regla diaria, duración, fechas `YYYY-MM-DD`, pasos y prioridad) detecta cambios reales. Habilitado `fecha_fin` para cualquier serie recurrente, uso de `formatFechaIsoLocal()`, tokens Cobalt (`sky-500`), accesos inmediatos `"Google Calendar"` y `".ics"`, y propagación inmediata `syncManager.syncPendingRecords()` + `guardarSnapshotEnPuenteLocal()` en creación/edición.
+  - `TarjetaHabito.tsx`: Reemplazada la píldora `"+ Avance"` por un único botón iconográfico cuadrado Cobalt `w-7 h-7` con `<TrendingUp strokeWidth={1.75} />` y `title="Registrar avance"`.
+  - `useDailySchedule.ts`, `calendarSyncService.ts` y `.env.example`: Integrado `evaluarOcurrenciaEnFecha` en Agenda 24H y Tablero de Hábitos; reescrito `calendarSyncService.ts` sobre estándar moderno Google Calendar v3 / RFC-5545 sin acoplamiento legado GAS (`VITE_CALENDAR_ENDPOINT` documentado en `.env.example`).
+
+### FASE 5.25 — Rediseño Limpio de Hábitos Sin Pérdida de Datos y Blindaje de Zona Horaria / Rachas / Sync (REQ-UI-37-HABITOS-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Subtareas/ListaSubtareas.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Views/ViewHabitos.tsx`, `src/hooks/useHabitos.ts`, `src/services/habitosService.ts`, `src/utils/entityNormalizer.ts`, `src/components/Habitos/HistogramaSeguimientoTemporal.tsx`, `src/services/metasService.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `TarjetaHabito.tsx` y `ListaSubtareas.tsx`: Consolidación visual en 4 niveles preservando el 100% de los datos operativos (`codigoHabito`, categoría, mora `+Nd`, ciclo traducido a tooltip en icono `Repeat`, racha `Flame`, notas vinculadas, título íntegro, bloque único de Meta + Progreso 360° con ratio/barra sólida `bg-sky-500`/`bg-emerald-500`/rescate mínimo/`+ Avance`, bloque unificado de pasos sin duplicación entre `ListaSubtareas` y checklist exclusivo, y pie tabular con gasto `S/ XX.XX`). Añadido guard `toggleInFlight` / `togglingId` contra doble clic rápido y checkbox neutro en estado pendiente.
+  - `TableroHabitos.tsx` y `ViewHabitos.tsx`: Cálculo real de inversión en KPI `Bienestar` (`gastoTotal`) y horas completadas por columna (`horasHoy` / `horasPlanificadas`), subtextos dinámicos en KPIs, unificación completa de controles del toolbar a `h-9` y `py-0.5` en tokens Dark Cobalt (`#0D1526` / `sky-500`), filtro temporal táctil con cierre por clic fuera/`Escape`, iconos de pilar con `cfg.badgeClase` y limpieza de `optimisticCompletados` en `finally` de `handleToggleCompletar` para sincronía inmediata con `DailyCockpit`.
+  - Blindaje Timezone, Rachas y Sync (`entityNormalizer.ts`, `HistogramaSeguimientoTemporal.tsx`, `metasService.ts`, `habitosService.ts`, `useHabitos.ts`): Reemplazo de `.toISOString().split('T')[0]` por `formatFechaIsoLocal(...)` para evitar desfases UTC-5 Lima después de las 19:00; lectura fresca en Dexie + guarda `ultima_fecha_completado !== hoyStr` antes de incrementar `racha_actual` en `completarActividadPersonalLocal` y `registrarAvanceCuantitativoLocal`; tombstones para subtareas en `eliminarActividadConAlcance(..., 'ALL')`; indexación dual (`codigo_legado` e `id`) en `subtareasPorPadre`, búsqueda por código legado en `useHabitos` y propagación `guardarSnapshotEnPuenteLocal()`.
+
+### FASE 5.24 — Pulso de Salud en Portafolio, Iconografía Limpia en Detalle 360°, Purga Debug en Grafo WBS y Saneamiento de Tabla Portafolio (REQ-UI-36-FINAL)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/PMO/TarjetaProyecto.tsx`, `src/components/Views/ViewDetalle360.tsx`, `src/components/WBS/GrafoWBS.tsx`, `src/components/PMO/FiltrosPortafolio.tsx`, `src/components/Views/ViewPortafolio.tsx`, `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `TarjetaProyecto.tsx`: Activación de pulso visual vivo (`animate-ping` halo + punto central sólido `emerald-400`/`amber-400`/`rose-500`) únicamente en el punto indicador de salud superior derecho con `title` limpio, conservando intactos altura y contenido de la tarjeta.
+  - `ViewDetalle360.tsx`: Reemplazo de etiquetas crudas en el Hero por cápsulas de icono `w-8 h-8` con `title` legible (`obtenerEstadoEjecucionMeta`, `obtenerEstadoSalud` con pulso vivo, `IconoCategoriaIniciativa`); eliminación de `overflow-hidden` en tarjetas WP (`#wbs-nodo-*`) y tareas (`#wbs-tarea-*`) para desbloquear el popover de gastos; eliminación de `truncate`/`line-clamp-2` en encabezados WBS y del bug `"Costo: $0.00"` en Hitos Marcadores (formato `PEN` condicional si `presupuesto_asignado > 0`); lectura de estado canónico en `Tareas Generales` (`estado_tarea`/`Estado_Tarea` con prefijos `'04_'` y `'03_'`) y consolidación Dark Cobalt (`#0D1526`, `sky-500`).
+  - `GrafoWBS.tsx`: Purga de cadena debug de coordenadas Y (`"N0 Proyecto (Y=40)..."`), reemplazada por leyenda mínima con iconos (`Proyecto · Fases · Paquetes · Tareas`) y toggle `soloHitos` en acento `sky-500`.
+  - `FiltrosPortafolio.tsx`, `ViewPortafolio.tsx` y `ViewKanban.tsx`: Unificación `h-9` en `#sliding-pill-track-estado`, selector Tarjetas/Tabla y barra superior de `ViewKanban.tsx` (`#sidebar-search-proyectos`, `#label-proyecto-activo`, `#kanban-cronograma-proyecto`, `#kanban-gasto-presupuesto-box`); ampliación de `#table-proyectos-wrapper` a 9 columnas con `min-w-[960px]`, `whitespace-nowrap`, importes `PEN` a 2 decimales y columna `Varianza` (`BAC - AC`); purga de clases duales de tema claro (`bg-white`, `bg-slate-50`, `bg-slate-100`), corrección `py-0.2` -> `py-0.5` y retiro de `animate-ping`/`animate-pulse` en tarjetas de proyectos del sidebar de `ViewKanban.tsx`.
+
+### FASE 5.23 — Temporizador Ultra-Minimalista con React Bits (`SpotlightCard`), Vínculo Opcional y Alerta Ámbar/Acústica de Alto Impacto (REQ-UI-33-V2)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Integración de Primitivo React Bits (`SpotlightCard.tsx`) en `DailyCockpit.tsx`:**
+   - Envoltorio directo del bloque de temporizador con `SpotlightCard` (`src/components/SpotlightCard.tsx`, excluyendo estrictamente efectos criptográficos), alternando `spotlightColor` entre `rgba(56, 189, 248, 0.14)` (operación normal) y `rgba(245, 158, 11, 0.28)` (estado expirado).
+2. **Economía Extrema de Texto y Modo Libre por Defecto:**
+   - Inicialización de `tareaFocoId` en `null` sin auto-selección forzada: muestra píldora compacta `<Link2 /> Vincular` para vincular en 1 clic solo cuando el usuario lo decide.
+   - En estado vinculado, despliega chip único `TAR-XXX` + título truncado (`max-w-[160px]`) + 3 micro-iconos `24x24px` (`Check` completar, `Repeat` cambiar, `X` desvincular a Modo libre).
+   - Barra de control única bajo el reloj tabular (`text-3xl sm:text-4xl`): 1 botón principal (`Iniciar`/`Pausar` o botón ámbar `Reiniciar` al expirar) + micro-iconos `36x36px` (`RotateCcw`, `SlidersHorizontal` con presets `10m..90m` e input sin spinners, `Volume2`/`VolumeX` con 6 perfiles).
+3. **Alerta Ámbar Unificada en Cockpit Desplegado + Cápsula Colapsada y Refuerzo Sonoro:**
+   - Sin banners ni tarjetas duplicadas: al llegar a `00:00`, el bloque `SpotlightCard` y ambas píldoras colapsadas (HUD Electron + píldora flotante Web) mutan a énfasis ámbar (`border-amber-500`, `ring-2 ring-amber-500/40..50`, `<BellRing />`, `00:00` en `text-amber-300`/`text-amber-400`, etiqueta `FINALIZADO` y botón de reinicio directo).
+   - Elevación limpia de ganancia (`0.38`–`0.45` a través de `DynamicsCompressorNode` limitador) en los 5 perfiles audibles Web Audio API y repetición automática de 2 ciclos con pausa de `600ms` al expirar (preservando motor `Date.now()` y acreditación de `horas_reales` en `db.tareas`).
+
+---
+
+### FASE 5.22 — Rediseño de Temporizador en Daily Cockpit y Sincronización Bidireccional en Tiempo Real (REQ-UI-33-EXEC)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `src/App.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Purga de Presets `Deep`, `Admin` y `Recarga` (`DailyCockpit.tsx`):**
+   - Eliminación integral de la botonera superior de modos (`Deep`, `Admin`, `Recarga`), del estado `modoEnfoque`, de `handleCambiarEnfoque` y de sus referencias residuales en la píldora colapsada, conservando la cabecera minimalista `"Daily Cockpit"` con su duración persistida en `localStorage` (`pmo_pomodoro_minutos`).
+2. **Popover Minimalista de Duración sin Spinners (`DailyCockpit.tsx`):**
+   - Sustitución del bloque inline de presets y `<input type="number">` con flechas nativas por un disparador compacto de icono técnico (`SlidersHorizontal`, `w-8 h-8`) que abre un popover Dark Cobalt (`bg-[#0D1526] border-slate-700/80 rounded-xl p-2.5 shadow-lg z-30`) con píldoras rápidas (`10m`, `15m`, `25m`, `45m`, `60m`, `90m`), campo numérico libre de spinners CSS y confirmación por botón `Check` o tecla `Enter`, cerrando automáticamente ante clic fuera (`mousedown`) o `Escape` (incluyendo ventana Document Picture-in-Picture).
+3. **Unificación de Alerta Final y Botón `Reiniciar` Único (`DailyCockpit.tsx`):**
+   - Erradicación del banner ámbar superior redundante (`"Bloque Finalizado"`) y de los botones duplicados de reinicio, integrando al expirar un único badge esmeralda (`<CheckCircle2 /> Completado`) en cabecera de bloque y un único botón ejecutivo `Reiniciar` (`<RotateCcw />`, `h-8 px-3`).
+4. **Selector Compacto de Sonido en Popover con 6 Perfiles Web Audio API (`DailyCockpit.tsx`):**
+   - Reemplazo de la barra segmentada de 3 opciones por un botón de icono compacto (`w-8 h-8` con `<Volume2 />` / `<VolumeX />`) y popover de 6 perfiles sintetizados en Web Audio API (`Campana Zen`, `Pulso Digital`, `Acorde Cristal`, `Gong Profundo`, `Alerta Radar`, `Silencio`), con persistencia en `pmo_perfil_alarma`, previsualización inmediata al seleccionar y cierre seguro de `AudioContext` tras reproducir y en unmount.
+5. **Reloj Absoluto `Date.now()` y Sincronización Bidireccional en Tiempo Real (`DailyCockpit.tsx`, `src/App.tsx`):**
+   - Reemplazo del conteo `prev - 1` vulnerable a throttling por marca temporal objetivo (`targetEndTimestampRef` + listener `visibilitychange`) y efecto único determinístico de expiración (`expiracionNotificadaRef`).
+   - Acreditación automática de horas ejecutadas (`horas_reales` redondeado a 2 decimales con `sync_status: 'pending'`) en `db.tareas` al concluir un bloque con tarea activa, además de invocación incondicional de `syncManager.syncPendingRecords()` y `syncManager.guardarSnapshotEnPuenteLocal()` en `handleCrearTareaRapida`.
+   - Alineación canónica en `BarraFocoTareasEnProgreso` (`src/App.tsx`, L140) de `'03_En_Progreso'` a `'03_En_Proceso'`.
+
+---
+
+### FASE 5.21 — Reducción Proporcionada de Checkbox en Tarjetas de Hábitos (REQ-UI-35-HOTFIX-CHECK)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/Habitos/TarjetaHabito.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Checkbox Compacto `20x20px` (`TarjetaHabito.tsx`):**
+   - Sustitución del disparador `min-w-[44px] min-h-[44px] rounded-xl` junto al título `<h4>` por un checkbox compacto de `20x20px` (`w-5 h-5 min-w-0 min-h-0 shrink-0 rounded-md flex items-center justify-center mt-0.5 transition-colors`) alineado con `items-start` e icono `<Check />` de `w-3.5 h-3.5` y `strokeWidth={2.5}`, liberando ancho horizontal para el enunciado completo del hábito sin alterar lógica de rachas ni contratos de datos.
+
+---
+
+### FASE 5.20 — Restauración Íntegra de Tarjetas de Hábitos y Actividades (REQ-UI-35-ROLLBACK-HABITOS)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Reversión Canónica del Tablero y Tarjetas de Hábitos (`TableroHabitos.tsx`, `TarjetaHabito.tsx`):**
+   - Restauración exacta desde `HEAD` (`0c045fa`) vía `git checkout HEAD` de `TableroHabitos.tsx` y `TarjetaHabito.tsx`, preservando los KPIs Bento, columnas de categorías y bloques operativos originales.
+   - Incorporación de `shrink-0 h-auto` y retiro de `overflow-hidden` / `line-clamp-2` en el enunciado dentro de `TarjetaHabito.tsx` para evitar compresión vertical en columnas densas y garantizar lectura completa (cabecera `ACT-XXX`, icono de categoría, mora `+Xd`, racha, franja lateral encajada `top-0 bottom-0 w-1 rounded-l-xl`, checkbox `44px`, subtareas/Meta & Plan `360°`, barra de progreso y botón `+ Avance`, más pie con estado/fecha y hora programada).
+
+---
+
+### FASE 5.19 — Restauración Íntegra de Tarjetas de Proyecto en Portafolio (REQ-UI-35-ROLLBACK-PORTAFOLIO)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/PMO/TarjetaProyecto.tsx`, `src/components/Views/ViewPortafolio.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Despliegue Vertical Completo de Tarjeta de Proyecto (`TarjetaProyecto.tsx`):**
+   - Eliminación de `overflow-hidden`, `line-clamp-2`, `line-clamp-1`, `truncate` y compresiones compactas del overhaul móvil, consolidando altura automática libre (`shrink-0 h-auto`) sobre tarjetas Dark Cobalt (`bg-[#0D1526]/90 border-slate-800/80 hover:border-sky-500/40 rounded-xl`).
+   - Conservación exclusiva de `IconoCategoriaIniciativa` en cabecera junto a `PRO-XXX`, `BadgeNotasVinculadas` y estado de salud; renderizado completo sin recortes de título, objetivo estratégico / OKR (`whitespace-normal break-words`), doble barra de avance (`Avance Real` vs `Meta`), tareas/plazo/estado, bloque financiero íntegro (`BAC`, `Real`, burn rate bar, `Consumo`, `Varianza` y `Saldo` en `S/`) y pie de acciones `h-10` con botón sólido `Ver Detalle 360°`.
+2. **Estabilidad del Grid (`ViewPortafolio.tsx`):**
+   - Ajuste en `#grid-proyectos-cards` con `auto-rows-auto items-stretch shrink-0` y remoción de `contain-layout [contain:layout]` para garantizar expansión vertical irrestricta sin filas fijas.
+
+---
+
+### FASE 5.18 — Restauración Íntegra de Tarjetas/Columnas Kanban y Corrección de Dock en Header (REQ-UI-34-ROLLBACK)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados/eliminados:** `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `src/components/PMO/__tests__/kanbanUiHierarchy.test.ts` (Eliminado), `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Reversión Canónica de Tablero Kanban (`TarjetaTareaKanban.tsx`, `ColumnaKanban.tsx`):**
+   - Restauración exacta desde `HEAD` (`0c045fa`) de `TarjetaTareaKanban.tsx` y `ColumnaKanban.tsx`, preservando íntegramente los 6 niveles estructurales de tarjeta (badge `TAR-XXX` + icono de energía + `BadgeNotasVinculadas`, enunciado principal, badges de dependencia `Lock` y presupuesto `S/`, badges de fecha y horas `X/Yh`, ruta `Nombre Proyecto • Nombre Hito`, y botonera táctica inferior de transición de estados `Por Hacer →`, `← | Iniciar`, `← | Completar`, `↻ Reabrir`).
+   - Inclusión explícita de `shrink-0` en el contenedor raíz `.kanban-card` de `TarjetaTareaKanban.tsx` para evitar compresión vertical en columnas con alta densidad de tarjetas (15+ elementos).
+   - Eliminación de `src/components/PMO/__tests__/kanbanUiHierarchy.test.ts` correspondiente al experimento revertido de `REQ-UI-34`.
+2. **Contención de Badge en Cabecera Maestra (`HeaderMaestro.tsx`):**
+   - Ajuste en `#header-actions-container` incrementando espaciado a `gap-2.5` y conversión de `#badge-header-archivados` dentro de `#btn-header-archivados` a chip inline contenido (`px-2.5 gap-1.5` cuando `totalArchivados > 0`), erradicando el desbordamiento negativo (`-right-1`) y cualquier solapamiento con `#btn-toggle-shortcuts-modal`.
+
+---
+
+### FASE 5.17 — Estandarización Ejecutiva Dark Cobalt y Tabular en Hábitos, Notas, Portafolio y Finanzas (REQ-UI-35)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/Views/ViewHabitos.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/Metas/ViewMetasPlanes.tsx`, `src/components/Notas/VisorNotas.tsx`, `src/components/Notas/TarjetaNota.tsx`, `src/components/Views/ViewPortafolio.tsx`, `src/components/PMO/FiltrosPortafolio.tsx`, `src/components/PMO/TarjetaProyecto.tsx`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Finanzas/DashboardFinanciero.tsx`, `src/components/Finanzas/TabControlCuotas.tsx`, `src/components/Finanzas/TabPresupuestos.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Unificación Dark Cobalt de Superficies y Eliminación de Gradientes/Brillos:**
+   - Erradicación de badges con degradado multicolor, barras `bg-gradient-to-r`, `animate-ping`/`animate-pulse` en indicadores no-skeleton, elevaciones 3D (`hover:translate-y-[-2px]`, `hover:-translate-y-0.5`), sombras `shadow-cobalt-1`/`shadow-xl`/`shadow-2xl` y glows neón (`shadow-[0_0_8px_...]`), consolidando tarjetas y paneles en `bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 rounded-xl transition-colors`.
+2. **Ergonomía Uniforme de Controles (`h-9` / `h-10`):**
+   - Estandarización de inputs de búsqueda, selectores de periodo/meta y botones/píldoras de filtro secundarios a altura `h-9` (`bg-[#040711]/70` / `#0D1526` con `border-slate-800/80`) y botones CTA primarios a altura `h-10` con acento ejecutivo sólido (`bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold rounded-xl`).
+3. **Integridad Tabular y Contratos Inmutables:**
+   - Preservación total de `src/db/db.ts`, `src/types/index.ts`, fórmulas financieras y cálculo de rachas, aplicando `font-mono tabular-nums` de forma transversal en importes, KPIs, porcentajes, rachas, fechas y métricas de tabla/cápsulas.
+
+---
+
+### FASE 5.16 — Refinamiento Ejecutivo de Columnas y Tarjetas de Tareas en Tablero Kanban (REQ-UI-34)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/PMO/ColumnaKanban.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/Views/ViewKanban.tsx`, `src/components/PMO/__tests__/kanbanUiHierarchy.test.ts` (Nuevo), `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Estandarización de Columnas (`ColumnaKanban.tsx`):**
+   - Superficie unificada `bg-[#040711]/60 border border-slate-800/70 rounded-xl flex flex-col`, cabecera sobria (`text-xs font-semibold uppercase tracking-wider text-slate-300`), contador numérico `font-mono tabular-nums text-[11px] bg-slate-800/80 text-slate-400 px-2 py-0.5 rounded-md` y espaciado uniforme `gap-2.5 p-2.5`.
+2. **Jerarquía de Lectura en 3 Niveles (`TarjetaTareaKanban.tsx`):**
+   - Superficie Dark Cobalt `bg-[#0D1526]/95 border border-slate-800/80 hover:border-sky-500/40 rounded-xl p-3 transition-colors` preservando franja lateral de prioridad (`P1`..`P4`), drag & drop y botones táctiles aislados sin solapamiento.
+   - Nivel 1: contexto WBS superior (`TAR-XXX · PRO-XXX · HIT-XXX` vía `resolverContextoWbsTarjeta`); Nivel 2: enunciado `text-xs sm:text-[13px] font-medium text-slate-100 leading-snug line-clamp-2 my-1`; Nivel 3: pie técnico único (`pt-2 border-t border-slate-800/60 text-[11px] font-mono tabular-nums text-slate-400`) con iconos de `12px` para horas, fecha, dependencia (`Req`) y costo `S/`.
+3. **Barra de Filtros Compacta (`ViewKanban.tsx`):**
+   - Estandarización de input de búsqueda, micro-riel de ordenamiento y disparadores de filtro a altura uniforme `h-9` (`36px`) con bordes `border-slate-800/80 bg-[#0D1526] text-xs` y limpieza de brillos/elevaciones residuales.
+
+---
+
+### FASE 5.15 — Refinamiento Ergonómico, Métricas Tabulares y Estado de Foco en Daily Cockpit (REQ-UI-33)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `src/components/Cockpit/cockpitUiHelpers.ts` (Nuevo), `src/components/Cockpit/__tests__/cockpitUiHelpers.test.ts` (Nuevo), `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Tarjetas de Ejecución y Jerarquía WBS (`DailyCockpit.tsx`, `cockpitUiHelpers.ts`):**
+   - Estandarización de tarjetas Bento, Top 3, Checklist y Riel Horario 24H a superficie sobria Dark Cobalt (`bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 transition-colors rounded-xl p-3.5`), retirando gradientes multicolores, elevaciones 3D y sombras excesivas.
+   - Extracción de `obtenerIdentificadoresWbs` para desplegar identificadores técnicos (`TAR-XXX · HIT-XXX · PRO-XXX`) en `text-[11px] font-mono text-slate-400`, filtrando UUIDs crudos.
+2. **Métricas Tabulares y Barra de Progreso Uniforme (`DailyCockpit.tsx`):**
+   - Incorporación de barra táctica superior con avance del día (`completadas/total`), porcentaje completado y tiempo invertido (`formatearTiempoInvertido`), formateados estrictamente con `font-mono tabular-nums text-slate-100 font-bold`.
+   - Relleno de barras de progreso en `bg-sky-500 shadow-[0_0_8px_rgba(56,189,248,0.25)]` tanto en progreso diario como en temporizador Pomodoro.
+3. **Bloque de Modo Foco / Deep Work y Objetivos Táctiles (`DailyCockpit.tsx`):**
+   - Estado activo de alto contraste (`border-sky-500/60 ring-1 ring-sky-500/20`) libre de animaciones parásitas (`animate-pulse`, `animate-bounce`, `animate-ping`).
+   - Botones directos de acción (`Completar`, `Pausar`/`Iniciar`, `Cambiar`, `Reiniciar`) y disparadores táctiles principales con objetivo accesible mínimo de `36px` (`min-w-[36px] min-h-[36px]`) y tooltips `title` descriptivos.
+   - Integridad preservada al 100% en `src/db/db.ts`, `src/types/index.ts` y `syncManager.ts`.
+
+---
+
+### FASE 5.14 — Identificador Corporativo Fijo "MiPortalWeb" y Compactación Iconográfica de Categorías en Tarjetas PMO/Kanban (REQ-UI-32-33-REF)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/Layout/HeaderMaestro.tsx`, `src/components/PMO/IconoCategoriaIniciativa.tsx` (Nuevo), `src/components/Views/ViewKanban.tsx`, `src/components/PMO/TarjetaProyecto.tsx`, `src/components/PMO/__tests__/IconoCategoriaIniciativa.test.ts` (Nuevo), `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Cabecera Estática Corporativa (`HeaderMaestro.tsx` - REQ-UI-32-FINAL):**
+   - Eliminación definitiva del diccionario mutante `tituloVistaActiva` y renderizado permanente del identificador `"MiPortalWeb"` (`text-base sm:text-lg font-bold text-slate-100 tracking-tight`) en `#header-view-title` (desktop) y `#mobile-header-view-title` (móvil), manteniendo a su derecha la píldora esmeralda `"Al Día"`.
+2. **Compactación Iconográfica de Categorías (`IconoCategoriaIniciativa.tsx`, `ViewKanban.tsx`, `TarjetaProyecto.tsx` - REQ-UI-33-PRE):**
+   - Creación del componente reutilizable `IconoCategoriaIniciativa` (`w-6 h-6 rounded-md`, `strokeWidth={1.75}`, `title={categoria}`, `aria-label={categoria}`) con resolución normalizada sin acentos para las 4 carteras canónicas (`Profesional` -> `Briefcase` `sky-400`, `Personal` -> `User` `emerald-400`, `Inversiones`/`Inversión` -> `TrendingUp` `violet-400`, `Social` -> `Users` `amber-400`) y respaldo limpio `General`.
+   - Reemplazo de las píldoras textuales extensas en las tarjetas de proyecto de `#lista-proyectos-sidebar` (`ViewKanban.tsx`) y en `TarjetaProyecto.tsx`, erradicando encimamientos y truncamientos y conservando intactos los filtros por cartera (`''`, `'Personal'`, `'Profesional'`, `'Inversiones'`, `'Social'`) en `ViewKanban.tsx`.
+
+---
+
+### FASE 5.13 — Sobriedad Ejecutiva en Cabecera: Erradicación de DecryptedText, Restitución de Píldora "Al Día" y Purga de Selector de Temas (REQ-UI-32-FIX)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados/eliminados:** `src/components/Layout/HeaderMaestro.tsx`, `src/App.tsx`, `src/components/DecryptedText.tsx` (Eliminado), `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Erradicación de `DecryptedText` y Tipografía Corporativa Sobria (`HeaderMaestro.tsx`, `DecryptedText.tsx`):**
+   - Retiro definitivo de `src/components/DecryptedText.tsx` del repositorio y de su importación/uso en `HeaderMaestro.tsx`.
+   - Restauración de `#header-view-title` (desktop) y `#mobile-header-view-title` (móvil) a tipografía plana ejecutiva (`text-base sm:text-lg font-bold text-slate-100 tracking-tight`), eliminando retrasos o animaciones criptográficas al cambiar de módulo.
+2. **Restitución de la Píldora "Al Día" junto al Título (`HeaderMaestro.tsx`):**
+   - Reubicación de `#btn-sync-status-merged` desde `#header-actions-container` de regreso al bloque izquierdo inmediatamente al lado del título principal.
+   - Estilización técnica con cápsula esmeralda (`bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium`), micro-indicador con onda `animate-ping opacity-40 duration-1000` y núcleo `bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]`, etiqueta `"Al Día"` (o `"Sincronizando..."` con spinner `RotateCw` al transferir) y disparo manual al pulsar.
+3. **Purga Integral del Selector de Temas y Sello Dark Cobalt (`HeaderMaestro.tsx`, `App.tsx`):**
+   - Eliminación completa de `#btn-toggle-tema` (`btn-theme-dropdown`), `#menu-theme-dropdown`, iconos de sol/luna/paleta, tipos `ModoColor`/`SaborTema`, estado `menuTemaAbierto` y props/handlers de tema en `App.tsx` y `HeaderMaestro.tsx`, sellando `document.documentElement` exclusivamente en `dark` (`#040711` / `#0D1526`).
+   - Dock derecho `#header-actions-container` balanceado con botones operativos `40x40px` Dark Cobalt (`#tab-nav-notas`, `#btn-header-calendar`, `#btn-header-archivados`, `#btn-toggle-shortcuts-modal`, `#btn-header-exportar-pdf`).
+   - Integridad intacta de `src/db/db.ts` y `src/types/index.ts`.
+
+---
+
+### FASE 5.12 — Modernización Visual de Cabecera Maestra con React Bits DecryptedText y Ergonomía de Acciones (REQ-UI-32)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/DecryptedText.tsx` (Nuevo vía `@reactbits-starter/DecryptedText-TS-TW`), `src/components/Layout/HeaderMaestro.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Integración de `@reactbits-starter/DecryptedText-TS-TW` en Títulos de Vista (`HeaderMaestro.tsx`):**
+   - Instalación oficial de `src/components/DecryptedText.tsx` y montaje directo sobre `#header-view-title` (desktop `hidden md:flex`) y `#mobile-header-view-title` (móvil `md:hidden`) con `key={vistaActiva}`, `speed={35}`, `maxIterations={10}`, `animateOn="view"`, `revealDirection="start"` y `encryptedClassName="text-sky-400 font-mono"`, disparando el efecto de decodificación al cambiar de módulo sin jitter horizontal.
+2. **Dock Cobalt de 40px y Compactación de Sincronización (`#header-actions-container`):**
+   - Estandarización de acciones superiores (`#btn-toggle-tema`, `#btn-sync-status-merged`, `#btn-header-calendar`, `#btn-header-archivados`, `#btn-toggle-shortcuts-modal`, `#btn-header-exportar-pdf`) con área táctil `min-w-[40px] min-h-[40px]` y acabado `rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] transition-all`.
+   - Compactación de `#btn-sync-status-merged` hacia micro-LED con pulso suave (`w-2.5 h-2.5 rounded-full ring-2 ring-emerald-500/20`), ocultando texto redundante bajo `xl:` (`hidden xl:inline`) para mantener limpia la cabecera móvil y evitando colisiones con la navegación central (`xl:absolute xl:left-1/2 xl:-translate-x-1/2`).
+   - Integridad intacta de `src/App.tsx`, `src/db/db.ts` y `src/types/index.ts`.
+
+---
+
+### FASE 5.11 — Depuración de Captura Rápida: Erradicación de Labels Parásitos y Acabado Ejecutivo React Bits (REQ-UI-31-HOTFIX-2)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/components/VoicePill.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Erradicación de Textos Parásitos (`"Vía voz"`, `"Cancel"`, badges superpuestos):**
+   - Eliminado el bloque JSX de estado visual `"Vía voz"` / `"Escuchando dictado..."` bajo `#input-captura-rapida-enunciado` en `WidgetIdeasBubble.tsx` (preservando la lógica interna `fueGrabadoConVoz` para clasificación `tipo_captura: 'VOZ'`).
+   - Desactivado explícitamente `slideToCancel={false}`, `showTime={false}`, `waveform={false}` y `reach={0}` sobre `<VoicePill />` en `WidgetIdeasBubble.tsx`, e inicializadas `--vp-slide: '0px'` y `--vp-cancel: '0'` en `VoicePill.tsx` para prevenir la visualización residual del nodo `"Cancel"` cuando no hay arrastre lateral activo.
+2. **Iconografía Técnica de Precisión (`strokeWidth={1.5}`) y Pulido Cinético `motion/react`:**
+   - Unificada la barra de herramientas en micro-cápsulas Dark Cobalt (`bg-[#0B1220]/70`, micro-borde `border-slate-800/80`, hover `border-sky-500/40` y resplandor `shadow-[0_0_12px_rgba(56,189,248,0.2)]`) con `VoicePill` (`32px`), `Paperclip`, `Camera`, `Sparkles` (`text-sky-400`) y envío `#btn-quick-idea-submit` con flecha técnica `CornerDownLeft` y `active:scale-95 duration-150`.
+   - Envuelto `#popover-captura-rapida-idea` en `<AnimatePresence>` + `<motion.div>` (`motion/react`) con transición volumétrica calibrada sin rebote (`initial={{ opacity: 0, scale: 0.98, y: ±4 }}`, `animate={{ opacity: 1, scale: 1, y: 0 }}`, `duration: 0.18`, `ease: [0.16, 1, 0.3, 1]`).
+   - Cero cambios en `src/db/db.ts` ni `src/types/index.ts`.
+
+---
+
+### FASE 5.10 — Interacción Hover-Reveal en Píldora y Rediseño Minimalista de Captura Rápida (REQ-UI-31-REFINEMENT)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Hover-Reveal hacia la Izquierda en Píldora Flotante (`WidgetIdeasBubble.tsx`):**
+   - Estructuración de `#widget-ideas-pill` como grupo `group` manteniendo en reposo el botón visible por defecto `#btn-widget-ideas-add` (`w-10 h-10`, icono `Plus` `w-5 h-5`) y el micro-grip `GripVertical` (`#widget-ideas-drag-handle`, `hidden md:flex`) con anclaje derecho inteligente (`usaAnclajeDerecho`) y persistencia `pmo_ideas_bubble_pos` sin desplazamientos al desplegarse.
+   - Replegado por defecto de `#btn-widget-ideas-bubble` (`max-w-0 opacity-0 overflow-hidden group-hover:max-w-xs group-hover:opacity-100 group-focus-within:max-w-xs group-focus-within:opacity-100 transition-all duration-300 ease-out`) revelándose hacia la izquierda al pasar el puntero con icono `Lightbulb` (`w-4 h-4 text-sky-400`), texto `"Gestor"` y contador tabular `#badge-contador-ideas-activas`.
+2. **Rediseño Minimalista Técnico de `#popover-captura-rapida-idea`:**
+   - Reducción dimensional a `w-80 max-w-[calc(100vw-24px)] sm:w-[360px]` con `!p-3.5` y cabecera desaturada minimalista.
+   - Textarea sin bordes pesados (`bg-transparent border-0 p-1 text-sm leading-relaxed text-slate-100 focus:outline-none`) con placeholder `"Captura un pensamiento, comando o tarea rápida..."` conservando blindaje IME (`!e.nativeEvent.isComposing`) y foco automático.
+   - Barra inferior simplificada en 1 sola fila compacta: izquierda con 4 micro-herramientas de `32x32px` / iconos `w-4 h-4` (`VoicePill` micro `size={32}` `showTime={false}` `waveform={false}` `reach={0}`, `Adjuntar`, `Cámara` e `IA`, todos `w-8 h-8 rounded-lg`); derecha con indicador `Ctrl ↵` (`text-[10px] font-mono text-slate-500`) y `#btn-quick-idea-submit` (`h-8 px-3 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950`); y chip de adjunto (`text-[11px] px-2 py-0.5 rounded-md bg-slate-800/80 border-slate-700/60`) flotando justo sobre la botonera.
+   - Preservación total de compresión Canvas, persistencia en `db.ideas` (`url_adjunto_drive`), `src/db/db.ts` y `src/types/index.ts`.
+
+---
+
+### FASE 5.09 — Restauración de Arrastre Persistente, Paleta Cobalt Ejecutiva y Captura Multimodal Robusta (REQ-UI-31-FIX)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Arrastre Controlado con Puntero y Persistencia (`WidgetIdeasBubble.tsx`):**
+   - Restauración del estado de posición leyendo `localStorage.getItem('pmo_ideas_bubble_pos')` en desktop (fallback seguro `{ x: window.innerWidth - 180, y: window.innerHeight - 80 }`, acotado con `16px` de margen vía `clampPosicionBurbuja` y reajuste en `resize`), manteniendo anclaje fijo Tailwind en móvil (`bottom-20 right-3`).
+   - Inclusión de micro-grip `GripVertical` (`#widget-ideas-drag-handle`) con listeners nativos `pointerdown`, `pointermove` y `pointerup` / `pointercancel`, persistiendo coordenadas finales en `localStorage` al soltar y calculando alineación contextual del popover (`top-full` / `bottom-full`, `left-0` / `right-0`) sin mover la píldora.
+2. **Estética Ejecutiva Cobalt (`#btn-widget-ideas-bubble` y Cabecera PiP):**
+   - Retiro completo de degradados multicolores (`from-amber-400 via-orange-500 to-sky-500`) y `animate-pulse`, sustituidos por superficies `bg-[#0D1526]/90 border-slate-800/80 hover:border-sky-500/40`, círculos de icono `bg-sky-500/15 border-sky-500/30 text-sky-400` y badges `font-mono tabular-nums text-[11px] bg-slate-800 text-slate-300 border-slate-700/60`, con visibilidad y acceso directo coherente en móvil y desktop.
+3. **Adjuntos Reales, Compresión Canvas y Footer Simétrico de 2 Filas:**
+   - Conexión de `<input type="file" accept="image/*,.pdf,.doc,.docx,.txt">` (`fileInputRef`) y cámara (`cameraInputRef`) hacia `procesarArchivoSeleccionado`: compresión nativa WebP/JPEG vía Canvas (`maxWidth = 1280px`, `quality = 0.75`, objetivo `< 400KB`), soporte a documentos `< 500KB` en Data-URI (o referencia `meta://adjunto` si supera `500KB`), preview chip removible `#chip-adjunto-captura-rapida` y persistencia real en `db.ideas.add` (`tipo_captura: 'FOTO' | 'ARCHIVO' | 'VOZ' | 'TEXTO'` y `url_adjunto_drive`).
+   - Reestructuración del footer en 2 filas simétricas (`Fila Superior`: `VoicePill` `shape="rounded"` `reach={0}` con padding dinámico reservado `pl-[42px]` / `pl-[116px]` al escuchar para evitar colisiones o recortes en `SpotlightCard`, junto a botones uniformes `40x40px` `Adjuntar`, `Cámara` e `IA`; `Fila Inferior`: chip de adjunto + botón `#btn-quick-idea-submit` `bg-sky-500 hover:bg-sky-400 text-slate-950`).
+   - Integridad intacta de `src/db/db.ts` y `src/types/index.ts`.
+
+---
+
+### FASE 5.08 — Retiro de Basic-SSL y Restauración de HTTP Plano en Localhost (REQ-OPS-31)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `vite.config.ts`, `package.json`, `iniciar-todo.bat`, `iniciar-movil.bat`, `scripts/dev-mobile.bat`, `scripts/supervisor-servicios.ps1`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Desacople Completo de `@vitejs/plugin-basic-ssl` (`vite.config.ts`, `package.json`):**
+   - Eliminación de la importación y registro de `basicSsl()` en `vite.config.ts`, retirando igualmente `@vitejs/plugin-basic-ssl` de `devDependencies` en `package.json`.
+   - Configuración de `server` en `vite.config.ts` para servir HTTP plano sin TLS autofirmado (`host: '0.0.0.0'`, `port: 3000`, `https: undefined` acorde al contrato `ServerOptions` de Vite 6, `strictPort: true`, `open: false`), manteniendo `"dev:mobile": "vite --host 0.0.0.0 --port 3000"`.
+2. **Actualización Integral de Scripts de Arranque y Polling (`iniciar-todo.bat`, `iniciar-movil.bat`, `scripts/dev-mobile.bat`, `scripts/supervisor-servicios.ps1`):**
+   - Migración de URLs, mensajes y lanzamiento automático del navegador hacia `http://localhost:3000/` (PC) y `http://%IP%:3000/` (LAN/móvil), eliminando advertencias de certificado autofirmado.
+   - Sustitución del polling `curl.exe -k https://localhost:3000/` por verificación HTTP directa `curl.exe http://localhost:3000/`.
+   - Integridad intacta de `src/db/db.ts`, `src/types/index.ts` y lógica de aplicación.
+
+---
+
+### FASE 5.07 — Eliminación de Física Lúdica en Widget de Ideas y Ergonomía Ejecutiva (REQ-UI-31-HOTFIX)
+**Fecha:** Noviembre 2026 | **Archivos modificados/eliminados:** `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/components/Magnet.tsx` (Eliminado), `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Desacople Total de `Magnet` y Anclaje Estático Sobrio (`WidgetIdeasBubble.tsx`):**
+   - Retiro definitivo de `src/components/Magnet.tsx` y eliminación de su importación/envoltorio sobre `#widget-ideas-pill`, dejando `#widget-ideas-bubble-container` anclado de forma estática en `fixed bottom-20 right-3 md:bottom-6 md:right-6 z-[9990]`.
+   - Aplicación de estilo ejecutivo Cobalt sin traslación X/Y ni escalado al pasar el cursor (`rounded-full bg-[#0D1526]/90 backdrop-blur-xl border border-slate-800/80 hover:border-sky-500/40 shadow-sm hover:shadow-[0_0_15px_rgba(56,189,248,0.12)] transition-all duration-200`) con `flex-row-reverse` para revelar `#btn-widget-ideas-bubble` hacia la izquierda sin desplazar `#btn-widget-ideas-add`.
+2. **Acceso Rápido Ejecutivo (`Ctrl + I` / `Alt + I`) y Foco Limpio:**
+   - Ampliación del listener global de atajos en `WidgetIdeasBubble.tsx` para responder tanto a `Ctrl + I` como a `Alt + I` (excluyendo `Shift`/`Meta`) y conmutar instantáneamente `#popover-captura-rapida-idea`.
+   - Incorporación de `autoFocus` y `textareaRef` con `requestAnimationFrame(() => textareaRef.current?.focus())` sobre `#input-captura-rapida-enunciado` al abrir el popover, conservando `SpotlightCard` (`proximity={0}`, `flare={false}`) únicamente como textura luminosa sutil dentro de la tarjeta sin desplazamiento de elementos.
+   - Sin cambios sobre `vite.config.ts`, `src/db/db.ts` ni `src/types/index.ts`.
+
+---
+
+### FASE 5.06 — Modernización Cinética del Widget Flotante de Ideas con React Bits Magnet y Spotlight (REQ-UI-31)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/Magnet.tsx` (Nuevo vía `@reactbits-starter/Magnet-TS-TW`), `src/components/SpotlightCard.tsx` (Nuevo vía `@reactbits-starter/SpotlightCard-TS-TW`), `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Acople Magnético en Píldora Flotante (`Magnet.tsx` + `WidgetIdeasBubble.tsx`):**
+   - Instalación oficial de `src/components/Magnet.tsx` y envoltura de `#widget-ideas-pill` con `<Magnet padding={40} disabled={esMovil}>`.
+   - Eliminación del grip de arrastre físico (`#widget-ideas-drag-handle`) y su estado asociado en favor del anclaje limpio Cobalt (`rounded-full border border-sky-500/30 shadow-[0_0_20px_rgba(56,189,248,0.15)]`), manteniendo en móvil (`< md`) posición fija segura en `bottom-20 right-3` sin colisión sobre `BottomNavMobile`.
+2. **Tarjeta de Captura Multimodal con Spotlight (`SpotlightCard.tsx` + `WidgetIdeasBubble.tsx`):**
+   - Instalación oficial de `src/components/SpotlightCard.tsx` reemplazando la superficie plana de `#popover-captura-rapida-idea` (`spotlightColor="rgba(56, 189, 248, 0.12)"`, `--spotlight-card-surface` Cobalt `#0D1526`, `rounded-2xl !p-4 backdrop-blur-xl`).
+   - Calibración ergonómica de controles multimodales (`VoicePill` `size={40}`, botón `Adjuntar`, botón `Cámara` `#btn-quick-idea-camera` con selector visual `capture="environment"`, `IA`, cabecera y `Guardar`) con targets táctiles `min-w-[40px] min-h-[40px]` y estados hover iluminados.
+   - Sin cambios en `src/db/db.ts`, `src/types/index.ts` ni lógica de persistencia de ideas.
+
+---
+
+### FASE 5.05 — Launcher Maestro Resiliente para Cockpit, Vite HTTPS Móvil y Portal Web (REQ-OPS-30)
+**Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `iniciar-todo.bat` (Nuevo), `scripts/supervisor-servicios.ps1` (Nuevo), `package.json`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Supervisor en Segundo Plano con Auto-Recuperación (`scripts/supervisor-servicios.ps1`):**
+   - Limpieza preventiva de sockets en los puertos troncales `3000` (Vite HTTPS) y `48123` (Cockpit loopback bridge), además de instancias huérfanas de `electron.exe` vinculadas a `desktop/main.js` (sin afectar otros procesos Electron del sistema).
+   - Orquestación paralela de `npm run dev:mobile` (`0.0.0.0:3000` con SSL) y `npm run cockpit` (`127.0.0.1:48123`) mediante ciclo de vigilancia continuo cada 3 segundos, relanzando automáticamente cualquier servicio caído previa limpieza segura de puerto.
+2. **Lanzador Unificado de Un Solo Clic (`iniciar-todo.bat`) y Scripts (`package.json`):**
+   - Detección priorizada de IP Wi-Fi/LAN (`192.168.x.x`), limpieza previa de procesos/supervisores previos con `-ExecutionPolicy Bypass`, arranque minimizado de `scripts/supervisor-servicios.ps1` y presentación de rutas listas (`https://localhost:3000/`, `https://%IP%:3000/`, `http://127.0.0.1:48123`).
+   - Polling silencioso de disponibilidad sobre `https://localhost:3000/` (`curl.exe -k`) y `http://127.0.0.1:48123/status`, con apertura automática del navegador predeterminado en `https://localhost:3000/`.
+   - Registro en `package.json` de los alias `"start:all": ".\\iniciar-todo.bat"` y `"servicios:all": ".\\iniciar-todo.bat"` (con prefijo `.\\` para compatibilidad cuando `NoDefaultCurrentDirectoryInExePath` está activo).
+   - Cero modificaciones sobre `src/db/db.ts`, `src/types/index.ts` ni lógica de negocio.
+
+---
+
+### FASE 5.04 — Auto-Liberación Forzada de Puerto 3000 en Lanzador Móvil (REQ-OPS-29)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `iniciar-movil.bat`, `scripts/dev-mobile.bat`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Auto-limpieza del puerto 3000 antes del arranque Vite (`iniciar-movil.bat`, `scripts/dev-mobile.bat`):**
+   - Incorporación de bucle `netstat -aon | findstr ":3000 " | findstr LISTENING` con terminación forzada vía `taskkill /F /PID %%p` sobre procesos ocupantes antes de ejecutar `call npm run dev:mobile`.
+   - Inclusión de espera de 1 segundo (`timeout /t 1 /nobreak >nul 2>&1 || ping -n 2 127.0.0.1 >nul`) posterior al bloque de limpieza para garantizar liberación del socket TCP antes de enlazar `0.0.0.0:3000` con `strictPort: true`.
+   - Limpieza inmediata del listener activo en puerto 3000 de la sesión operativa mediante `Get-NetTCPConnection` / `Stop-Process -Force`.
+   - Cero cambios en `src/`, `src/db/db.ts` ni `src/types/index.ts`.
+
+---
+
+### FASE 5.03 — Catálogo Completo de App Shortcuts, Enrutador Deep-Link y Micro-Widget de Foco (REQ-OPS-28)
+**Fecha:** Noviembre 2026 | **Archivos modificados:** `public/manifest.json`, `public/manifest.webmanifest`, `src/App.tsx`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### Solución Implementada
+1. **Catálogo Completo de App Shortcuts PWA (`public/manifest.json`, `public/manifest.webmanifest`):**
+   - Sincronización 1:1 de ambos manifiestos estáticos incorporando los 5 atajos directos móviles en `shortcuts`: `Capturar Idea (Voz)` (`/?action=nueva_idea`), `Nueva Tarea` (`/?action=nueva_tarea`), `Registrar Gasto` (`/?action=nuevo_gasto`), `Nueva Nota` (`/?action=nueva_nota`) y `Avance de Hábito` (`/?action=nuevo_habito`), preservando `Ejecución Diaria (Hoy)` (`./?mode=hud`).
+2. **Enrutador Deep-Link en Carga Inicial y Limpieza de Historial (`src/App.tsx`):**
+   - Procesamiento de `URLSearchParams(window.location.search).get('action')` durante el montaje inicial (inhibido en modo `esModoHud` / Electron widget) despachando apertura inmediata de `ModalTareaFlow`, `ModalGasto`, `ModalActividadFlow` (`#habitos`), `EditorNotaModal` global (`#notas`) y el evento personalizado `'pmo:abrir-captura-idea'`.
+   - Saneamiento automático de query string vía `window.history.replaceState({}, '', pathname + hashDestino)` para evitar reaperturas accidentales al refrescar la PWA.
+3. **Receptor de Disparo Externo en Ideas (`WidgetIdeasBubble.tsx`) y Micro-Widget de Foco (`src/App.tsx`):**
+   - Registro del listener `window.addEventListener('pmo:abrir-captura-idea', ...)` en `WidgetIdeasBubble.tsx` invocando `abrirPopover()` (`setPopoverAbierto(true)` con reset seguro).
+   - Incorporación de `BarraFocoTareasEnProgreso` (`#micro-widget-foco-progreso`, `z-[9980]`, `bottom-20 left-3 md:bottom-5 md:left-1/2`) consultando tareas activas `03_En_Progreso` desde Dexie con rotación entre múltiples focos, acceso directo a `ModalTareaFlow` y ocultamiento temporal sin colisiones sobre `BottomNavMobile` ni `WidgetIdeasBubble`.
+   - Contratos de `src/db/db.ts` y `src/types/index.ts` intactos.
+
+---
+
 ### FASE 5.02 — Ergonomía Móvil en Hábitos, Registro Financiero Ágil y Consolidación Global (REQ-UI-30)
 **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Habitos/TarjetaHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Views/ViewHabitos.tsx`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Finanzas/DashboardFinanciero.tsx`, `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalIngreso.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 

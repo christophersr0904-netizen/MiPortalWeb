@@ -10,6 +10,7 @@ import type {
   HabitoLogRecord
 } from '../types';
 import { syncManager } from './syncManager';
+import { formatFechaIsoLocal } from '../utils/timeFormatters';
 
 /**
  * ============================================================================
@@ -230,7 +231,7 @@ export async function guardarMetaPlanLocal(
     nivel_rescate_minimo: Number(metaData.nivel_rescate_minimo || 0),
     peso_hitos_pct: Number(metaData.peso_hitos_pct ?? 50),
     peso_habitos_pct: Number(metaData.peso_habitos_pct ?? 50),
-    fecha_inicio: metaData.fecha_inicio || nowIso.split('T')[0],
+    fecha_inicio: metaData.fecha_inicio || formatFechaIsoLocal(),
     fecha_fin: metaData.fecha_fin,
     estado: metaData.estado || '02_En_Progreso',
     proyecto_id: metaData.proyecto_id || null,
@@ -321,7 +322,7 @@ export async function conmutarHitoPlanLocal(
   if (!hito) return null;
 
   const nuevoCompletado = completadoDeseado !== undefined ? completadoDeseado : !hito.completado;
-  const hoyStr = new Date().toISOString().split('T')[0];
+  const hoyStr = formatFechaIsoLocal();
   const nowIso = new Date().toISOString();
 
   const hitoActualizado: HitoPlanRecord = {
@@ -621,7 +622,7 @@ export function calcularProyeccionMeta(
   meta: MetaPlanRecord,
   logsHabitos: HabitoLogRecord[],
   hitos: HitoPlanRecord[],
-  fechaHoyStr: string = new Date().toISOString().split('T')[0]
+  fechaHoyStr: string = formatFechaIsoLocal()
 ): ProyeccionMetaResult {
   const soloHoy = fechaHoyStr.split('T')[0];
   const [yHoy, mHoy, dHoy] = soloHoy.split('-').map(Number);
@@ -643,8 +644,8 @@ export function calcularProyeccionMeta(
       typeof log.valor_cuantitativo_sumado === 'number' && log.valor_cuantitativo_sumado > 0
         ? log.valor_cuantitativo_sumado
         : log.completado
-        ? 1
-        : 0;
+          ? 1
+          : 0;
     sumaValorRegistrado += valor;
   }
 
@@ -669,8 +670,8 @@ export function calcularProyeccionMeta(
     // V_real > 0
     diasRestantesEstimados = Math.ceil(volumenPendiente / velocidadDiaria);
     const projUtc = hoyUtc + diasRestantesEstimados * 86400000;
-    const projDate = new Date(projUtc);
-    fechaProyectada = projDate.toISOString().split('T')[0];
+    const projLocal = new Date(yHoy, mHoy - 1, dHoy + diasRestantesEstimados, 12, 0, 0);
+    fechaProyectada = formatFechaIsoLocal(projLocal);
 
     if (meta.fecha_fin && meta.fecha_fin.trim().length > 0) {
       const [yF, mF, dF] = meta.fecha_fin.split('T')[0].split('-').map(Number);

@@ -347,9 +347,9 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
       className="flex-1 flex flex-col h-full w-full overflow-y-auto overscroll-contain p-3 md:p-6 lg:p-8 pb-28 md:pb-8 bg-[#040711] text-slate-100 transition-colors duration-200 custom-scrollbar space-y-4 md:space-y-6"
     >
       {/* CABECERA PRINCIPAL DEL PORTAFOLIO */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800/80">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-sky-600 via-sky-500 to-teal-500 flex items-center justify-center text-white shadow-md shadow-sky-500/20 shrink-0">
+          <div className="w-11 h-11 rounded-xl bg-[#0B132B] border border-slate-800/80 flex items-center justify-center text-sky-400 shrink-0">
             <FolderKanban className="w-5 h-5" strokeWidth={1.75} />
           </div>
           <div>
@@ -372,7 +372,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
           <button
             type="button"
             onClick={() => setModalPdfAbierto(true)}
-            className="px-3 py-1.5 rounded-xl border border-slate-800 bg-[#0D1526] text-slate-300 hover:bg-slate-800/60 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-2xs cursor-pointer active:scale-95"
+            className="h-10 px-3.5 rounded-xl border border-slate-800/80 bg-[#0D1526] text-slate-300 hover:bg-slate-800/60 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Compilar y Descargar Ficha Ejecutiva en PDF"
           >
             <FileDown className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
@@ -385,7 +385,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               setProyectoAEditarId(null);
               setModalProyectoAbierto(true);
             }}
-            className="bg-sky-500 hover:bg-sky-400 text-white shadow-md shadow-sky-950/50 px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+            className="h-10 px-4 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Crear Nuevo Proyecto"
           >
             <Plus className="w-4 h-4" strokeWidth={1.75} />
@@ -397,7 +397,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
       {/* SECCIÓN 1: KPI CARDS EJECUTIVAS CON COUNTUP Y CUADRÍCULA 2X2 MÓVIL (REQ-UI-29) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 p-2 sm:p-0">
         {/* KPI 1: TOTAL PROYECTOS & FASES */}
-        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-800/60 shadow-sm flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/30 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-colors duration-200">
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate leading-none">
               Iniciativas
@@ -429,7 +429,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
 
         {/* KPI 2: AVANCE GLOBAL PONDERADO */}
-        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-800/60 shadow-sm flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/30 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-colors duration-200">
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate leading-none">
               Avance Global
@@ -461,7 +461,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               />
               <div
                 id="kpi-avance-real-bar"
-                className="bg-gradient-to-r from-sky-400 to-emerald-400 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
+                className="bg-sky-500 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
                 style={{ width: `${promReal}%` }}
               />
             </div>
@@ -469,7 +469,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
 
         {/* KPI 3: CONSUMO PRESUPUESTARIO (BURN RATE) */}
-        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-800/60 shadow-sm flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/30 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-colors duration-200">
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate leading-none">
               Presupuesto
@@ -518,16 +518,13 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         </div>
 
         {/* KPI 4: SALUD & RIESGOS DEL PORTAFOLIO */}
-        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-800/60 shadow-sm flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/30 transition-[transform,border-color,box-shadow] duration-200 transform-gpu">
+        <div className="portal-surface bg-[#0D1526]/90 p-2.5 sm:p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-colors duration-200">
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate leading-none">
               Salud
             </span>
             <span id="kpi-health-icon" className="w-4 h-4 sm:w-7 sm:h-7 sm:rounded-xl sm:bg-slate-900/80 flex items-center justify-center text-xs font-bold relative shrink-0">
-              {countBloqueado > 0 && (
-                <span className="animate-ping absolute inline-flex h-4 w-4 rounded-full opacity-60 duration-1000 bg-rose-500" />
-              )}
-              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 shadow-[0_0_8px_currentColor] ${countBloqueado > 0 ? 'bg-rose-500 text-rose-500' : countRiesgo > 0 ? 'bg-amber-400 text-amber-400' : 'bg-emerald-400 text-emerald-400'}`} />
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${countBloqueado > 0 ? 'bg-rose-500' : countRiesgo > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
             </span>
           </div>
           <div className="mt-1 sm:my-2">
@@ -580,7 +577,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
       </div>
 
       {/* SECCIÓN 2: BARRA DE DISTRIBUCIÓN GERENCIAL Y SEMÁFORO INTERACTIVO */}
-      <div className="bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-xs space-y-3">
+      <div className="bg-[#0D1526]/90 p-4 rounded-xl border border-slate-800/80 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
           <span className="font-bold text-slate-200 flex items-center gap-1.5">
             <Layers className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
@@ -593,32 +590,32 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <button
               type="button"
               onClick={() => setFiltroSalud(filtroSalud === 'En Rango' ? '' : 'En Rango')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-950/50 text-emerald-300 border border-emerald-800/60 hover:scale-105 active:scale-95 transition flex items-center gap-1 shadow-2xs cursor-pointer ${
-                filtroSalud === 'En Rango' ? 'ring-2 ring-sky-500 font-black' : ''
+              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-emerald-950/50 text-emerald-300 border border-emerald-800/60 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                filtroSalud === 'En Rango' ? 'ring-2 ring-sky-500 font-bold' : 'hover:border-emerald-500/50'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block mr-1.5" />
-              <span>En Rango ({countRango})</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+              <span className="font-mono tabular-nums">En Rango ({countRango})</span>
             </button>
             <button
               type="button"
               onClick={() => setFiltroSalud(filtroSalud === 'En Riesgo' ? '' : 'En Riesgo')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-950/50 text-amber-300 border border-amber-800/60 hover:scale-105 active:scale-95 transition flex items-center gap-1 shadow-2xs cursor-pointer ${
-                filtroSalud === 'En Riesgo' ? 'ring-2 ring-sky-500 font-black' : ''
+              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-amber-950/50 text-amber-300 border border-amber-800/60 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                filtroSalud === 'En Riesgo' ? 'ring-2 ring-sky-500 font-bold' : 'hover:border-amber-500/50'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block mr-1.5" />
-              <span>En Riesgo ({countRiesgo})</span>
+              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+              <span className="font-mono tabular-nums">En Riesgo ({countRiesgo})</span>
             </button>
             <button
               type="button"
               onClick={() => setFiltroSalud(filtroSalud === 'Bloqueado' ? '' : 'Bloqueado')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-950/50 text-rose-300 border border-rose-800/60 hover:scale-105 active:scale-95 transition flex items-center gap-1 shadow-2xs cursor-pointer ${
-                filtroSalud === 'Bloqueado' ? 'ring-2 ring-sky-500 font-black' : ''
+              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-rose-950/50 text-rose-300 border border-rose-800/60 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                filtroSalud === 'Bloqueado' ? 'ring-2 ring-sky-500 font-bold' : 'hover:border-rose-500/50'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-rose-400 inline-block mr-1.5" />
-              <span>Bloqueados ({countBloqueado})</span>
+              <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
+              <span className="font-mono tabular-nums">Bloqueados ({countBloqueado})</span>
             </button>
           </div>
         </div>
@@ -699,7 +696,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
       </div>
 
       {/* SECCIÓN 3: BARRA DE FILTROS CRUZADOS, BUSCADOR Y TOGGLE DE VISTA (GRID / TABLE) */}
-      <div className="bg-[#0D1526] p-3.5 my-2 space-y-3 rounded-2xl border border-slate-800/40 shadow-xs">
+      <div className="bg-[#0D1526]/90 p-3.5 my-2 space-y-3 rounded-xl border border-slate-800/80">
         {/* FILTRO DE CARTERA INTERACTIVO (Tira táctil horizontal en móvil + Toggle Click en Desktop) */}
         <div className="flex items-center gap-2">
           <div className="relative inline-flex items-center w-full sm:w-auto">
@@ -707,17 +704,17 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               type="button"
               onClick={() => setCarteraAbierta((prev) => !prev)}
               aria-expanded={carteraAbierta}
-              className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold transition-[border-color,color,transform] duration-200 items-center gap-2 cursor-pointer active:scale-95 bg-slate-900/80 border border-slate-700/70 text-slate-200 shadow-sm hover:border-sky-500 hover:text-white"
+              className="hidden sm:flex h-9 px-3 rounded-xl text-xs font-semibold transition-colors items-center gap-2 cursor-pointer bg-[#040711]/70 border border-slate-800/80 text-slate-200 hover:border-sky-500/40 hover:text-white"
             >
               <FolderKanban className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
-              <span>Cartera: <b className="text-sky-400 font-extrabold">{filtroTipo || 'Todos'}</b></span>
+              <span>Cartera: <b className="text-sky-400 font-bold">{filtroTipo || 'Todos'}</b></span>
               <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${carteraAbierta ? 'rotate-180' : ''}`} strokeWidth={1.75} />
             </button>
 
             {/* Tira horizontal táctil en móvil (< sm) y desplegada por clic en desktop */}
             <div
               id="flyout-cartera-strip"
-              className={`flyout-cartera-menu flex overflow-x-auto no-scrollbar gap-1.5 pb-1 w-full sm:w-auto sm:pb-1.5 sm:p-1.5 sm:rounded-2xl sm:bg-[#0D1526]/95 sm:backdrop-blur-md sm:border sm:border-slate-800 sm:shadow-xl sm:absolute sm:left-full sm:top-0 sm:ml-2 z-30 transition-[opacity,transform] duration-200 transform-gpu whitespace-nowrap ${
+              className={`flyout-cartera-menu flex overflow-x-auto no-scrollbar gap-1.5 pb-1 w-full sm:w-auto sm:pb-1.5 sm:p-1.5 sm:rounded-xl sm:bg-[#0D1526]/95 sm:backdrop-blur-md sm:border sm:border-slate-800/80 sm:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] sm:absolute sm:left-full sm:top-0 sm:ml-2 z-30 transition-[opacity,transform] duration-200 whitespace-nowrap ${
                 carteraAbierta
                   ? 'sm:opacity-100 sm:translate-x-0 sm:pointer-events-auto'
                   : 'sm:opacity-0 sm:translate-x-[-8px] sm:pointer-events-none'
@@ -726,14 +723,18 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               <button
                 type="button"
                 onClick={() => { setFiltroTipo(''); setCarteraAbierta(false); }}
-                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
+                className={`h-9 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   filtroTipo === ''
-                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
-                    : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                    ? 'bg-sky-500 text-slate-950 border border-sky-400'
+                    : 'bg-[#040711]/70 border border-slate-800/80 text-slate-300 hover:border-sky-500/40 hover:text-white'
                 }`}
               >
                 <span>Todos</span>
-                <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.2 rounded-full bg-sky-900/60 text-sky-200 border border-sky-400/30">
+                <span className={`text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded-full border ${
+                  filtroTipo === ''
+                    ? 'bg-slate-950/20 text-slate-950 border-slate-950/25'
+                    : 'bg-slate-800 text-slate-400 border-slate-700/60'
+                }`}>
                   {totalProyectos}
                 </span>
               </button>
@@ -741,15 +742,17 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               <button
                 type="button"
                 onClick={() => { setFiltroTipo('Personal'); setCarteraAbierta(false); }}
-                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
+                className={`h-9 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   filtroTipo === 'Personal'
-                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
-                    : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                    ? 'bg-sky-500 text-slate-950 border border-sky-400'
+                    : 'bg-[#040711]/70 border border-slate-800/80 text-slate-300 hover:border-sky-500/40 hover:text-white'
                 }`}
               >
                 <User className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Personal</span>
-                <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+                <span className={`text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded-full ${
+                  filtroTipo === 'Personal' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                }`}>
                   {countsPorTipo.Personal || 0}
                 </span>
               </button>
@@ -757,15 +760,17 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               <button
                 type="button"
                 onClick={() => { setFiltroTipo('Profesional'); setCarteraAbierta(false); }}
-                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
+                className={`h-9 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   filtroTipo === 'Profesional'
-                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
-                    : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                    ? 'bg-sky-500 text-slate-950 border border-sky-400'
+                    : 'bg-[#040711]/70 border border-slate-800/80 text-slate-300 hover:border-sky-500/40 hover:text-white'
                 }`}
               >
                 <Briefcase className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Profesional</span>
-                <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+                <span className={`text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded-full ${
+                  filtroTipo === 'Profesional' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                }`}>
                   {countsPorTipo.Profesional || 0}
                 </span>
               </button>
@@ -773,15 +778,17 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               <button
                 type="button"
                 onClick={() => { setFiltroTipo('Inversiones'); setCarteraAbierta(false); }}
-                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
+                className={`h-9 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   filtroTipo === 'Inversiones'
-                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
-                    : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                    ? 'bg-sky-500 text-slate-950 border border-sky-400'
+                    : 'bg-[#040711]/70 border border-slate-800/80 text-slate-300 hover:border-sky-500/40 hover:text-white'
                 }`}
               >
                 <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Inversiones</span>
-                <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+                <span className={`text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded-full ${
+                  filtroTipo === 'Inversiones' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                }`}>
                   {countsPorTipo.Inversiones || 0}
                 </span>
               </button>
@@ -789,15 +796,17 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               <button
                 type="button"
                 onClick={() => { setFiltroTipo('Social'); setCarteraAbierta(false); }}
-                className={`min-h-[40px] sm:min-h-0 px-3 sm:px-2.5 py-1.5 rounded-xl text-xs font-bold transition-[color,background-color,border-color,transform] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0 ${
+                className={`h-9 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   filtroTipo === 'Social'
-                    ? 'bg-sky-500 text-white shadow-md shadow-sky-500/25 border border-sky-400'
-                    : 'bg-slate-900/80 border border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                    ? 'bg-sky-500 text-slate-950 border border-sky-400'
+                    : 'bg-[#040711]/70 border border-slate-800/80 text-slate-300 hover:border-sky-500/40 hover:text-white'
                 }`}
               >
                 <Users className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Social</span>
-                <span className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400">
+                <span className={`text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded-full ${
+                  filtroTipo === 'Social' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                }`}>
                   {countsPorTipo.Social || 0}
                 </span>
               </button>
@@ -811,14 +820,14 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             {/* Buscador Rápido */}
             <div className="relative min-w-[200px] flex-1 max-w-xs">
               <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-slate-400">
-                <Search className="w-4 h-4 text-slate-400 shrink-0" strokeWidth={1.75} />
+                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
               </span>
               <input
                 type="text"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar proyecto, ID, OKR o líder..."
-                className="w-full bg-slate-900/80 text-slate-200 placeholder-slate-500 text-xs rounded-xl border border-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 pl-8 pr-7 py-1.5 outline-none transition shadow-2xs"
+                className="w-full h-9 bg-[#040711]/70 text-slate-200 placeholder-slate-500 text-xs rounded-xl border border-slate-800/80 focus:border-sky-500/50 pl-8 pr-7 outline-none transition-colors"
               />
               {busqueda && (
                 <button
@@ -845,7 +854,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               <button
                 type="button"
                 onClick={limpiarFiltros}
-                className="px-2.5 py-1 rounded-xl text-xs font-bold bg-slate-800 text-rose-400 hover:bg-slate-700 transition flex items-center gap-1 cursor-pointer"
+                className="h-9 px-3 rounded-xl text-xs font-semibold bg-rose-950/40 text-rose-400 hover:bg-rose-900/60 border border-rose-800/60 transition-colors flex items-center gap-1 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Limpiar</span>
@@ -854,13 +863,13 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
           </div>
 
           {/* Selector de Vista (Cuadrícula / Tabla) */}
-          <div className="flex items-center gap-1 p-0.5 bg-slate-900/80 rounded-lg border border-slate-800 shrink-0 shadow-2xs">
+          <div className="h-9 flex items-center gap-1 p-0.5 bg-[#040711]/70 rounded-xl border border-slate-800/80 shrink-0">
             <button
               type="button"
               onClick={() => setVistaModo('grid')}
-              className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+              className={`h-full px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                 vistaModo === 'grid'
-                  ? 'bg-sky-500 text-white shadow-xs'
+                  ? 'bg-sky-500 text-slate-950'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -871,9 +880,9 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <button
               type="button"
               onClick={() => setVistaModo('table')}
-              className={`px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+              className={`h-full px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                 vistaModo === 'table'
-                  ? 'bg-sky-500 text-white shadow-xs'
+                  ? 'bg-sky-500 text-slate-950'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -889,9 +898,9 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
         proyectosFiltrados.length === 0 ? (
           proyectos.length === 0 ? (
             /* Bento Empty State Onboarding: Portafolio en blanco */
-            <div className="flex flex-col items-center justify-center p-12 text-center bg-[#0D1526] rounded-2xl border border-slate-800/40 shadow-xs min-h-[420px] [contain:layout]">
-              <div className="w-14 h-14 rounded-2xl bg-sky-950/40 border border-sky-800/40 flex items-center justify-center text-sky-400 mb-3.5 shadow-inner">
-                <FolderKanban className="w-7 h-7" strokeWidth={1.75} />
+            <div className="flex flex-col items-center justify-center p-12 text-center bg-[#0D1526]/90 rounded-xl border border-slate-800/80 min-h-[420px] [contain:layout]">
+              <div className="w-12 h-12 rounded-2xl bg-[#0B132B] border border-slate-800/80 flex items-center justify-center text-sky-400 mb-3.5">
+                <FolderKanban className="w-6 h-6" strokeWidth={1.75} />
               </div>
               <h3 className="font-bold text-base text-slate-100 mb-1">
                 Comienza tu Portafolio Ejecutivo
@@ -905,7 +914,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                   setProyectoAEditarId(null);
                   setModalProyectoAbierto(true);
                 }}
-                className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold transition-all shadow-md shadow-sky-950/50 flex items-center gap-2 cursor-pointer active:scale-95"
+                className="h-10 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer"
               >
                 <Plus className="w-4 h-4" strokeWidth={1.75} />
                 <span>Crear Primer Proyecto</span>
@@ -913,7 +922,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             </div>
           ) : (
             /* Bento Empty State Filtro: Búsqueda sin coincidencias */
-            <div className="flex flex-col items-center justify-center p-12 text-center bg-[#0D1526] rounded-2xl border border-slate-800/40 shadow-xs min-h-[420px] [contain:layout]">
+            <div className="flex flex-col items-center justify-center p-12 text-center bg-[#0D1526]/90 rounded-xl border border-slate-800/80 min-h-[420px] [contain:layout]">
               <div className="w-14 h-14 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-center text-slate-400 mb-3.5 shadow-inner">
                 <SearchX className="w-7 h-7" strokeWidth={1.75} />
               </div>
@@ -926,14 +935,14 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               <button
                 type="button"
                 onClick={limpiarFiltros}
-                className="px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-sky-300 border border-slate-700/60 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                className="h-9 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-sky-300 border border-slate-700/60 text-xs font-semibold transition-colors cursor-pointer inline-flex items-center justify-center"
               >
                 Restablecer Filtros
               </button>
             </div>
           )
         ) : (
-          <div id="grid-proyectos-cards" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 sm:gap-3 md:gap-5 min-h-[420px] md:min-h-[520px] contain-layout [contain:layout]">
+          <div id="grid-proyectos-cards" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 auto-rows-auto items-stretch gap-3 md:gap-5 shrink-0 min-h-[420px]">
             {proyectosFiltrados.map((p) => {
               const resumen = resumenTareasPorProyecto.get(p.codigo_legado) ||
                               resumenTareasPorProyecto.get(p.id) ||
@@ -953,19 +962,20 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
           </div>
         )
       ) : (
-        /* SECCIÓN 4B: VISTA TABLA EJECUTIVA (8 COLUMNAS CANÓNICAS) */
-        <div id="table-proyectos-wrapper" className="overflow-x-auto rounded-2xl bg-[#0D1526] border border-slate-800/40 shadow-xs custom-scrollbar min-h-[520px] contain-layout [contain:layout]">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead className="bg-slate-950/80 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-bold">
+        /* SECCIÓN 4B: VISTA TABLA EJECUTIVA (9 COLUMNAS CANÓNICAS CON VARIANZA) */
+        <div id="table-proyectos-wrapper" className="overflow-x-auto rounded-xl bg-[#0D1526]/90 border border-slate-800/80 custom-scrollbar min-h-[520px] contain-layout [contain:layout]">
+          <table className="w-full min-w-[960px] text-left border-collapse text-xs">
+            <thead className="bg-slate-950/80 border-b border-slate-800/80 text-[11px] uppercase tracking-wider text-slate-400 font-bold">
               <tr>
                 <th className="py-3 px-4">Proyecto</th>
-                <th className="py-3 px-3">Salud</th>
-                <th className="py-3 px-3">Estado</th>
-                <th className="py-3 px-3 min-w-[140px]">Avance Real</th>
-                <th className="py-3 px-3">Tareas</th>
-                <th className="py-3 px-3">Plazo Límite</th>
-                <th className="py-3 px-3">Presupuesto (AC / BAC)</th>
-                <th className="py-3 px-4 text-right">Acciones</th>
+                <th className="py-3 px-3 text-center whitespace-nowrap">Salud</th>
+                <th className="py-3 px-3 whitespace-nowrap">Estado</th>
+                <th className="py-3 px-3 text-right min-w-[140px] whitespace-nowrap">Avance Real</th>
+                <th className="py-3 px-3 text-right whitespace-nowrap">Tareas</th>
+                <th className="py-3 px-3 text-right whitespace-nowrap">Plazo Límite</th>
+                <th className="py-3 px-3 text-right whitespace-nowrap">Presupuesto (AC / BAC)</th>
+                <th className="py-3 px-3 text-right whitespace-nowrap">Varianza</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80 font-medium">
@@ -975,6 +985,10 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                                 { total: 0, completadas: 0 };
                 const tTotal = resumen.total;
                 const tComp = resumen.completadas;
+
+                const bac = p.presupuesto || 0;
+                const ac = p.costo_real || 0;
+                const varianza = bac > 0 ? bac - ac : 0;
 
                 const h = String(p.health_status || '').toLowerCase();
                 const isCrit = h.includes('bloqueado') || h.includes('crítico') || h.includes('critico');
@@ -989,7 +1003,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                   >
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
-                        <span className="font-mono font-bold text-[10px] bg-slate-900 text-slate-300 px-2 py-1 rounded-md border border-slate-800 shrink-0">
+                        <span className="font-mono tabular-nums font-bold text-[10px] bg-slate-900 text-slate-300 px-2 py-1 rounded-md border border-slate-800 shrink-0">
                           {p.codigo_legado}
                         </span>
                         <div className="min-w-0 max-w-[240px]">
@@ -998,37 +1012,32 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-3">
+                    <td className="py-3 px-3 text-center">
                       <div
-                        className="relative flex items-center justify-center w-4 h-4 shrink-0 cursor-help"
+                        className="relative inline-flex items-center justify-center w-4 h-4 shrink-0 cursor-help"
                         title={healthClean}
                         aria-label={`Salud: ${healthClean}`}
                       >
                         <span
-                          className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-60 duration-1000 ${
-                            isCrit ? 'bg-rose-500' : isRiesgo ? 'bg-amber-400' : 'bg-emerald-400'
-                          }`}
-                        />
-                        <span
-                          className={`relative inline-flex rounded-full h-2.5 w-2.5 shadow-[0_0_8px_currentColor] ${
+                          className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
                             isCrit
-                              ? 'bg-rose-500 text-rose-500'
+                              ? 'bg-rose-500'
                               : isRiesgo
-                              ? 'bg-amber-400 text-amber-400'
-                              : 'bg-emerald-400 text-emerald-400'
+                              ? 'bg-amber-400'
+                              : 'bg-emerald-400'
                           }`}
                         />
                       </div>
                     </td>
-                    <td className="py-3 px-3">
+                    <td className="py-3 px-3 whitespace-nowrap">
                       <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-900 border border-slate-800 text-slate-400">
                         {p.estado ? p.estado.replace(/^\d+_/, '').replace(/_/g, ' ') : 'Activo'}
                       </span>
                     </td>
-                    <td className="py-3 px-3">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[10px] font-mono">
-                          <span>{p.avance_pct || 0}%</span>
+                    <td className="py-3 px-3 text-right whitespace-nowrap">
+                      <div className="inline-flex flex-col items-end space-y-1">
+                        <div className="text-[10px] font-mono tabular-nums text-slate-200">
+                          {p.avance_pct || 0}%
                         </div>
                         <div className="w-24 bg-slate-800 h-1.5 rounded-full overflow-hidden">
                           <div
@@ -1038,21 +1047,35 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-slate-400">
+                    <td className="py-3 px-3 text-right whitespace-nowrap font-mono tabular-nums text-[11px] text-slate-400">
                       {tComp}/{tTotal}
                     </td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-slate-400">
+                    <td className="py-3 px-3 text-right whitespace-nowrap font-mono tabular-nums text-[11px] text-slate-400">
                       {p.fecha_fin || 'Sin fecha'}
                     </td>
-                    <td className="py-3 px-3 font-mono text-[11px]">
-                      <div>S/ {(p.costo_real || 0).toLocaleString('es-PE')}</div>
-                      <div className="text-[10px] text-slate-500">de S/ {(p.presupuesto || 0).toLocaleString('es-PE')}</div>
+                    <td className="py-3 px-3 text-right whitespace-nowrap font-mono tabular-nums text-[11px]">
+                      <div className="text-slate-100">
+                        PEN {ac.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        de PEN {bac.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
                     </td>
-                    <td className="py-3 px-4 text-right">
+                    <td className="py-3 px-3 text-right whitespace-nowrap font-mono tabular-nums text-[11px] font-semibold">
+                      {bac > 0 ? (
+                        <span className={varianza >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                          {varianza >= 0 ? '+' : '-'}PEN{' '}
+                          {Math.abs(varianza).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onSeleccionarProyecto(p.id); }}
-                        className="px-2.5 py-1 bg-sky-500 hover:bg-sky-400 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-xs shadow-sky-950/40"
+                        className="h-9 px-3 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                       >
                         Ver 360°
                       </button>
@@ -1104,7 +1127,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             }
           }}
         >
-          <div className="w-full max-w-md max-h-[92dvh] bg-[#0D1526] border-t sm:border border-rose-500/40 rounded-t-3xl sm:rounded-2xl shadow-cobalt-2 p-5 text-slate-100 flex flex-col gap-4 relative overflow-hidden">
+          <div className="w-full max-w-md max-h-[92dvh] bg-[#0D1526] border-t sm:border border-rose-500/40 rounded-t-3xl sm:rounded-2xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] p-5 text-slate-100 flex flex-col gap-4 relative overflow-hidden">
             <div className="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto -mt-2 sm:hidden flex-shrink-0" />
             <div className="flex items-start gap-3">
               <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 shrink-0">

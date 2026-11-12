@@ -1324,9 +1324,27 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
                 {nodes.length} Nodos • {edges.length} Enlaces
               </span>
             </h2>
-            <p className="text-[11px] text-slate-400">
-              N0 Proyecto (Y=40) → N1 Fases (Y=200) → N2 WP/Hitos (Y=380) → N3 Tareas (Y=580) → Precedencias (Y=720)
-            </p>
+            <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-400 mt-0.5">
+              <span className="inline-flex items-center gap-1">
+                <GitFork className="w-3 h-3 text-sky-400" strokeWidth={1.75} />
+                <span>Proyecto</span>
+              </span>
+              <span className="text-slate-600">·</span>
+              <span className="inline-flex items-center gap-1">
+                <Layers className="w-3 h-3 text-sky-400" strokeWidth={1.75} />
+                <span>Fases</span>
+              </span>
+              <span className="text-slate-600">·</span>
+              <span className="inline-flex items-center gap-1">
+                <Zap className="w-3 h-3 text-amber-400" strokeWidth={1.75} />
+                <span>Paquetes</span>
+              </span>
+              <span className="text-slate-600">·</span>
+              <span className="inline-flex items-center gap-1">
+                <CheckSquare className="w-3 h-3 text-emerald-400" strokeWidth={1.75} />
+                <span>Tareas</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1357,7 +1375,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
             onClick={() => setSoloHitos(!soloHitos)}
             className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer active:scale-95 ${
               soloHitos
-                ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
+                ? 'bg-sky-500/20 border-sky-500/40 text-sky-300'
                 : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
             }`}
             title="Alternar entre ver árbol completo o solo hitos y paquetes"

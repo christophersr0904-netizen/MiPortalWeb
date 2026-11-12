@@ -231,6 +231,10 @@ class SyncManager {
     }
   }
 
+  public getSupabaseClient(): SupabaseClient | null {
+    return this.supabase;
+  }
+
   private setupNetworkListeners() {
     if (typeof window === 'undefined') return;
 

@@ -133,7 +133,7 @@ const PALETA_COLORES: Record<string, { card: string; border: string; badge: stri
   },
   default: {
     card: 'bg-[#0D1526]/90',
-    border: 'border-slate-800/60 hover:border-sky-500/30',
+    border: 'border-slate-800/80 hover:border-sky-500/40',
     badge: 'bg-slate-800 text-slate-300 border-slate-700',
     dot: 'bg-slate-400'
   }
@@ -330,7 +330,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onClick={() => onEditar(nota)}
-        className={`h-12 w-full px-3.5 py-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-800/60 border-l-4 ${bordeAcentoIzquierdo} bg-[#0D1526]/90 hover:border-sky-500/30 kinetic-card-lista cursor-grab active:cursor-grabbing group select-none shadow-sm ${
+        className={`h-12 w-full px-3.5 py-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-800/80 border-l-4 ${bordeAcentoIzquierdo} bg-[#0D1526]/90 hover:border-sky-500/40 transition-colors cursor-grab active:cursor-grabbing group select-none ${
           isDragging ? 'opacity-40 scale-[0.98] border-dashed border-sky-500/50' : ''
         }`}
       >
@@ -396,7 +396,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onClick={() => onEditar(nota)}
-      className={`nota-card ${nota.es_fijada ? 'nota-card-pinned' : ''} break-inside-avoid mb-3 sm:mb-4 p-3 sm:p-4 flex flex-col justify-between rounded-xl sm:rounded-2xl kinetic-card-mosaico cursor-grab active:cursor-grabbing bg-[#0D1526]/90 ${estilo.card} border border-slate-800/60 ${estilo.border} border-l-4 ${bordeAcentoIzquierdo} shadow-sm hover:border-sky-500/30 group relative ${
+      className={`nota-card ${nota.es_fijada ? 'nota-card-pinned' : ''} break-inside-avoid mb-3 sm:mb-4 p-3 sm:p-4 flex flex-col justify-between rounded-xl cursor-grab active:cursor-grabbing bg-[#0D1526]/90 ${estilo.card} border border-slate-800/80 ${estilo.border} border-l-4 ${bordeAcentoIzquierdo} hover:border-sky-500/40 transition-colors group relative ${
         isDragging ? 'opacity-40 scale-[0.98] border-dashed border-sky-500/50' : ''
       }`}
     >
@@ -406,9 +406,9 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
         id="btn-pin-nota"
         onClick={handleTogglePin}
         title={nota.es_fijada ? 'Desfijar nota' : 'Fijar nota en la parte superior'}
-        className={`absolute top-1.5 right-1.5 sm:top-2.5 sm:right-2.5 rounded-xl sm:rounded-lg transition-all duration-200 active:scale-90 cursor-pointer min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center ${
+        className={`absolute top-1.5 right-1.5 sm:top-2.5 sm:right-2.5 rounded-xl sm:rounded-lg transition-colors duration-200 cursor-pointer min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center ${
           nota.es_fijada
-            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 opacity-100 shadow-sm'
+            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 opacity-100'
             : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800 opacity-90 sm:opacity-0 sm:group-hover:opacity-100'
         }`}
       >

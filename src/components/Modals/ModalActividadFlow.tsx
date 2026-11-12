@@ -19,7 +19,17 @@ import {
   editarActividadConAlcance,
   eliminarActividadConAlcance
 } from '../../services/habitosService';
-import { sincronizarActividadCalendar } from '../../services/calendarSyncService';
+import {
+  sincronizarCreacionCalendar,
+  abrirGoogleCalendarActividad,
+  descargarICSActividad,
+  autorizarGoogleCalendarOAuth,
+  obtenerEstadoConexionGoogleCalendar,
+  suscribirEstadoGoogleCalendar,
+  type EstadoConexionGoogleCalendar
+} from '../../services/calendarSyncService';
+import { syncManager } from '../../services/syncManager';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import {
   vincularHabitoAMetaLocal,
   recalcularProgresoMetaLocal,
@@ -58,12 +68,15 @@ import {
   Flame,
   Clock,
   Tag,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink,
+  Download
 } from 'lucide-react';
 import {
   formatearDuracionLegible,
   convertirStringToHorasDecimal,
-  convertirHorasDecimalAString
+  convertirHorasDecimalAString,
+  formatFechaIsoLocal
 } from '../../utils/timeFormatters';
 
 export type TipoRecurrenciaOpcion =
@@ -72,6 +85,7 @@ export type TipoRecurrenciaOpcion =
   | 'DIARIA_LABORAL'
   | 'FIN_SEMANA'
   | 'SEMANAL'
+  | 'QUINCENAL'
   | 'MENSUAL'
   | 'PERSONALIZADO';
 
@@ -251,6 +265,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   const [mostrarModalAlcance, setMostrarModalAlcance] = useState(false);
   const [payloadPendiente, setPayloadPendiente] = useState<ActividadPersonal | null>(null);
   const [errorLocal, setErrorLocal] = useState<string | null>(null);
+  const [gcalEstado, setGcalEstado] = useState<EstadoConexionGoogleCalendar>(() => obtenerEstadoConexionGoogleCalendar());
+
+  useEffect(() => {
+    setGcalEstado(obtenerEstadoConexionGoogleCalendar());
+    return suscribirEstadoGoogleCalendar(setGcalEstado);
+  }, [isOpen]);
 
   // Cargar datos en edición o resetear en nuevo
   useEffect(() => {
@@ -260,8 +280,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       setTitulo(nombreDisplay);
       setCategoria(actividadEditar.categoria_vida || categoriaInicial);
       setTipoCompromiso(actividadEditar.tipo_compromiso || 'HABITUAL');
+      const prioRaw = (actividadEditar as any).prioridad || (actividadEditar as any).prioridad_eisenhower || '02_P2_Media';
+      setPrioridad(prioRaw as '01_P1_Alta' | '02_P2_Media' | '03_P3_Baja');
       setCalendarSync(actividadEditar.agendado_calendar || 'Sí');
-      setFecha(actividadEditar.fecha_programada || '');
+      setFecha((actividadEditar.fecha_programada || '').split(/[\sT]/)[0]);
       setHora(actividadEditar.hora_inicio || '08:00');
       const dur = actividadEditar.duracion_horas ?? 1.0;
       setDuracionHoras(dur);
@@ -273,16 +295,18 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
       if (freq === 'NINGUNA' || (!freq && !regla && actividadEditar.tipo_compromiso === 'PUNTUAL')) {
         setTipoRecurrencia('NINGUNA');
+      } else if (regla.startsWith('INTERVALO:')) {
+        setTipoRecurrencia('PERSONALIZADO');
       } else if (freq === 'DIARIA_LABORAL' || regla === 'L-V') {
         setTipoRecurrencia('DIARIA_LABORAL');
       } else if (freq === 'FIN_SEMANA') {
         setTipoRecurrencia('FIN_SEMANA');
+      } else if (freq === 'QUINCENAL') {
+        setTipoRecurrencia('QUINCENAL');
       } else if (freq === 'SEMANAL') {
         setTipoRecurrencia('SEMANAL');
       } else if (freq === 'MENSUAL') {
         setTipoRecurrencia('MENSUAL');
-      } else if (regla.startsWith('INTERVALO:')) {
-        setTipoRecurrencia('PERSONALIZADO');
       } else if (freq === 'DIARIA') {
         setTipoRecurrencia('DIARIA');
       } else {
@@ -291,7 +315,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
       if (actividadEditar.fecha_fin) {
         setTieneFechaFin(true);
-        setFechaFin(actividadEditar.fecha_fin);
+        setFechaFin((actividadEditar.fecha_fin || '').split(/[\sT]/)[0]);
       } else {
         setTieneFechaFin(false);
         setFechaFin('');
@@ -366,10 +390,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
         setMostrarGasto(true);
       }
 
-      // Cargar subtareas desde Dexie
+      // Cargar subtareas desde Dexie (por codigo_legado o id)
+      const padreLlaves = [actividadEditar.codigo_legado, actividadEditar.id].filter(Boolean) as string[];
       db.subtareas_pasos
         .where('id_padre_vinculado')
-        .equals(actividadEditar.codigo_legado)
+        .anyOf(padreLlaves)
         .sortBy('numero_paso')
         .then((items) => {
           if (items && items.length > 0) {
@@ -380,7 +405,15 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               completado: it.completado
             }));
             setPasosLocales(mapped);
-            setPasosInicialesJson(JSON.stringify(mapped));
+            setPasosInicialesJson(
+              JSON.stringify(
+                mapped.map((m) => ({
+                  numero: m.numero,
+                  descripcion: m.descripcion.trim(),
+                  completado: m.completado
+                }))
+              )
+            );
           } else {
             setPasosLocales([]);
             setPasosInicialesJson('[]');
@@ -394,7 +427,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       setPrioridad('02_P2_Media');
       setCalendarSync('Sí');
       setNotas('');
-      const hoy = new Date().toISOString().split('T')[0];
+      const hoy = formatFechaIsoLocal();
       setFecha(hoy);
       setHora('08:00');
       setDuracionHoras(1.0);
@@ -527,7 +560,16 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     }
   };
 
-  // Detección de Dirty State (comparación con el snapshot inicial)
+  // Detección de Dirty State normalizada (cero falsos positivos al abrir y guardar/cerrar sin cambios)
+  const normalizarReglaParaDirty = (reglaStr?: string, freqStr?: string): string => {
+    const r = (reglaStr || '').trim().toUpperCase();
+    const f = (freqStr || 'DIARIA').trim().toUpperCase();
+    if (f === 'DIARIA' && (r === '' || r === 'DIAS:LU,MA,MI,JU,VI,SA,DO')) return 'DIARIA_FULL';
+    if (f === 'DIARIA_LABORAL' && (r === '' || r === 'L-V' || r === 'DIAS:LU,MA,MI,JU,VI')) return 'DIARIA_LAB';
+    if (f === 'FIN_SEMANA' && (r === '' || r === 'DIAS:S,D' || r === 'DIAS:SA,DO')) return 'FIN_SEM';
+    return r;
+  };
+
   const verificarSiHayCambios = (payload: ActividadPersonal): boolean => {
     if (!actividadEditar) return true;
 
@@ -544,15 +586,21 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       ''
     ).trim();
     const nombreCambio = payload.nombre_actividad.trim() !== nombreInicial;
-    const catCambio = payload.categoria_vida !== actividadEditar.categoria_vida;
-    const tipoCambio = payload.tipo_compromiso !== actividadEditar.tipo_compromiso;
-    const fechaCambio = payload.fecha_programada !== (actividadEditar.fecha_programada || '');
-    const fechaFinCambio = (payload.fecha_fin || '') !== (actividadEditar.fecha_fin || '');
+    const catCambio = payload.categoria_vida !== (actividadEditar.categoria_vida || categoriaInicial);
+    const fechaInicial = (actividadEditar.fecha_programada || '').split(/[\sT]/)[0];
+    const fechaCambio = (payload.fecha_programada || '').split(/[\sT]/)[0] !== fechaInicial;
+    const fechaFinInicial = (actividadEditar.fecha_fin || '').split(/[\sT]/)[0];
+    const fechaFinCambio = ((payload.fecha_fin || '').split(/[\sT]/)[0]) !== fechaFinInicial;
     const horaCambio = payload.hora_inicio !== (actividadEditar.hora_inicio || '08:00');
-    const duracionCambio = (payload.duracion_horas ?? 0) !== (actividadEditar.duracion_horas ?? 0);
+    const duracionCambio = (payload.duracion_horas ?? 1.0) !== (actividadEditar.duracion_horas ?? 1.0);
     const syncCambio = payload.agendado_calendar !== (actividadEditar.agendado_calendar || 'Sí');
-    const freqCambio = (payload.frecuencia_ciclo || 'DIARIA') !== (actividadEditar.frecuencia_ciclo || 'DIARIA');
-    const reglaCambio = (payload.regla_repeticion || '') !== (actividadEditar.regla_repeticion || '');
+    const freqInicial = actividadEditar.frecuencia_ciclo || (actividadEditar.tipo_compromiso === 'PUNTUAL' ? 'NINGUNA' : 'DIARIA');
+    const freqCambio = (payload.frecuencia_ciclo || 'DIARIA') !== freqInicial;
+    const reglaCambio =
+      normalizarReglaParaDirty(payload.regla_repeticion, payload.frecuencia_ciclo) !==
+      normalizarReglaParaDirty(actividadEditar.regla_repeticion, freqInicial);
+    const prioInicial = (actividadEditar as any).prioridad || (actividadEditar as any).prioridad_eisenhower || '02_P2_Media';
+    const prioCambio = prioridad !== prioInicial;
     const notasCambio = (payload.notas_checklist || '').trim() !== (actividadEditar.notas_checklist || '').trim();
     const gastoCambio = (payload.monto_gasto_asociado || 0) !== (actividadEditar.monto_gasto_asociado || 0);
     const macroCambio = (payload.meta_macro_nombre || '').trim() !== (actividadEditar.meta_macro_nombre || '').trim();
@@ -560,13 +608,19 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     const metaTotCambio = (payload.meta_objetivo_total || 0) !== (actividadEditar.meta_objetivo_total || 0);
     const metaDiaCambio = (payload.meta_diaria_estandar || 0) !== (actividadEditar.meta_diaria_estandar || 0);
     const rescMinCambio = (payload.nivel_rescate_minimo || 0) !== (actividadEditar.nivel_rescate_minimo || 0);
-    const pasosCambio = JSON.stringify(pasosLocales) !== pasosInicialesJson;
+    const pasosActualesNorm = JSON.stringify(
+      pasosLocales.map((p) => ({
+        numero: p.numero,
+        descripcion: p.descripcion.trim(),
+        completado: p.completado
+      }))
+    );
+    const pasosCambio = pasosActualesNorm !== pasosInicialesJson;
     const vinculoCambio = metaSeleccionadaId !== metaIdInicial;
 
     return (
       nombreCambio ||
       catCambio ||
-      tipoCambio ||
       fechaCambio ||
       fechaFinCambio ||
       horaCambio ||
@@ -574,6 +628,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       syncCambio ||
       freqCambio ||
       reglaCambio ||
+      prioCambio ||
       notasCambio ||
       gastoCambio ||
       macroCambio ||
@@ -609,39 +664,59 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     }
 
     if (actividadEditar) {
-      await editarActividadConAlcance(
+      const editRes = await editarActividadConAlcance(
         actividadEditar,
         payloadAguardar,
         alcance,
         actividadEditar.fecha_programada
       );
+      if (editRes.calendarResult) {
+        if (editRes.calendarResult.success && editRes.calendarResult.mode === 'API_V3') {
+          mostrarToastCobalt(editRes.calendarResult.message || 'Actualizado en Google Calendar', 'success');
+        } else if (editRes.calendarResult.requiereAuth) {
+          mostrarToastCobalt('Cambios guardados · Conecta Google Calendar para sync automático', 'info', 3500);
+        } else if (!editRes.calendarResult.success && editRes.calendarResult.error) {
+          mostrarToastCobalt(`Guardado local · ${editRes.calendarResult.error}`, 'warning', 3500);
+        }
+      }
     } else {
       await db.actividades_personales.put(payloadAguardar);
       if (calendarSync === 'Sí') {
-        sincronizarActividadCalendar(payloadAguardar, 'UPSERT', { alcance: 'ALL', fechaRef: payloadAguardar.fecha_programada })
-          .catch((e) => console.warn('[ModalActividadFlow] Fallo en sincronización inicial Calendar:', e));
+        const calRes = await sincronizarCreacionCalendar(payloadAguardar).catch((e) => {
+          console.warn('[ModalActividadFlow] Fallo en sincronización inicial Calendar:', e);
+          return null;
+        });
+        if (calRes?.success && calRes.mode === 'API_V3') {
+          mostrarToastCobalt('Sincronizado en Google Calendar', 'success');
+        } else if (calRes?.requiereAuth) {
+          mostrarToastCobalt('Actividad guardada · Conecta Google Calendar para sync automático', 'info', 3500);
+        } else if (calRes && !calRes.success && calRes.error) {
+          mostrarToastCobalt(`Guardado local · ${calRes.error}`, 'warning', 3500);
+        }
       }
     }
 
     // Persistir subtareas asociadas en db.subtareas_pasos
-    if (pasosLocales.length > 0 && codigoLegado) {
+    if (codigoLegado) {
       await db.subtareas_pasos.where('id_padre_vinculado').equals(codigoLegado).delete();
-      const subtareasPayload: SubtareaPaso[] = pasosLocales.map((p, idx) => ({
-        id: p.id,
-        user_id: '00000000-0000-0000-0000-000000000001',
-        codigo_legado: `SUB-${String(idx + 1).padStart(3, '0')}`,
-        id_padre_vinculado: codigoLegado,
-        tipo_padre: 'ACTIVIDAD',
-        numero_paso: p.numero,
-        descripcion_paso: p.descripcion,
-        completado: p.completado,
-        fecha_completado: p.completado ? nowIso : undefined,
-        created_at: nowIso,
-        updated_at: nowIso,
-        version: 1,
-        sync_status: 'pending'
-      }));
-      await db.subtareas_pasos.bulkPut(subtareasPayload);
+      if (pasosLocales.length > 0) {
+        const subtareasPayload: SubtareaPaso[] = pasosLocales.map((p, idx) => ({
+          id: p.id,
+          user_id: '00000000-0000-0000-0000-000000000001',
+          codigo_legado: `SUB-${String(idx + 1).padStart(3, '0')}`,
+          id_padre_vinculado: codigoLegado,
+          tipo_padre: 'ACTIVIDAD',
+          numero_paso: p.numero,
+          descripcion_paso: p.descripcion,
+          completado: p.completado,
+          fecha_completado: p.completado ? nowIso : undefined,
+          created_at: nowIso,
+          updated_at: nowIso,
+          version: 1,
+          sync_status: 'pending'
+        }));
+        await db.subtareas_pasos.bulkPut(subtareasPayload);
+      }
     }
 
     // Si se registró nuevo gasto directo
@@ -657,7 +732,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
         tipo_origen: 'ACTIVIDAD_PERSONAL',
         id_origen_vinculado: codigoLegado,
         categoria_gasto: gastoCategoria,
-        fecha_gasto: fecha || nowIso.split('T')[0],
+        fecha_gasto: fecha || formatFechaIsoLocal(),
         descripcion_gasto: gastoConcepto.trim() || `Gasto en ${titulo.trim()}`,
         moneda_original: gastoMoneda,
         monto_original: montoGastoFinal,
@@ -714,9 +789,64 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       }
     }
 
+    // Propagar inmediatamente hacia Supabase y el puente local del Cockpit/HUD
+    syncManager.syncPendingRecords().catch(() => {});
+    syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
+
     if (onGuardadoExitoso) onGuardadoExitoso(payloadAguardar);
     setPayloadPendiente(null);
     onClose();
+  };
+
+  // Helper de construcción de payload/recurrencia para guardado y vista previa Calendar
+  const construirReglaYFrecuencia = (): {
+    freqFinal: FrecuenciaCiclo;
+    reglaFinal: string;
+    fechaFinFinal: string | undefined;
+  } => {
+    let freqFinal: FrecuenciaCiclo = 'DIARIA';
+    let reglaFinal = '';
+
+    if (tipoRecurrencia === 'NINGUNA') {
+      freqFinal = 'NINGUNA';
+      reglaFinal = '';
+    } else if (tipoRecurrencia === 'DIARIA') {
+      freqFinal = 'DIARIA';
+      reglaFinal = 'DIAS:LU,MA,MI,JU,VI,SA,DO';
+    } else if (tipoRecurrencia === 'DIARIA_LABORAL') {
+      freqFinal = 'DIARIA_LABORAL';
+      reglaFinal = 'DIAS:LU,MA,MI,JU,VI';
+    } else if (tipoRecurrencia === 'FIN_SEMANA') {
+      freqFinal = 'FIN_SEMANA';
+      reglaFinal = 'DIAS:SA,DO';
+    } else if (tipoRecurrencia === 'QUINCENAL') {
+      freqFinal = 'QUINCENAL';
+      reglaFinal = '';
+    } else if (tipoRecurrencia === 'SEMANAL') {
+      freqFinal = 'SEMANAL';
+      reglaFinal = diasSemana.length > 0 ? `DIAS:${diasSemana.join(',')}` : 'DIAS:LU';
+    } else if (tipoRecurrencia === 'MENSUAL') {
+      freqFinal = 'MENSUAL';
+      reglaFinal = '';
+    } else if (tipoRecurrencia === 'PERSONALIZADO') {
+      if (unidadIntervalo === 'dias') {
+        freqFinal = 'DIARIA';
+        reglaFinal = intervaloRepeticion > 1 ? `INTERVALO:${intervaloRepeticion}:DIAS` : 'DIAS:LU,MA,MI,JU,VI,SA,DO';
+      } else if (unidadIntervalo === 'semanas') {
+        freqFinal = 'SEMANAL';
+        const diasStr = diasSemana.length > 0 ? diasSemana.join(',') : 'LU';
+        reglaFinal = intervaloRepeticion > 1 ? `INTERVALO:${intervaloRepeticion}:SEMANAS;DIAS:${diasStr}` : `DIAS:${diasStr}`;
+      } else {
+        freqFinal = 'MENSUAL';
+        reglaFinal = intervaloRepeticion > 1 ? `INTERVALO:${intervaloRepeticion}:MESES` : '';
+      }
+    }
+
+    const fechaFinFinal = (tipoRecurrencia !== 'NINGUNA' && tieneFechaFin && fechaFin)
+      ? fechaFin
+      : undefined;
+
+    return { freqFinal, reglaFinal, fechaFinFinal };
   };
 
   // Guardar en Dexie con Dirty Checking y confirmación diferida de alcance
@@ -748,47 +878,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       metaMacroNombre = metasDisponibles.find((m) => m.id === metaSeleccionadaId)?.nombre_meta || metaMacro.trim();
     }
 
-    let freqFinal: FrecuenciaCiclo = 'DIARIA';
-    let reglaFinal = '';
-
-    if (tipoRecurrencia === 'NINGUNA') {
-      freqFinal = 'NINGUNA';
-      reglaFinal = '';
-    } else if (tipoRecurrencia === 'DIARIA') {
-      freqFinal = 'DIARIA';
-      reglaFinal = 'DIAS:LU,MA,MI,JU,VI,SA,DO';
-    } else if (tipoRecurrencia === 'DIARIA_LABORAL') {
-      freqFinal = 'DIARIA_LABORAL';
-      reglaFinal = 'DIAS:LU,MA,MI,JU,VI';
-    } else if (tipoRecurrencia === 'FIN_SEMANA') {
-      freqFinal = 'FIN_SEMANA';
-      reglaFinal = 'DIAS:SA,DO';
-    } else if (tipoRecurrencia === 'SEMANAL') {
-      freqFinal = 'SEMANAL';
-      reglaFinal = diasSemana.length > 0 ? `DIAS:${diasSemana.join(',')}` : 'DIAS:LU';
-    } else if (tipoRecurrencia === 'MENSUAL') {
-      freqFinal = 'MENSUAL';
-      reglaFinal = '';
-    } else if (tipoRecurrencia === 'PERSONALIZADO') {
-      if (unidadIntervalo === 'dias') {
-        freqFinal = 'DIARIA';
-        reglaFinal = intervaloRepeticion > 1 ? `INTERVALO:${intervaloRepeticion}:DIAS` : 'DIAS:LU,MA,MI,JU,VI,SA,DO';
-      } else if (unidadIntervalo === 'semanas') {
-        freqFinal = 'SEMANAL';
-        const diasStr = diasSemana.length > 0 ? diasSemana.join(',') : 'LU';
-        reglaFinal = intervaloRepeticion > 1 ? `INTERVALO:${intervaloRepeticion}:SEMANAS;DIAS:${diasStr}` : `DIAS:${diasStr}`;
-      } else {
-        freqFinal = 'MENSUAL';
-        reglaFinal = intervaloRepeticion > 1 ? `INTERVALO:${intervaloRepeticion}:MESES` : '';
-      }
-    }
+    const { freqFinal, reglaFinal, fechaFinFinal } = construirReglaYFrecuencia();
 
     const tipoCompromisoFinal: TipoCompromiso =
       tipoRecurrencia === 'NINGUNA' ? 'PUNTUAL' : metaTotal ? 'META' : tipoCompromiso === 'PUNTUAL' ? 'HABITUAL' : tipoCompromiso;
-
-    const fechaFinFinal = (tipoRecurrencia === 'PERSONALIZADO' && tieneFechaFin && fechaFin)
-      ? fechaFin
-      : undefined;
 
     const payload: ActividadPersonal = {
       id: idActividad!,
@@ -805,7 +898,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       nivel_rescate_minimo: parseFloat(rescateMinimo) || undefined,
       estado: actividadEditar?.estado || '01_Backlog',
       racha_actual: actividadEditar?.racha_actual || 0,
-      fecha_programada: fecha || new Date().toISOString().split('T')[0],
+      fecha_programada: fecha || formatFechaIsoLocal(),
       fecha_fin: fechaFinFinal,
       hora_inicio: hora || '08:00',
       duracion_horas: duracionHoras,
@@ -820,6 +913,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       version: (actividadEditar?.version || 0) + 1,
       sync_status: 'pending'
     };
+    (payload as any).prioridad = prioridad;
 
     if (actividadEditar) {
       // 1. Detección de cambios reales (Dirty Checking)
@@ -880,20 +974,20 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     >
       <div
         id="modal-actividad-flow-card"
-        className="portal-surface elevation-3 w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0D1526] shadow-2xl relative transform-gpu transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        className="portal-surface elevation-3 w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/80 bg-[#0D1526] shadow-2xl relative transform-gpu transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
       >
         {/* Drag handle móvil */}
-        <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
+        <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
 
         {/* 1. CABECERA INTEGRADA EN 2 FILAS (1:1 con ModalTareaFlow) */}
-        <div className="px-5 sm:px-6 py-3 border-b border-slate-200/80 dark:border-slate-800 shrink-0 space-y-2 bg-slate-50/50 dark:bg-slate-950/40">
+        <div className="px-5 sm:px-6 py-3 border-b border-slate-800 shrink-0 space-y-2 bg-slate-950/40">
           {/* Fila 1: ID, Selector Categoría de Vida con micro-punto semántico, Badge Recurrencia/Racha y botón cerrar */}
           <div className="flex items-center justify-between gap-2.5 w-full">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 min-w-0 flex-1">
               {/* ID de Actividad */}
               <span
                 id="act-flow-badge-id"
-                className="text-[11px] font-mono tabular-nums font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-900 text-white dark:bg-slate-800 dark:text-slate-200 border border-slate-700/60 shadow-2xs shrink-0 select-none"
+                className="text-[11px] font-mono tabular-nums font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-800 text-slate-200 border border-slate-700/60 shadow-2xs shrink-0 select-none"
               >
                 {actividadEditar?.codigo_legado || 'NUEVA ACTIVIDAD'}
               </span>
@@ -926,9 +1020,9 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                   {menuCategoriaAbierto && (
                     <div
                       id="flow-cat-dropdown"
-                      className="absolute left-0 top-full mt-2 w-64 max-w-[calc(100vw-24px)] bg-white dark:bg-[#0D1526] rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-2 z-50 space-y-1 transform-gpu transition-[transform,opacity] duration-150 ease-out"
+                      className="absolute left-0 top-full mt-2 w-64 max-w-[calc(100vw-24px)] bg-[#0D1526] rounded-xl shadow-2xl border border-slate-800 p-2 z-50 space-y-1 transform-gpu transition-[transform,opacity] duration-150 ease-out"
                     >
-                      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 px-2 py-1 uppercase tracking-wider">
+                      <p className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider">
                         Categoría de Vida:
                       </p>
                       {CATEGORIAS_FLOW.map((cat) => (
@@ -940,8 +1034,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                             setMenuCategoriaAbierto(false);
                           }}
                           className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2.5 transition cursor-pointer ${categoria === cat.clave
-                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
-                              : 'hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-700 dark:text-slate-300'
+                              ? 'bg-slate-800 text-white'
+                              : 'hover:bg-slate-800/50 text-slate-300'
                             }`}
                         >
                           <span className={`w-2 h-2 rounded-full ${cat.dotColor}`} />
@@ -970,11 +1064,13 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                         ? 'Lun a Vie'
                         : tipoRecurrencia === 'FIN_SEMANA'
                           ? 'Fines de semana'
-                          : tipoRecurrencia === 'SEMANAL'
-                            ? 'Semanal'
-                            : tipoRecurrencia === 'MENSUAL'
-                              ? 'Mensual'
-                              : 'Personalizado'}
+                          : tipoRecurrencia === 'QUINCENAL'
+                            ? 'Cada 15 días'
+                            : tipoRecurrencia === 'SEMANAL'
+                              ? 'Semanal'
+                              : tipoRecurrencia === 'MENSUAL'
+                                ? 'Mensual'
+                                : 'Personalizado'}
                 </span>
               </span>
 
@@ -1036,7 +1132,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               <div className="bg-[#0D1526] border border-slate-800/80 rounded-xl p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                    <Calendar className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
                     <span>Tiempo & Programación</span>
                   </span>
                 </div>
@@ -1090,6 +1186,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                         <option value="DIARIA_LABORAL" className="bg-[#0D1526] text-slate-200">De lunes a viernes</option>
                         <option value="FIN_SEMANA" className="bg-[#0D1526] text-slate-200">Fines de semana</option>
                         <option value="SEMANAL" className="bg-[#0D1526] text-slate-200">Cada semana</option>
+                        <option value="QUINCENAL" className="bg-[#0D1526] text-slate-200">Cada 15 días</option>
                         <option value="MENSUAL" className="bg-[#0D1526] text-slate-200">Cada mes</option>
                         <option value="PERSONALIZADO" className="bg-[#0D1526] text-slate-200">Personalizado...</option>
                       </select>
@@ -1139,7 +1236,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   )}
 
-                  {/* Configuración avanzada de Personalizado (Intervalo y Fin) */}
+                  {/* Configuración avanzada de Personalizado (Intervalo) */}
                   {tipoRecurrencia === 'PERSONALIZADO' && (
                     <div className="pt-2 space-y-2 border-t border-slate-800/60">
                       <div className="flex items-center gap-2">
@@ -1162,40 +1259,45 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           <option value="meses" className="bg-[#0D1526]">mes(es)</option>
                         </select>
                       </div>
+                    </div>
+                  )}
 
-                      {/* Fecha de término */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] text-slate-400 block">Finaliza</label>
-                        <div className="flex items-center gap-3">
-                          <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="finRecurrencia"
-                              checked={!tieneFechaFin}
-                              onChange={() => setTieneFechaFin(false)}
-                              className="text-sky-500 focus:ring-sky-500"
-                            />
-                            <span>Nunca</span>
-                          </label>
-                          <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="finRecurrencia"
-                              checked={tieneFechaFin}
-                              onChange={() => setTieneFechaFin(true)}
-                              className="text-sky-500 focus:ring-sky-500"
-                            />
-                            <span>El</span>
-                          </label>
-                          {tieneFechaFin && (
-                            <input
-                              type="date"
-                              value={fechaFin}
-                              onChange={(e) => setFechaFin(e.target.value)}
-                              className="flex-1 bg-[#040711] px-2 py-0.5 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50"
-                            />
-                          )}
-                        </div>
+                  {/* Fecha de término opcional para toda serie recurrente */}
+                  {tipoRecurrencia !== 'NINGUNA' && (
+                    <div className="pt-1.5 space-y-1 border-t border-slate-800/60">
+                      <label className="text-[10px] text-slate-400 block">Finaliza serie</label>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="finRecurrencia"
+                            checked={!tieneFechaFin}
+                            onChange={() => {
+                              setTieneFechaFin(false);
+                              setFechaFin('');
+                            }}
+                            className="text-sky-500 focus:ring-sky-500"
+                          />
+                          <span>Nunca</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="finRecurrencia"
+                            checked={tieneFechaFin}
+                            onChange={() => setTieneFechaFin(true)}
+                            className="text-sky-500 focus:ring-sky-500"
+                          />
+                          <span>El</span>
+                        </label>
+                        {tieneFechaFin && (
+                          <input
+                            type="date"
+                            value={fechaFin}
+                            onChange={(e) => setFechaFin(e.target.value)}
+                            className="flex-1 bg-[#040711] px-2 py-0.5 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50"
+                          />
+                        )}
                       </div>
                     </div>
                   )}
@@ -1272,20 +1374,108 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   </div>
 
-                  {/* Sincronización Google Calendar */}
-                  <div className="pt-1.5 flex items-center justify-between text-[11px] border-t border-slate-800/60">
-                    <span className="text-slate-400">Agendar en Calendar</span>
-                    <button
-                      type="button"
-                      onClick={() => setCalendarSync(calendarSync === 'Sí' ? 'No' : 'Sí')}
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${calendarSync === 'Sí'
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                          : 'bg-[#040711] border border-slate-800 text-slate-500 hover:text-slate-300'
-                        }`}
-                    >
-                      {calendarSync === 'Sí' && <Check className="w-3 h-3" />}
-                      <span>{calendarSync === 'Sí' ? 'Sí' : 'No'}</span>
-                    </button>
+                  {/* Sincronización Google Calendar (Estándar RFC-5545 + Acción Inmediata) */}
+                  <div className="pt-1.5 space-y-1.5 border-t border-slate-800/60">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">Agendar en Calendar</span>
+                      <button
+                        type="button"
+                        onClick={() => setCalendarSync(calendarSync === 'Sí' ? 'No' : 'Sí')}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${calendarSync === 'Sí'
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                            : 'bg-[#040711] border border-slate-800 text-slate-500 hover:text-slate-300'
+                          }`}
+                      >
+                        {calendarSync === 'Sí' && <Check className="w-3 h-3" strokeWidth={1.75} />}
+                        <span>{calendarSync === 'Sí' ? 'Sí' : 'No'}</span>
+                      </button>
+                    </div>
+
+                    {calendarSync === 'Sí' && (
+                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (gcalEstado.conectado) return;
+                            const authRes = await autorizarGoogleCalendarOAuth();
+                            if (authRes.success) {
+                              mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
+                            } else {
+                              mostrarToastCobalt(authRes.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
+                            }
+                          }}
+                          className={`h-7 px-2 rounded-lg border text-[10px] font-semibold inline-flex items-center gap-1 transition cursor-pointer ${
+                            gcalEstado.conectado
+                              ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-300 cursor-default'
+                              : 'border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300'
+                          }`}
+                          title={
+                            gcalEstado.conectado
+                              ? 'Sincronización automática con Google Calendar API v3 activa'
+                              : 'Conectar cuenta Google Calendar (OAuth2)'
+                          }
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${gcalEstado.conectado ? 'bg-emerald-400' : 'bg-sky-400'}`} />
+                          <span>{gcalEstado.conectado ? 'OAuth Activo' : 'Conectar OAuth'}</span>
+                        </button>
+
+                        <div className="flex items-center gap-1.5 ml-auto">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const { freqFinal, reglaFinal, fechaFinFinal } = construirReglaYFrecuencia();
+                              abrirGoogleCalendarActividad({
+                                id: actividadEditar?.id,
+                                codigo_legado: actividadEditar?.codigo_legado || 'ACT-NEW',
+                                nombre_actividad: titulo.trim() || nombreDisplay.trim() || 'Actividad PMO',
+                                categoria_vida: categoria,
+                                tipo_compromiso: tipoRecurrencia === 'NINGUNA' ? 'PUNTUAL' : tipoCompromiso,
+                                meta_macro_nombre: metaMacro || undefined,
+                                notas_checklist: notas || undefined,
+                                fecha_programada: fecha || formatFechaIsoLocal(),
+                                fecha_fin: fechaFinFinal,
+                                hora_inicio: hora || '08:00',
+                                duracion_horas: duracionHoras,
+                                frecuencia_ciclo: freqFinal,
+                                regla_repeticion: reglaFinal
+                              });
+                            }}
+                            className="h-7 px-2 rounded-lg border border-sky-500/40 bg-sky-500/10 hover:bg-sky-500 hover:text-slate-950 text-sky-300 text-[10px] font-semibold inline-flex items-center gap-1 transition cursor-pointer"
+                            title="Abrir directamente en Google Calendar con regla RRULE RFC-5545"
+                          >
+                            <ExternalLink className="w-3 h-3" strokeWidth={1.75} />
+                            <span>Google Calendar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const { freqFinal, reglaFinal, fechaFinFinal } = construirReglaYFrecuencia();
+                              descargarICSActividad({
+                                id: actividadEditar?.id,
+                                codigo_legado: actividadEditar?.codigo_legado || 'ACT-NEW',
+                                nombre_actividad: titulo.trim() || nombreDisplay.trim() || 'Actividad PMO',
+                                categoria_vida: categoria,
+                                tipo_compromiso: tipoRecurrencia === 'NINGUNA' ? 'PUNTUAL' : tipoCompromiso,
+                                meta_macro_nombre: metaMacro || undefined,
+                                notas_checklist: notas || undefined,
+                                fecha_programada: fecha || formatFechaIsoLocal(),
+                                fecha_fin: fechaFinFinal,
+                                hora_inicio: hora || '08:00',
+                                duracion_horas: duracionHoras,
+                                frecuencia_ciclo: freqFinal,
+                                regla_repeticion: reglaFinal,
+                                excepciones_fechas: actividadEditar?.excepciones_fechas
+                              });
+                            }}
+                            className="h-7 px-2 rounded-lg border border-slate-700/80 bg-[#040711] hover:border-sky-500/40 text-slate-300 hover:text-sky-300 text-[10px] font-mono font-semibold inline-flex items-center gap-1 transition cursor-pointer"
+                            title="Descargar archivo .ics RFC-5545"
+                          >
+                            <Download className="w-3 h-3" strokeWidth={1.75} />
+                            <span>.ics</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1615,7 +1805,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                                 <span className={`w-2 h-2 rounded-full shrink-0 ${isSelected ? 'bg-emerald-400' : 'bg-slate-600'}`} />
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="font-mono font-bold text-[10px] text-sky-400 bg-sky-950/50 px-1.5 py-0.2 rounded border border-sky-800/40 shrink-0">
+                                    <span className="font-mono font-bold text-[10px] text-sky-400 bg-sky-950/50 px-1.5 py-0.5 rounded border border-sky-800/40 shrink-0">
                                       {g.codigo_legado}
                                     </span>
                                     <span className="font-medium text-slate-200 truncate">
@@ -1650,8 +1840,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
           <div className="p-3.5 bg-[#040711] border border-slate-800/80 rounded-xl space-y-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="p-1.5 bg-indigo-500/10 text-indigo-400 rounded-lg text-xs font-black">
-                  <ListOrdered className="w-4 h-4" />
+                <span className="p-1.5 bg-sky-500/10 text-sky-400 rounded-lg text-xs font-black">
+                  <ListOrdered className="w-4 h-4" strokeWidth={1.75} />
                 </span>
                 <div>
                   <h4 className="font-bold text-slate-200 text-xs">Pasos / Subtareas Procedurales</h4>
@@ -1669,11 +1859,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               )}
             </div>
 
-            {/* Barra de progreso con gradiente */}
+            {/* Barra de progreso */}
             {pasosLocales.length > 0 && (
               <div className="w-full bg-[#0D1526] h-1.5 rounded-full overflow-hidden border border-slate-800/40">
                 <div
-                  className="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full rounded-full transition-all duration-300"
+                  className={`${progresoPasos >= 100 ? 'bg-emerald-500' : 'bg-sky-500'} h-full rounded-full transition-all duration-300`}
                   style={{ width: `${progresoPasos}%` }}
                 />
               </div>
@@ -1740,10 +1930,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               <button
                 type="button"
                 onClick={agregarPaso}
-                className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition cursor-pointer"
+                className="p-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 transition cursor-pointer"
                 title="Agregar paso"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4" strokeWidth={1.75} />
               </button>
             </div>
           </div>
@@ -1804,7 +1994,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               type="button"
               id="btn-submit-flow-actividad"
               onClick={() => handleGuardar()}
-              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md transition cursor-pointer"
+              className="h-9 px-4 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-sm transition cursor-pointer"
             >
               {actividadEditar ? 'Actualizar Actividad' : 'Guardar Actividad'}
             </button>

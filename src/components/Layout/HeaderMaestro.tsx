@@ -3,8 +3,6 @@ import {
   Calendar,
   Archive,
   RotateCw,
-  Sun,
-  Moon,
   Columns,
   FolderKanban,
   HeartPulse,
@@ -14,9 +12,6 @@ import {
   X,
   RotateCcw,
   Keyboard,
-  Sparkles,
-  Zap,
-  Palette,
   Globe,
   Briefcase,
   Lightbulb
@@ -28,8 +23,6 @@ import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { syncManager, type SyncState } from '../../services/syncManager';
 
 export type VistaGlobal = 'kanban' | 'portafolio' | 'habitos' | 'financiero' | 'detalle' | 'notas';
-export type SaborTema = 'slate' | 'rose';
-export type ModoColor = 'light' | 'dark';
 
 interface HeaderMaestroProps {
   vistaActiva: VistaGlobal;
@@ -39,10 +32,6 @@ interface HeaderMaestroProps {
   onAbrirExportarPdf?: () => void;
   drawerArchivadosAbierto?: boolean;
   onToggleDrawerArchivados?: (abierto: boolean) => void;
-  modoColor: ModoColor;
-  saborTema: SaborTema;
-  onCambiarModoColor: (modo: ModoColor) => void;
-  onCambiarSaborTema: (sabor: SaborTema) => void;
   sincronizando?: boolean;
 }
 
@@ -54,13 +43,8 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
   onAbrirExportarPdf,
   drawerArchivadosAbierto: propDrawerAbierto,
   onToggleDrawerArchivados,
-  modoColor,
-  saborTema,
-  onCambiarModoColor,
-  onCambiarSaborTema,
   sincronizando = false
 }) => {
-  const [menuTemaAbierto, setMenuTemaAbierto] = useState(false);
   const [localDrawerOpen, setLocalDrawerOpen] = useState(false);
   const isDrawerOpen = propDrawerAbierto !== undefined ? propDrawerAbierto : localDrawerOpen;
   const setDrawerAbierto = onToggleDrawerArchivados || setLocalDrawerOpen;
@@ -104,27 +88,6 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
       window.removeEventListener('pmo:sync-triggered', handleSyncEvent);
     };
   }, []);
-
-  useEffect(() => {
-    if (!menuTemaAbierto) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (!target?.closest('#container-theme-dropdown')) {
-        setMenuTemaAbierto(false);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setMenuTemaAbierto(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [menuTemaAbierto]);
 
   const estaSincronizando = sincronizando || syncManagerEstado === 'syncing' || recargandoAnim;
 
@@ -247,52 +210,45 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
     );
   }, [tabArchivados, busquedaArchivados, tareasArchivadas, proyectosArchivados, actividadesArchivadas, gastosArchivados, ingresosArchivados]);
 
-  const tituloMovil = {
-    kanban: 'Tablero Kanban',
-    portafolio: 'Portafolio Ejecutivo',
-    habitos: 'Hábitos & Vida',
-    financiero: 'Finanzas & Liquidez',
-    detalle: 'Detalle 360°',
-    notas: 'Notas Inteligentes'
-  }[vistaActiva];
-
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white/80 dark:bg-[#0D1526]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/40 transition-colors duration-200 shadow-xs flex items-center justify-between px-3 md:px-6 py-1.5 md:py-2.5 h-12 md:h-auto shrink-0 gap-3 relative">
-        {/* FLANCO IZQUIERDO: Branding & Sync Status */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center font-black text-xs md:text-sm text-white shadow-md shadow-indigo-500/20 ring-1 ring-white/20">
+      <header className="sticky top-0 z-40 bg-[#0D1526]/95 backdrop-blur-md border-b border-slate-800/40 shadow-xs flex items-center justify-between px-3 md:px-5 py-1.5 md:py-2 min-h-[52px] md:min-h-0 shrink-0 gap-2 relative">
+        {/* FLANCO IZQUIERDO: Identificador Corporativo Permanente y Píldora "Al Día" (REQ-UI-32-FINAL) */}
+        <div className="flex items-center gap-2.5 flex-1 md:flex-initial min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 flex items-center justify-center font-black text-xs md:text-sm text-white shadow-md shadow-indigo-500/20 ring-1 ring-white/20 shrink-0">
               <span>P</span>
             </div>
-            <div className="hidden md:flex flex-col">
-              <span className="text-xs font-black tracking-wider text-slate-900 dark:text-white uppercase leading-none">
-                PMO Modular
-              </span>
-              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-400 leading-tight">
-                Executive Suite
-              </span>
-            </div>
-            {/* Título compacto de la vista activa para móviles (< md) */}
-            <span id="mobile-header-view-title" className="md:hidden text-xs font-bold text-slate-800 dark:text-slate-100 truncate max-w-[170px]">
-              {tituloMovil}
+            <span
+              id="header-view-title"
+              className="hidden md:inline text-base sm:text-lg font-bold text-slate-100 tracking-tight truncate"
+            >
+              MiPortalWeb
+            </span>
+            <span
+              id="mobile-header-view-title"
+              className="md:hidden text-base sm:text-lg font-bold text-slate-100 tracking-tight truncate"
+            >
+              MiPortalWeb
             </span>
           </div>
 
-          {/* Indicador reactivo y botón de sincronización unificado (Desktop) */}
+          {/* Píldora de Estado de Sincronización con Pulso Esmeralda Reactivo */}
           <button
             type="button"
             id="btn-sync-status-merged"
             data-legacy-id="btn-header-refresh"
             onClick={handleEjecutarSync}
-            className={`group hidden md:inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all duration-300 select-none cursor-pointer shadow-xs ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors cursor-pointer select-none shrink-0 ml-auto md:ml-0 ${
               estaSincronizando
-                ? 'border-sky-400/60 bg-white/10 dark:bg-white/[0.08] text-white shadow-[0_0_12px_rgba(56,189,248,0.25)] scale-[1.02]'
+                ? 'bg-sky-500/10 border-sky-500/25 text-sky-400'
                 : syncManagerEstado === 'reconnecting'
-                ? 'border-amber-500/60 bg-amber-950/20 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                ? 'bg-amber-500/10 border-amber-500/25 text-amber-400'
+                : syncManagerEstado === 'offline'
+                ? 'bg-slate-800/80 border-slate-700/60 text-slate-400'
                 : syncManagerEstado === 'error'
-                ? 'border-rose-500/60 bg-rose-950/20 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.25)]'
-                : 'border-slate-800/80 bg-slate-900/60 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60 hover:text-slate-100 active:scale-95'
+                ? 'bg-rose-500/10 border-rose-500/25 text-rose-400'
+                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/35'
             }`}
             title={
               estaSincronizando
@@ -303,45 +259,33 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                 ? 'Modo sin conexión'
                 : syncManagerEstado === 'error'
                 ? 'Error en sincronización (Click para reintentar)'
-                : 'Al día (Sincronizado) - Presiona R para refrescar'
+                : 'Al Día (Sincronizado) - Click o presiona R para refrescar'
             }
+            aria-label="Estado de sincronización: pulsar para sincronizar"
           >
-            {/* Indicador Radar / Spinner Cinemático */}
-            <div className="relative flex items-center justify-center w-3.5 h-3.5">
-              {estaSincronizando ? (
-                <RotateCw className="w-3.5 h-3.5 text-sky-400 animate-spin transition-transform duration-500" strokeWidth={2} />
-              ) : syncManagerEstado === 'reconnecting' ? (
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-60"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400 shadow-[0_0_12px_#f59e0b]"></span>
-                </span>
-              ) : syncManagerEstado === 'offline' ? (
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500 shadow-[0_0_6px_rgba(100,116,139,0.5)]"></span>
-              ) : syncManagerEstado === 'error' ? (
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]"></span>
-              ) : (
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]"></span>
-                </span>
-              )}
-            </div>
+            {estaSincronizando ? (
+              <RotateCw className="w-3 h-3 text-sky-400 animate-spin shrink-0" strokeWidth={1.75} />
+            ) : syncManagerEstado === 'reconnecting' ? (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-40 duration-1000" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+              </span>
+            ) : syncManagerEstado === 'offline' ? (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500" />
+              </span>
+            ) : syncManagerEstado === 'error' ? (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]" />
+              </span>
+            ) : (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-40 duration-1000" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+              </span>
+            )}
 
-            {/* Texto Dinámico */}
-            <span
-              id="sync-status-text"
-              className={`font-mono text-[10.5px] tracking-tight transition-colors duration-200 ${
-                estaSincronizando
-                  ? 'text-white font-semibold'
-                  : syncManagerEstado === 'reconnecting'
-                  ? 'text-amber-300 font-semibold'
-                  : syncManagerEstado === 'error'
-                  ? 'text-rose-300 font-semibold'
-                  : syncManagerEstado === 'offline'
-                  ? 'text-slate-400'
-                  : 'text-slate-300 group-hover:text-slate-100'
-              }`}
-            >
+            <span id="sync-status-text" className="whitespace-nowrap leading-none">
               {estaSincronizando
                 ? 'Sincronizando...'
                 : syncManagerEstado === 'reconnecting'
@@ -350,13 +294,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                 ? 'Offline'
                 : syncManagerEstado === 'error'
                 ? 'Error sync'
-                : 'Al día'}
+                : 'Al Día'}
             </span>
           </button>
         </div>
 
         {/* CENTRO: 5 Pestañas Maestras Canónicas Unificadas (Atajos 1 a 5) */}
-        <nav className="hidden md:inline-flex items-center p-1.5 bg-slate-100/90 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-inner gap-1 text-xs select-none absolute left-1/2 -translate-x-1/2">
+        <nav className="hidden md:inline-flex items-center p-1.5 bg-slate-100/90 dark:bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-inner gap-1 text-xs select-none xl:absolute xl:left-1/2 xl:-translate-x-1/2">
           {/* 1. Kanban */}
           <button
             type="button"
@@ -438,23 +382,23 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
           </button>
         </nav>
 
-        {/* FLANCO DERECHO: Notas Inteligentes (Separada Visualmente), Calendar, Archivados y Dock de Utilidades */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* 0. Acceso Rápido a Notas Inteligentes (Extremo derecho separado del nav principal, Atajo 5) */}
+        {/* FLANCO DERECHO: Dock Operativo Dark Cobalt (REQ-UI-32-FIX) */}
+        <div id="header-actions-container" className="hidden md:flex items-center gap-2.5 shrink-0">
+          {/* 0. Acceso Rápido a Notas Inteligentes (Atajo 5) */}
           <button
             type="button"
             onClick={() => onCambiarVista('notas')}
             id="tab-nav-notas"
             data-legacy-id="btn-nav-notas"
-            className={`px-2.5 py-1.5 rounded-xl font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out transform-gpu will-change-transform hidden md:flex items-center gap-1.5 cursor-pointer active:scale-95 mr-1 ${
+            className={`min-h-[40px] px-2.5 py-1.5 rounded-xl font-bold transition-all duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               vistaActiva === 'notas'
                 ? 'text-sky-300 bg-sky-950/40 border border-sky-800/60 shadow-xs'
-                : 'text-slate-400 hover:text-sky-300 hover:bg-slate-800/40 border border-slate-800/50'
+                : 'text-slate-400 hover:text-sky-300 hover:bg-[#0D1526] bg-[#0D1526]/80 border border-slate-800/80 hover:border-sky-500/40'
             }`}
             title="Notas Inteligentes y Wishlists (Presiona 5)"
           >
             <FileText className="w-4 h-4 shrink-0" strokeWidth={1.75} />
-            <span className="hidden lg:inline text-xs font-semibold">Notas</span>
+            <span className="hidden xl:inline text-xs font-semibold">Notas</span>
             {totalNotas > 0 && (
               <span
                 id="badge-header-notas"
@@ -471,8 +415,9 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             target="_blank"
             rel="noopener noreferrer"
             id="btn-header-calendar"
-            className="h-9 w-9 p-0 rounded-xl text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer hidden md:flex items-center justify-center select-none"
+            className="min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300 active:scale-95 transition-all cursor-pointer flex items-center justify-center select-none"
             title="Abrir Google Calendar (Presiona C)"
+            aria-label="Abrir Google Calendar"
           >
             <Calendar className="w-4 h-4" strokeWidth={1.75} />
           </a>
@@ -483,29 +428,34 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             id="btn-header-archivados"
             data-legacy-id="btn-header-boveda-archivados"
             onClick={() => setDrawerAbierto(true)}
-            className="relative h-9 w-9 p-0 rounded-xl text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer hidden md:flex items-center justify-center select-none"
+            className={`min-w-[40px] min-h-[40px] h-10 rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 select-none ${
+              totalArchivados > 0 ? 'px-2.5' : 'w-10 p-0'
+            }`}
             title="Bóveda de Archivados (+10 días completados/conciliados)"
+            aria-label="Abrir Bóveda de Archivados"
           >
-            <Archive className="w-4 h-4" strokeWidth={1.75} />
+            <Archive className="w-4 h-4 shrink-0" strokeWidth={1.75} />
             {totalArchivados > 0 && (
               <span
                 id="badge-header-archivados"
-                className="absolute -top-1 -right-1 text-[9px] font-mono tabular-nums font-bold px-1 min-w-[15px] h-3.5 rounded-full bg-slate-800 text-sky-300 border border-slate-700 leading-none flex items-center justify-center shadow-xs"
+                className="text-[10px] font-mono tabular-nums font-bold px-1.5 py-0.5 min-w-[18px] h-4 rounded-full bg-slate-800 text-sky-300 border border-slate-700 leading-none flex items-center justify-center shrink-0"
               >
                 {totalArchivados}
               </span>
             )}
           </button>
-          {/* 3. Atajos (#btn-toggle-shortcuts-modal): Canónico según legacy L151-166 */}
+
+          {/* 3. Atajos (#btn-toggle-shortcuts-modal) */}
           <button
             type="button"
             id="btn-toggle-shortcuts-modal"
             data-legacy-id="btn-shortcuts-config"
             onClick={onAbrirAtajos}
-            className="h-9 w-9 p-0 rounded-xl bg-transparent border border-transparent text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer hidden md:flex items-center justify-center select-none"
+            className="min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300 active:scale-95 transition-all cursor-pointer flex items-center justify-center select-none"
             title="Atajos de Teclado (Presiona ?)"
+            aria-label="Abrir guía de atajos de teclado"
           >
-            <Keyboard className="w-4 h-4 transition-transform duration-150" strokeWidth={1.75} />
+            <Keyboard className="w-4 h-4" strokeWidth={1.75} />
           </button>
 
           {/* 4. Exportar Ficha PDF (Opcional / Directo) */}
@@ -514,141 +464,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               type="button"
               id="btn-header-exportar-pdf"
               onClick={onAbrirExportarPdf}
-              className="h-9 w-9 p-0 rounded-xl bg-transparent border border-transparent text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer hidden md:flex items-center justify-center select-none"
+              className="min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300 active:scale-95 transition-all cursor-pointer flex items-center justify-center select-none"
               title="Generar Ficha Resumen (PDF)"
+              aria-label="Generar Ficha Resumen (PDF)"
             >
               <FileText className="w-4 h-4" strokeWidth={1.75} />
             </button>
           )}
-
-          {/* 5. Selector de Tema / Paleta */}
-          <div className="relative" id="container-theme-dropdown">
-            <button
-              type="button"
-              id="btn-theme-dropdown"
-              onClick={() => setMenuTemaAbierto(!menuTemaAbierto)}
-              className="w-11 h-11 min-w-[44px] min-h-[44px] md:w-9 md:h-9 md:min-w-0 md:min-h-0 p-0 rounded-xl bg-transparent text-slate-400 hover:text-sky-300 hover:bg-slate-800/30 flex items-center justify-center active:scale-95 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
-              title="Tema e Iluminación (Sol / Luna y Paletas)"
-            >
-              {modoColor === 'light' ? (
-                <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.75} />
-              ) : (
-                <Moon className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
-              )}
-            </button>
-
-            {/* Dropdown Flotante Glassmorphism */}
-            {menuTemaAbierto && (
-              <div
-                id="menu-theme-dropdown"
-                className="absolute right-0 mt-2 w-60 max-w-[calc(100vw-24px)] rounded-2xl bg-white/95 dark:bg-[#0D1526]/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800/60 shadow-2xl p-3 z-50 space-y-3"
-              >
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/80">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                      Apariencia
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onCambiarModoColor(modoColor === 'dark' ? 'light' : 'dark');
-                    }}
-                    className="text-[10px] font-bold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
-                  >
-                    Alternar Modo
-                  </button>
-                </div>
-
-                {/* Iluminación */}
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider block">
-                    Iluminación
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onCambiarModoColor('light')}
-                      className={`flex items-center gap-2 p-2 rounded-xl border transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer ${
-                        modoColor === 'light'
-                          ? 'border-amber-400 bg-amber-500/10'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-amber-400/50'
-                      }`}
-                    >
-                      <Sun className="w-4 h-4 text-amber-500 shrink-0" strokeWidth={1.75} />
-                      <div className="flex flex-col text-left">
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Claro</span>
-                        <span className="text-[9px] text-slate-400">Light</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onCambiarModoColor('dark')}
-                      className={`flex items-center gap-2 p-2 rounded-xl border transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer ${
-                        modoColor === 'dark'
-                          ? 'border-sky-400 bg-sky-500/10'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-sky-400/50'
-                      }`}
-                    >
-                      <Moon className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
-                      <div className="flex flex-col text-left">
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Oscuro</span>
-                        <span className="text-[9px] text-slate-400">OLED</span>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Paleta de Color */}
-                <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-wider block">
-                    Paleta de Color
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onCambiarSaborTema('slate')}
-                      className={`flex flex-col items-start p-2 rounded-xl border transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform text-left cursor-pointer ${
-                        saborTema === 'slate'
-                          ? 'border-sky-500 bg-sky-500/10'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-sky-400'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between w-full mb-1">
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                          <Zap className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
-                          <span>Slate</span>
-                        </span>
-                        {saborTema === 'slate' && <span className="w-2 h-2 rounded-full bg-sky-500"></span>}
-                      </div>
-                      <span className="text-[9px] text-slate-500 dark:text-slate-400 leading-tight">Metálico</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onCambiarSaborTema('rose')}
-                      className={`flex flex-col items-start p-2 rounded-xl border transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform text-left cursor-pointer ${
-                        saborTema === 'rose'
-                          ? 'border-rose-500 bg-rose-500/10'
-                          : 'border-slate-200 dark:border-slate-800 hover:border-rose-400'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between w-full mb-1">
-                        <span className="text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1">
-                          <Palette className="w-3.5 h-3.5 text-rose-400" strokeWidth={1.75} />
-                          <span>Rose</span>
-                        </span>
-                        {saborTema === 'rose' && <span className="w-2 h-2 rounded-full bg-rose-500"></span>}
-                      </div>
-                      <span className="text-[9px] text-slate-500 dark:text-slate-400 leading-tight">Champagne</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </header>
 

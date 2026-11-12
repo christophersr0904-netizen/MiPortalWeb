@@ -92,11 +92,11 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
         {/* Card 1: Saldo en Mano Real Hoy */}
         <div
           title="Liquidez disponible y consolidada en cuentas bancarias"
-          className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526]/90 border border-slate-800/60 shadow-sm relative overflow-hidden flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
+          className="p-2.5 sm:p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 relative overflow-hidden flex flex-col justify-between transition-colors duration-150"
         >
           <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1 gap-1">
             <span className="text-[10px] uppercase font-bold tracking-wider truncate">Dinero Real Hoy</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] shrink-0" title="Liquidez Real Activa" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" title="Liquidez Real Activa" />
           </div>
           <div>
             <div id="kpi-saldo-en-mano" className="text-base sm:text-2xl font-bold font-mono tabular-nums text-emerald-400 truncate tracking-tight">
@@ -116,11 +116,11 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
         {/* Card 2: Saldo Proyectado a Fin de Mes */}
         <div
           title="Saldo proyectado deduciendo compromisos y cuotas pendientes del mes"
-          className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526]/90 border border-slate-800/60 shadow-sm relative overflow-hidden flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
+          className="p-2.5 sm:p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 relative overflow-hidden flex flex-col justify-between transition-colors duration-150"
         >
           <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1 gap-1">
             <span className="text-[10px] uppercase font-bold tracking-wider truncate">Saldo Proyectado</span>
-            <span className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_8px_#06b6d4] shrink-0" title="Estimación a Fin de Mes" />
+            <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" title="Estimación a Fin de Mes" />
           </div>
           <div>
             <div id="kpi-saldo-proyectado-fin-mes" className="text-base sm:text-2xl font-bold font-mono tabular-nums text-cyan-400 truncate tracking-tight">
@@ -136,7 +136,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
         {/* Card 3: Compromisos y Cuotas Pendientes del Mes */}
         <div
           title="Obligaciones financieras programadas pendientes de liquidación en el periodo"
-          className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526]/90 border border-slate-800/60 shadow-sm flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
+          className="p-2.5 sm:p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 flex flex-col justify-between transition-colors duration-150"
         >
           <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1 gap-1">
             <span className="text-[10px] uppercase font-bold tracking-wider truncate">Compromisos</span>
@@ -162,7 +162,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
         {/* Card 4: Posición Bimonetaria y TC */}
         <div
           title="Distribución de fondos en Soles (PEN) y Dólares (USD)"
-          className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526]/90 border border-slate-800/60 shadow-sm flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
+          className="p-2.5 sm:p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 flex flex-col justify-between transition-colors duration-150"
         >
           <div className="flex items-center justify-between text-slate-400 mb-0.5 sm:mb-1 gap-1">
             <span className="text-[10px] uppercase font-bold tracking-wider truncate">Bimoneda</span>
@@ -218,28 +218,28 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
         {/* Mini cápsulas métricas compactas para móvil cuando está colapsado */}
         {!kpisExpandidosMovil && (
           <div className="md:hidden flex flex-row overflow-x-auto [&::-webkit-scrollbar]:hidden gap-1.5 py-0.5 snap-x overscroll-contain select-none">
-            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526] border border-slate-800/60 text-[10px] font-mono flex items-center gap-1.5">
+            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526]/90 border border-slate-800/80 text-[10px] font-mono tabular-nums flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${semaforoStatus.dot}`} />
               <span className="text-slate-300 font-bold">{semaforoStatus.badge}</span>
               <span className="text-emerald-400">({diasCobertura}d)</span>
             </div>
-            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526] border border-slate-800/60 text-[10px] font-mono flex items-center gap-1.5">
-              <Flame className="w-3 h-3 text-amber-400 shrink-0" />
+            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526]/90 border border-slate-800/80 text-[10px] font-mono tabular-nums flex items-center gap-1.5">
+              <Flame className="w-3 h-3 text-amber-400 shrink-0" strokeWidth={1.75} />
               <span className="text-slate-400">Hormiga:</span>
               <span className="text-amber-400 font-bold">{pctGastosHormiga}%</span>
             </div>
-            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526] border border-slate-800/60 text-[10px] font-mono flex items-center gap-1.5">
-              <TrendingUp className="w-3 h-3 text-emerald-400 shrink-0" />
+            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526]/90 border border-slate-800/80 text-[10px] font-mono tabular-nums flex items-center gap-1.5">
+              <TrendingUp className="w-3 h-3 text-emerald-400 shrink-0" strokeWidth={1.75} />
               <span className="text-slate-400">Ahorro:</span>
               <span className="text-emerald-400 font-bold">{ratioAhorroPct}%</span>
             </div>
-            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526] border border-slate-800/60 text-[10px] font-mono flex items-center gap-1.5">
-              <CreditCard className="w-3 h-3 text-violet-400 shrink-0" />
+            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526]/90 border border-slate-800/80 text-[10px] font-mono tabular-nums flex items-center gap-1.5">
+              <CreditCard className="w-3 h-3 text-violet-400 shrink-0" strokeWidth={1.75} />
               <span className="text-slate-400">Deuda:</span>
               <span className="text-violet-400 font-bold">{ratioEndeudamientoCuotas}%</span>
             </div>
-            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526] border border-slate-800/60 text-[10px] font-mono flex items-center gap-1.5">
-              <PieChart className="w-3 h-3 text-sky-400 shrink-0" />
+            <div className="shrink-0 snap-start px-2.5 py-1 rounded-lg bg-[#0D1526]/90 border border-slate-800/80 text-[10px] font-mono tabular-nums flex items-center gap-1.5">
+              <PieChart className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.75} />
               <span className="text-slate-300 truncate max-w-[110px]">{radarCategorias[0]?.categoria || 'Sin gastos'}</span>
             </div>
           </div>
@@ -250,15 +250,15 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
           <div
             id="card-semaforo-liquidez"
             title={semaforoStatus.desc}
-            className="p-4 rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
+            className="p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 flex flex-col justify-between transition-colors duration-150"
           >
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full ${semaforoStatus.dot} shadow-[0_0_8px_#10b981]`} id="dot-semaforo-liquidez" />
+                  <span className={`w-2.5 h-2.5 rounded-full ${semaforoStatus.dot}`} id="dot-semaforo-liquidez" />
                   <span className="text-xs font-bold text-slate-100">1. Semáforo de Liquidez</span>
                 </div>
-                <span id="badge-semaforo-liquidez" className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span id="badge-semaforo-liquidez" className="text-[10px] font-bold font-mono tabular-nums px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   {semaforoStatus.badge} ({diasCobertura}d)
                 </span>
               </div>
@@ -270,7 +270,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
               </div>
             </div>
             <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mt-3 shadow-inner">
-              <div id="bar-semaforo-liquidez" className="bg-emerald-500 shadow-[0_0_8px_#10b981] h-full rounded-full transition-all duration-500" style={{ width: semaforoStatus.barWidth }} />
+              <div id="bar-semaforo-liquidez" className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: semaforoStatus.barWidth }} />
             </div>
           </div>
 
@@ -278,7 +278,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
           <div
             id="card-gastos-hormiga"
             title={`Compras menores no esenciales del mes (<= S/ 300). Representa el ${pctGastosHormiga}% de tus egresos.`}
-            className="p-4 rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
+            className="p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 flex flex-col justify-between transition-colors duration-150"
           >
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -298,7 +298,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
               </div>
             </div>
             <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mt-3 shadow-inner">
-              <div id="bar-gastos-hormiga" className="bg-amber-500 shadow-[0_0_8px_#f59e0b] h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(pctGastosHormiga * 3, 100)}%` }} />
+              <div id="bar-gastos-hormiga" className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(pctGastosHormiga * 3, 100)}%` }} />
             </div>
           </div>
 
@@ -306,7 +306,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
           <div
             id="card-capacidad-ahorro"
             title={`Dinero libre para ahorro e inversión. Tasa calculada: ${ratioAhorroPct}% (Meta recomendada >= 20%).`}
-            className="p-4 rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
+            className="p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 flex flex-col justify-between transition-colors duration-150"
           >
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -326,7 +326,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
               </div>
             </div>
             <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mt-3 shadow-inner">
-              <div id="bar-capacidad-ahorro" className="bg-emerald-500 shadow-[0_0_8px_#10b981] h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(ratioAhorroPct, 100)}%` }} />
+              <div id="bar-capacidad-ahorro" className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(ratioAhorroPct, 100)}%` }} />
             </div>
           </div>
 
@@ -334,7 +334,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
           <div
             id="card-endeudamiento-cuotas"
             title={`Porcentaje del ingreso comprometido en cuotas bancarias. Compromiso mensual: S/ ${montoCuotasPendientes.toFixed(2)} (Límite seguro <= 30%).`}
-            className="p-4 rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
+            className="p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 flex flex-col justify-between transition-colors duration-150"
           >
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -354,7 +354,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
               </div>
             </div>
             <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mt-3 shadow-inner">
-              <div id="bar-endeudamiento-cuotas" className="bg-violet-500 shadow-[0_0_8px_#8b5cf6] h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(ratioEndeudamientoCuotas, 100)}%` }} />
+              <div id="bar-endeudamiento-cuotas" className="bg-violet-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(ratioEndeudamientoCuotas, 100)}%` }} />
             </div>
           </div>
 
@@ -362,7 +362,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
           <div
             id="card-radar-categorias-criticas"
             title="Categorías con mayor presión presupuestal o consumo acelerado este periodo"
-            className="p-4 rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 md:col-span-2 flex flex-col justify-between transform-gpu hover:translate-y-[-2px] transition duration-150"
+            className="p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 md:col-span-2 flex flex-col justify-between transition-colors duration-150"
           >
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -399,7 +399,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
       </div>
 
       {/* 3. PRÓXIMOS VENCIMIENTOS Y CUOTAS (WIDGET ACCIONABLE CON UI OPTIMISTA) */}
-      <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1">
+      <div className="p-3 sm:p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
@@ -432,7 +432,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
               return (
                 <div
                   key={`${item.tipo}-${item.id}`}
-                  className="p-3 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-between gap-3 hover:border-slate-700 transition"
+                  className="p-3 rounded-xl border border-slate-800/80 bg-[#040711]/50 flex items-center justify-between gap-3 hover:border-sky-500/40 transition-colors"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
@@ -443,7 +443,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
                       }`}>
                         {item.codigo}
                       </span>
-                      <span className={`text-[10px] font-bold ${item.diasRestantes <= 1 ? 'text-rose-400 font-extrabold' : 'text-amber-400'}`}>
+                      <span className={`text-[10px] font-mono tabular-nums font-bold ${item.diasRestantes <= 1 ? 'text-rose-400 font-extrabold' : 'text-amber-400'}`}>
                         {item.diasRestantes <= 0 ? 'Vence hoy' : `En ${item.diasRestantes}d`}
                       </span>
                     </div>
@@ -464,7 +464,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
                           onToggleConciliarGasto(item.id);
                         }
                       }}
-                      className={`mt-1 px-2 py-0.5 rounded text-[10px] font-bold border transition cursor-pointer flex items-center gap-1 active:scale-95 ${
+                      className={`mt-1 px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors cursor-pointer flex items-center gap-1 ${
                         esConciliado
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                           : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30'

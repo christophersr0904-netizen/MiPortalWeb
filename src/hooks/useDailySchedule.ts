@@ -11,9 +11,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { completarActividadPersonalLocal, calcularProximaFechaValida } from '../services/habitosService';
+import { completarActividadPersonalLocal } from '../services/habitosService';
 import { syncManager } from '../services/syncManager';
 import { esElementoArchivado, getProp } from '../utils/entityNormalizer';
+import { evaluarOcurrenciaEnFecha } from '../utils/recurrenceEngine';
 import type { TareaRecord, ActividadPersonal, GastoRecord, IngresoRecord, CuotaRecord } from '../types';
 
 export type HorizonteAgenda = 'HOY' | 'MANANA' | 'SEMANA';
@@ -292,8 +293,7 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       for (const fHorizonte of fechasHorizonte) {
         if (fHorizonte === fechaActual) {
           const aplicaPorRecurrenciaHoy =
-            esRutinaria &&
-            calcularProximaFechaValida(fHorizonte, freqCiclo as any, reglaRep) === fHorizonte;
+            esRutinaria && evaluarOcurrenciaEnFecha(a, fHorizonte);
 
           if (fProg === fechaActual || estaEnMora || completadoHoy || aplicaPorRecurrenciaHoy) {
             fechasAplicables.push(fHorizonte);
@@ -303,7 +303,7 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
             esRutinaria &&
             freqCiclo &&
             freqCiclo !== 'NINGUNA' &&
-            calcularProximaFechaValida(fHorizonte, freqCiclo as any, reglaRep) === fHorizonte;
+            evaluarOcurrenciaEnFecha(a, fHorizonte);
 
           if (fProg === fHorizonte || aplicaPorRecurrenciaFutura) {
             fechasAplicables.push(fHorizonte);

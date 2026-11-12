@@ -28,11 +28,15 @@ import {
   Flame,
   FolderOpen,
   Circle,
-  Tag
+  Tag,
+  PlayCircle,
+  PauseCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { GrafoWBS } from '../WBS/GrafoWBS';
+import { IconoCategoriaIniciativa } from '../PMO/IconoCategoriaIniciativa';
 import { calcularRutaCriticaCPM } from '../../services/cpmService';
 import { ModalGasto } from '../Modals/ModalGasto';
 import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
@@ -66,25 +70,54 @@ const obtenerEstadoSalud = (rawStatus?: string) => {
     .trim() || 'Saludable';
   const lower = textoLimpio.toLowerCase();
 
-  if (lower.includes('crit') || lower.includes('rojo')) {
+  if (lower.includes('crit') || lower.includes('rojo') || lower.includes('bloquead')) {
     return {
-      etiqueta: 'Crítico',
-      dotClass: 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]',
-      badgeClass: 'bg-rose-950/60 text-rose-300 border-rose-800/80',
+      etiqueta: lower.includes('bloquead') ? 'Bloqueado' : 'Crítico',
+      esCrit: true,
+      esRiesgo: false,
+      dotSolidClass: 'bg-rose-500',
+      dotClass: 'bg-rose-500',
+      iconClass: 'text-rose-400',
+      badgeClass: 'bg-rose-950/60 text-rose-300 border-rose-800/80'
     };
   }
   if (lower.includes('riesgo') || lower.includes('amarillo') || lower.includes('alerta')) {
     return {
       etiqueta: 'En Riesgo',
-      dotClass: 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]',
-      badgeClass: 'bg-amber-950/60 text-amber-300 border-amber-800/80',
+      esCrit: false,
+      esRiesgo: true,
+      dotSolidClass: 'bg-amber-400',
+      dotClass: 'bg-amber-500',
+      iconClass: 'text-amber-400',
+      badgeClass: 'bg-amber-950/60 text-amber-300 border-amber-800/80'
     };
   }
   return {
     etiqueta: 'Saludable',
-    dotClass: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]',
-    badgeClass: 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80',
+    esCrit: false,
+    esRiesgo: false,
+    dotSolidClass: 'bg-emerald-400',
+    dotClass: 'bg-emerald-500',
+    iconClass: 'text-emerald-400',
+    badgeClass: 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80'
   };
+};
+
+const obtenerEstadoEjecucionMeta = (rawEstado?: string) => {
+  const norm = String(rawEstado || '03_En_Ejecucion').trim().toLowerCase();
+  if (norm.includes('01_') || norm.includes('backlog')) {
+    return { etiqueta: 'Backlog', Icon: Layers, iconClass: 'text-slate-400' };
+  }
+  if (norm.includes('02_') || norm.includes('plan')) {
+    return { etiqueta: 'Planificado', Icon: Compass, iconClass: 'text-sky-400' };
+  }
+  if (norm.includes('04_') || norm.includes('pausa')) {
+    return { etiqueta: 'En Pausa', Icon: PauseCircle, iconClass: 'text-amber-400' };
+  }
+  if (norm.includes('05_') || norm.includes('06_') || norm.includes('cerrad') || norm.includes('complet')) {
+    return { etiqueta: 'Completado', Icon: CheckCircle2, iconClass: 'text-emerald-400' };
+  }
+  return { etiqueta: 'En Ejecución', Icon: PlayCircle, iconClass: 'text-sky-400' };
 };
 
 export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
@@ -420,7 +453,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
   if (!proyectoActivo) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#040711] text-slate-400">
-        <Compass className="w-12 h-12 mb-3 text-indigo-400 animate-pulse" />
+        <Compass className="w-12 h-12 mb-3 text-sky-400" strokeWidth={1.75} />
         <p className="text-sm font-semibold">Cargando detalles del proyecto...</p>
       </div>
     );
@@ -612,9 +645,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
         <button
           type="button"
           onClick={onVolverAlPortafolio}
-          className="px-3 py-1.5 rounded-xl border border-slate-800 bg-[#0D1526] text-slate-300 hover:bg-slate-800 text-xs font-semibold flex items-center gap-2 transition cursor-pointer active:scale-95 shadow-2xs"
+          className="h-9 px-3 rounded-xl border border-slate-800/80 bg-[#0D1526] text-slate-300 hover:border-sky-500/40 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4" strokeWidth={1.75} />
           <span>Volver al Portafolio</span>
         </button>
 
@@ -622,7 +655,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
           <button
             type="button"
             onClick={() => setModalPdfAbierto(true)}
-            className="px-3 py-1.5 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+            className="h-9 px-3 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Descargar Informe Ejecutivo PDF de este Proyecto"
           >
             <FileDown className="w-4 h-4" strokeWidth={1.75} />
@@ -632,7 +665,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
           <button
             type="button"
             onClick={() => setModalEditarAbierto(true)}
-            className="px-3 py-1.5 rounded-xl border border-slate-800 bg-[#0D1526] text-slate-300 hover:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+            className="h-9 px-3 rounded-xl border border-slate-800/80 bg-[#0D1526] text-slate-300 hover:border-sky-500/40 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Editar parámetros del proyecto"
           >
             <Edit3 className="w-4 h-4" strokeWidth={1.75} />
@@ -655,8 +688,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
               });
               onVolverAlPortafolio();
             }}
-            className="p-2 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 active:scale-95 rounded-xl border border-rose-500/20 hover:border-rose-500/40 transition shadow-2xs cursor-pointer"
+            className="w-9 h-9 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl border border-rose-500/25 hover:border-rose-500/40 transition-colors cursor-pointer flex items-center justify-center"
             title="Eliminar este proyecto (con opción a deshacer)"
+            aria-label="Eliminar proyecto"
           >
             <Trash2 className="w-4 h-4" strokeWidth={1.75} />
           </button>
@@ -664,31 +698,57 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
       </div>
 
       {/* HERO CARD DEL PROYECTO & OKR / DOD */}
-      <div className="portal-surface bg-[#0D1526] rounded-2xl p-6 border border-slate-800/40 shadow-xs relative">
-        {/* Capa decorativa confinada con overflow-hidden para orbes de luz */}
-        <div className="pointer-events-none absolute inset-0 rounded-2xl overflow-hidden">
-          <div className="absolute -right-20 -top-20 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl" />
-          <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl" />
-        </div>
-
+      <div className="portal-surface bg-[#0D1526] rounded-2xl p-6 border border-slate-800/60 relative">
         {/* Encabezado Principal del Proyecto */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-start gap-4 border-b border-slate-800/60 pb-5 mb-5 relative z-10">
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs font-extrabold bg-slate-900 text-white px-2.5 py-0.5 rounded-lg tracking-wide border border-slate-800 shadow-2xs">
-                {proyectoActivo.codigo_legado || proyectoActivo.id}
-              </span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-950/60 text-indigo-300 border border-indigo-800 font-bold">
-                {proyectoActivo.tipo_iniciativa || 'General'}
-              </span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-bold">
-                {proyectoActivo.estado_proyecto || 'En Ejecución'}
-              </span>
-              <span className={`${estadoSalud.badgeClass} flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-bold border`}>
-                <span className={`w-1.5 h-1.5 rounded-full inline-block ${estadoSalud.dotClass}`} />
-                <span>{estadoSalud.etiqueta}</span>
-              </span>
-            </div>
+          <div className="flex-1 min-w-0 space-y-2.5">
+            {(() => {
+              const estadoEjecMeta = obtenerEstadoEjecucionMeta(
+                proyectoActivo.estado_proyecto || (proyectoActivo as any).estado
+              );
+              const IconoEstadoEjec = estadoEjecMeta.Icon;
+
+              return (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="h-8 px-2.5 inline-flex items-center font-mono tabular-nums text-xs font-bold bg-[#040711]/70 text-slate-100 rounded-lg tracking-wide border border-slate-800">
+                    {proyectoActivo.codigo_legado || proyectoActivo.id}
+                  </span>
+
+                  <IconoCategoriaIniciativa
+                    categoria={proyectoActivo.tipo_iniciativa}
+                    className="!w-8 !h-8 !rounded-lg !border !border-slate-800 !bg-[#0D1526]"
+                  />
+
+                  <span
+                    title={estadoEjecMeta.etiqueta}
+                    aria-label={`Estado: ${estadoEjecMeta.etiqueta}`}
+                    className="w-8 h-8 rounded-lg border border-slate-800 bg-[#0D1526] flex items-center justify-center shrink-0 cursor-help"
+                  >
+                    <IconoEstadoEjec className={`w-4 h-4 ${estadoEjecMeta.iconClass}`} strokeWidth={1.75} />
+                  </span>
+
+                  <span
+                    title={estadoSalud.etiqueta}
+                    aria-label={`Salud: ${estadoSalud.etiqueta}`}
+                    className="relative w-8 h-8 rounded-lg border border-slate-800 bg-[#0D1526] flex items-center justify-center shrink-0 cursor-help"
+                  >
+                    {estadoSalud.esCrit || estadoSalud.esRiesgo ? (
+                      <AlertTriangle className={`w-4 h-4 ${estadoSalud.iconClass}`} strokeWidth={1.75} />
+                    ) : (
+                      <ShieldCheck className={`w-4 h-4 ${estadoSalud.iconClass}`} strokeWidth={1.75} />
+                    )}
+                    <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                      <span
+                        className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${estadoSalud.dotSolidClass}`}
+                      />
+                      <span
+                        className={`relative inline-flex rounded-full h-2.5 w-2.5 ${estadoSalud.dotSolidClass}`}
+                      />
+                    </span>
+                  </span>
+                </div>
+              );
+            })()}
             <h1 className="text-xl md:text-2xl lg:text-3xl font-black text-slate-100 leading-tight tracking-tight">
               {proyectoActivo.nombre_proyecto || (proyectoActivo as any).nombre}
             </h1>
@@ -698,7 +758,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
           <div className="w-full lg:w-80 bg-slate-900/80 rounded-xl p-3.5 border border-slate-800 space-y-2 shrink-0">
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-slate-400" />
+                <Clock className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
                 <span>Cronograma Temporal</span>
               </span>
               <span className="font-mono tabular-nums text-[11px] font-bold text-slate-400">
@@ -707,13 +767,13 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
             </div>
             <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
               <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                className="h-full bg-sky-500 rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, pctTiempo)}%` }}
               />
             </div>
             <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono tabular-nums">
               <span>Inicio: {proyectoActivo.fecha_inicio_plan || '-'}</span>
-              <span className="font-bold text-indigo-400">{pctTiempo}% tiempo</span>
+              <span className="font-bold text-sky-400">{pctTiempo}% tiempo</span>
               <span>Fin: {proyectoActivo.fecha_fin_plan || '-'}</span>
             </div>
           </div>
@@ -722,8 +782,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
         {/* North Star OKR & Criterios DoD */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mb-6 relative z-10">
           <div className="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 space-y-1">
-            <span className="font-bold text-indigo-300 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-amber-500" />
+            <span className="font-bold text-sky-300 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-amber-500" strokeWidth={1.75} />
               <span>North Star OKR</span>
             </span>
             <p className="text-slate-300 leading-relaxed font-medium">
@@ -731,8 +791,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
             </p>
           </div>
           <div className="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 space-y-1">
-            <span className="font-bold text-indigo-300 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <span className="font-bold text-sky-300 uppercase text-[10px] tracking-wider flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" strokeWidth={1.75} />
               <span>Criterios de Aceptación (DoD)</span>
             </span>
             <p className="text-slate-300 leading-relaxed font-medium">
@@ -813,7 +873,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
                 <path
-                  className="text-indigo-400 transition-all duration-700 ease-out"
+                  className="text-sky-400 transition-all duration-700 ease-out"
                   strokeDasharray={`${pctAvance}, 100`}
                   strokeLinecap="round"
                   strokeWidth="3.5"
@@ -836,7 +896,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
             </div>
             <div className="my-1">
               <div className="text-sm font-black font-mono tabular-nums text-slate-100">
-                PEN {saldoRestante.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                PEN {saldoRestante.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">Saldo disponible</div>
             </div>
@@ -860,7 +920,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
             </div>
             <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-800 font-mono tabular-nums">
               <span className="text-slate-400">Ritmo Plazo:</span>
-              <b className={`font-mono font-bold ${spi >= 1 ? 'text-indigo-400' : 'text-amber-400'}`}>{spi.toFixed(2)}</b>
+              <b className={`font-mono font-bold ${spi >= 1 ? 'text-sky-400' : 'text-amber-400'}`}>{spi.toFixed(2)}</b>
             </div>
           </div>
         </div>
@@ -868,58 +928,58 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
 
       {/* SISTEMA DE SUBPESTAÑAS ERGONÓMICAS VISTA 360° */}
       <div
-        className="flex items-center gap-1.5 border-b border-slate-800 pb-1 overflow-x-auto scrollbar-none shrink-0"
+        className="flex items-center gap-1.5 border-b border-slate-800 pb-1.5 overflow-x-auto scrollbar-none shrink-0"
         role="tablist"
       >
         <button
           type="button"
           onClick={() => setSubTabActiva('wbs')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+          className={`h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
             subTabActiva === 'wbs'
-              ? 'bg-indigo-950/70 text-indigo-300 border border-indigo-800 shadow-2xs'
+              ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
               : 'text-slate-400 hover:text-white border border-transparent'
           }`}
         >
-          <GitFork className="w-4 h-4 shrink-0" />
+          <GitFork className="w-4 h-4 shrink-0" strokeWidth={1.75} />
           <span>1. WBS & Ruta Crítica</span>
         </button>
 
         <button
           type="button"
           onClick={() => setSubTabActiva('evm')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+          className={`h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
             subTabActiva === 'evm'
-              ? 'bg-indigo-950/70 text-indigo-300 border border-indigo-800 shadow-2xs'
+              ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
               : 'text-slate-400 hover:text-white border border-transparent'
           }`}
         >
-          <TrendingUp className="w-4 h-4 shrink-0" />
+          <TrendingUp className="w-4 h-4 shrink-0" strokeWidth={1.75} />
           <span>2. Rendimiento EVM & Curva S</span>
         </button>
 
         <button
           type="button"
           onClick={() => setSubTabActiva('tradeoff')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+          className={`h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
             subTabActiva === 'tradeoff'
-              ? 'bg-indigo-950/70 text-indigo-300 border border-indigo-800 shadow-2xs'
+              ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
               : 'text-slate-400 hover:text-white border border-transparent'
           }`}
         >
-          <Scale className="w-4 h-4 shrink-0" />
+          <Scale className="w-4 h-4 shrink-0" strokeWidth={1.75} />
           <span>3. Matriz Trade-Off</span>
         </button>
 
         <button
           type="button"
           onClick={() => setSubTabActiva('gobernanza')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+          className={`h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
             subTabActiva === 'gobernanza'
-              ? 'bg-indigo-950/70 text-indigo-300 border border-indigo-800 shadow-2xs'
+              ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
               : 'text-slate-400 hover:text-white border border-transparent'
           }`}
         >
-          <ShieldCheck className="w-4 h-4 shrink-0" />
+          <ShieldCheck className="w-4 h-4 shrink-0" strokeWidth={1.75} />
           <span>4. Gobernanza & Salud</span>
         </button>
       </div>
@@ -930,9 +990,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
       {subTabActiva === 'wbs' && (
         <div className="space-y-6">
           {/* Banner de Estado de Ruta Crítica CPM */}
-          <div className="portal-surface bg-[#0D1526] p-3.5 rounded-xl flex items-center justify-between gap-3 text-xs border border-slate-800/80 shadow-xs">
+          <div className="portal-surface bg-[#0D1526] p-3.5 rounded-xl flex items-center justify-between gap-3 text-xs border border-slate-800/80">
             <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
               <div>
                 <span className="font-bold text-slate-100">Ruta Crítica CPM:</span>
                 <span className="font-mono font-bold text-amber-400 ml-1">
@@ -962,14 +1022,14 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-indigo-400" />
+                <Layers className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
                 <h2 className="text-sm font-black uppercase tracking-wider text-slate-300">
                   Estructura Jerárquica de Entregables e Hitos (WBS)
                 </h2>
                 <button
                   type="button"
                   onClick={() => toggleTodosHitos(true)}
-                  className="text-[11px] text-indigo-400 hover:underline font-bold px-1.5 cursor-pointer"
+                  className="text-[11px] text-sky-400 hover:underline font-bold px-1.5 cursor-pointer"
                 >
                   Expandir todos
                 </button>
@@ -986,10 +1046,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
               <button
                 type="button"
                 onClick={() => abrirModalCrearHitoFase('Fase General')}
-                className="px-3 py-1.5 rounded-xl border border-indigo-800/60 bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900/60 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+                className="h-9 px-3 rounded-xl border border-sky-500/40 bg-[#0D1526] text-sky-300 hover:bg-sky-500/15 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Nuevo Hito / Entregable</span>
+                <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <span>Nuevo Hito / Entregable</span>
               </button>
             </div>
 
@@ -1003,31 +1063,20 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                 {fasesAgrupadas.map((fase, idxFase) => {
                   const pctPesoFase = Math.round(fase.pesoTotal * 100);
 
-                  const gradienteBadge =
-                    idxFase === 0
-                      ? 'bg-gradient-to-r from-sky-500 to-indigo-600'
-                      : idxFase === 1
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600'
-                      : idxFase === 2
-                      ? 'bg-gradient-to-r from-purple-500 to-pink-600'
-                      : 'bg-gradient-to-r from-emerald-500 to-teal-600';
-
                   return (
                     <div
                       key={fase.nombre}
-                      className="wbs-fase-seccion space-y-4 p-4 md:p-5 rounded-2xl bg-[#0D1526]/70 border border-slate-800/80 shadow-2xs"
+                      className="wbs-fase-seccion space-y-4 p-4 md:p-5 rounded-2xl bg-[#0D1526]/90 border border-slate-800/80"
                     >
                       {/* Banner Header de Fase */}
                       <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-slate-800">
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <span
-                            className={`inline-flex items-center justify-center min-w-[2.2rem] px-2 h-7 rounded-lg ${gradienteBadge} text-white font-mono font-black text-[11px] border border-white/20 tracking-tight shrink-0 shadow-xs`}
-                          >
+                          <span className="inline-flex items-center justify-center min-w-[2.2rem] px-2 h-7 rounded-lg bg-[#040711]/80 text-sky-300 font-mono font-bold text-[11px] border border-sky-500/40 tracking-tight shrink-0">
                             F{idxFase + 1}
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-black text-slate-100 text-sm md:text-base leading-tight truncate">
+                              <h3 className="font-bold text-slate-100 text-sm md:text-base leading-tight break-words">
                                 {fase.nombre}
                               </h3>
                               <span className="text-xs text-slate-400 font-mono font-medium">
@@ -1038,7 +1087,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                          <span className="text-xs bg-indigo-950/60 text-indigo-300 font-mono tabular-nums font-bold px-2.5 py-1 rounded-xl border border-indigo-800 flex items-center gap-1.5 shadow-2xs">
+                          <span className="h-9 px-2.5 text-xs bg-[#040711]/70 text-sky-300 font-mono tabular-nums font-bold rounded-xl border border-slate-800 flex items-center gap-1.5">
                             <span>
                               Peso: <b>{pctPesoFase}%</b>
                             </span>
@@ -1046,9 +1095,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                           <button
                             type="button"
                             onClick={() => abrirModalCrearHitoFase(fase.nombre)}
-                            className="px-2.5 py-1 rounded-xl border border-indigo-800/60 bg-[#0D1526] hover:bg-indigo-950/40 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition cursor-pointer active:scale-95 shadow-2xs"
+                            className="h-9 px-3 rounded-xl border border-slate-800 bg-[#0D1526] hover:border-sky-500/40 text-sky-300 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
                             <span>Entregable</span>
                           </button>
                         </div>
@@ -1096,14 +1145,14 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               <div
                                 key={h.id}
                                 id={`wbs-nodo-${hitoIdKey}`}
-                                className={`portal-surface bg-[#0D1526] rounded-2xl border border-slate-800/80 overflow-hidden shadow-xs transition-all ${
+                                className={`portal-surface bg-[#0D1526] rounded-2xl border border-slate-800/80 transition-colors ${
                                   esElementoResaltado
                                     ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
                                     : ''
                                 }`}
                               >
                                 {/* Header Paquete WP */}
-                                <div className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 gap-3.5 bg-slate-950/40">
+                                <div className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 gap-3.5 bg-slate-950/40 rounded-t-2xl">
                                   <div className="flex items-start gap-3 min-w-0 flex-1">
                                     <button
                                       type="button"
@@ -1124,23 +1173,23 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                           {hitoIdKey}
                                         </span>
                                         <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border bg-sky-950/70 text-sky-300 border-sky-800/60 flex items-center gap-1">
-                                          <Package className="w-3 h-3" />
+                                          <Package className="w-3 h-3" strokeWidth={1.75} />
                                           <span>Paquete WP</span>
                                         </span>
                                         <span className="text-xs px-2.5 py-0.5 rounded-full font-bold border bg-slate-800 text-slate-300 border-slate-700">
-                                          {h.estado || 'Pendiente'}
+                                          {h.estado ? String(h.estado).replace(/^\d+_/, '').replace(/_/g, ' ') : 'Pendiente'}
                                         </span>
                                         {esCrit && (
                                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/30 flex items-center gap-1">
-                                            <Flame className="w-3 h-3 text-rose-400" />
+                                            <Flame className="w-3 h-3 text-rose-400" strokeWidth={1.75} />
                                             <span>Ruta Crítica</span>
                                           </span>
                                         )}
                                         <span className="text-xs text-slate-400 font-mono tabular-nums inline-flex items-center gap-1">
-                                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                          <Calendar className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.75} />
                                           <span>Límite: <b>{h.fecha_limite || h.Fecha_Limite_Plan || h.fecha_limite_plan || '-'}</b></span>
                                         </span>
-                                        <span className="text-xs bg-indigo-950/60 text-indigo-300 font-mono tabular-nums font-bold px-2 py-0.5 rounded border border-indigo-800">
+                                        <span className="text-xs bg-sky-950/50 text-sky-300 font-mono tabular-nums font-bold px-2 py-0.5 rounded border border-sky-500/30">
                                           Peso: {(() => {
                                             const rawP = Number(h.peso_pct ?? h.peso_ponderado_pct ?? h.Peso_Ponderado_Pct ?? 0) || 0;
                                             return Math.round(rawP > 1 ? rawP : rawP * 100);
@@ -1148,7 +1197,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                         </span>
                                       </div>
 
-                                      <h3 className="font-black text-slate-100 text-base leading-tight truncate">
+                                      <h3 className="font-bold text-slate-100 text-base leading-snug break-words">
                                         {nomElem}
                                       </h3>
 
@@ -1156,11 +1205,11 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                       <div className="flex items-center gap-2 mt-2 w-full max-w-xs">
                                         <div className="flex-1 bg-slate-800 h-2 rounded-full overflow-hidden">
                                           <div
-                                            className="bg-indigo-500 h-full rounded-full transition-all duration-300"
+                                            className="bg-sky-500 h-full rounded-full transition-all duration-300"
                                             style={{ width: `${pctHito}%` }}
                                           />
                                         </div>
-                                        <span className="text-[11px] font-mono tabular-nums font-black text-indigo-400 shrink-0">
+                                        <span className="text-[11px] font-mono tabular-nums font-bold text-sky-400 shrink-0">
                                           {pctHito}%
                                         </span>
                                       </div>
@@ -1169,11 +1218,11 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
 
                                   {/* Panel de Control Financiero & Botones */}
                                   <div className="flex items-center gap-2 shrink-0 self-end md:self-center flex-wrap">
-                                    <div className="px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-900 shadow-2xs text-right min-w-[170px]">
+                                    <div className="px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-900 text-right min-w-[190px]">
                                       <div className="flex items-center justify-between gap-2 text-[10px] font-mono tabular-nums">
                                         <span className="text-slate-400 font-bold uppercase">Est vs Real:</span>
                                         <span className="font-bold text-slate-300">
-                                          S/ {presEstimadoHito.toLocaleString('es-PE')} |{' '}
+                                          PEN {presEstimadoHito.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} |{' '}
                                           <b
                                             className={
                                               realEjecutadoHito > presEstimadoHito && presEstimadoHito > 0
@@ -1181,7 +1230,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                 : 'text-emerald-400 font-bold'
                                             }
                                           >
-                                            S/ {realEjecutadoHito.toLocaleString('es-PE')}
+                                            PEN {realEjecutadoHito.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                           </b>
                                         </span>
                                       </div>
@@ -1195,8 +1244,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                         >
                                           {presEstimadoHito > 0
                                             ? varianzaHito >= 0
-                                              ? `Ahorro +S/ ${varianzaHito.toFixed(1)}`
-                                              : `Desvío -S/ ${Math.abs(varianzaHito).toFixed(1)}`
+                                              ? `Ahorro +PEN ${varianzaHito.toFixed(2)}`
+                                              : `Desvío -PEN ${Math.abs(varianzaHito).toFixed(2)}`
                                             : 'Sin Techo'}
                                         </span>
                                         <span
@@ -1214,17 +1263,17 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                     </div>
 
                                     {/* Botones de Acción */}
-                                    <div className="inline-flex items-center gap-1 p-0.5 rounded-xl bg-slate-900 border border-slate-800 shadow-2xs">
+                                    <div className="inline-flex items-center gap-1 p-0.5 rounded-xl bg-slate-900 border border-slate-800">
                                       <button
                                         type="button"
                                         onClick={() => {
                                           setTareaAEditarId(null);
                                           setIsModalTareaOpen(true);
                                         }}
-                                        className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold flex items-center gap-1 transition cursor-pointer active:scale-95"
+                                        className="h-8 px-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                                         title="Crear tarea en este paquete"
                                       >
-                                        <Plus className="w-3 h-3" />
+                                        <Plus className="w-3 h-3" strokeWidth={2} />
                                         <span>Tarea</span>
                                       </button>
 
@@ -1233,10 +1282,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                         onClick={() =>
                                           mostrarToastCobalt(`Asistente WBS IA: Desglosando tareas para ${nomElem}...`, 'info')
                                         }
-                                        className="px-2 py-1 rounded-lg bg-indigo-950/40 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer active:scale-95"
+                                        className="h-8 px-2.5 rounded-lg bg-sky-950/40 hover:bg-sky-900/60 text-sky-300 border border-sky-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                                         title="Desglosar tareas con IA"
                                       >
-                                        <Bot className="w-3 h-3" />
+                                        <Bot className="w-3 h-3" strokeWidth={1.75} />
                                         <span>IA</span>
                                       </button>
 
@@ -1284,7 +1333,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                     <div className="lg:col-span-7 space-y-3">
                                       <div className="flex justify-between items-center px-1 pb-1 border-b border-slate-800">
                                         <span className="text-xs font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                                          <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                                          <Layers className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
                                           <span>Tareas del Paquete ({tareasHito.length})</span>
                                         </span>
                                         <span className="text-[11px] font-mono tabular-nums text-slate-400">
@@ -1369,7 +1418,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                               <div
                                                 key={t.id}
                                                 id={`wbs-tarea-${tareaIdKey}`}
-                                                className={`group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-3.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:border-slate-700/80 hover:bg-[#0D1526] hover:shadow-[0_4px_20px_-2px_rgba(2,6,23,0.7)] hover:translate-y-[-1px] ${
+                                                className={`group relative rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-3.5 transition-colors hover:border-sky-500/40 hover:bg-[#0D1526] ${
                                                   esTareaResaltada
                                                     ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
                                                     : ''
@@ -1437,15 +1486,15 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                           <div className="relative group/gastos inline-block">
                                                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-800/40 text-[9.5px] font-mono tabular-nums font-semibold cursor-help">
                                                               <DollarSign className="w-2.5 h-2.5 text-emerald-400" strokeWidth={1.75} />
-                                                              <span>S/ {totalGastosTarea.toFixed(2)}</span>
+                                                              <span>PEN {totalGastosTarea.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                                             </span>
 
                                                             {/* Popover con conceptos y montos */}
-                                                            <div className="pointer-events-none group-hover/gastos:pointer-events-auto opacity-0 group-hover/gastos:opacity-100 transition-all duration-200 absolute left-0 bottom-full mb-1.5 z-40 w-52 p-2 rounded-xl bg-[#0D1526] border border-slate-700/80 shadow-2xl space-y-1 text-left">
+                                                            <div className="pointer-events-none group-hover/gastos:pointer-events-auto opacity-0 group-hover/gastos:opacity-100 transition-all duration-200 absolute left-0 bottom-full mb-1.5 z-40 w-56 p-2.5 rounded-xl bg-[#0D1526] border border-slate-700/80 shadow-2xl space-y-1 text-left">
                                                               <div className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider pb-1 border-b border-slate-800 flex items-center justify-between">
                                                                 <span>Gastos ({gastosDeEstaTarea.length})</span>
                                                                 <span className="font-mono text-emerald-400">
-                                                                  S/ {totalGastosTarea.toFixed(2)}
+                                                                  PEN {totalGastosTarea.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                                 </span>
                                                               </div>
                                                               <div className="max-h-28 overflow-y-auto space-y-1 text-[10px]">
@@ -1461,7 +1510,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                                         'Gasto'}
                                                                     </span>
                                                                     <span className="font-mono tabular-nums font-bold text-emerald-400 shrink-0">
-                                                                      S/{' '}
+                                                                      PEN{' '}
                                                                       {(
                                                                         parseFloat(
                                                                           gt.Monto_PEN ||
@@ -1469,7 +1518,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                                             gt.monto ||
                                                                             0
                                                                         ) || 0
-                                                                      ).toFixed(2)}
+                                                                      ).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                                     </span>
                                                                   </div>
                                                                 ))}
@@ -1485,7 +1534,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                           setTareaAEditarId(t.id);
                                                           setIsModalTareaOpen(true);
                                                         }}
-                                                        className={`text-xs font-semibold leading-snug cursor-pointer transition-colors group-hover:text-sky-300 line-clamp-2 ${
+                                                        className={`text-xs font-semibold leading-snug cursor-pointer transition-colors group-hover:text-sky-300 break-words whitespace-normal ${
                                                           esDone ? 'line-through text-slate-500' : 'text-slate-200'
                                                         }`}
                                                         title={t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}
@@ -1622,7 +1671,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                             return (
                                               <div
                                                 key={g.id}
-                                                className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-[1px] hover:border-sky-500/30 hover:bg-[#0D1526] hover:shadow-[0_4px_16px_rgba(56,189,248,0.08)]"
+                                                className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-2.5 transition-colors hover:border-sky-500/30 hover:bg-[#0D1526]"
                                               >
                                                 {/* Franja Lateral Semántica */}
                                                 <div className={`absolute left-0 top-0 bottom-0 w-[3.5px] rounded-l-xl ${franjaGastoClass}`} />
@@ -1631,7 +1680,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                   {/* Columna 1, 2 y 3: Concepto, Categoría, Vínculo y Fecha */}
                                                   <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                                      <span className="text-xs font-semibold text-slate-200 truncate group-hover:text-sky-300 transition-colors">
+                                                      <span className="text-xs font-semibold text-slate-200 break-words group-hover:text-sky-300 transition-colors">
                                                         {g.Descripcion_Gasto || g.concepto || g.descripcion || 'Gasto'}
                                                       </span>
                                                       {categoria && (
@@ -1648,7 +1697,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                         <span>{g.Fecha_Gasto || g.fecha || '-'}</span>
                                                       </span>
                                                       {vinculo && (
-                                                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60 truncate max-w-[130px]">
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60 truncate max-w-[130px]">
                                                           {vinculo}
                                                         </span>
                                                       )}
@@ -1740,17 +1789,24 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                           {h.codigo_legado}
                                         </span>
                                         <h4
-                                          className={`font-bold truncate ${
+                                          className={`font-bold break-words ${
                                             esComp ? 'line-through text-slate-500' : 'text-slate-100'
                                           }`}
                                         >
                                           {h.nombre_elemento || h.Nombre_Elemento || h.nombre_hito || h.Nombre_Hito || h.nombre || h.codigo_legado}
                                         </h4>
-                                        <span className="text-[10px] font-mono text-purple-400 bg-purple-950/40 border border-purple-800 px-1.5 py-0.5 rounded">
-                                          Costo: $0.00
-                                        </span>
+                                        {(() => {
+                                          const presupuestoMarcador =
+                                            parseFloat(h.presupuesto_asignado || h.Presupuesto_Asignado || 0) || 0;
+                                          if (presupuestoMarcador <= 0) return null;
+                                          return (
+                                            <span className="text-[10px] font-mono tabular-nums text-sky-300 bg-sky-950/40 border border-sky-500/30 px-1.5 py-0.5 rounded">
+                                              PEN {presupuestoMarcador.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
+                                          );
+                                        })()}
                                       </div>
-                                      <p className="text-[11px] text-slate-400 truncate">
+                                      <p className="text-[11px] text-slate-400 break-words leading-relaxed">
                                         DoD: {h.criterio_dod || h.criterio_aceptacion_dod || h.Criterio_Aceptacion_DoD || 'Criterio de aceptación estándar'}
                                       </p>
                                     </div>
@@ -1813,10 +1869,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                       Tareas Generales
                     </span>
                     {tareasGenerales.map((t: any) => {
-                      const est = String(t.estado || t.Estado || 'PENDIENTE').toUpperCase();
-                      const esComp = est === 'COMPLETADA' || est === 'HECHO';
-                      const esProc = est === 'EN_PROCESO' || est === 'EN_PROGRESO';
-                      const esBloq = est === 'BLOQUEADA' || est === 'CANCELADA';
+                      const est = String(t.estado_tarea || t.Estado_Tarea || t.estado || t.Estado || '02_Por_Hacer').toUpperCase();
+                      const esComp = est.includes('04_') || est.includes('COMPLETAD') || est === 'HECHO' || est === 'DONE';
+                      const esProc = est.includes('03_') || est.includes('PROCESO') || est.includes('PROGRESO');
+                      const esBloq = est.includes('BLOQUEAD') || est.includes('IMPED') || est.includes('CANCEL');
                       let franjaTarea = 'bg-slate-600';
                       if (esComp) franjaTarea = 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]';
                       else if (esProc) franjaTarea = 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.4)]';
@@ -1825,10 +1881,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                       return (
                         <div
                           key={t.id}
-                          className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-[1px] hover:border-sky-500/30 hover:bg-[#0D1526] hover:shadow-[0_4px_16px_rgba(56,189,248,0.08)] flex items-center justify-between text-xs"
+                          className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-2.5 transition-colors hover:border-sky-500/30 hover:bg-[#0D1526] flex items-center justify-between gap-2 text-xs"
                         >
                           <div className={`absolute left-0 top-0 bottom-0 w-[3.5px] rounded-l-xl ${franjaTarea}`} />
-                          <span className="pl-2 font-medium text-slate-200 group-hover:text-sky-300 transition-colors truncate">
+                          <span className="pl-2 font-medium text-slate-200 group-hover:text-sky-300 transition-colors break-words">
                             {t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}
                           </span>
                           <span className="font-mono tabular-nums text-slate-400 text-[11px] shrink-0">
@@ -1855,11 +1911,11 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                       return (
                         <div
                           key={g.id}
-                          className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-2.5 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-[1px] hover:border-sky-500/30 hover:bg-[#0D1526] hover:shadow-[0_4px_16px_rgba(56,189,248,0.08)] flex items-center justify-between gap-2 text-xs"
+                          className="group relative overflow-hidden rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-2.5 transition-colors hover:border-sky-500/30 hover:bg-[#0D1526] flex items-center justify-between gap-2 text-xs"
                         >
                           <div className={`absolute left-0 top-0 bottom-0 w-[3.5px] rounded-l-xl ${franjaGastoClass}`} />
                           <div className="pl-2 min-w-0 flex-1">
-                            <span className="font-semibold text-slate-200 group-hover:text-sky-300 transition-colors truncate block">
+                            <span className="font-semibold text-slate-200 group-hover:text-sky-300 transition-colors break-words block">
                               {g.Descripcion_Gasto || g.concepto || 'Gasto'}
                             </span>
                             <span className="font-mono text-[10px] text-slate-400 tabular-nums">
@@ -1914,7 +1970,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
 
             <div className="portal-surface bg-[#0D1526] p-3.5 rounded-xl border border-slate-800 space-y-1">
               <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">PV (Planificado)</span>
-              <div className="text-sm font-black font-mono tabular-nums text-indigo-400">
+              <div className="text-sm font-black font-mono tabular-nums text-sky-400">
                 PEN {pv.toLocaleString('es-PE', { maximumFractionDigits: 0 })}
               </div>
               <span className="text-[9.5px] text-slate-400 block">{pctTiempo}% de cronograma</span>
@@ -1973,7 +2029,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                 <span>Variación de Cronograma (SV)</span>
                 <span className="font-mono text-slate-400">EV - PV</span>
               </div>
-              <div className={`text-lg font-black font-mono tabular-nums ${sv >= 0 ? 'text-indigo-400' : 'text-amber-400'}`}>
+              <div className={`text-lg font-black font-mono tabular-nums ${sv >= 0 ? 'text-sky-400' : 'text-amber-400'}`}>
                 PEN {sv.toLocaleString('es-PE', { maximumFractionDigits: 0 })}
               </div>
               <p className="text-[11px] text-slate-400">
@@ -1997,7 +2053,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                 <span>Índice Plazo (SPI)</span>
                 <span className="font-mono text-slate-400">EV / PV</span>
               </div>
-              <div className={`text-lg font-black font-mono tabular-nums ${spi >= 1 ? 'text-indigo-400' : 'text-amber-400'}`}>
+              <div className={`text-lg font-black font-mono tabular-nums ${spi >= 1 ? 'text-sky-400' : 'text-amber-400'}`}>
                 {spi.toFixed(2)}
               </div>
               <p className="text-[11px] text-slate-400">{spi >= 1 ? 'Ritmo acelerado.' : 'Retraso de ejecución.'}</p>
@@ -2010,12 +2066,12 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
             <div className="portal-surface bg-[#0D1526] p-5 rounded-2xl space-y-3 lg:col-span-2 border border-slate-800">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-indigo-400" />
+                  <TrendingUp className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
                   <span>Curva S: Proyección de Desempeño Acumulado</span>
                 </h3>
                 <div className="flex items-center gap-3 text-[10.5px] font-mono">
-                  <span className="flex items-center gap-1 text-indigo-400 font-semibold">
-                    <span className="w-2.5 h-1 bg-indigo-500 rounded-full inline-block" /> PV (Plan)
+                  <span className="flex items-center gap-1 text-sky-400 font-semibold">
+                    <span className="w-2.5 h-1 bg-sky-500 rounded-full inline-block" /> PV (Plan)
                   </span>
                   <span className="flex items-center gap-1 text-emerald-400 font-semibold">
                     <span className="w-2.5 h-1 bg-emerald-500 rounded-full inline-block" /> EV (Ganado)
@@ -2037,7 +2093,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                   <path
                     d="M 40 150 C 180 145, 260 70, 480 25"
                     fill="none"
-                    stroke="#6366f1"
+                    stroke="#38bdf8"
                     strokeWidth="2.5"
                     strokeLinecap="round"
                   />
@@ -2128,14 +2184,14 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
       {/* ================================================================= */}
       {subTabActiva === 'tradeoff' && (
         <div className="space-y-6">
-          <div className="portal-surface bg-[#0D1526] p-5 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-4 shadow-xs">
+          <div className="portal-surface bg-[#0D1526] p-5 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-indigo-500 shrink-0" />
+                <span className="w-3 h-3 rounded-full bg-sky-500 shrink-0" />
                 <h2 className="text-base font-black text-slate-100">
                   Matriz de Decisión Ponderada (Trade-Off Analysis)
                 </h2>
-                <span className="text-[10px] bg-indigo-950/60 text-indigo-300 font-bold px-2 py-0.5 rounded-full border border-indigo-800">
+                <span className="text-[10px] bg-sky-950/60 text-sky-300 font-bold px-2 py-0.5 rounded-full border border-sky-800">
                   Decisiones Tipo 1 / Alto Valor
                 </span>
               </div>
@@ -2153,7 +2209,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                   { id: `c-${Date.now()}-4`, nombre: 'Garantía / SLA', peso: 20, scoreA: 4, scoreB: 4, scoreC: 4 }
                 ]);
               }}
-              className="px-3 py-1.5 rounded-xl border border-indigo-800/60 bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+              className="h-9 px-3 rounded-xl border border-slate-800 bg-[#0D1526] hover:border-sky-500/40 text-sky-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Restablecer Criterios</span>
@@ -2378,9 +2434,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                   <button
                     type="button"
                     onClick={guardarDecisionTradeOff}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-sm"
+                    className="h-10 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <Check className="w-4 h-4" />
+                    <Check className="w-4 h-4" strokeWidth={2} />
                     <span>Guardar y Aprobar Decisión</span>
                   </button>
                 </div>
@@ -2427,14 +2483,14 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
       {/* ================================================================= */}
       {subTabActiva === 'gobernanza' && (
         <div className="space-y-6">
-          <div className="portal-surface bg-[#0D1526] p-5 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-4 shadow-xs">
+          <div className="portal-surface bg-[#0D1526] p-5 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-violet-500 shrink-0" />
+                <span className="w-3 h-3 rounded-full bg-sky-500 shrink-0" />
                 <h2 className="text-base font-black text-slate-100">
                   Ficha de Gobernanza, Control & Auditoría
                 </h2>
-                <span className="text-[10px] bg-violet-950/60 text-violet-300 font-bold px-2 py-0.5 rounded-full border border-violet-800">
+                <span className="text-[10px] bg-sky-950/60 text-sky-300 font-bold px-2 py-0.5 rounded-full border border-sky-800">
                   Supervisión PMO
                 </span>
               </div>
@@ -2445,9 +2501,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
             <button
               type="button"
               onClick={registrarCheckinHoy}
-              className="px-3 py-1.5 rounded-xl border border-indigo-800/60 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-2xs"
+              className="h-9 px-3.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <Check className="w-3.5 h-3.5" />
+              <Check className="w-3.5 h-3.5" strokeWidth={2} />
               <span>Registrar Check-in de Control Hoy</span>
             </button>
           </div>

@@ -9,6 +9,7 @@
  */
 
 import type { NotaRecord, ChecklistItem, WishlistMeta, AdjuntoDrive, VinculoEntidad } from '../types';
+import { formatFechaIsoLocal } from './timeFormatters';
 
 /**
  * Extractor tolerante a fallos multillave
@@ -531,7 +532,7 @@ export function evaluarFiltroTemporal(
   if (!fechaIso) return false;
 
   const fechaLimpia = String(fechaIso).split('T')[0].split(' ')[0];
-  const refIso = fechaRef.toISOString().split('T')[0];
+  const refIso = formatFechaIsoLocal(fechaRef);
 
   if (filtro === 'HOY') {
     return fechaLimpia === refIso;
@@ -607,7 +608,7 @@ export function evaluarFiltroPlazo(
   if (!fechaIso) return false;
 
   const fechaLimpia = String(fechaIso).split('T')[0].split(' ')[0];
-  const refIso = fechaRef.toISOString().split('T')[0];
+  const refIso = formatFechaIsoLocal(fechaRef);
 
   if (plazo === 'hoy') {
     return fechaLimpia === refIso;

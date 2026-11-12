@@ -14,6 +14,7 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [errorLocal, setErrorLocal] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   if (!pasos || pasos.length === 0) return null;
 
@@ -25,13 +26,14 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
   const colorPill = esTotal
     ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
     : completados > 0
-    ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
+    ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
     : 'bg-slate-800/60 text-slate-400 border-slate-700/60';
 
-  const colorBarra = esTotal ? 'bg-emerald-500' : 'bg-indigo-500';
+  const colorBarra = esTotal ? 'bg-emerald-500' : 'bg-sky-500';
 
   const handleToggle = async (p: SubtareaPaso, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (togglingId === p.id) return;
 
     // Validar bloqueo en cliente antes de mutar
     if (!p.completado) {
@@ -43,10 +45,15 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
       }
     }
 
-    const res = await onTogglePaso(p.id, !p.completado);
-    if (!res.success && res.error) {
-      setErrorLocal(res.error);
-      setTimeout(() => setErrorLocal(null), 3500);
+    setTogglingId(p.id);
+    try {
+      const res = await onTogglePaso(p.id, !p.completado);
+      if (!res.success && res.error) {
+        setErrorLocal(res.error);
+        setTimeout(() => setErrorLocal(null), 3500);
+      }
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -105,9 +112,9 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
             return (
               <div
                 key={p.id}
-                onClick={(e) => !estaBloqueado && handleToggle(p, e)}
+                onClick={(e) => !estaBloqueado && togglingId !== p.id && handleToggle(p, e)}
                 className={`flex items-center gap-2 py-1 px-1.5 rounded-lg transition-colors group/step ${
-                  estaBloqueado
+                  estaBloqueado || togglingId === p.id
                     ? 'opacity-50 cursor-not-allowed'
                     : 'hover:bg-slate-800/60 cursor-pointer'
                 }`}
@@ -115,9 +122,9 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
                 {/* Checkbox o Candado de Bloqueo */}
                 <button
                   type="button"
-                  disabled={estaBloqueado}
+                  disabled={estaBloqueado || togglingId === p.id}
                   onClick={(e) => handleToggle(p, e)}
-                  className="shrink-0 p-0.5 rounded transition active:scale-95 focus:outline-none flex items-center justify-center"
+                  className="shrink-0 p-0.5 rounded transition active:scale-95 focus:outline-none flex items-center justify-center disabled:opacity-60"
                   title={
                     estaBloqueado
                       ? `Bloqueado: Completa el Paso ${pasos[idx - 1].numero_paso} primero`
@@ -135,7 +142,7 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
                       <Lock className="w-2.5 h-2.5 text-slate-400" />
                     </span>
                   ) : (
-                    <span className="w-4 h-4 rounded border border-slate-600 hover:border-cyan-400 bg-slate-800/80 shrink-0 transition-colors" />
+                    <span className="w-4 h-4 rounded border border-slate-600 hover:border-sky-400 bg-slate-800/80 shrink-0 transition-colors" />
                   )}
                 </button>
 

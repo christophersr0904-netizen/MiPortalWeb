@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus,
   Lightbulb,
   X,
-  Mic,
   Paperclip,
-  Check,
+  Camera,
+  CornerDownLeft,
   Sparkles,
   Minus,
   Maximize2,
@@ -15,7 +16,9 @@ import {
   FolderPlus,
   Activity,
   FileText,
-  ArrowRight
+  ArrowRight,
+  GripVertical,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -23,6 +26,7 @@ import type { IdeaRecord } from '../../types';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import VoicePill from '../VoicePill';
+import SpotlightCard from '../SpotlightCard';
 
 interface WidgetIdeasBubbleProps {
   onAbrirAsistenteIA?: () => void;
@@ -35,6 +39,118 @@ interface WidgetIdeasBubbleProps {
 
 type TabIdeasVentana = 'inbox' | 'incubacion' | 'procesadas';
 
+interface AdjuntoCapturaRapida {
+  nombre: string;
+  pesoKb: number;
+  tipoMime: string;
+  esImagen: boolean;
+  dataUri: string;
+}
+
+const STORAGE_KEY_BUBBLE_POS = 'pmo_ideas_bubble_pos';
+const MARGIN_MINIMO_PANTALLA = 16;
+const MAX_IMAGEN_ANCHO = 1280;
+const CALIDAD_COMPRESION_IMAGEN = 0.75;
+const LIMITE_IMAGEN_BYTES = 400 * 1024;
+const LIMITE_DOC_BYTES = 500 * 1024;
+
+function acortarNombreArchivo(nombre: string, maxLen: number = 22): string {
+  if (nombre.length <= maxLen) return nombre;
+  const dotIdx = nombre.lastIndexOf('.');
+  if (dotIdx > 0 && dotIdx < nombre.length - 1) {
+    const ext = nombre.slice(dotIdx);
+    const baseMax = Math.max(6, maxLen - ext.length - 3);
+    return `${nombre.slice(0, baseMax)}...${ext}`;
+  }
+  return `${nombre.slice(0, maxLen - 3)}...`;
+}
+
+function calcularBytesDataUri(dataUri: string): number {
+  const commaIdx = dataUri.indexOf(',');
+  const base64 = commaIdx >= 0 ? dataUri.slice(commaIdx + 1) : dataUri;
+  return Math.ceil((base64.length * 3) / 4);
+}
+
+function leerArchivoComoDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo seleccionado.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function comprimirImagenCanvas(file: File): Promise<{ dataUri: string; pesoBytes: number; tipoMime: string }> {
+  const objectUrl = typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+    ? URL.createObjectURL(file)
+    : null;
+  const srcUrl = objectUrl ?? (await leerArchivoComoDataUrl(file));
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const imagen = new Image();
+      imagen.onload = () => resolve(imagen);
+      imagen.onerror = () => reject(new Error('No se pudo decodificar la imagen.'));
+      imagen.src = srcUrl;
+    });
+
+    const natW = img.naturalWidth || img.width || 1;
+    const natH = img.naturalHeight || img.height || 1;
+    let escala = natW > MAX_IMAGEN_ANCHO ? MAX_IMAGEN_ANCHO / natW : 1;
+    let calidad = CALIDAD_COMPRESION_IMAGEN;
+    let outputMime = 'image/webp';
+    let dataUri = '';
+    let pesoBytes = 0;
+
+    for (let intento = 0; intento < 3; intento++) {
+      const targetW = Math.max(1, Math.round(natW * escala));
+      const targetH = Math.max(1, Math.round(natH * escala));
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Contexto Canvas 2D no disponible.');
+      }
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+
+      dataUri = canvas.toDataURL('image/webp', calidad);
+      outputMime = 'image/webp';
+      if (!dataUri.startsWith('data:image/webp')) {
+        dataUri = canvas.toDataURL('image/jpeg', calidad);
+        outputMime = 'image/jpeg';
+      }
+
+      pesoBytes = calcularBytesDataUri(dataUri);
+      if (pesoBytes < LIMITE_IMAGEN_BYTES) {
+        break;
+      }
+      escala *= 0.78;
+      calidad = Math.max(0.5, calidad - 0.12);
+    }
+
+    return { dataUri, pesoBytes, tipoMime: outputMime };
+  } finally {
+    if (objectUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+}
+
+function clampPosicionBurbuja(
+  x: number,
+  y: number,
+  anchoWidget: number,
+  altoWidget: number
+): { x: number; y: number } {
+  const maxX = Math.max(MARGIN_MINIMO_PANTALLA, window.innerWidth - anchoWidget - MARGIN_MINIMO_PANTALLA);
+  const maxY = Math.max(MARGIN_MINIMO_PANTALLA, window.innerHeight - altoWidget - MARGIN_MINIMO_PANTALLA);
+  return {
+    x: Math.round(Math.max(MARGIN_MINIMO_PANTALLA, Math.min(maxX, x))),
+    y: Math.round(Math.max(MARGIN_MINIMO_PANTALLA, Math.min(maxY, y)))
+  };
+}
+
 export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   onAbrirAsistenteIA,
   onConvertirATarea,
@@ -46,12 +162,17 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   // Popover de micro-captura
   const [popoverAbierto, setPopoverAbierto] = useState(false);
   const [enunciado, setEnunciado] = useState('');
+  const [adjunto, setAdjunto] = useState<AdjuntoCapturaRapida | null>(null);
+  const [procesandoAdjunto, setProcesandoAdjunto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [fueGrabadoConVoz, setFueGrabadoConVoz] = useState(false);
   const [voiceResetSignal, setVoiceResetSignal] = useState(0);
   const baseTextoVozRef = useRef<string>('');
   const popoverRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Hook de Reconocimiento de Voz Nativo (REQ-IDEAS-VOICE-RECOGNITION-19)
   const {
@@ -72,9 +193,11 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     }
   });
 
-  // Reset integral de formulario de captura rápida (REQ-IDEAS-UX-REFINEMENT-22)
+  // Reset integral de formulario de captura rápida (REQ-IDEAS-UX-REFINEMENT-22 / REQ-UI-31-FIX)
   const resetFormulario = useCallback(() => {
     setEnunciado('');
+    setAdjunto(null);
+    setProcesandoAdjunto(false);
     setFueGrabadoConVoz(false);
     baseTextoVozRef.current = '';
     setVoiceResetSignal((n) => n + 1);
@@ -140,6 +263,26 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     }
   }, [popoverAbierto, isListening, stopListening]);
 
+  // Foco automático limpio en el campo de captura al abrir el popover (REQ-UI-31-HOTFIX)
+  useEffect(() => {
+    if (!popoverAbierto) return;
+    const frameId = requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [popoverAbierto]);
+
+  // Receptor externo para apertura por App Shortcuts / Deep-Link (?action=nueva_idea) (REQ-OPS-28)
+  useEffect(() => {
+    const handleAbrirCapturaExterna = () => {
+      abrirPopover();
+    };
+    window.addEventListener('pmo:abrir-captura-idea', handleAbrirCapturaExterna);
+    return () => {
+      window.removeEventListener('pmo:abrir-captura-idea', handleAbrirCapturaExterna);
+    };
+  }, [abrirPopover]);
+
   const handleVoiceStart = useCallback(() => {
     if (!isSupported) {
       mostrarToastCobalt('Tu navegador no soporta reconocimiento de voz nativo. Usa Chrome o Edge.', 'info');
@@ -163,9 +306,18 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const [tabVentana, setTabVentana] = useState<TabIdeasVentana>('inbox');
   const [busquedaDrawer, setBusquedaDrawer] = useState('');
 
-  // Posición del micro-widget flotante con persistencia en localStorage
+  // Posición del micro-widget flotante con persistencia en localStorage (REQ-UI-31-FIX)
   const [posicion, setPosicion] = useState<{ x: number; y: number } | null>(null);
-  const dragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    initialX: number;
+    initialY: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const latestPosRef = useRef<{ x: number; y: number } | null>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   // Posición y tamaño de la ventana flotante de gestión con persistencia
   const [posicionVentana, setPosicionVentana] = useState<{ x: number; y: number } | null>(null);
@@ -173,15 +325,17 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const ventanaDragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
   const ventanaResizeRef = useRef<{ startX: number; startY: number; initialW: number; initialH: number } | null>(null);
 
-  // Cargar posiciones y dimensiones guardadas
+  // Cargar posiciones y dimensiones guardadas de la píldora y la ventana PiP
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const savedPos = localStorage.getItem('pmo_ideas_bubble_pos');
+        const savedPos = localStorage.getItem(STORAGE_KEY_BUBBLE_POS);
         if (savedPos) {
           const parsed = JSON.parse(savedPos);
           if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
-            setPosicion(parsed);
+            const clamped = clampPosicionBurbuja(parsed.x, parsed.y, 160, 48);
+            setPosicion(clamped);
+            latestPosRef.current = clamped;
           }
         }
         const savedVentanaPos = localStorage.getItem('pmo_ideas_ventana_pos');
@@ -204,10 +358,30 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     }
   }, []);
 
-  // Atajo global Alt+I
+  // Re-acotar posición guardada al redimensionar la ventana para evitar salidas de viewport
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = () => {
+      setPosicion((prev) => {
+        if (!prev) return prev;
+        const w = pillRef.current?.offsetWidth || 160;
+        const h = pillRef.current?.offsetHeight || 48;
+        const clamped = clampPosicionBurbuja(prev.x, prev.y, w, h);
+        latestPosRef.current = clamped;
+        return clamped;
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      dragCleanupRef.current?.();
+    };
+  }, []);
+
+  // Atajos globales ejecutivos Ctrl+I / Alt+I para captura rápida (REQ-UI-31-HOTFIX)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey && (e.key === 'i' || e.key === 'I')) {
+      if ((e.ctrlKey || e.altKey) && !e.shiftKey && !e.metaKey && (e.key === 'i' || e.key === 'I')) {
         e.preventDefault();
         togglePopover();
       }
@@ -260,9 +434,9 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     return lista.sort((a: IdeaRecord, b: IdeaRecord) => new Date(b.fecha_captura).getTime() - new Date(a.fecha_captura).getTime());
   }, [tabVentana, ideasInbox, ideasIncubacion, ideasProcesadas, busquedaDrawer]);
 
-  // Guardar captura rápida en 1 clic
+  // Guardar captura rápida en 1 clic (texto, voz, cámara o archivo adjunto)
   const handleGuardarIdea = async () => {
-    if (!enunciado.trim()) return;
+    if (!enunciado.trim() && !adjunto) return;
 
     if (isListening) {
       stopListening();
@@ -275,9 +449,17 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       const codigoLegado = `IDE-${String(count + 1).padStart(3, '0')}`;
 
       // Desglose: primera línea para Enunciado, resto para Detalle
-      const lineas = enunciado.trim().split(/\r?\n/);
-      const enunFinal = lineas[0] || 'Idea sin título';
+      const textoLimpio = enunciado.trim();
+      const lineas = textoLimpio ? textoLimpio.split(/\r?\n/) : [];
+      const enunFinal = lineas[0] || (adjunto ? adjunto.nombre : 'Idea sin título');
       const detFinal = lineas.slice(1).join('\n').trim();
+      const tipoCaptura = adjunto
+        ? adjunto.esImagen
+          ? 'FOTO'
+          : 'ARCHIVO'
+        : fueGrabadoConVoz
+        ? 'VOZ'
+        : 'TEXTO';
 
       await db.ideas.add({
         id: crypto.randomUUID ? crypto.randomUUID() : `ide_${Date.now()}`,
@@ -285,7 +467,8 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
         codigo_legado: codigoLegado,
         enunciado_idea: enunFinal,
         detalle_contexto: detFinal,
-        tipo_captura: fueGrabadoConVoz ? 'VOZ' : 'TEXTO',
+        tipo_captura: tipoCaptura,
+        url_adjunto_drive: adjunto?.dataUri || '',
         estado: 'CAPTURA',
         fecha_captura: nowIso,
         updated_at: nowIso,
@@ -472,43 +655,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     });
   };
 
-  // Drag and Drop de la cápsula flotante
-  const handleMouseDownGrip = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const currentX = posicion?.x ?? (window.innerWidth - 80);
-    const currentY = posicion?.y ?? (window.innerHeight - 80);
-
-    dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      initialX: currentX,
-      initialY: currentY
-    };
-
-    const handleMouseMove = (moveEv: MouseEvent) => {
-      if (!dragRef.current) return;
-      const dx = moveEv.clientX - dragRef.current.startX;
-      const dy = moveEv.clientY - dragRef.current.startY;
-      const newX = Math.max(16, Math.min(window.innerWidth - 90, dragRef.current.initialX + dx));
-      const newY = Math.max(16, Math.min(window.innerHeight - 90, dragRef.current.initialY + dy));
-      const newPos = { x: newX, y: newY };
-      setPosicion(newPos);
-      try {
-        localStorage.setItem('pmo_ideas_bubble_pos', JSON.stringify(newPos));
-      } catch (err) {}
-    };
-
-    const handleMouseUp = () => {
-      dragRef.current = null;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Detección reactiva de viewport móvil (< 768px) para anclaje despejado sobre BottomNavMobile (REQ-UI-24)
+  // Detección reactiva de viewport móvil (< 768px) para anclaje despejado sobre BottomNavMobile (REQ-UI-24 / REQ-UI-31-HOTFIX)
   const [esMovil, setEsMovil] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   );
@@ -522,16 +669,172 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     return () => mq.removeEventListener('change', actualizar);
   }, []);
 
-  const containerStyle: React.CSSProperties = (posicion && !esMovil)
-    ? {
-        position: 'fixed',
-        left: `${posicion.x}px`,
-        top: `${posicion.y}px`,
-        bottom: 'auto',
-        right: 'auto',
-        zIndex: 9990
+  const procesarArchivoSeleccionado = async (file: File) => {
+    setProcesandoAdjunto(true);
+    try {
+      const esImagen = file.type.startsWith('image/');
+      if (esImagen) {
+        const comprimido = await comprimirImagenCanvas(file);
+        const pesoKb = Math.max(1, Math.round(comprimido.pesoBytes / 1024));
+        if (comprimido.pesoBytes > LIMITE_IMAGEN_BYTES) {
+          mostrarToastCobalt(`Imagen pesada (${pesoKb}KB). Intenta con una foto más ligera (< 400KB).`, 'warning');
+          return;
+        }
+        setAdjunto({
+          nombre: file.name,
+          pesoKb,
+          tipoMime: comprimido.tipoMime,
+          esImagen: true,
+          dataUri: comprimido.dataUri
+        });
+        mostrarToastCobalt(`Imagen lista (${pesoKb}KB)`, 'success');
+        return;
       }
-    : {};
+
+      const pesoKb = Math.max(1, Math.round(file.size / 1024));
+      if (file.size <= LIMITE_DOC_BYTES) {
+        const dataUri = await leerArchivoComoDataUrl(file);
+        setAdjunto({
+          nombre: file.name,
+          pesoKb,
+          tipoMime: file.type || 'application/octet-stream',
+          esImagen: false,
+          dataUri
+        });
+        mostrarToastCobalt(`Archivo adjuntado (${pesoKb}KB)`, 'success');
+      } else {
+        const metadataRef = `meta://adjunto?name=${encodeURIComponent(file.name)}&size=${file.size}&type=${encodeURIComponent(file.type || 'application/octet-stream')}`;
+        setAdjunto({
+          nombre: file.name,
+          pesoKb,
+          tipoMime: file.type || 'application/octet-stream',
+          esImagen: false,
+          dataUri: metadataRef
+        });
+        mostrarToastCobalt(`Archivo > 500KB (${pesoKb}KB): se adjuntó referencia de metadata`, 'info');
+      }
+    } catch (err) {
+      console.error('Error al procesar archivo adjunto:', err);
+      mostrarToastCobalt('No se pudo procesar el archivo seleccionado', 'warning');
+    } finally {
+      setProcesandoAdjunto(false);
+    }
+  };
+
+  const handleSeleccionarArchivo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    await procesarArchivoSeleccionado(file);
+  };
+
+  const handleCapturarImagen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    await procesarArchivoSeleccionado(file);
+  };
+
+  // Arrastre controlado con puntero y persistencia en localStorage (REQ-UI-31-FIX / REQ-UI-31-REFINEMENT)
+  const PILL_COLLAPSED_WIDTH = 78;
+  const PILL_COLLAPSED_HEIGHT = 48;
+
+  const handlePointerDownGrip = (e: React.PointerEvent) => {
+    if (esMovil) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+    e.preventDefault();
+    dragCleanupRef.current?.();
+
+    const rect = pillRef.current?.getBoundingClientRect();
+    const hasRect = Boolean(rect && rect.width > 0);
+    const width = PILL_COLLAPSED_WIDTH;
+    const height = hasRect ? rect!.height : PILL_COLLAPSED_HEIGHT;
+    const usaAnclajeDerecho = posicion ? posicion.x >= 200 : true;
+    const currentX =
+      posicion?.x ??
+      (hasRect
+        ? usaAnclajeDerecho
+          ? rect!.right - width
+          : rect!.left
+        : window.innerWidth - 180);
+    const currentY = posicion?.y ?? (hasRect ? rect!.top : window.innerHeight - 80);
+
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: currentX,
+      initialY: currentY,
+      width,
+      height
+    };
+    latestPosRef.current = { x: currentX, y: currentY };
+
+    const handlePointerMove = (moveEv: PointerEvent) => {
+      if (!dragRef.current) return;
+      const dx = moveEv.clientX - dragRef.current.startX;
+      const dy = moveEv.clientY - dragRef.current.startY;
+      const nextPos = clampPosicionBurbuja(
+        dragRef.current.initialX + dx,
+        dragRef.current.initialY + dy,
+        dragRef.current.width,
+        dragRef.current.height
+      );
+      latestPosRef.current = nextPos;
+      setPosicion(nextPos);
+    };
+
+    const cleanup = () => {
+      dragRef.current = null;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+      dragCleanupRef.current = null;
+    };
+
+    const handlePointerUp = () => {
+      const posFinal = latestPosRef.current;
+      cleanup();
+      if (posFinal) {
+        try {
+          localStorage.setItem(STORAGE_KEY_BUBBLE_POS, JSON.stringify(posFinal));
+        } catch {}
+      }
+    };
+
+    dragCleanupRef.current = cleanup;
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+  };
+
+  const usaAnclajeDerecho = Boolean(posicion && posicion.x >= 200);
+  const containerStyle: React.CSSProperties =
+    posicion && !esMovil
+      ? {
+          position: 'fixed',
+          top: `${posicion.y}px`,
+          bottom: 'auto',
+          ...(usaAnclajeDerecho
+            ? {
+                right: `${Math.max(
+                  MARGIN_MINIMO_PANTALLA,
+                  window.innerWidth - (posicion.x + PILL_COLLAPSED_WIDTH)
+                )}px`,
+                left: 'auto'
+              }
+            : {
+                left: `${posicion.x}px`,
+                right: 'auto'
+              }),
+          zIndex: 9990
+        }
+      : {};
+
+  const abrirPopoverHaciaAbajo = Boolean(!esMovil && posicion && posicion.y < 340);
+  const abrirPopoverHaciaDerecha = Boolean(
+    !esMovil && posicion && typeof window !== 'undefined' && posicion.x < window.innerWidth / 2
+  );
 
   // Drag and Drop de la ventana de gestión (REQ-IDEAS-UX-REFINEMENT-22)
   const handleMouseDownVentanaHeader = (e: React.MouseEvent) => {
@@ -670,193 +973,259 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
 
   return (
     <>
-      {/* 1. MICRO-BOTÓN FLOTANTE EXPANDIBLE (Dynamic Micro-Pill) */}
+      {/* 1. MICRO-BOTÓN FLOTANTE EJECUTIVO CON ARRASTRE CONTROLADO (REQ-UI-31-FIX) */}
       <div
         id="widget-ideas-bubble-container"
         style={containerStyle}
-        className={`fixed ${(!posicion || esMovil) ? 'bottom-20 right-3 md:bottom-6 md:right-6' : ''} z-[9990] flex flex-col items-end gap-2 select-none pointer-events-none`}
+        className={`${
+          !posicion || esMovil ? 'fixed bottom-20 right-3 md:bottom-6 md:right-6' : 'fixed'
+        } z-[9990] select-none pointer-events-none`}
       >
-        {/* POPOVER DE MICRO-CAPTURA RÁPIDA */}
-        {popoverAbierto && (
-          <div
-            ref={popoverRef}
-            id="popover-captura-rapida-idea"
-            className="w-80 max-w-[calc(100vw-24px)] sm:w-96 p-4 rounded-3xl bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/60 shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_25px_rgba(56,189,248,0.12)] focus-within:border-sky-500/50 focus-within:shadow-[0_20px_50px_rgba(2,6,23,0.8),0_0_30px_rgba(56,189,248,0.2)] text-slate-100 flex flex-col gap-3.5 transform-gpu transition-[transform,opacity] duration-200 origin-bottom-right pointer-events-auto"
-          >
-            {/* Cabecera */}
-            <div className="flex items-center justify-between border-b border-slate-800/60 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center border border-sky-500/20">
-                  <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
-                </div>
-                <span className="text-xs font-bold tracking-wide text-slate-200">
-                  Captura Rápida de Idea
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    cerrarPopover();
-                    setVentanaAbierta(true);
-                    setVentanaMinimizada(false);
-                  }}
-                  className="min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-white/5 flex items-center justify-center transition cursor-pointer"
-                  title="Expandir a Gestión de Ideas"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" strokeWidth={1.75} />
-                </button>
-                <button
-                  type="button"
-                  onClick={cerrarPopover}
-                  className="min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 flex items-center justify-center transition cursor-pointer"
-                  title="Cerrar Captura"
-                >
-                  <X className="w-3.5 h-3.5" strokeWidth={1.75} />
-                </button>
-              </div>
-            </div>
-
-            {/* Textarea con tipografía limpia y contador de caracteres */}
-            <div className="relative flex flex-col gap-1.5">
-              <textarea
-                id="input-captura-rapida-enunciado"
-                rows={4}
-                value={enunciado}
-                onChange={(e) => setEnunciado(e.target.value)}
-                placeholder="Escribe tu chispazo, idea o nota rápida... (usa #tags)"
-                className="w-full bg-[#040711]/80 border border-slate-800/80 rounded-xl p-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 transition-all duration-200 resize-none min-h-[105px] leading-relaxed font-sans"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    handleGuardarIdea();
-                  }
-                }}
-              />
-              <div className="flex items-center justify-between px-1">
-                <span className="font-mono text-[10px] text-slate-500 tabular-nums">
-                  {enunciado.length} caracteres
-                </span>
-                {fueGrabadoConVoz && (
-                  <span className="font-mono text-[10px] text-sky-400/80 flex items-center gap-1">
-                    <Mic className="w-2.5 h-2.5" strokeWidth={1.75} />
-                    Vía voz
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Footer de Controles */}
-            <div className="flex items-center justify-between gap-2 pt-0.5">
-              <div
-                className={`flex items-center gap-1.5 transition-opacity duration-200 ${
-                  isListening ? 'opacity-30 pointer-events-none' : ''
-                }`}
+        {/* POPOVER DE MICRO-CAPTURA MULTIMODAL CON SPOTLIGHTCARD SUTIL Y TRANSICIÓN VOLUMÉTRICA (REQ-UI-31-HOTFIX-2) */}
+        <AnimatePresence>
+          {popoverAbierto && (
+            <motion.div
+              ref={popoverRef}
+              initial={{ opacity: 0, scale: 0.98, y: abrirPopoverHaciaAbajo ? -4 : 4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: abrirPopoverHaciaAbajo ? -4 : 4 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              style={{
+                transformOrigin: `${abrirPopoverHaciaAbajo ? 'top' : 'bottom'} ${abrirPopoverHaciaDerecha ? 'left' : 'right'}`
+              }}
+              className={`absolute z-10 pointer-events-auto ${
+                abrirPopoverHaciaAbajo ? 'top-full mt-2' : 'bottom-full mb-2'
+              } ${abrirPopoverHaciaDerecha ? 'left-0' : 'right-0'}`}
+            >
+              <SpotlightCard
+                id="popover-captura-rapida-idea"
+                spotlightColor="rgba(56, 189, 248, 0.12)"
+                proximity={0}
+                flare={false}
+                style={
+                  {
+                    '--spotlight-card-surface': 'rgba(13, 21, 38, 0.95)',
+                    '--spotlight-card-border': 'rgba(30, 41, 59, 0.8)'
+                  } as React.CSSProperties
+                }
+                className="w-80 max-w-[calc(100vw-24px)] sm:w-[360px] bg-[#0D1526]/95 border border-slate-800/80 rounded-2xl !p-3.5 shadow-2xl backdrop-blur-xl focus-within:border-sky-500/50 text-slate-100 flex flex-col gap-2.5 transition-colors duration-150"
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    mostrarToastCobalt('Adjuntos disponibles en notas', 'info');
-                  }}
-                  className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 transition flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-                  title="Adjuntar archivo"
-                >
-                  <Paperclip className="w-3.5 h-3.5 text-emerald-400" strokeWidth={1.75} />
-                  <span className="font-mono text-[11px]">Adjuntar</span>
-                </button>
-                {onAbrirAsistenteIA && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      cerrarPopover();
-                      onAbrirAsistenteIA();
-                    }}
-                    className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 transition flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-                    title="Abrir Asistente IA"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" strokeWidth={1.75} />
-                    <span className="font-mono text-[11px]">IA</span>
-                  </button>
-                )}
-              </div>
+                {/* Cabecera minimalista */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold tracking-wide text-slate-400">
+                    Captura rápida
+                  </span>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cerrarPopover();
+                        setVentanaAbierta(true);
+                        setVentanaMinimizada(false);
+                      }}
+                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 flex items-center justify-center transition-colors cursor-pointer"
+                      title="Expandir a Gestión de Ideas"
+                      aria-label="Expandir a Gestión de Ideas"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cerrarPopover}
+                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 flex items-center justify-center transition-colors cursor-pointer"
+                      title="Cerrar Captura"
+                      aria-label="Cerrar Captura"
+                    >
+                      <X className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    </button>
+                  </div>
+                </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                {/* Píldora Cinética React Bits (REQ-UI-20) */}
-                <VoicePill
-                  id="btn-quick-voice-record"
-                  reactive="simulated"
-                  showTime={true}
-                  waveform={true}
-                  size={32}
-                  accentColor="#38bdf8"
-                  iconColor="#94a3b8"
-                  background="#1e293b"
-                  active={isListening}
-                  resetSignal={voiceResetSignal}
-                  disabled={guardando}
-                  ariaLabel={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
-                  title={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
-                  onStart={handleVoiceStart}
-                  onStop={handleVoiceStop}
+                {/* Textarea minimalista sin bordes ni labels parásitos */}
+                <div className="flex flex-col">
+                  <textarea
+                    ref={textareaRef}
+                    id="input-captura-rapida-enunciado"
+                    aria-label="Enunciado de la idea rápida"
+                    autoFocus
+                    rows={4}
+                    value={enunciado}
+                    onChange={(e) => setEnunciado(e.target.value)}
+                    placeholder="Captura un pensamiento, comando o tarea rápida..."
+                    className="w-full bg-transparent border-0 p-1 text-sm leading-relaxed text-slate-100 placeholder-slate-500 focus:outline-none resize-none min-h-[88px] font-sans"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
+                        handleGuardarIdea();
+                      }
+                    }}
+                  />
+                </div>
+
+                {/* Inputs ocultos para adjuntos y captura visual */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept="image/*,.pdf,.doc,.docx,.txt"
+                  onChange={handleSeleccionarArchivo}
+                  aria-hidden="true"
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleCapturarImagen}
+                  className="hidden"
+                  aria-hidden="true"
                 />
 
-                <button
-                  type="button"
-                  id="btn-quick-idea-submit"
-                  disabled={guardando || !enunciado.trim()}
-                  onClick={handleGuardarIdea}
-                  className={`px-4 py-1.5 rounded-xl transition-all duration-150 flex items-center gap-1.5 text-xs font-bold shadow-md cursor-pointer ${
-                    enunciado.trim()
-                      ? 'bg-sky-600 hover:bg-sky-500 active:scale-95 text-white shadow-sky-600/30'
-                      : 'bg-slate-800/50 text-slate-600 border border-slate-800 cursor-not-allowed'
-                  }`}
-                >
-                  <span>{guardando ? 'Guardando...' : 'Guardar'}</span>
-                  <Check className="w-3.5 h-3.5" strokeWidth={1.75} />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+                {/* Chip de adjunto flotante justo arriba de la botonera */}
+                {(procesandoAdjunto || adjunto) && (
+                  <div>
+                    {procesandoAdjunto ? (
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 inline-flex items-center gap-1.5 font-mono">
+                        Comprimiendo...
+                      </span>
+                    ) : adjunto ? (
+                      <div
+                        id="chip-adjunto-captura-rapida"
+                        className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 flex items-center gap-1.5 w-fit max-w-full"
+                        title={`${adjunto.nombre} (${adjunto.pesoKb}KB)`}
+                      >
+                        {adjunto.esImagen ? (
+                          <ImageIcon className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.5} />
+                        ) : (
+                          <FileText className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.5} />
+                        )}
+                        <span className="truncate font-medium">
+                          {acortarNombreArchivo(adjunto.nombre)}
+                        </span>
+                        <span className="font-mono tabular-nums text-[10px] text-slate-400 shrink-0">
+                          ({adjunto.pesoKb}KB)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setAdjunto(null)}
+                          className="w-4 h-4 rounded text-slate-400 hover:text-rose-300 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                          title="Remover adjunto"
+                          aria-label="Remover adjunto"
+                        >
+                          <X className="w-3 h-3" strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
 
-        {/* CONTENEDOR FLOTANTE: [ DRAG HANDLE ] + [ BOTÓN '+' ] + [ HOVER: FOCO + CONTADOR ] */}
+                {/* Barra inferior técnica depurada (REQ-UI-31-HOTFIX-2) */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
+                  {/* Izquierda: 4 micro-herramientas técnicas en Dark Cobalt */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <VoicePill
+                      id="btn-quick-voice-record"
+                      reactive="simulated"
+                      showTime={false}
+                      waveform={false}
+                      slideToCancel={false}
+                      reach={0}
+                      shape="rounded"
+                      size={32}
+                      accentColor="#38bdf8"
+                      iconColor="#94a3b8"
+                      background="#0B1220"
+                      className="rounded-lg text-slate-400 hover:text-slate-100 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] [&>span:first-child]:!border-slate-800/80 hover:[&>span:first-child]:!border-sky-500/40 data-[state=listening]:shadow-[0_0_14px_rgba(56,189,248,0.28)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 focus-visible:outline-offset-1"
+                      active={isListening}
+                      resetSignal={voiceResetSignal}
+                      disabled={guardando || procesandoAdjunto}
+                      ariaLabel={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
+                      title={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
+                      onStart={handleVoiceStart}
+                      onStop={handleVoiceStop}
+                    />
+
+                    <button
+                      type="button"
+                      id="btn-quick-idea-attach"
+                      disabled={isListening || procesandoAdjunto || guardando}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
+                        isListening || procesandoAdjunto ? 'opacity-40 pointer-events-none' : ''
+                      }`}
+                      title="Adjuntar archivo o imagen"
+                      aria-label="Adjuntar archivo o imagen"
+                    >
+                      <Paperclip className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+                    </button>
+
+                    <button
+                      type="button"
+                      id="btn-quick-idea-camera"
+                      disabled={isListening || procesandoAdjunto || guardando}
+                      onClick={() => cameraInputRef.current?.click()}
+                      className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
+                        isListening || procesandoAdjunto ? 'opacity-40 pointer-events-none' : ''
+                      }`}
+                      title="Capturar imagen con cámara"
+                      aria-label="Capturar imagen con cámara"
+                    >
+                      <Camera className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+                    </button>
+
+                    {onAbrirAsistenteIA && (
+                      <button
+                        type="button"
+                        id="btn-quick-idea-ai"
+                        disabled={isListening || guardando}
+                        onClick={() => {
+                          cerrarPopover();
+                          onAbrirAsistenteIA();
+                        }}
+                        className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-sky-400 hover:text-sky-300 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
+                          isListening ? 'opacity-40 pointer-events-none' : ''
+                        }`}
+                        title="Clarificar con Asistente IA"
+                        aria-label="Clarificar con Asistente IA"
+                      >
+                        <Sparkles className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.5} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Derecha: Atajo visual + Botón Enviar con flecha técnica */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-mono text-slate-500 select-none">
+                      Ctrl ↵
+                    </span>
+                    <button
+                      type="button"
+                      id="btn-quick-idea-submit"
+                      disabled={guardando || procesandoAdjunto || (!enunciado.trim() && !adjunto)}
+                      onClick={handleGuardarIdea}
+                      className={`h-8 px-3 rounded-lg font-semibold text-xs transition-all duration-150 active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                        !guardando && !procesandoAdjunto && (enunciado.trim() || adjunto)
+                          ? 'bg-sky-500 hover:bg-sky-400 text-slate-950 cursor-pointer'
+                          : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed'
+                      }`}
+                    >
+                      <span>{guardando ? 'Guardando...' : 'Guardar'}</span>
+                      <CornerDownLeft className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+                    </button>
+                  </div>
+                </div>
+              </SpotlightCard>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* PÍLDORA FLOTANTE COBALT CON HOVER-REVEAL Y ARRASTRE (REQ-UI-31-REFINEMENT) */}
         <div
           ref={pillRef}
           id="widget-ideas-pill"
-          className="group flex items-center p-1 rounded-full bg-[#0D1526]/90 backdrop-blur-xl border border-slate-800/60 shadow-2xl transition-[transform,opacity,box-shadow] duration-200 ease-out transform-gpu select-none pointer-events-auto"
+          className="group flex items-center p-1 rounded-full bg-[#0D1526]/90 backdrop-blur-xl border border-slate-800/80 hover:border-sky-500/40 text-slate-200 shadow-sm hover:shadow-[0_0_15px_rgba(56,189,248,0.12)] transition-colors duration-200 select-none pointer-events-auto"
         >
-          {/* 1. Drag Handle interactivo (solo desktop md+) */}
-          <div
-            id="widget-ideas-drag-handle"
-            onMouseDown={handleMouseDownGrip}
-            className="hidden md:flex items-center justify-center w-5 h-8 px-1 text-slate-400 hover:text-slate-200 cursor-grab active:cursor-grabbing shrink-0 transition-colors"
-            title="Arrastrar widget de ideas"
-          >
-            <div className="grid grid-cols-2 gap-0.5">
-              <span className="w-1 h-1 rounded-full bg-slate-400" />
-              <span className="w-1 h-1 rounded-full bg-slate-400" />
-              <span className="w-1 h-1 rounded-full bg-slate-400" />
-              <span className="w-1 h-1 rounded-full bg-slate-400" />
-              <span className="w-1 h-1 rounded-full bg-slate-400" />
-              <span className="w-1 h-1 rounded-full bg-slate-400" />
-            </div>
-          </div>
-
-          {/* 2. Micro-Botón (+) de Captura Rápida con Reset Seguro */}
-          <button
-            type="button"
-            id="btn-widget-ideas-add"
-            onClick={togglePopover}
-            className="w-9 h-9 md:w-8 md:h-8 rounded-full bg-sky-600 hover:bg-sky-500 text-white flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-transform duration-150 transform-gpu cursor-pointer border border-sky-400/40 shrink-0"
-            title="Nueva Idea Rápida (+)"
-            aria-label="Nueva Idea Rápida"
-          >
-            <Plus className="w-4 h-4 pointer-events-none" strokeWidth={1.75} />
-          </button>
-
-          {/* 3. Foco + Contador en Hover (solo desktop md+, evita expansión lateral sobre Nav en móvil) */}
-          <div className="hidden md:flex max-w-0 opacity-0 group-hover:max-w-xs group-hover:opacity-100 group-focus-within:max-w-xs group-focus-within:opacity-100 transition-all duration-300 ease-out items-center overflow-hidden pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
-            <div className="w-[1px] h-4 bg-white/10 mx-1 shrink-0" />
-
+          {/* Botón Gestor Completo desplegable hacia la izquierda en Hover */}
+          <div className="max-w-0 opacity-0 overflow-hidden group-hover:max-w-xs group-hover:opacity-100 group-focus-within:max-w-xs group-focus-within:opacity-100 transition-all duration-300 ease-out flex items-center pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
             <button
               type="button"
               id="btn-widget-ideas-bubble"
@@ -865,26 +1234,45 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                 setVentanaAbierta(true);
                 setVentanaMinimizada(false);
               }}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 rounded-full hover:bg-slate-800/60 text-slate-200 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 focus-visible:outline-offset-1 shrink-0 whitespace-nowrap"
               title="Abrir Gestión de Ideas"
+              aria-label={`Abrir Gestión de Ideas (${totalIdeasActivas} en Inbox)`}
             >
-              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-400 via-orange-500 to-sky-500 flex items-center justify-center text-white shadow-sm">
-                <Lightbulb className="w-3.5 h-3.5" strokeWidth={1.75} />
-              </div>
-
-              {/* Micro-badge contador con pulsación si hay más de 5 ideas pendientes */}
+              <Lightbulb className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
+              <span className="text-xs font-medium text-slate-200">Gestor</span>
               <span
                 id="badge-contador-ideas-activas"
-                className={`font-mono tabular-nums text-[11px] font-bold px-1.5 py-0.5 leading-none rounded-full border ${
-                  totalIdeasActivas > 5
-                    ? 'animate-pulse bg-amber-500/30 text-amber-200 border-amber-400'
-                    : 'text-amber-300 bg-amber-500/15 border-amber-500/30'
-                }`}
+                className="font-mono tabular-nums text-[11px] bg-slate-800 text-slate-300 border border-slate-700/60 px-1.5 py-0.5 leading-none rounded-full"
               >
                 {totalIdeasActivas}
               </span>
             </button>
+            <div className="w-[1px] h-5 bg-slate-800/80 mx-1 shrink-0" />
           </div>
+
+          {/* Botón Visible por Defecto: Nueva Idea Rápida (+) */}
+          <button
+            type="button"
+            id="btn-widget-ideas-add"
+            onClick={togglePopover}
+            className="w-10 h-10 rounded-full bg-sky-600 hover:bg-sky-500 active:scale-95 text-white flex items-center justify-center shadow-sm transition-colors duration-150 cursor-pointer border border-sky-400/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 focus-visible:outline-offset-2 shrink-0"
+            title="Nueva Idea Rápida (Ctrl+I / Alt+I)"
+            aria-label="Nueva Idea Rápida"
+          >
+            <Plus className="w-5 h-5 pointer-events-none" strokeWidth={1.75} />
+          </button>
+
+          {/* Micro-grip de arrastre en desktop (sin interferir en reposo ni hover) */}
+          <button
+            type="button"
+            id="widget-ideas-drag-handle"
+            onPointerDown={handlePointerDownGrip}
+            className="hidden md:flex items-center justify-center w-6 h-8 rounded-r-full text-slate-500 hover:text-slate-300 cursor-grab active:cursor-grabbing touch-none transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0"
+            title="Arrastrar widget de ideas"
+            aria-label="Arrastrar widget de ideas"
+          >
+            <GripVertical className="w-3.5 h-3.5 pointer-events-none" strokeWidth={1.75} />
+          </button>
         </div>
       </div>
 
@@ -905,7 +1293,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
             title="Arrastrar ventana"
           >
             <div className="flex items-center gap-2.5 pointer-events-none">
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-amber-400/20 via-orange-500/20 to-sky-500/20 text-amber-300 flex items-center justify-center border border-amber-500/30">
+              <div className="w-7 h-7 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center">
                 <Lightbulb className="w-4 h-4" strokeWidth={1.75} />
               </div>
               <div className="flex items-center gap-1.5">
@@ -914,7 +1302,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                 </span>
                 <span
                   id="drawer-ideas-total-badge"
-                  className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                  className="font-mono tabular-nums text-[11px] bg-slate-800 text-slate-300 border border-slate-700/60 px-1.5 py-0.5 rounded-full"
                 >
                   {ideasRaw.length}
                 </span>
@@ -1095,6 +1483,20 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                                   {tag}
                                 </span>
                               ))}
+                            </div>
+                          )}
+
+                          {/* Indicador de adjunto o foto persistida */}
+                          {idea.url_adjunto_drive && (
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-sky-300 bg-sky-500/10 border border-sky-500/20 px-2 py-1 rounded-lg w-fit">
+                              {idea.tipo_captura === 'FOTO' ? (
+                                <ImageIcon className="w-3 h-3 shrink-0" strokeWidth={1.75} />
+                              ) : (
+                                <Paperclip className="w-3 h-3 shrink-0" strokeWidth={1.75} />
+                              )}
+                              <span>
+                                {idea.tipo_captura === 'FOTO' ? 'Imagen adjunta' : 'Archivo adjunto'}
+                              </span>
                             </div>
                           )}
 

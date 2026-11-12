@@ -639,10 +639,10 @@ export const VisorNotas: React.FC = () => {
       {/* ===================================================================== */}
       <div className="flex-1 flex flex-col min-h-0 h-full min-w-0 overflow-hidden [contain:layout_paint]">
         {/* BARRA SUPERIOR DE HERRAMIENTAS (Cobalt Aerodynamic) */}
-        <div className="shrink-0 bg-[#080D1A] border-b border-slate-800/60 px-3 sm:px-6 py-1.5 md:py-2.5 flex items-center justify-between gap-2 shadow-cobalt-1 z-10 h-auto">
+        <div className="shrink-0 bg-[#0D1526]/90 backdrop-blur-md border-b border-slate-800/80 px-3 sm:px-6 py-2 flex items-center justify-between gap-2 z-10 h-auto">
           {/* Lado Izquierdo: Título y Block Activo */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-sky-950/40 border border-sky-500/30 flex items-center justify-center text-sky-400 shadow-xs shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-[#0B132B] border border-slate-800/80 flex items-center justify-center text-sky-400 shrink-0">
               <FileText className="w-4 h-4 text-sky-400" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
@@ -675,9 +675,9 @@ export const VisorNotas: React.FC = () => {
                 type="button"
                 id="btn-vista-notas-masonry"
                 onClick={() => setModoVista('masonry')}
-                className={`p-1.5 rounded-lg transition-all duration-200 active:scale-90 cursor-pointer ${
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                   modoVista === 'masonry'
-                    ? 'text-sky-300 bg-sky-950/50 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]'
+                    ? 'text-sky-300 bg-sky-500/15 border border-sky-500/40'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
                 }`}
                 title="Vista Mosaico Dinámico (Masonry Grid)"
@@ -688,9 +688,9 @@ export const VisorNotas: React.FC = () => {
                 type="button"
                 id="btn-vista-notas-lista"
                 onClick={() => setModoVista('lista')}
-                className={`p-1.5 rounded-lg transition-all duration-200 active:scale-90 cursor-pointer ${
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                   modoVista === 'lista'
-                    ? 'text-sky-300 bg-sky-950/50 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]'
+                    ? 'text-sky-300 bg-sky-500/15 border border-sky-500/40'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
                 }`}
                 title="Vista Lista Compacta"
@@ -707,38 +707,38 @@ export const VisorNotas: React.FC = () => {
                 setNotaEnEdicion(null);
                 setModalAbierto(true);
               }}
-              className="inline-flex items-center justify-center gap-1.5 px-3 rounded-xl font-bold text-xs bg-sky-500 hover:bg-sky-400 kinetic-btn-tactile text-slate-950 shadow-sm shadow-sky-500/20 cursor-pointer min-w-[40px] min-h-[40px] sm:min-h-0 sm:py-1.5 group"
+              className="h-10 inline-flex items-center justify-center gap-1.5 px-4 rounded-xl font-semibold text-xs bg-sky-500 hover:bg-sky-400 text-slate-950 transition-colors cursor-pointer shrink-0 group"
               title="Crear nota detallada con modal 360°"
             >
-              <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 stroke-[2.5] group-hover:rotate-90 transition-transform duration-200 ease-out" />
-              <span className="text-[11px] sm:text-xs">Nueva Nota</span>
+              <Plus className="w-4 h-4 stroke-[2.25]" strokeWidth={1.75} />
+              <span className="text-xs">Nueva Nota</span>
             </button>
           </div>
         </div>
 
         {/* NIVEL SECUNDARIO: Búsqueda Rápida y Filtros de Refinamiento */}
-        <div className="shrink-0 bg-[#080D1A] border-b border-slate-800/60 px-3 sm:px-6 py-1.5 md:py-3 flex flex-col md:flex-row md:items-center justify-between gap-2 z-10">
+        <div className="shrink-0 bg-[#080D1A] border-b border-slate-800/80 px-3 sm:px-6 py-2 flex flex-col md:flex-row md:items-center justify-between gap-2 z-10">
           {/* Fila compacta de búsqueda + botón de filtros móvil */}
           <div className="flex items-center gap-2 w-full md:max-w-md">
             <div className="relative flex-1">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.75} />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.75} />
               <input
                 type="text"
                 id="input-busqueda-notas"
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
                 placeholder="Buscar notas, checklists o #tags..."
-                className="w-full h-10 md:h-8 pl-8 pr-11 text-xs rounded-xl md:rounded-lg bg-slate-900/60 border border-slate-800/60 text-slate-100 placeholder:text-slate-500 kinetic-input-spotlight transition-[border-color,box-shadow] outline-none"
+                className="w-full h-9 pl-8 pr-9 text-xs rounded-xl bg-[#0D1526] border border-slate-800/80 text-slate-100 placeholder:text-slate-500 focus:border-sky-500/50 transition-colors outline-none"
               />
               {busqueda && (
                 <button
                   type="button"
                   id="btn-limpiar-busqueda-notas"
                   onClick={() => setBusqueda('')}
-                  className="absolute right-0.5 md:right-2 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] md:min-w-0 md:min-h-0 flex items-center justify-center text-slate-500 hover:text-slate-300 text-xs cursor-pointer"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
                   aria-label="Limpiar búsqueda de notas"
                 >
-                  <X className="w-4 h-4 md:w-3.5 md:h-3.5" strokeWidth={1.75} />
+                  <X className="w-3.5 h-3.5" strokeWidth={1.75} />
                 </button>
               )}
             </div>
@@ -747,16 +747,16 @@ export const VisorNotas: React.FC = () => {
               type="button"
               onClick={() => setFiltrosNotasAbiertos(!filtrosNotasAbiertos)}
               aria-label="Mostrar filtros"
-              className={`min-w-[40px] min-h-[40px] h-10 px-3 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition-[transform,colors] active:scale-95 cursor-pointer shrink-0 md:hidden ${
+              className={`h-9 px-3 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer shrink-0 md:hidden ${
                 (tagsSeleccionados.length > 0 || colorFiltro) || filtrosNotasAbiertos
                   ? 'bg-sky-950/40 text-sky-300 border-sky-500/40'
-                  : 'bg-slate-900/60 border-slate-800/60 text-slate-400 hover:text-white'
+                  : 'bg-[#0D1526] border-slate-800/80 text-slate-400 hover:text-white'
               }`}
             >
               <SlidersHorizontal className="w-4 h-4" strokeWidth={1.75} />
               <span>Filtros</span>
               {(tagsSeleccionados.length > 0 || colorFiltro) && (
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
               )}
             </button>
           </div>
@@ -764,12 +764,12 @@ export const VisorNotas: React.FC = () => {
           {/* Refinamiento: Tags, Color y Limpieza (Desplegable en móvil, visible en md:) */}
           <div className={`${filtrosNotasAbiertos ? 'flex' : 'hidden md:flex'} flex-wrap items-center gap-1.5 justify-start md:justify-end pt-1 md:pt-0 border-t md:border-t-0 border-slate-800/40`}>
             {/* Conmutador de vista en móvil cuando se abren filtros */}
-            <div className="flex sm:hidden items-center p-0.5 bg-slate-900/80 rounded-xl border border-slate-800/60">
+            <div className="flex sm:hidden items-center p-0.5 bg-slate-900/80 rounded-xl border border-slate-800/80">
               <button
                 type="button"
                 onClick={() => setModoVista('masonry')}
-                className={`min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg transition-[transform,colors] duration-150 active:scale-90 cursor-pointer ${
-                  modoVista === 'masonry' ? 'text-sky-300 bg-sky-950/50 shadow-sm' : 'text-slate-400'
+                className={`min-w-[36px] h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                  modoVista === 'masonry' ? 'text-sky-300 bg-sky-500/15' : 'text-slate-400'
                 }`}
                 title="Vista Mosaico"
                 aria-label="Vista Mosaico"
@@ -779,8 +779,8 @@ export const VisorNotas: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setModoVista('lista')}
-                className={`min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg transition-[transform,colors] duration-150 active:scale-90 cursor-pointer ${
-                  modoVista === 'lista' ? 'text-sky-300 bg-sky-950/50 shadow-sm' : 'text-slate-400'
+                className={`min-w-[36px] h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                  modoVista === 'lista' ? 'text-sky-300 bg-sky-500/15' : 'text-slate-400'
                 }`}
                 title="Vista Lista"
                 aria-label="Vista Lista"
@@ -794,11 +794,11 @@ export const VisorNotas: React.FC = () => {
                 type="button"
                 id="btn-filtro-etiquetas-notas"
                 onClick={() => setDropdownTagsAbierto(!dropdownTagsAbierto)}
-                className="min-w-[40px] min-h-[40px] sm:min-h-0 sm:h-8 px-2.5 rounded-xl sm:rounded-lg text-xs font-medium text-slate-300 hover:text-sky-300 hover:bg-slate-800/60 bg-slate-900/60 border border-slate-800/60 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                className="h-9 px-3 rounded-xl text-xs font-medium text-slate-300 hover:text-sky-300 hover:bg-slate-800/60 bg-[#0D1526] border border-slate-800/80 hover:border-sky-500/40 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 title="Filtrar por etiqueta"
                 aria-label="Filtrar por etiqueta"
               >
-                <Tag className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-sky-400" strokeWidth={1.75} />
+                <Tag className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
                 <span id="label-filtro-etiqueta-activa" className="hidden sm:inline">Tags</span>
                 {tagsSeleccionados.length > 0 && (
                   <span id="badge-filtro-etiqueta-activa" className="px-1.5 py-0.5 rounded-full text-[10px] font-mono tabular-nums font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">
@@ -812,7 +812,7 @@ export const VisorNotas: React.FC = () => {
               {dropdownTagsAbierto && (
                 <div
                   id="dropdown-etiquetas-notas-menu"
-                  className="absolute right-0 mt-1 w-64 max-w-[calc(100vw-24px)] bg-[#0D1526] rounded-2xl shadow-xl border border-slate-800 p-2 z-50 transform-gpu transition-[transform,opacity] duration-150 ease-out"
+                  className="absolute right-0 mt-1 w-64 max-w-[calc(100vw-24px)] bg-[#0D1526] rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] border border-slate-800/80 p-2 z-50 transition-opacity duration-150 ease-out"
                 >
                   <div className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider flex items-center justify-between">
                     <span>Filtrar por Tags</span>
@@ -867,17 +867,17 @@ export const VisorNotas: React.FC = () => {
                 type="button"
                 id="btn-filtro-color-notas"
                 onClick={() => setDropdownColorAbierto(!dropdownColorAbierto)}
-                className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 sm:p-2 rounded-xl text-slate-400 hover:bg-slate-800 bg-slate-900/80 border border-slate-800 transition flex items-center justify-center cursor-pointer"
+                className="h-9 w-9 rounded-xl text-slate-400 hover:bg-slate-800/60 bg-[#0D1526] border border-slate-800/80 hover:border-sky-500/40 transition-colors flex items-center justify-center cursor-pointer"
                 title="Filtrar por color / tono"
                 aria-label="Filtrar por color"
               >
-                <span className="w-4 h-4 sm:w-3.5 sm:h-3.5 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-400 inline-block"></span>
+                <span className="w-3.5 h-3.5 rounded-full bg-sky-400/80 border border-sky-300/60 inline-block"></span>
               </button>
 
               {dropdownColorAbierto && (
                 <div
                   id="dropdown-color-notas-menu"
-                  className="absolute right-0 mt-1 w-56 max-w-[calc(100vw-24px)] max-h-80 overflow-y-auto custom-scrollbar bg-[#0D1526] rounded-2xl shadow-xl border border-slate-800 p-2 z-50 transform-gpu transition-[transform,opacity] duration-150 ease-out"
+                  className="absolute right-0 mt-1 w-56 max-w-[calc(100vw-24px)] max-h-80 overflow-y-auto custom-scrollbar bg-[#0D1526] rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] border border-slate-800/80 p-2 z-50 transition-opacity duration-150 ease-out"
                 >
                   <div className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider">
                     Filtrar por Tono
@@ -890,13 +890,13 @@ export const VisorNotas: React.FC = () => {
                         setColorFiltro(tono.id);
                         setDropdownColorAbierto(false);
                       }}
-                      className={`w-full text-left px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all duration-150 active:scale-95 cursor-pointer ${
+                      className={`w-full text-left px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors duration-150 cursor-pointer ${
                         colorFiltro === tono.id
-                          ? 'bg-amber-500/15 text-amber-300 font-bold shadow-[0_0_10px_rgba(245,158,11,0.2)]'
-                          : 'hover:bg-slate-800 text-slate-300'
+                          ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40 font-semibold'
+                          : 'hover:bg-slate-800 text-slate-300 border border-transparent'
                       }`}
                     >
-                      <span className={`w-3 h-3 rounded-full ${tono.dot} group-hover:scale-110 transition-transform`}></span>
+                      <span className={`w-3 h-3 rounded-full ${tono.dot}`}></span>
                       <span>{tono.label}</span>
                     </button>
                   ))}
@@ -910,11 +910,11 @@ export const VisorNotas: React.FC = () => {
                 type="button"
                 id="btn-limpiar-filtros-notas"
                 onClick={limpiarTodosLosFiltros}
-                className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-400 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 transition flex items-center justify-center gap-1 active:scale-95 cursor-pointer"
+                className="h-9 px-3 rounded-xl text-xs font-semibold text-rose-400 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 transition-colors flex items-center justify-center gap-1 cursor-pointer"
                 title="Restablecer todos los filtros"
                 aria-label="Restablecer filtros"
               >
-                <X className="w-4 h-4 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
+                <X className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span className="hidden sm:inline">Limpiar</span>
               </button>
             )}
@@ -968,7 +968,7 @@ export const VisorNotas: React.FC = () => {
         <div className="hidden md:block shrink-0 w-full max-w-2xl mx-auto px-4 pt-2 pb-1 z-10">
           <div
             id="quick-note-box"
-            className={`bg-[#0D1526]/80 hover:bg-[#0D1526] rounded-xl border border-slate-800/60 hover:border-sky-500/40 shadow-cobalt-1 hover:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.12)] relative overflow-hidden group transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            className={`bg-[#0D1526]/90 hover:bg-[#0D1526] rounded-xl border border-slate-800/80 hover:border-sky-500/40 relative overflow-hidden group transition-colors duration-200 ${
               quickExpanded ? 'max-h-[700px]' : 'min-h-[44px]'
             }`}
           >
@@ -1276,11 +1276,11 @@ export const VisorNotas: React.FC = () => {
                       type="button"
                       id="quick-note-btn-palette"
                       onClick={() => setQuickColorPickerAbierto(!quickColorPickerAbierto)}
-                      className="min-w-[40px] min-h-[40px] px-2.5 rounded-xl border border-slate-800 hover:bg-slate-800 transition flex items-center justify-center gap-1.5 text-slate-300 cursor-pointer"
+                      className="h-9 px-2.5 rounded-xl border border-slate-800/80 hover:bg-slate-800/60 transition-colors flex items-center justify-center gap-1.5 text-slate-300 cursor-pointer"
                       title="Seleccionar tono de nota"
                       aria-label="Seleccionar tono de nota"
                     >
-                      <span className="w-4 h-4 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-400 inline-block shadow-2xs"></span>
+                      <span className="w-3.5 h-3.5 rounded-full bg-sky-400/80 border border-sky-300/60 inline-block"></span>
                       <span id="quick-note-color-label" className="text-[11px] font-semibold hidden sm:inline">Color</span>
                       <ChevronDown className="w-3 h-3 text-slate-400" />
                     </button>
@@ -1288,7 +1288,7 @@ export const VisorNotas: React.FC = () => {
                     {quickColorPickerAbierto && (
                       <div
                         id="quick-note-color-picker-popover"
-                        className="absolute left-0 bottom-full mb-2 w-48 max-w-[calc(100vw-24px)] bg-[#0D1526] rounded-2xl shadow-xl border border-slate-800 p-2 z-50 transform-gpu transition-[transform,opacity] duration-150 ease-out"
+                        className="absolute left-0 bottom-full mb-2 w-48 max-w-[calc(100vw-24px)] bg-[#0D1526] rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] border border-slate-800/80 p-2 z-50 transition-opacity duration-150 ease-out"
                       >
                         <div className="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider">Tono de Nota</div>
                         <div className="grid grid-cols-4 gap-1.5 p-1">
@@ -1457,8 +1457,8 @@ export const VisorNotas: React.FC = () => {
           {/* ESTADO VACÍO */}
           {notasFijadas.length === 0 && notasOtras.length === 0 && notasConseguidasWishlist.length === 0 && (
             <div id="notas-empty-state" className="flex flex-col items-center justify-center py-20 text-center px-4">
-              <div className="w-14 h-14 rounded-2xl bg-[#0D1526] border border-slate-800 text-slate-400 flex items-center justify-center mb-3 shadow-2xs">
-                <FileText className="w-7 h-7 text-amber-500" />
+              <div className="w-12 h-12 rounded-2xl bg-[#0D1526] border border-slate-800/80 text-sky-400 flex items-center justify-center mb-3">
+                <FileText className="w-6 h-6 text-sky-400" strokeWidth={1.75} />
               </div>
               <h3 className="text-sm font-bold text-slate-100">
                 {blockActivo ? `No hay notas en "${blockActivo}"` : 'Tu espacio de notas está vacío'}
@@ -1471,9 +1471,9 @@ export const VisorNotas: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setQuickExpanded(true)}
-                className="mt-3.5 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-sm transition-all active:scale-95 cursor-pointer"
+                className="mt-3.5 h-10 inline-flex items-center gap-1.5 px-4 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 transition-colors cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Crear primera nota</span>
               </button>
             </div>
@@ -1518,7 +1518,7 @@ export const VisorNotas: React.FC = () => {
         <div
           role="status"
           aria-live="polite"
-          className="fixed top-14 sm:top-5 right-3 sm:right-5 left-3 sm:left-auto z-[10010] flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#0D1526]/95 border border-emerald-500/40 text-emerald-300 text-xs font-semibold shadow-xl backdrop-blur-sm transform-gpu transition-[transform,opacity] duration-200 ease-out"
+          className="fixed top-14 sm:top-5 right-3 sm:right-5 left-3 sm:left-auto z-[10010] flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#0D1526]/95 border border-emerald-500/40 text-emerald-300 text-xs font-semibold shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] backdrop-blur-sm transition-opacity duration-200 ease-out"
         >
           <Check className="w-4 h-4 text-emerald-400 shrink-0" strokeWidth={2} />
           <span>{toastMsg}</span>

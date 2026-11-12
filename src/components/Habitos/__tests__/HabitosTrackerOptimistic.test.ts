@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { formatFechaIsoLocal } from '../../../utils/timeFormatters';
 import { areHabitoPropsEqual, type TarjetaHabitoProps } from '../TarjetaHabito';
 import { esTipoHabitoRecurrente } from '../TableroHabitos';
+import { esActividadCompletadaHoy } from '../../../services/habitosService';
 import seedLife from '../../../db/seedLife.json';
 import type { ActividadPersonal } from '../../../types';
 
@@ -158,6 +159,39 @@ describe('Tracker de Hábitos & Consistencia Diaria [REQ-SYS-001-F6]', () => {
       expect(habituales.length).toBe(12);
       expect(puntuales.length).toBe(1);
       expect(puntuales[0].codigo_legado).toBe('ACT-012');
+    });
+  });
+
+  describe('V6: Evaluación Sin Rebote al Marcar/Desmarcar Hábitos (REQ-UI-37-HOTFIX-CHECK-BOUNCE)', () => {
+    it('mantiene completado hoy incluso si fecha_programada sigue en mora histórica (sin rebote a pendiente)', () => {
+      const hoy = '2026-11-12';
+      const habitoEnMoraCompletadoHoy: Partial<ActividadPersonal> = {
+        id: 'act-mora-ok',
+        tipo_compromiso: 'HABITUAL',
+        frecuencia_ciclo: 'DIARIA',
+        estado: '02_Por_Hacer',
+        fecha_programada: '2026-10-20',
+        ultima_fecha_completado: hoy,
+        historial_fechas: [hoy],
+        racha_actual: 1
+      };
+      expect(esActividadCompletadaHoy(habitoEnMoraCompletadoHoy as ActividadPersonal, hoy)).toBe(true);
+    });
+
+    it('al desmarcar un hábito con racha activa y updated_at de hoy retorna false (sin rebote a completado)', () => {
+      const hoy = '2026-11-12';
+      const habitoDesmarcado: Partial<ActividadPersonal> = {
+        id: 'act-uncheck',
+        tipo_compromiso: 'HABITUAL',
+        frecuencia_ciclo: 'DIARIA',
+        estado: '02_Por_Hacer',
+        fecha_programada: hoy,
+        ultima_fecha_completado: undefined,
+        historial_fechas: ['2026-11-11'],
+        racha_actual: 4,
+        updated_at: '2026-11-12T06:45:00.000Z'
+      };
+      expect(esActividadCompletadaHoy(habitoDesmarcado as ActividadPersonal, hoy)).toBe(false);
     });
   });
 });

@@ -14,7 +14,8 @@ import {
   eliminarActividadConAlcance,
   editarActividadConAlcance,
   autoHidratarVinculosHabitosActividades,
-  formatFechaIsoLocal
+  formatFechaIsoLocal,
+  esActividadCompletadaHoy
 } from '../services/habitosService';
 import { syncManager, type SyncState } from '../services/syncManager';
 
@@ -124,11 +125,6 @@ export function useHabitos() {
 
   const rawMetasPlanes = useLiveQuery(
     () => db.metas_planes.toArray(),
-    []
-  );
-
-  const rawTodasLasTareas = useLiveQuery(
-    () => db.tareas.toArray(),
     []
   );
 
@@ -293,22 +289,46 @@ export function useHabitos() {
     return actividadesPorHabitoId.get(key) || [];
   };
 
-  // Mapeo O(1) de subtareas agrupadas por ID_Padre_Vinculado
+  // Mapeo O(1) de subtareas agrupadas por id_padre_vinculado (indexado por código legado e ID)
   const subtareasPorPadre = useMemo(() => {
-    const map = new Map<string, SubtareaPaso[]>();
+    const mapCrudo = new Map<string, SubtareaPaso[]>();
     for (const sub of todasLasSubtareas) {
-      const padre = sub.id_padre_vinculado;
-      if (!map.has(padre)) {
-        map.set(padre, []);
+      const padre = String(sub.id_padre_vinculado || (sub as any).actividad_id || '').trim();
+      if (!padre) continue;
+      if (!mapCrudo.has(padre)) {
+        mapCrudo.set(padre, []);
       }
-      map.get(padre)!.push(sub);
+      mapCrudo.get(padre)!.push(sub);
     }
-    // Ordenar por numero_paso
-    map.forEach((lista) => {
-      lista.sort((a, b) => a.numero_paso - b.numero_paso);
+
+    const map = new Map<string, SubtareaPaso[]>();
+    mapCrudo.forEach((lista, key) => {
+      map.set(key, [...lista].sort((a, b) => a.numero_paso - b.numero_paso));
     });
+
+    // Unificar subtareas bajo ambas llaves (id y codigo_legado) por cada actividad
+    for (const h of todasLasActividades) {
+      const hId = String(h.id || '').trim();
+      const hCod = String(h.codigo_legado || '').trim();
+      const porId = hId ? mapCrudo.get(hId) || [] : [];
+      const porCod = hCod ? mapCrudo.get(hCod) || [] : [];
+      if (porId.length === 0 && porCod.length === 0) continue;
+
+      const vistos = new Set<string>();
+      const combinadas: SubtareaPaso[] = [];
+      for (const s of [...porId, ...porCod]) {
+        if (!vistos.has(s.id)) {
+          vistos.add(s.id);
+          combinadas.push(s);
+        }
+      }
+      combinadas.sort((a, b) => a.numero_paso - b.numero_paso);
+      if (hId) map.set(hId, combinadas);
+      if (hCod) map.set(hCod, combinadas);
+    }
+
     return map;
-  }, [todasLasSubtareas]);
+  }, [todasLasSubtareas, todasLasActividades]);
 
   // Filtrado reactivo en memoria
   const actividadesFiltradas = useMemo(() => {
@@ -317,10 +337,11 @@ export function useHabitos() {
         return false;
       }
       if (filtroTexto.trim()) {
-        const q = filtroTexto.toLowerCase();
+        const q = filtroTexto.toLowerCase().trim();
         const nom = (a.nombre_actividad || (a as any).nombre || (a as any).Nombre_Actividad || (a as any).Nombre || (a as any).titulo || '').toLowerCase();
         const macro = (a.meta_macro_nombre || '').toLowerCase();
-        if (!nom.includes(q) && !macro.includes(q)) return false;
+        const cod = (a.codigo_legado || '').toLowerCase();
+        if (!nom.includes(q) && !macro.includes(q) && !cod.includes(q)) return false;
       }
       return true;
     });
@@ -359,8 +380,7 @@ export function useHabitos() {
         res.pilarCounts[a.categoria_vida]++;
       }
 
-      const esCompletado = a.estado === '04_Completado' || a.ultima_fecha_completado === hoyStr;
-      if (esCompletado || (a.tipo_compromiso === 'HABITUAL' && a.fecha_programada > hoyStr && racha > 0)) {
+      if (esActividadCompletadaHoy(a, hoyStr)) {
         res.completadosHoy++;
         res.horasInvertidas += a.duracion_horas || 0;
       }
@@ -369,29 +389,33 @@ export function useHabitos() {
     return res;
   }, [todasLasActividades]);
 
-  // Acciones transaccionales reactivas
+  // Acciones transaccionales reactivas + puente local con Cockpit
+  const notificarSyncYPuente = () => {
+    syncManager.syncPendingRecords().catch(() => {});
+    syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
+  };
+
   const toggleCompletar = async (actividad: ActividadPersonal, completadoDeseado: boolean) => {
     const res = await completarActividadPersonalLocal(actividad, completadoDeseado);
-    // Notificar al worker de sincronización en segundo plano
-    syncManager.syncPendingRecords();
+    notificarSyncYPuente();
     return res;
   };
 
   const registrarAvance = async (actividad: ActividadPersonal, valor: number) => {
     const res = await registrarAvanceCuantitativoLocal(actividad, valor);
-    syncManager.syncPendingRecords();
+    notificarSyncYPuente();
     return res;
   };
 
   const toggleSubtarea = async (idSubtarea: string, deseado?: boolean) => {
     const res = await toggleSubtareaSecuencialLocal(idSubtarea, deseado);
-    syncManager.syncPendingRecords();
+    notificarSyncYPuente();
     return res;
   };
 
   const eliminarConAlcance = async (id: string, alcance: 'SINGLE' | 'FUTURE' | 'ALL', fechaReferencia: string) => {
     const res = await eliminarActividadConAlcance(id, alcance, fechaReferencia);
-    syncManager.syncPendingRecords();
+    notificarSyncYPuente();
     return res;
   };
 
@@ -402,7 +426,7 @@ export function useHabitos() {
     fechaReferencia: string
   ) => {
     const res = await editarActividadConAlcance(actividadOriginal, cambios, alcance, fechaReferencia);
-    syncManager.syncPendingRecords();
+    notificarSyncYPuente();
     return res;
   };
 
@@ -455,25 +479,6 @@ export function useHabitos() {
     });
   }, []);
 
-  // Instrumentación de logs de diagnóstico solicitada en DIAG-HABITOS-DATA-INSPECTION-104 & FIX-105
-  useEffect(() => {
-    console.groupCollapsed('[DEBUG HÁBITOS]');
-    console.log('Total hábitos en DB:', todasLasActividades.length);
-    console.log('Total tareas en DB:', rawTodasLasTareas?.length || 0);
-    console.log('Vínculos habitos_metas_vinculos:', vinculos?.length || 0);
-    console.log(
-      'Muestra primer hábito:',
-      actividadesEnriquecidas[0]?.codigo_legado,
-      '| metaVinculada:',
-      actividadesEnriquecidas[0]?.metaVinculada?.codigo_legado || 'Sin meta',
-      '| subtareas:',
-      actividadesEnriquecidas[0]?.actividadesVinculadas?.length || 0,
-      '| vinculosMeta:',
-      actividadesEnriquecidas[0]?.vinculosMeta?.length || 0
-    );
-    console.groupEnd();
-  }, [todasLasActividades.length, rawTodasLasTareas?.length, vinculos?.length, actividadesEnriquecidas]);
-
   return {
     actividades: actividadesEnriquecidas,
     todasLasActividades,
@@ -497,3 +502,5 @@ export function useHabitos() {
     loading
   };
 }
+
+export default useHabitos;

@@ -515,7 +515,9 @@ const VoicePill: React.FC<VoicePillProps> = ({
           '--vp-time-size': `${timeSize}px`,
           '--vp-open': `${openDuration}ms`,
           '--vp-press': pressScale,
-          '--vp-hit': `${hit}px`
+          '--vp-hit': `${hit}px`,
+          '--vp-slide': '0px',
+          '--vp-cancel': '0'
         } as CSSProperties
       }
     >

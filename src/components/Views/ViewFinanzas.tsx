@@ -642,18 +642,18 @@ export const ViewFinanzas: React.FC = () => {
       className="flex-1 bg-[#040711] flex flex-col w-full h-full overflow-y-auto overscroll-contain pb-28 md:pb-8 transition-colors duration-200 custom-scrollbar select-none"
     >
       {/* 1. HEADER FINANCIERO */}
-      <header className="bg-[#0D1526]/85 backdrop-blur-md border-b border-slate-800/40 px-3 md:px-6 py-2 md:py-3.5 shrink-0 shadow-cobalt-1 flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-20 transition-colors duration-200">
+      <header className="bg-[#0D1526]/90 backdrop-blur-md border-b border-slate-800/80 px-3 md:px-6 py-2 md:py-3 shrink-0 flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-20 transition-colors duration-200">
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 text-lg sm:text-xl font-bold shrink-0">
-            <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#0B132B] border border-slate-800/80 flex items-center justify-center text-sky-400 shrink-0">
+            <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-sky-400" strokeWidth={1.75} />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="font-black text-slate-100 text-sm sm:text-lg tracking-tight">
                 Finanzas & Gobernanza
               </h2>
-              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-800/60">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/70 text-emerald-300 border border-emerald-800/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                 En Tiempo Real
               </span>
             </div>
@@ -669,13 +669,13 @@ export const ViewFinanzas: React.FC = () => {
             type="button"
             onClick={handleRefreshTC}
             title={`Actualizar tipo de cambio oficial SUNAT / SBS. Última cotización: ${fechaCotizacion}`}
-            className="h-7.5 sm:h-auto px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-slate-800/60 bg-[#0D1526] text-slate-300 hover:bg-slate-800/60 hover:text-white text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition cursor-pointer shadow-2xs"
+            className="h-9 px-3 rounded-xl border border-slate-800/80 bg-[#0D1526] text-slate-300 hover:bg-slate-800/60 hover:text-white hover:border-sky-500/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <span id="icon-refresh-tc" className="transition-transform duration-300 flex items-center">
-              <RefreshCw className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 ${actualizandoTC ? 'animate-spin text-amber-500' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${actualizandoTC ? 'animate-spin text-amber-500' : ''}`} strokeWidth={1.75} />
             </span>
             <span className="hidden sm:inline">TC SUNAT:</span>
-            <span id="btn-label-tc" className="font-mono tabular-nums text-amber-400 font-black">
+            <span id="btn-label-tc" className="font-mono tabular-nums text-amber-400 font-bold">
               {tipoCambioSunat.toFixed(3)}
             </span>
           </button>
@@ -683,21 +683,21 @@ export const ViewFinanzas: React.FC = () => {
       </header>
 
       {/* 2. BARRA DE NAVEGACIÓN PRINCIPAL (4 PESTAÑAS ESTRUCTURALES) */}
-      <div className="px-2.5 sm:px-4 md:px-6 pt-2 pb-1.5 sm:pt-3 sm:pb-2 flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-3 border-b border-slate-800/40 bg-[#0D1526]/50 shrink-0">
+      <div className="px-2.5 sm:px-4 md:px-6 pt-2 pb-2 sm:pt-3 sm:pb-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-3 border-b border-slate-800/80 bg-[#0D1526]/60 shrink-0">
         {/* Tabs Pills */}
-        <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 sm:p-1 rounded-xl sm:rounded-2xl border border-slate-800/60 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0">
+        <div className="flex items-center gap-1 bg-[#0B132B] p-0.5 rounded-xl border border-slate-800/80 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0">
           {/* Pestaña 1: Vista General & KPIs */}
           <button
             type="button"
             id="tab-btn-fin-general"
             onClick={() => setTabActiva('general')}
-            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0 ${
+            className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
               tabActiva === 'general'
-                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
-                : 'text-slate-400 hover:text-sky-300'
+                ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
+                : 'text-slate-400 hover:text-sky-300 border border-transparent'
             }`}
           >
-            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={1.75} />
             <span>Vista General</span>
           </button>
 
@@ -706,17 +706,17 @@ export const ViewFinanzas: React.FC = () => {
             type="button"
             id="tab-btn-fin-transacciones"
             onClick={() => setTabActiva('transacciones')}
-            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0 ${
+            className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
               tabActiva === 'transacciones'
-                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60 font-bold'
-                : 'text-slate-400 hover:text-sky-300'
+                ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
+                : 'text-slate-400 hover:text-sky-300 border border-transparent'
             }`}
           >
-            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={1.75} />
             <span>Transacciones</span>
             <span
               id="tab-count-transacciones"
-              className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 bg-emerald-950 text-emerald-300 rounded-full font-mono font-bold"
+              className="text-[10px] px-1.5 py-0.2 bg-emerald-950 text-emerald-300 rounded-full font-mono tabular-nums font-bold"
             >
               {gastosFiltrados.length + ingresosFiltrados.length}
             </span>
@@ -727,17 +727,17 @@ export const ViewFinanzas: React.FC = () => {
             type="button"
             id="tab-btn-fin-cuotas"
             onClick={() => setTabActiva('cuotas')}
-            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0 ${
+            className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
               tabActiva === 'cuotas'
-                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60 font-bold'
-                : 'text-slate-400 hover:text-sky-300'
+                ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
+                : 'text-slate-400 hover:text-sky-300 border border-transparent'
             }`}
           >
-            <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={1.75} />
             <span>Cuotas / Deudas</span>
             <span
               id="tab-count-cuotas"
-              className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.2 bg-violet-950 text-violet-300 rounded-full font-mono font-bold"
+              className="text-[10px] px-1.5 py-0.2 bg-violet-950 text-violet-300 rounded-full font-mono tabular-nums font-bold"
             >
               {cuotasRaw.length}
             </span>
@@ -748,13 +748,13 @@ export const ViewFinanzas: React.FC = () => {
             type="button"
             id="tab-btn-fin-presupuesto"
             onClick={() => setTabActiva('presupuesto')}
-            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0 ${
+            className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
               tabActiva === 'presupuesto'
-                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60 font-bold'
-                : 'text-slate-400 hover:text-sky-300'
+                ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
+                : 'text-slate-400 hover:text-sky-300 border border-transparent'
             }`}
           >
-            <PieChart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <PieChart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={1.75} />
             <span>Presupuestos</span>
           </button>
         </div>
@@ -762,15 +762,15 @@ export const ViewFinanzas: React.FC = () => {
         {/* Segmentación y Periodo */}
         <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto [&::-webkit-scrollbar]:hidden py-0.5">
           {/* Barra de Segmentación Maestra: [ Todos | Proyectos | Personal ] */}
-          <div className="inline-flex p-0.5 sm:p-1 bg-slate-900/90 rounded-xl sm:rounded-2xl border border-slate-800/60 gap-1 text-[11px] sm:text-xs shrink-0">
+          <div className="inline-flex p-0.5 bg-[#0B132B] rounded-xl border border-slate-800/80 gap-1 text-xs shrink-0">
             <button
               type="button"
               id="btn-seg-fin-todos"
               onClick={() => setSegmento('TODOS')}
-              className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ${
+              className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
                 segmento === 'TODOS'
-                  ? 'bg-slate-800 text-white border border-slate-700/60'
-                  : 'text-slate-400 hover:text-sky-300'
+                  ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
+                  : 'text-slate-400 hover:text-sky-300 border border-transparent'
               }`}
             >
               <span>Todos</span>
@@ -779,10 +779,10 @@ export const ViewFinanzas: React.FC = () => {
               type="button"
               id="btn-seg-fin-proyectos"
               onClick={() => setSegmento('PROYECTOS')}
-              className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
                 segmento === 'PROYECTOS'
-                  ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
-                  : 'text-slate-400 hover:text-sky-300'
+                  ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
+                  : 'text-slate-400 hover:text-sky-300 border border-transparent'
               }`}
             >
               <span>Proyectos</span>
@@ -791,10 +791,10 @@ export const ViewFinanzas: React.FC = () => {
               type="button"
               id="btn-seg-fin-personal"
               onClick={() => setSegmento('PERSONAL')}
-              className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
                 segmento === 'PERSONAL'
-                  ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
-                  : 'text-slate-400 hover:text-emerald-400'
+                  ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
+                  : 'text-slate-400 hover:text-emerald-400 border border-transparent'
               }`}
             >
               <span>Personal</span>
@@ -807,7 +807,7 @@ export const ViewFinanzas: React.FC = () => {
               id="filtro-mes-finanzas"
               value={periodo}
               onChange={(e) => setPeriodo(e.target.value as PeriodoFinanzas)}
-              className="py-1 sm:py-1.5 pl-2 sm:pl-3 pr-6 sm:pr-8 text-[11px] sm:text-xs bg-[#0D1526] border border-slate-800/80 rounded-xl outline-none focus:ring-1 focus:ring-sky-500 text-slate-200 shadow-2xs font-semibold cursor-pointer transition h-7 sm:h-auto"
+              className="h-9 pl-3 pr-8 text-xs bg-[#0D1526] border border-slate-800/80 rounded-xl outline-none focus:border-sky-500/50 text-slate-200 font-semibold cursor-pointer transition-colors"
             >
               <option value="MES_ACTUAL">Mes Actual</option>
               <option value="MES_ANTERIOR">Mes Anterior</option>
@@ -857,7 +857,7 @@ export const ViewFinanzas: React.FC = () => {
             <div
               key={kpi.id}
               id={kpi.id}
-              className="bg-[#0D1526]/90 border border-slate-800/60 rounded-xl p-2.5 sm:p-3.5 shadow-sm flex flex-col justify-between"
+              className="bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 rounded-xl p-2.5 sm:p-3.5 transition-colors flex flex-col justify-between"
             >
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 {kpi.label}
@@ -865,7 +865,7 @@ export const ViewFinanzas: React.FC = () => {
               <div className={`text-sm sm:text-lg font-mono tabular-nums font-bold truncate mt-1 ${kpi.colorClass}`}>
                 S/ {kpi.valor.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <p className="hidden sm:block text-[10px] text-slate-400 mt-1 truncate">
+              <p className="hidden sm:block text-[10px] text-slate-400 mt-1 truncate font-mono tabular-nums">
                 {kpi.subtexto}
               </p>
             </div>
@@ -914,7 +914,7 @@ export const ViewFinanzas: React.FC = () => {
       {tabActiva === 'transacciones' && (
         <div id="vista-fin-tab-transacciones" className="tab-fin-view p-2.5 sm:p-4 md:p-6 space-y-3 sm:space-y-4 flex-1">
           {/* CABECERA Y FILTROS RÁPIDOS ERGONÓMICOS */}
-          <div className="portal-surface p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#0D1526] border border-slate-800/40 shadow-cobalt-1 space-y-2.5">
+          <div className="portal-surface p-3 sm:p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
@@ -932,14 +932,14 @@ export const ViewFinanzas: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setModalIngresoAbierto(true)}
-                  className="min-h-[40px] sm:min-h-0 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition cursor-pointer flex items-center justify-center"
+                  className="h-10 px-4 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center"
                 >
                   + Ingreso
                 </button>
                 <button
                   type="button"
                   onClick={() => setModalGastoAbierto(true)}
-                  className="min-h-[40px] sm:min-h-0 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition cursor-pointer flex items-center justify-center"
+                  className="h-10 px-4 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center"
                 >
                   + Gasto
                 </button>
@@ -956,16 +956,16 @@ export const ViewFinanzas: React.FC = () => {
                   value={busquedaTrx}
                   onChange={(e) => setBusquedaTrx(e.target.value)}
                   placeholder="Buscar movimientos..."
-                  className="w-full h-10 sm:h-8 pl-8 pr-10 text-xs bg-slate-900/80 border border-slate-800 rounded-xl outline-none focus:ring-1 focus:ring-sky-500 text-slate-100 placeholder:text-slate-500"
+                  className="w-full h-9 pl-8 pr-9 text-xs bg-[#040711]/70 border border-slate-800/80 rounded-xl outline-none focus:border-sky-500/50 text-slate-100 placeholder:text-slate-500 transition-colors"
                 />
                 {busquedaTrx && (
                   <button
                     type="button"
                     onClick={() => setBusquedaTrx('')}
                     aria-label="Limpiar búsqueda"
-                    className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 flex items-center justify-center absolute right-0.5 sm:right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                    className="w-7 h-7 flex items-center justify-center absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
                   >
-                    <X className="w-4 h-4 sm:w-3.5 sm:h-3.5" strokeWidth={1.75} />
+                    <X className="w-3.5 h-3.5" strokeWidth={1.75} />
                   </button>
                 )}
               </div>
@@ -973,34 +973,34 @@ export const ViewFinanzas: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setFiltrosTrxAbiertos(!filtrosTrxAbiertos)}
-                className={`min-h-[40px] px-3 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition active:scale-95 cursor-pointer shrink-0 md:hidden ${
+                className={`h-9 px-3 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer shrink-0 md:hidden ${
                   (tipoFlujo !== 'TODOS' || estadoFlujo !== 'TODOS') || filtrosTrxAbiertos
-                    ? 'bg-sky-950/40 border-sky-800/60 text-sky-300'
-                    : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:text-white'
+                    ? 'bg-sky-950/40 border-sky-500/40 text-sky-300'
+                    : 'bg-[#040711]/70 border-slate-800/80 text-slate-300 hover:text-white'
                 }`}
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Filtros</span>
                 {(tipoFlujo !== 'TODOS' || estadoFlujo !== 'TODOS') && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
                 )}
               </button>
             </div>
 
             {/* BARRAS DE FILTROS TIPO PÍLDORA: DESPLEGABLE EN MÓVIL, VISIBLE EN DESKTOP */}
-            <div className={`${filtrosTrxAbiertos ? 'grid' : 'hidden md:grid'} grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-800/60`}>
+            <div className={`${filtrosTrxAbiertos ? 'grid' : 'hidden md:grid'} grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-800/80`}>
               {/* Filtro 1: Selector Tipo de Movimiento */}
               <div>
                 <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Tipo de Flujo</span>
-                <div className="inline-flex p-1 bg-slate-900/80 rounded-xl gap-1 text-xs border border-slate-800/40">
+                <div className="inline-flex p-0.5 bg-[#040711]/70 rounded-xl gap-1 text-xs border border-slate-800/80">
                   <button
                     type="button"
                     id="pill-tipo-todos"
                     onClick={() => setTipoFlujo('TODOS')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    className={`h-8 px-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                       tipoFlujo === 'TODOS'
-                        ? 'bg-slate-800 text-white shadow-2xs border border-slate-700/60'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
+                        : 'text-slate-400 hover:text-white border border-transparent'
                     }`}
                   >
                     Todos
@@ -1009,26 +1009,26 @@ export const ViewFinanzas: React.FC = () => {
                     type="button"
                     id="pill-tipo-ingreso"
                     onClick={() => setTipoFlujo('INGRESO')}
-                    className={`px-2.5 py-1 rounded-lg font-medium inline-flex items-center gap-1.5 transition cursor-pointer ${
+                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                       tipoFlujo === 'INGRESO'
-                        ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/30 font-bold shadow-2xs'
-                        : 'text-slate-400 hover:text-emerald-400'
+                        ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/40'
+                        : 'text-slate-400 hover:text-emerald-400 border border-transparent'
                     }`}
                   >
-                    <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 shrink-0" strokeWidth={1.75} />
                     <span>Ingresos</span>
                   </button>
                   <button
                     type="button"
                     id="pill-tipo-gasto"
                     onClick={() => setTipoFlujo('GASTO')}
-                    className={`px-2.5 py-1 rounded-lg font-medium inline-flex items-center gap-1.5 transition cursor-pointer ${
+                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                       tipoFlujo === 'GASTO'
-                        ? 'bg-rose-950/40 text-rose-400 border border-rose-500/30 font-bold shadow-2xs'
-                        : 'text-slate-400 hover:text-rose-400'
+                        ? 'bg-rose-950/40 text-rose-300 border border-rose-500/40'
+                        : 'text-slate-400 hover:text-rose-400 border border-transparent'
                     }`}
                   >
-                    <ArrowDownRight className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <ArrowDownRight className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} />
                     <span>Gastos</span>
                   </button>
                 </div>
@@ -1037,15 +1037,15 @@ export const ViewFinanzas: React.FC = () => {
               {/* Filtro 2: Estado (Real/Conciliado vs Programado/Pendiente) */}
               <div>
                 <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Estado de Ejecución</span>
-                <div className="inline-flex p-1 bg-slate-900/80 rounded-xl gap-1 text-xs border border-slate-800/40">
+                <div className="inline-flex p-0.5 bg-[#040711]/70 rounded-xl gap-1 text-xs border border-slate-800/80">
                   <button
                     type="button"
                     id="pill-estado-todos"
                     onClick={() => setEstadoFlujo('TODOS')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    className={`h-8 px-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                       estadoFlujo === 'TODOS'
-                        ? 'bg-slate-800 text-white shadow-2xs border border-slate-700/60'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
+                        : 'text-slate-400 hover:text-white border border-transparent'
                     }`}
                   >
                     Todos
@@ -1054,26 +1054,26 @@ export const ViewFinanzas: React.FC = () => {
                     type="button"
                     id="pill-estado-real"
                     onClick={() => setEstadoFlujo('REAL')}
-                    className={`px-2.5 py-1 rounded-lg font-medium inline-flex items-center gap-1.5 transition cursor-pointer ${
+                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                       estadoFlujo === 'REAL'
-                        ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/30 font-bold shadow-2xs'
-                        : 'text-slate-400 hover:text-emerald-400'
+                        ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/40'
+                        : 'text-slate-400 hover:text-emerald-400 border border-transparent'
                     }`}
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" strokeWidth={1.75} />
                     <span>Conciliados</span>
                   </button>
                   <button
                     type="button"
                     id="pill-estado-programado"
                     onClick={() => setEstadoFlujo('PROGRAMADO')}
-                    className={`px-2.5 py-1 rounded-lg font-medium inline-flex items-center gap-1.5 transition cursor-pointer ${
+                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                       estadoFlujo === 'PROGRAMADO'
-                        ? 'bg-amber-950/40 text-amber-400 border border-amber-500/30 font-bold shadow-2xs'
-                        : 'text-slate-400 hover:text-amber-400'
+                        ? 'bg-amber-950/40 text-amber-300 border border-amber-500/40'
+                        : 'text-slate-400 hover:text-amber-400 border border-transparent'
                     }`}
                   >
-                    <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" strokeWidth={1.75} />
                     <span>Programados</span>
                   </button>
                 </div>
@@ -1172,9 +1172,9 @@ export const ViewFinanzas: React.FC = () => {
       {toastMsg && (
         <div
           id="toast-finanzas"
-          className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 bg-[#0D1526] border border-slate-700/60 shadow-cobalt-2 text-slate-200 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-opacity duration-200"
+          className="fixed bottom-24 md:bottom-6 right-4 md:right-6 z-50 bg-[#0D1526] border border-slate-800/80 shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] text-slate-200 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition-opacity duration-200"
         >
-          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]" />
+          <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span>{toastMsg}</span>
           <button
             type="button"

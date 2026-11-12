@@ -172,7 +172,7 @@ export const HistogramaSeguimientoTemporal: React.FC<HistogramaSeguimientoTempor
     const mapa = new Map<string, number>();
     if (!metaActiva) return mapa;
 
-    const hoyStr = new Date().toISOString().split('T')[0];
+    const hoyStr = formatFechaIsoLocal(new Date());
     const [yH, mH, dH] = hoyStr.split('-').map(Number);
     const hoyUtc = Date.UTC(yH, mH - 1, dH);
 

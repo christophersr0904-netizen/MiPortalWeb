@@ -39,7 +39,6 @@ interface SaludConfig {
   led: string;
   ring: string;
   ledHex: string;
-  ledShadow: string;
   text?: string;
 }
 
@@ -67,8 +66,7 @@ const OPCIONES_SALUD: SaludConfig[] = [
     icon: Activity,
     led: 'bg-slate-400',
     ring: 'ring-slate-400/20',
-    ledHex: '#94a3b8',
-    ledShadow: 'shadow-[0_0_4px_#94a3b8]'
+    ledHex: '#94a3b8'
   },
   {
     key: 'En Rango',
@@ -78,7 +76,6 @@ const OPCIONES_SALUD: SaludConfig[] = [
     led: 'bg-emerald-500',
     ring: 'ring-emerald-500/30',
     ledHex: '#10b981',
-    ledShadow: 'shadow-[0_0_8px_#10b981]',
     text: 'text-emerald-400'
   },
   {
@@ -89,7 +86,6 @@ const OPCIONES_SALUD: SaludConfig[] = [
     led: 'bg-amber-500',
     ring: 'ring-amber-500/30',
     ledHex: '#f59e0b',
-    ledShadow: 'shadow-[0_0_8px_#f59e0b]',
     text: 'text-amber-400'
   },
   {
@@ -100,7 +96,6 @@ const OPCIONES_SALUD: SaludConfig[] = [
     led: 'bg-rose-500',
     ring: 'ring-rose-500/30',
     ledHex: '#f43f5e',
-    ledShadow: 'shadow-[0_0_8px_#f43f5e]',
     text: 'text-rose-400'
   }
 ];
@@ -200,14 +195,13 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
       <div className="flex items-center overflow-x-auto no-scrollbar max-w-full py-0.5">
         <div
           ref={containerRef}
-          className="flex items-center rounded-full bg-slate-900/60 border border-slate-800/80 p-1 relative shrink-0 shadow-inner"
+          className="h-9 flex items-center rounded-xl bg-[#040711]/70 border border-slate-800/80 p-0.5 relative shrink-0"
           id="sliding-pill-track-estado"
         >
-          {/* Pastilla deslizante animada con gradiente premium */}
+          {/* Pastilla deslizante animada */}
           <div
-            className={`absolute top-1 bottom-1 rounded-full bg-gradient-to-r from-sky-600/40 to-teal-600/40 border border-sky-400/50 shadow-sm transition-all duration-300 ease-out pointer-events-none ${
-              pillStyle.width > 0 ? 'opacity-100' : 'opacity-0'
-            }`}
+            className={`absolute top-0.5 bottom-0.5 rounded-lg bg-sky-500/20 border border-sky-500/40 transition-all duration-300 ease-out pointer-events-none ${pillStyle.width > 0 ? 'opacity-100' : 'opacity-0'
+              }`}
             style={{
               transform: `translateX(${pillStyle.left}px)`,
               width: `${pillStyle.width}px`
@@ -227,11 +221,10 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
                 type="button"
                 title={item.tooltip}
                 onClick={() => setFiltroEstado(item.key)}
-                className={`relative z-10 px-2.5 py-1 text-xs font-semibold rounded-full transition-colors duration-200 cursor-pointer flex items-center gap-1.5 whitespace-nowrap select-none group ${
-                  isSelected
-                    ? 'text-white'
+                className={`relative z-10 h-full px-2.5 text-xs font-semibold rounded-lg transition-colors duration-200 cursor-pointer flex items-center gap-1.5 whitespace-nowrap select-none group ${isSelected
+                    ? 'text-sky-300'
                     : 'text-slate-400 hover:text-sky-200'
-                }`}
+                  }`}
               >
                 <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
                 <span className="hidden sm:inline-block">{item.label}</span>
@@ -247,31 +240,27 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
           type="button"
           onClick={() => setOpenSalud(!openSalud)}
           title={itemActualSalud.tooltip}
-          className="px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 bg-slate-900/60 border border-slate-700/70 text-slate-300 hover:border-slate-500 hover:text-white shadow-2xs group"
+          className="h-9 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer bg-[#040711]/70 border border-slate-800/80 text-slate-300 hover:border-sky-500/40 hover:text-white group"
         >
           <span
-            className={`w-2 h-2 rounded-full inline-block shrink-0 ${
-              !filtroSalud
-                ? 'bg-slate-400 shadow-[0_0_4px_#94a3b8]'
-                : `${itemActualSalud.led} ${itemActualSalud.ledShadow} ${
-                    filtroSalud === 'Bloqueado' ? 'animate-pulse' : ''
-                  }`
-            }`}
+            className={`w-2 h-2 rounded-full inline-block shrink-0 ${!filtroSalud
+                ? 'bg-slate-400'
+                : itemActualSalud.led
+              }`}
           />
           <span className="hidden sm:inline-block">
             {itemActualSalud.label}
           </span>
           <ChevronDown
-            className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-              openSalud ? 'rotate-180' : ''
-            }`}
+            className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${openSalud ? 'rotate-180' : ''
+              }`}
             strokeWidth={1.75}
           />
         </button>
 
         {openSalud && (
           <div
-            className="absolute left-0 top-full mt-1.5 z-50 w-52 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-2xl space-y-1 transform-gpu transition-[transform,opacity] duration-150 origin-top"
+            className="absolute left-0 top-full mt-1.5 z-50 w-52 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] space-y-1 transition-opacity duration-150 origin-top"
           >
             {OPCIONES_SALUD.map((item) => {
               const isSelected = filtroSalud === item.key;
@@ -285,19 +274,17 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
                     setFiltroSalud(item.key);
                     setOpenSalud(false);
                   }}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
-                    isSelected
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${isSelected
                       ? 'bg-slate-800/80 text-white font-semibold'
                       : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <span
-                      className={`w-2 h-2 rounded-full ${item.led} shrink-0 ${
-                        isSelected
-                          ? `${item.ring} ring-2 ${item.ledShadow} ${item.key === 'Bloqueado' ? 'animate-pulse' : ''}`
+                      className={`w-2 h-2 rounded-full ${item.led} shrink-0 ${isSelected
+                          ? `${item.ring} ring-2`
                           : ''
-                      }`}
+                        }`}
                     />
                     <Icon className={`w-3.5 h-3.5 shrink-0 ${item.text || 'text-slate-400'}`} strokeWidth={1.75} />
                     <span className={item.text || ''}>{item.label}</span>
@@ -318,21 +305,20 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
           type="button"
           onClick={() => setOpenOrden(!openOrden)}
           title={itemActualOrden.tooltip}
-          className="px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer bg-slate-900/60 border border-slate-700/70 text-slate-300 hover:border-slate-500 hover:text-white shadow-sm active:scale-[0.96] hover:scale-[1.02] transition-transform duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] group"
+          className="h-9 px-3 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer bg-[#040711]/70 border border-slate-800/80 text-slate-300 hover:border-sky-500/40 hover:text-white transition-colors group"
         >
           <IconOrden className="w-3.5 h-3.5 text-sky-400 group-hover:text-sky-300 shrink-0" strokeWidth={1.75} />
           <span className="hidden sm:inline-block">{itemActualOrden.label}</span>
           <ChevronDown
-            className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-              openOrden ? 'rotate-180' : ''
-            }`}
+            className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${openOrden ? 'rotate-180' : ''
+              }`}
             strokeWidth={1.75}
           />
         </button>
 
         {openOrden && (
           <div
-            className="absolute left-0 top-full mt-1.5 z-50 w-48 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-2xl space-y-1 transform-gpu transition-[transform,opacity] duration-150 origin-top"
+            className="absolute left-0 top-full mt-1.5 z-50 w-48 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] space-y-1 transition-opacity duration-150 origin-top"
           >
             {OPCIONES_ORDEN.map((o) => {
               const isSelected = filtroOrden === o.key;
@@ -346,11 +332,10 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
                     setFiltroOrden(o.key);
                     setOpenOrden(false);
                   }}
-                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between cursor-pointer active:scale-[0.97] transition-transform ${
-                    isSelected
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${isSelected
                       ? 'bg-slate-800/80 text-white font-semibold'
                       : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <Icon className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />

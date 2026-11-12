@@ -51,6 +51,7 @@ import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
 import { ModalDoDAdvertencia } from '../Modals/ModalDoDAdvertencia';
 import { ColumnaKanban } from '../PMO/ColumnaKanban';
+import { IconoCategoriaIniciativa, coincideCategoriaIniciativa } from '../PMO/IconoCategoriaIniciativa';
 import AnimatedContent from '../AnimatedContent';
 
 interface ViewKanbanProps {
@@ -500,7 +501,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   // Proyectos filtrados en el sidebar
   const proyectosFiltrados = useMemo(() => {
     return proyectos.filter((p) => {
-      const coincideTipo = !filtroTipoProyecto || p.tipo_iniciativa?.toLowerCase() === filtroTipoProyecto.toLowerCase();
+      const coincideTipo = coincideCategoriaIniciativa(p.tipo_iniciativa, filtroTipoProyecto);
       const coincideBusqueda =
         !busquedaProyecto ||
         p.nombre.toLowerCase().includes(busquedaProyecto.toLowerCase()) ||
@@ -725,46 +726,55 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     };
   }, [hoveredTaskId, rawTareas, tareasFiltradas, tareasLookupMap]);
 
-  // Columnas Kanban Canónicas
+  // Columnas Kanban Canónicas Dark Cobalt
+  const getFiltroTriggerClass = (activo: boolean, disabled = false) =>
+    `h-9 px-2.5 rounded-lg text-xs font-medium tracking-wide transition-colors inline-flex items-center gap-1.5 shrink-0 select-none border ${
+      disabled
+        ? 'opacity-40 cursor-not-allowed border-slate-800/60 bg-[#0D1526]/60 text-slate-500'
+        : activo
+        ? 'bg-sky-950/40 text-sky-300 border-sky-500/50 cursor-pointer'
+        : 'bg-[#0D1526] border-slate-800/80 hover:border-sky-500/40 text-slate-300 hover:text-slate-100 cursor-pointer'
+    }`;
+
   const columnas = [
     {
       id: '01_Backlog',
       domId: 'col-backlog',
       titulo: 'Backlog',
-      color: 'border-slate-500/40 text-slate-300 bg-slate-100/70 dark:bg-slate-900',
-      iconoColor: 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/70 dark:border-slate-700 shadow-2xs',
-      badgeColor: 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/70 dark:border-slate-700',
-      tituloColor: 'text-slate-700 dark:text-slate-200',
+      color: 'border-slate-500/40 text-slate-300 bg-slate-900',
+      iconoColor: 'bg-slate-800/80 text-slate-300 border border-slate-700/60',
+      badgeColor: 'bg-slate-800/80 text-slate-300 border border-slate-700/60',
+      tituloColor: 'text-slate-300',
       headerGlow: false
     },
     {
       id: '02_Por_Hacer',
       domId: 'col-por-hacer',
       titulo: 'Por Hacer',
-      color: 'border-sky-500/40 text-sky-400 bg-blue-50/20 dark:bg-slate-900',
-      iconoColor: 'bg-sky-500/10 border border-sky-500/30 text-sky-400 shadow-2xs',
-      badgeColor: 'bg-sky-500/10 border border-sky-500/30 text-sky-300',
-      tituloColor: 'text-sky-400',
+      color: 'border-sky-500/40 text-sky-400 bg-slate-900',
+      iconoColor: 'bg-sky-500/10 border border-sky-500/25 text-sky-400',
+      badgeColor: 'bg-sky-500/10 border border-sky-500/25 text-sky-300',
+      tituloColor: 'text-slate-300',
       headerGlow: false
     },
     {
       id: '03_En_Proceso',
       domId: 'col-en-proceso',
       titulo: 'En Proceso',
-      color: 'border-amber-500/40 text-amber-400 bg-amber-50/20 dark:bg-slate-900',
-      iconoColor: 'relative bg-amber-500/15 border border-amber-500/40 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]',
-      badgeColor: 'bg-amber-500/15 border border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]',
-      tituloColor: 'text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.2)]',
-      headerGlow: true
+      color: 'border-amber-500/40 text-amber-400 bg-slate-900',
+      iconoColor: 'bg-amber-500/10 border border-amber-500/25 text-amber-400',
+      badgeColor: 'bg-amber-500/10 border border-amber-500/25 text-amber-300',
+      tituloColor: 'text-slate-300',
+      headerGlow: false
     },
     {
       id: '04_Completado',
       domId: 'col-completado',
       titulo: 'Completado',
-      color: 'border-emerald-500/40 text-emerald-400 bg-emerald-50/20 dark:bg-slate-900',
-      iconoColor: 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-2xs',
-      badgeColor: 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300',
-      tituloColor: 'text-emerald-400',
+      color: 'border-emerald-500/40 text-emerald-400 bg-slate-900',
+      iconoColor: 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-400',
+      badgeColor: 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-300',
+      tituloColor: 'text-slate-300',
       headerGlow: false
     }
   ];
@@ -1024,7 +1034,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               id="btn-toggle-sidebar-header"
               onClick={() => setSidebarColapsado(!sidebarColapsado)}
               title={sidebarColapsado ? 'Expandir panel lateral' : 'Contraer panel lateral'}
-              className="p-1.5 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-400 hover:text-white hover:bg-slate-800 hover:border-sky-500/50 hover:shadow-[0_0_10px_rgba(56,189,248,0.25)] shadow-xs transition-all duration-200 shrink-0 flex items-center justify-center cursor-pointer"
+              className="p-1.5 rounded-full bg-slate-900/90 border border-slate-700/80 text-slate-400 hover:text-white hover:bg-slate-800 hover:border-sky-500/50 transition-colors shrink-0 flex items-center justify-center cursor-pointer"
             >
               {sidebarColapsado ? <ChevronRight className="w-4 h-4" strokeWidth={1.75} /> : <ChevronLeft className="w-4 h-4" strokeWidth={1.75} />}
             </button>
@@ -1034,14 +1044,14 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
             <>
               {/* Buscador de proyectos en vivo */}
               <div className="mt-2.5 relative">
-                <Search className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 w-4 h-4 top-2" strokeWidth={1.75} />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 w-3.5 h-3.5" strokeWidth={1.75} />
                 <input
                   type="text"
                   id="sidebar-search-proyectos"
                   value={busquedaProyecto}
                   onChange={(e) => setBusquedaProyecto(e.target.value)}
                   placeholder="Buscar por nombre o PRO-..."
-                  className="w-full bg-slate-900/90 text-slate-100 placeholder-slate-400 text-xs rounded-lg border border-slate-700/80 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 pl-8 pr-7 py-1.5 transition outline-none"
+                  className="w-full h-9 bg-[#0D1526] text-slate-100 placeholder-slate-400 text-xs rounded-lg border border-slate-800/80 focus:border-sky-500/60 pl-8 pr-7 transition-colors outline-none"
                 />
                 {busquedaProyecto && (
                   <button
@@ -1106,7 +1116,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
               if (/bloqueado|cr[ií]tico|danger|rojo/i.test(rawHealth)) {
                 healthLabel = 'Bloqueado';
-                healthBadgeClass = 'bg-rose-600/20 text-rose-300 border border-rose-500/60 shadow-[0_0_8px_rgba(244,63,94,0.3)] animate-pulse';
+                healthBadgeClass = 'bg-rose-950/60 text-rose-300 border border-rose-500/50';
                 healthDot = 'bg-rose-500';
               } else if (/riesgo|alerta|warning|amarillo/i.test(rawHealth)) {
                 healthLabel = 'En Riesgo';
@@ -1125,23 +1135,21 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     }
                   }}
                   title={sidebarColapsado ? `${proy.codigo_legado} · ${proy.nombre} (${healthLabel} - ${pct}%) · ${contadores.activas}/${contadores.total} tareas` : undefined}
-                  className={`group relative overflow-hidden transition-all duration-200 cursor-pointer ${sidebarColapsado ? 'p-2 flex flex-col items-center justify-center gap-1.5' : 'p-2.5'
+                  className={`group relative overflow-hidden transition-colors duration-150 cursor-pointer ${sidebarColapsado ? 'p-2 flex flex-col items-center justify-center gap-1.5' : 'p-2.5'
                     } rounded-xl border ${isActivo
-                      ? 'bg-[#0A101C] border-sky-500/50 shadow-[0_0_20px_rgba(56,189,248,0.12)] text-white before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-400 before:shadow-[0_0_12px_#38bdf8] before:transition-transform before:scale-y-100 before:rounded-l-xl'
-                      : 'bg-[#0D1526]/50 hover:bg-[#0D1526]/90 border-slate-800/40 hover:border-slate-700/80 text-slate-300 hover:translate-x-0.5 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-transparent before:scale-y-0 before:transition-transform'
+                      ? 'bg-[#0A101C] border-sky-500/50 text-white before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-400 before:transition-transform before:scale-y-100 before:rounded-l-xl'
+                      : 'bg-[#0D1526]/50 hover:bg-[#0D1526]/90 border-slate-800/40 hover:border-slate-700/80 text-slate-300 before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-transparent before:scale-y-0 before:transition-transform'
                     }`}
                 >
                   {!sidebarColapsado ? (
                     <>
-                      {/* 1. Cabecera con código PRO-XXX, cápsula O(1) de tareas, tipo y botón 360° */}
-                      <div className="flex items-center justify-between gap-1 mb-1.5 text-[10px]">
+                      {/* 1. Cabecera con código PRO-XXX, micro-icono de categoría, cápsula O(1) de tareas y salud */}
+                      <div className="flex items-center justify-between gap-1.5 mb-1.5 text-[10px]">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="font-mono font-bold text-slate-300 bg-slate-900/90 px-1.5 py-0.5 rounded border border-slate-800/80 shrink-0">
                             {proy.codigo_legado}
                           </span>
-                          <span className="px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 font-semibold text-[9px] truncate">
-                            {proy.tipo_iniciativa || 'General'}
-                          </span>
+                          <IconoCategoriaIniciativa categoria={proy.tipo_iniciativa} />
                           {/* Cápsula de conteo O(1) en font-mono tabular-nums */}
                           <div
                             className="flex items-center gap-1 font-mono tabular-nums text-[10px] text-slate-400 bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800/80 shrink-0"
@@ -1165,18 +1173,13 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                               }
                             }}
                             title="Ver Detalle 360°"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-1.5 py-0.5 text-[10px] font-bold rounded bg-sky-600/90 hover:bg-sky-500 text-white shadow-xs border border-sky-400/40 flex items-center gap-1 active:scale-95 cursor-pointer"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-1.5 py-0.5 text-[10px] font-bold rounded bg-sky-600/90 hover:bg-sky-500 text-white shadow-xs border border-sky-400/40 flex items-center gap-1 active:scale-95 cursor-pointer shrink-0"
                           >
                             <Sparkles className="w-3 h-3 text-sky-200" strokeWidth={1.75} />
                             <span>360°</span>
                           </button>
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold ${healthBadgeClass}`}>
-                            <span className="relative flex h-2 w-2 shrink-0">
-                              {healthLabel === 'Bloqueado' && (
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                              )}
-                              <span className={`relative inline-flex rounded-full h-2 w-2 ${healthDot}`} />
-                            </span>
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shrink-0 ${healthBadgeClass}`}>
+                            <span className={`inline-flex rounded-full h-2 w-2 shrink-0 ${healthDot}`} />
                             <span>{healthLabel}</span>
                           </span>
                         </div>
@@ -1210,14 +1213,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   ) : (
                     <div className="flex flex-col items-center justify-center gap-1.5 py-1">
                       <FolderKanban className="w-5 h-5 mx-auto text-slate-400 group-hover:text-sky-300 transition-colors duration-150" strokeWidth={1.75} />
-                      <span className="relative flex h-2.5 w-2.5">
-                        {healthLabel === 'Bloqueado' && (
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        )}
-                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${healthDot}`} />
-                      </span>
+                      <span className={`inline-flex rounded-full h-2.5 w-2.5 ${healthDot}`} />
                       {contadores.total > 0 && (
-                        <span className="font-mono tabular-nums text-[9px] text-sky-400 bg-sky-950/40 px-1 py-0.2 rounded border border-sky-800/50">
+                        <span className="font-mono tabular-nums text-[9px] text-sky-400 bg-sky-950/40 px-1 py-0.5 rounded border border-sky-800/50">
                           {contadores.activas}
                         </span>
                       )}
@@ -1240,11 +1238,11 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 setModalNuevoProyectoAbierto(true);
               }
             }}
-            className="w-full py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white text-xs font-bold shadow-md shadow-sky-950/40 flex items-center justify-center gap-2 transition duration-150 border border-sky-400/30 cursor-pointer"
+            className="w-full h-10 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
             title="Crear nuevo proyecto"
           >
-            <Plus className="w-4 h-4 text-sky-200 shrink-0" strokeWidth={1.75} />
-            {!sidebarColapsado && <span className="whitespace-nowrap font-semibold">Nuevo Proyecto</span>}
+            <Plus className="w-4 h-4 shrink-0" strokeWidth={2} />
+            {!sidebarColapsado && <span className="whitespace-nowrap">Nuevo Proyecto</span>}
           </button>
         </div>
       </aside>
@@ -1252,7 +1250,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
       {/* =================================================================== */}
       {/* 2. ÁREA CENTRAL DEL TABLERO KANBAN                                 */}
       {/* =================================================================== */}
-      <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-slate-100 dark:bg-[#040711] transition-colors duration-200">
+      <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#040711] transition-colors duration-200">
         {/* ================================================================= */}
         {/* ================================================================= */}
         {/* BARRA ÚNICA COMPACTA MÓVIL (md:hidden) - REQ-UI-24                */}
@@ -1339,14 +1337,14 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         {/* ================================================================= */}
         {/* HEADER MULTI-FILA DESKTOP (md:flex)                               */}
         {/* ================================================================= */}
-        <header className="hidden md:flex bg-white dark:bg-[#080E1C] border-b border-slate-200 dark:border-slate-800/60 md:px-4 md:py-2 shrink-0 flex-col gap-2 shadow-sm transition-colors overflow-visible relative">
+        <header className="hidden md:flex bg-[#080E1C] border-b border-slate-800/80 md:px-4 md:py-2 shrink-0 flex-col gap-2 transition-colors overflow-visible relative">
           {/* =============================================================== */}
           {/* FILA 1: CONTEXTO DE PROYECTO, CRONOGRAMA & GASTO GLOBAL          */}
           {/* =============================================================== */}
-          <div className="hidden md:flex items-center justify-between gap-3 min-h-[38px] overflow-visible relative w-full flex-wrap pb-1 border-b border-slate-200/60 dark:border-slate-800/40">
+          <div className="hidden md:flex items-center justify-between gap-3 min-h-[38px] overflow-visible relative w-full flex-wrap pb-1 border-b border-slate-800/60">
             {/* Lado Izquierdo: Título y Píldora de Estado (Vista Global o Proyecto Activo) */}
             <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-              <h2 className="hidden sm:flex font-bold text-slate-800 dark:text-slate-100 text-sm md:text-base items-center gap-2 shrink-0">
+              <h2 className="hidden sm:flex font-bold text-slate-100 text-sm md:text-base items-center gap-2 shrink-0">
                 <span>Tablero Kanban</span>
               </h2>
 
@@ -1365,7 +1363,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   return (
                     <div
                       id="label-proyecto-activo"
-                      className={`text-[11px] font-medium px-2.5 py-1.5 rounded-lg border inline-flex items-center gap-1.5 shrink-0 shadow-xs transition-all ${estiloSalud}`}
+                      className={`h-9 text-[11px] font-medium px-2.5 rounded-lg border inline-flex items-center gap-1.5 shrink-0 transition-colors ${estiloSalud}`}
                     >
                       <FolderKanban className="w-3.5 h-3.5 shrink-0 opacity-90" strokeWidth={1.75} />
                       <span className="font-mono font-bold tracking-tight">[{proyectoActivo.codigo_legado}]</span>
@@ -1373,7 +1371,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         {proyectoActivo.nombre}
                       </span>
                       {proyectoActivo.cpi !== undefined && (
-                        <span className="font-mono tabular-nums text-[10px] px-1 py-0.2 rounded bg-black/30 border border-white/10" title="CPI">
+                        <span className="font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded bg-black/30 border border-white/10" title="CPI">
                           CPI {proyectoActivo.cpi.toFixed(2)}
                         </span>
                       )}
@@ -1407,10 +1405,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               ) : (
                 <div
                   id="label-proyecto-activo"
-                  className="inline-flex text-[11px] font-medium px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800/60 bg-slate-100 dark:bg-slate-900/70 text-slate-600 dark:text-slate-300 items-center gap-1.5 shrink-0 select-none shadow-xs"
+                  className="h-9 inline-flex text-[11px] font-medium px-2.5 rounded-lg border border-slate-800/80 bg-[#0D1526] text-slate-300 items-center gap-1.5 shrink-0 select-none"
                 >
                   <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">Vista Global</span>
+                  <span className="font-semibold text-slate-200">Vista Global</span>
                 </div>
               )}
             </div>
@@ -1421,16 +1419,16 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               {proyectoActivo && (proyectoActivo.fecha_inicio || proyectoActivo.fecha_fin) && (
                 <div
                   id="kanban-cronograma-proyecto"
-                  className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800/60 text-[11px] font-medium text-slate-600 dark:text-slate-300 shrink-0"
+                  className="hidden lg:flex h-9 items-center gap-1.5 px-2.5 rounded-lg bg-[#0D1526] border border-slate-800/80 text-[11px] font-medium text-slate-300 shrink-0"
                   title="Cronograma del proyecto"
                 >
-                  <CalendarRange className="w-3.5 h-3.5 text-indigo-400 shrink-0" strokeWidth={1.75} />
+                  <CalendarRange className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
                   <span className="font-mono tabular-nums text-[10px]">
                     {formatearFechaSimple(proyectoActivo.fecha_inicio) || 'Inicio s/f'} → {formatearFechaSimple(proyectoActivo.fecha_fin) || 'Fin s/f'}
                   </span>
                   {progresoTemporalProyecto !== null && (
                     <span
-                      className="font-mono tabular-nums text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/30"
+                      className="font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 border border-sky-500/30"
                       title="Progreso temporal transcurrido"
                     >
                       {progresoTemporalProyecto}% t
@@ -1450,10 +1448,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   type="button"
                   id="btn-time-capsule"
                   onClick={() => setDropdownTiempoAbierto(!dropdownTiempoAbierto)}
-                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all flex items-center gap-1.5 cursor-pointer select-none active:scale-[0.98] ${filtroTemporal !== 'TODO'
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)]'
-                      : 'bg-slate-100 dark:bg-slate-900/70 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
-                    }`}
+                  className={getFiltroTriggerClass(filtroTemporal !== 'TODO')}
                   title="Filtro de horizonte temporal"
                 >
                   {filtroTemporal === 'TODO' && <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />}
@@ -1506,18 +1501,18 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
               {/* Bloque de Gasto Acumulado / Presupuesto Global (Solo Desktop md+ per REQ-UI-24) */}
               <div
                 id="kanban-gasto-presupuesto-box"
-                className="hidden md:inline-flex items-center gap-1.5 text-[11px] bg-slate-50 dark:bg-slate-900/70 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800/60 font-medium shrink-0"
+                className="hidden md:inline-flex h-9 items-center gap-1.5 text-[11px] bg-[#0D1526] px-2.5 rounded-lg border border-slate-800/80 font-medium shrink-0"
               >
-                <span className="text-slate-500 dark:text-slate-400">
+                <span className="text-slate-400">
                   {proyectoActivo ? 'Gasto Proyecto:' : 'Gasto Global:'}
                 </span>
-                <b className="text-slate-900 dark:text-slate-100 font-bold font-mono tabular-nums">
+                <b className="text-slate-100 font-bold font-mono tabular-nums">
                   PEN {gastoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </b>
                 {presupuestoContextualPen > 0 && (
                   <>
-                    <span className="text-slate-400 dark:text-slate-600">/</span>
-                    <span className="font-mono tabular-nums text-slate-500 dark:text-slate-400" title="Presupuesto Tope">
+                    <span className="text-slate-600">/</span>
+                    <span className="font-mono tabular-nums text-slate-400" title="Presupuesto Tope">
                       PEN {presupuestoContextualPen.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                     <span
@@ -1538,24 +1533,24 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
           {/* =============================================================== */}
           {/* FILA 2: BARRA DE FILTROS OPERATIVOS KANBAN (Desktop md+)        */}
           {/* =============================================================== */}
-          <div className="portal-surface p-2 rounded-xl flex flex-col gap-2 text-xs overflow-visible relative bg-slate-50/70 dark:bg-[#080E1C]/90 border border-slate-200/80 dark:border-slate-800/70">
+          <div className="p-2 rounded-xl flex flex-col gap-2 text-xs overflow-visible relative bg-[#080E1C]/90 border border-slate-800/80">
             <div className="hidden md:flex items-center gap-2 text-xs overflow-visible relative flex-wrap w-full">
-              {/* Buscador de Tareas Desktop */}
-              <div className="hidden md:block relative w-36 md:w-44 shrink-0">
-                <Search className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400 w-3.5 h-3.5 top-2" strokeWidth={1.75} />
+              {/* Buscador de Tareas Desktop (h-9 Dark Cobalt) */}
+              <div className="hidden md:block relative w-40 md:w-48 shrink-0">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 w-3.5 h-3.5" strokeWidth={1.75} />
                 <input
                   type="text"
                   id="filter-buscar-tarea"
                   value={busquedaTarea}
                   onChange={(e) => setBusquedaTarea(e.target.value)}
                   placeholder="Buscar tarea..."
-                  className="w-full bg-slate-100 dark:bg-[#0D1526]/60 hover:dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-[11px] rounded-lg border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/30 pl-7 pr-6 py-1.5 outline-none transition font-medium"
+                  className="w-full h-9 bg-[#0D1526] hover:border-sky-500/40 focus:border-sky-500/60 text-slate-200 placeholder-slate-400 text-xs rounded-lg border border-slate-800/80 pl-8 pr-7 outline-none transition-colors font-medium"
                 />
                 {busquedaTarea && (
                   <button
                     type="button"
                     onClick={() => setBusquedaTarea('')}
-                    className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-200 text-xs font-bold cursor-pointer"
+                    className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-200 text-xs font-bold cursor-pointer"
                     title="Limpiar búsqueda"
                   >
                     <X className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -1563,18 +1558,18 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 )}
               </div>
 
-              {/* Micro-Riel Compacto de Ordenamiento Kanban */}
+              {/* Micro-Riel Compacto de Ordenamiento Kanban (h-9) */}
               <div
-                className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/70 border border-slate-800/60 gap-0.5 shrink-0 shadow-xs"
+                className="h-9 inline-flex items-center p-0.5 rounded-lg bg-[#0D1526] border border-slate-800/80 gap-0.5 shrink-0"
                 role="group"
                 aria-label="Criterio de Ordenamiento"
               >
                 <button
                   type="button"
                   onClick={() => setCriterioOrden('PRIORITY')}
-                  className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${criterioOrden === 'PRIORITY'
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'PRIORITY'
+                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar por Prioridad (Eisenhower)"
                 >
@@ -1584,9 +1579,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <button
                   type="button"
                   onClick={() => setCriterioOrden('DATE')}
-                  className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${criterioOrden === 'DATE'
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'DATE'
+                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar por Fecha / Vencimiento"
                 >
@@ -1596,9 +1591,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <button
                   type="button"
                   onClick={() => setCriterioOrden('ENERGY')}
-                  className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${criterioOrden === 'ENERGY'
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'ENERGY'
+                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar por Nivel de Energía"
                 >
@@ -1608,9 +1603,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <button
                   type="button"
                   onClick={() => setCriterioOrden('HOURS')}
-                  className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${criterioOrden === 'HOURS'
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'HOURS'
+                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar por Horas Estimadas"
                 >
@@ -1620,9 +1615,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <button
                   type="button"
                   onClick={() => setCriterioOrden('ALPHA')}
-                  className={`h-7 w-7 rounded-md flex items-center justify-center transition-all cursor-pointer ${criterioOrden === 'ALPHA'
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_10px_rgba(56,189,248,0.15)]'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'ALPHA'
+                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar Alfabético (A-Z)"
                 >
@@ -1641,12 +1636,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   id="btn-hito-capsule"
                   disabled={!proyectoSeleccionadoCodigo}
                   onClick={() => proyectoSeleccionadoCodigo && setPopoverHitoAbierto(!popoverHitoAbierto)}
-                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${!proyectoSeleccionadoCodigo
-                      ? 'opacity-40 cursor-not-allowed border border-slate-300 dark:border-slate-800/40 bg-slate-200/50 dark:bg-[#0D1526]/40 text-slate-400 dark:text-slate-500'
-                      : filtroHito
-                        ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium cursor-pointer'
-                        : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80 cursor-pointer'
-                    }`}
+                  className={getFiltroTriggerClass(Boolean(filtroHito), !proyectoSeleccionadoCodigo)}
                   title={
                     !proyectoSeleccionadoCodigo
                       ? 'Selecciona un proyecto para filtrar por Paquete de Trabajo'
@@ -1736,10 +1726,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <button
                   type="button"
                   onClick={() => setPopoverPrioAbierto(!popoverPrioAbierto)}
-                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${filtroPrioridad
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
-                      : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
-                    }`}
+                  className={getFiltroTriggerClass(Boolean(filtroPrioridad))}
                 >
                   <Flame className={`w-3.5 h-3.5 shrink-0 ${filtroPrioridad ? 'text-sky-400' : 'text-rose-400'}`} strokeWidth={1.75} />
                   <span>
@@ -1797,10 +1784,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <button
                   type="button"
                   onClick={() => setPopoverEnergiaAbierto(!popoverEnergiaAbierto)}
-                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${filtroEnergia
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
-                      : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
-                    }`}
+                  className={getFiltroTriggerClass(Boolean(filtroEnergia))}
                 >
                   <Zap className={`w-3.5 h-3.5 shrink-0 ${filtroEnergia ? 'text-sky-400' : 'text-amber-400'}`} strokeWidth={1.75} />
                   <span>
@@ -1857,10 +1841,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <button
                   type="button"
                   onClick={() => setPopoverPlazoAbierto(!popoverPlazoAbierto)}
-                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${filtroPlazo
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
-                      : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
-                    }`}
+                  className={getFiltroTriggerClass(Boolean(filtroPlazo))}
                 >
                   <Calendar className={`w-3.5 h-3.5 shrink-0 ${filtroPlazo ? 'text-sky-400' : 'text-slate-400'}`} strokeWidth={1.75} />
                   <span>
@@ -1920,10 +1901,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <button
                   type="button"
                   onClick={() => setPopoverDepAbierto(!popoverDepAbierto)}
-                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium tracking-wide transition-all cursor-pointer inline-flex items-center gap-1.5 shrink-0 select-none active:scale-[0.98] ${filtroDependencia
-                      ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.12)] font-medium'
-                      : 'bg-slate-100 dark:bg-[#0D1526]/60 hover:bg-slate-200 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700/80'
-                    }`}
+                  className={getFiltroTriggerClass(Boolean(filtroDependencia))}
                 >
                   <Link2 className={`w-3.5 h-3.5 shrink-0 ${filtroDependencia ? 'text-sky-400' : 'text-slate-400'}`} strokeWidth={1.75} />
                   <span>
@@ -1968,12 +1946,12 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 )}
               </div>
 
-              {/* Indicador reactivo y botón Limpiar Filtros */}
+              {/* Indicador reactivo y botón Limpiar Filtros (h-9 Dark Cobalt) */}
               {hayFiltrosActivos && (
                 <div className="ml-auto hidden md:flex items-center gap-2 shrink-0">
                   <span
                     id="badge-filtro-activo-resumen"
-                    className="bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono tabular-nums text-[11px] px-2 py-1 rounded-lg flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                    className="h-9 px-2.5 rounded-lg bg-[#0D1526] border border-amber-500/35 text-amber-300 font-mono tabular-nums text-xs inline-flex items-center gap-1 whitespace-nowrap"
                   >
                     <span>{tareasFiltradas.length}/{tareas.length} tareas</span>
                   </span>
@@ -1982,10 +1960,10 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     type="button"
                     id="btn-limpiar-filtros-kanban"
                     onClick={limpiarTodosLosFiltros}
-                    className="filter-ghost-btn text-[11px] font-medium flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800/60 hover:border-rose-500/30 transition cursor-pointer active:scale-[0.98]"
+                    className="filter-ghost-btn h-9 px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 bg-[#0D1526] text-slate-300 hover:text-rose-300 hover:bg-rose-500/10 border border-slate-800/80 hover:border-rose-500/40 transition-colors cursor-pointer"
                     title="Restablecer filtros (X)"
                   >
-                    <RotateCcw className="w-3 h-3" strokeWidth={1.75} />
+                    <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.75} />
                     <span>Limpiar (X)</span>
                   </button>
                 </div>

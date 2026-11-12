@@ -16,11 +16,11 @@ export const ViewHabitos: React.FC = () => {
       {/* ================================================================= */}
       {/* CABECERA MAESTRA UNIFICADA CON SELECTOR DE SUBPESTAÑAS COBALT     */}
       {/* ================================================================= */}
-      <div className="px-2.5 sm:px-4 lg:px-6 py-2 sm:py-3 bg-[#0D1526]/80 backdrop-blur-md border-b border-slate-800/40 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 shadow-cobalt-1">
+      <div className="px-2.5 sm:px-4 lg:px-6 py-2 sm:py-3 bg-[#0D1526]/90 backdrop-blur-md border-b border-slate-800/80 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
         {/* Identidad del Módulo */}
         <div className="flex items-center justify-between sm:justify-start gap-2.5 sm:gap-3">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="p-1.5 sm:p-2.5 bg-gradient-to-tr from-emerald-600 via-teal-600 to-cyan-600 text-white rounded-xl sm:rounded-2xl shadow-md shadow-emerald-500/20 ring-1 ring-white/20 shrink-0">
+            <div className="p-2 bg-[#0B132B] text-sky-400 border border-slate-800/80 rounded-xl shrink-0">
               <Activity className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
@@ -28,7 +28,7 @@ export const ViewHabitos: React.FC = () => {
                 <h2 className="text-sm sm:text-lg font-black text-slate-100 leading-tight truncate">
                   Hábitos & Vida
                 </h2>
-                <span className="text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-800/80 shrink-0">
+                <span className="text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-sky-950/60 text-sky-300 border border-sky-800/60 shrink-0">
                   SaaS Personal
                 </span>
               </div>
@@ -43,7 +43,7 @@ export const ViewHabitos: React.FC = () => {
             type="button"
             id="btn-nuevo-habito-header-movil"
             onClick={() => setModalActividadAbierto(true)}
-            className="sm:hidden min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-900/30 transition-all duration-200 active:scale-95 cursor-pointer shrink-0"
+            className="sm:hidden h-10 px-3.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
             title="Registrar nuevo hábito"
           >
             <Plus className="w-4 h-4" strokeWidth={1.75} />
@@ -57,7 +57,7 @@ export const ViewHabitos: React.FC = () => {
           <div
             role="tablist"
             aria-label="Navegación estratégica del módulo de Hábitos y Vida"
-            className="inline-flex p-0.5 sm:p-1 bg-[#0B132B] rounded-xl border border-slate-800/40 gap-0.5 sm:gap-1 text-xs w-full sm:w-auto justify-between sm:justify-start"
+            className="inline-flex p-0.5 bg-[#0B132B] rounded-xl border border-slate-800/80 gap-0.5 sm:gap-1 text-xs w-full sm:w-auto justify-between sm:justify-start"
           >
             <button
               type="button"
@@ -65,9 +65,9 @@ export const ViewHabitos: React.FC = () => {
               aria-selected={tabActiva === 'tablero'}
               id="subtab-habitos-tablero"
               onClick={() => setTabActiva('tablero')}
-              className={`relative flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
+              className={`relative flex-1 sm:flex-initial h-9 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
                 tabActiva === 'tablero'
-                  ? 'text-sky-300 bg-sky-950/30 shadow-xs'
+                  ? 'text-sky-300 bg-sky-950/30'
                   : 'text-slate-400 hover:text-sky-300'
               }`}
             >
@@ -84,9 +84,9 @@ export const ViewHabitos: React.FC = () => {
               aria-selected={tabActiva === 'metas'}
               id="subtab-habitos-metas"
               onClick={() => setTabActiva('metas')}
-              className={`relative flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
+              className={`relative flex-1 sm:flex-initial h-9 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
                 tabActiva === 'metas'
-                  ? 'text-sky-300 bg-sky-950/30 shadow-xs'
+                  ? 'text-sky-300 bg-sky-950/30'
                   : 'text-slate-400 hover:text-sky-300'
               }`}
             >
@@ -103,9 +103,9 @@ export const ViewHabitos: React.FC = () => {
               aria-selected={tabActiva === 'dashboard'}
               id="subtab-habitos-dashboard"
               onClick={() => setTabActiva('dashboard')}
-              className={`relative flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
+              className={`relative flex-1 sm:flex-initial h-9 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
                 tabActiva === 'dashboard'
-                  ? 'text-sky-300 bg-sky-950/30 shadow-xs'
+                  ? 'text-sky-300 bg-sky-950/30'
                   : 'text-slate-400 hover:text-sky-300'
               }`}
             >
@@ -122,7 +122,7 @@ export const ViewHabitos: React.FC = () => {
             type="button"
             id="btn-nuevo-habito-header"
             onClick={() => setModalActividadAbierto(true)}
-            className="hidden sm:flex px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs items-center gap-1.5 shadow-md shadow-emerald-900/30 transition-all duration-200 active:scale-95 cursor-pointer shrink-0"
+            className="hidden sm:flex h-10 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs items-center gap-1.5 transition-colors cursor-pointer shrink-0"
             title="Registrar nuevo hábito o compromiso personal"
           >
             <Plus className="w-4 h-4" strokeWidth={1.75} />

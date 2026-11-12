@@ -1,6 +1,12 @@
 import { db, registrarTombstone } from '../db/db';
 import type { ActividadPersonal, SubtareaPaso, FrecuenciaCiclo, TareaRecord } from '../types';
-import { sincronizarActividadCalendar } from './calendarSyncService';
+import {
+  sincronizarActividadCalendar,
+  sincronizarCreacionCalendar,
+  sincronizarActualizacionCalendar,
+  sincronizarEliminacionCalendar,
+  type ResultadoCalendarSync
+} from './calendarSyncService';
 import { sincronizarMetasInternasHaciaPlanesLocal } from './metasService';
 
 /**
@@ -18,6 +24,34 @@ export function formatFechaIsoLocal(date: Date = new Date()): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/**
+ * Evaluación única y canónica de cumplimiento diario para Tablero, Tarjeta y KPIs.
+ * Evita falsos negativos en hábitos con mora histórica (ultima_fecha_completado === hoyStr)
+ * y falsos positivos tras desmarcar (eliminando heurísticos de updated_at).
+ */
+export function esActividadCompletadaHoy(
+  act: ActividadPersonal | undefined | null,
+  hoyStr: string = formatFechaIsoLocal()
+): boolean {
+  if (!act) return false;
+  if (act.estado === '04_Completado') return true;
+  if (act.ultima_fecha_completado === hoyStr) return true;
+  if (Array.isArray(act.historial_fechas) && act.historial_fechas.includes(hoyStr)) return true;
+
+  const tieneRecurrencia = Boolean(
+    (act.frecuencia_ciclo && act.frecuencia_ciclo !== 'NINGUNA') ||
+    (act.regla_repeticion && act.regla_repeticion.trim() !== '')
+  );
+  const esRutinaria = act.tipo_compromiso === 'HABITUAL' || tieneRecurrencia;
+  const fProgLimpia = (act.fecha_programada || '').split(/[\sT]/)[0];
+
+  if (esRutinaria && fProgLimpia > hoyStr && (act.racha_actual || 0) > 0) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -135,27 +169,52 @@ export async function completarActividadPersonalLocal(
   esRepetida: boolean;
   nuevaRacha: number;
 }> {
-  const rachaActual = actividad.racha_actual || 0;
+  let actividadBase = actividad;
+  try {
+    const fresca = await db.actividades_personales.get(actividad.id);
+    if (fresca) actividadBase = fresca;
+  } catch {
+    // Fallback al snapshot recibido si IndexedDB no está disponible en entorno de test
+  }
+
+  const rachaActual = actividadBase.racha_actual || 0;
   const tieneRecurrencia = Boolean(
-    (actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'NINGUNA') ||
-    (actividad.regla_repeticion && actividad.regla_repeticion.trim() !== '')
+    (actividadBase.frecuencia_ciclo && actividadBase.frecuencia_ciclo !== 'NINGUNA') ||
+    (actividadBase.regla_repeticion && actividadBase.regla_repeticion.trim() !== '')
   );
-  const esRutinaria = actividad.tipo_compromiso === 'HABITUAL' || tieneRecurrencia;
+  const esRutinaria = actividadBase.tipo_compromiso === 'HABITUAL' || tieneRecurrencia;
 
   const hoyD = new Date();
   const hoyStr = formatFechaIsoLocal(hoyD);
   const ayerD = new Date(hoyD.getFullYear(), hoyD.getMonth(), hoyD.getDate() - 1, 12, 0, 0);
   const ayerStr = formatFechaIsoLocal(ayerD);
 
-  // 1. Cálculo de Racha: validación de mora y penalización por discontinuidad temporal
+  const fProgLimpia = (actividadBase.fecha_programada || '').split(/[\sT]/)[0];
+
+  // Idempotencia ante doble clic rápido cuando el ciclo de hoy ya fue completado
+  if (
+    completar &&
+    actividadBase.ultima_fecha_completado === hoyStr &&
+    (esRutinaria ? fProgLimpia > hoyStr : actividadBase.estado === '04_Completado')
+  ) {
+    return {
+      actividadActualizada: actividadBase,
+      esRepetida: esRutinaria,
+      nuevaRacha: rachaActual
+    };
+  }
+
+  // 1. Cálculo de Racha: validación de mora y blindaje contra doble conteo en el mismo día
   let nuevaRacha = rachaActual;
   if (completar) {
     if (!esRutinaria) {
       nuevaRacha = rachaActual;
+    } else if (actividadBase.ultima_fecha_completado === hoyStr) {
+      // Ya se sumó cumplimiento hoy: impedir doble incremento de racha
+      nuevaRacha = rachaActual;
     } else {
-      const fProgLimpia = (actividad.fecha_programada || '').split(/[\sT]/)[0];
       const estaEnMora = fProgLimpia < hoyStr;
-      const ultimaComp = actividad.ultima_fecha_completado;
+      const ultimaComp = actividadBase.ultima_fecha_completado;
       if (estaEnMora && (!ultimaComp || ultimaComp < ayerStr)) {
         // Rompe racha por discontinuidad temporal al arrastrar mora
         nuevaRacha = 1;
@@ -169,18 +228,18 @@ export async function completarActividadPersonalLocal(
 
   // 2. Avance de ciclo y reinicio de estado para hábitos o actividades recurrentes
   let nuevoEstado = completar ? '04_Completado' : '02_Por_Hacer';
-  let nuevaFecha = actividad.fecha_programada;
-  let proximaFecha: string | undefined = actividad.proxima_fecha_programada;
-  let ultimaFechaCompletado: string | undefined = actividad.ultima_fecha_completado;
+  let nuevaFecha = actividadBase.fecha_programada;
+  let proximaFecha: string | undefined = actividadBase.proxima_fecha_programada;
+  let ultimaFechaCompletado: string | undefined = actividadBase.ultima_fecha_completado;
   let esRepetida = false;
 
   if (completar) {
     ultimaFechaCompletado = hoyStr;
-    if (esRutinaria && actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'NINGUNA') {
+    if (esRutinaria && actividadBase.frecuencia_ciclo && actividadBase.frecuencia_ciclo !== 'NINGUNA') {
       const prox = calcularSiguienteFechaCiclo(
-        actividad.fecha_programada,
-        actividad.frecuencia_ciclo,
-        actividad.regla_repeticion
+        actividadBase.fecha_programada,
+        actividadBase.frecuencia_ciclo,
+        actividadBase.regla_repeticion
       );
       nuevaFecha = prox;
       proximaFecha = prox;
@@ -192,13 +251,13 @@ export async function completarActividadPersonalLocal(
     ultimaFechaCompletado = undefined;
     proximaFecha = undefined;
     nuevoEstado = '02_Por_Hacer';
-    if (esRutinaria && (actividad.fecha_programada || '').split(/[\sT]/)[0] > hoyStr) {
+    if (esRutinaria && (actividadBase.fecha_programada || '').split(/[\sT]/)[0] > hoyStr) {
       nuevaFecha = hoyStr;
     }
   }
 
   // 3. Gestión de trazabilidad histórica en historial_fechas
-  const historialPrevio = Array.isArray(actividad.historial_fechas) ? [...actividad.historial_fechas] : [];
+  const historialPrevio = Array.isArray(actividadBase.historial_fechas) ? [...actividadBase.historial_fechas] : [];
   let nuevoHistorial: string[];
   if (completar) {
     nuevoHistorial = historialPrevio.includes(hoyStr) ? historialPrevio : [...historialPrevio, hoyStr];
@@ -208,14 +267,14 @@ export async function completarActividadPersonalLocal(
 
   const nowIso = new Date().toISOString();
   const actividadActualizada: ActividadPersonal = {
-    ...actividad,
+    ...actividadBase,
     estado: nuevoEstado as ActividadPersonal['estado'],
     racha_actual: nuevaRacha,
     fecha_programada: nuevaFecha,
     ultima_fecha_completado: ultimaFechaCompletado,
     proxima_fecha_programada: proximaFecha,
     historial_fechas: nuevoHistorial,
-    version: (actividad.version || 1) + 1,
+    version: (actividadBase.version || 1) + 1,
     sync_status: 'pending',
     updated_at: nowIso
   };
@@ -223,7 +282,7 @@ export async function completarActividadPersonalLocal(
   await db.actividades_personales.put(actividadActualizada);
 
   // Notificar al servicio puente de Calendar de forma reactiva no bloqueante
-  if (actividad.agendado_calendar === 'Sí') {
+  if (actividadBase.agendado_calendar === 'Sí') {
     sincronizarActividadCalendar(actividadActualizada, 'UPSERT', {
       alcance: 'ALL',
       fechaRef: actividadActualizada.fecha_programada
@@ -252,38 +311,64 @@ export async function registrarAvanceCuantitativoLocal(
   rachaRescatada: boolean;
   metaCompletada: boolean;
 }> {
+  let actividadBase = actividad;
+  try {
+    const fresca = await db.actividades_personales.get(actividad.id);
+    if (fresca) actividadBase = fresca;
+  } catch {
+    // Fallback al snapshot recibido si IndexedDB no está disponible en entorno de test
+  }
+
+  const hoyStr = formatFechaIsoLocal();
   const valorNum = Math.max(0, parseFloat(String(valorAvance)) || 0);
-  const acumActual = parseFloat(String(actividad.valor_acumulado_actual || 0)) || 0;
+  const acumActual = parseFloat(String(actividadBase.valor_acumulado_actual || 0)) || 0;
   const nuevoAcumulado = acumActual + valorNum;
 
-  const nivelRescate = parseFloat(String(actividad.nivel_rescate_minimo || 0)) || 0;
-  const rachaActual = actividad.racha_actual || 0;
+  const nivelRescate = parseFloat(String(actividadBase.nivel_rescate_minimo || 0)) || 0;
+  const rachaActual = actividadBase.racha_actual || 0;
   let nuevaRacha = rachaActual;
   let rachaRescatada = false;
+  let ultimaFechaCompletado = actividadBase.ultima_fecha_completado;
+  const historialPrevio = Array.isArray(actividadBase.historial_fechas)
+    ? [...actividadBase.historial_fechas]
+    : [];
+  let nuevoHistorial = historialPrevio;
 
-  // Rescate de racha si el avance supera o iguala el nivel de rescate
+  // Rescate de racha si el avance supera o iguala el nivel de rescate (máx. 1 incremento por día)
   if (nivelRescate > 0 && valorNum >= nivelRescate) {
-    nuevaRacha = rachaActual + 1;
     rachaRescatada = true;
+    if (actividadBase.ultima_fecha_completado !== hoyStr) {
+      nuevaRacha = rachaActual + 1;
+      ultimaFechaCompletado = hoyStr;
+      if (!nuevoHistorial.includes(hoyStr)) {
+        nuevoHistorial.push(hoyStr);
+      }
+    }
   }
 
   // Verificación de cumplimiento de meta total
-  const metaTotal = parseFloat(String(actividad.meta_objetivo_total || 0)) || 0;
+  const metaTotal = parseFloat(String(actividadBase.meta_objetivo_total || 0)) || 0;
   let metaCompletada = false;
-  let nuevoEstado = actividad.estado;
+  let nuevoEstado = actividadBase.estado;
 
   if (metaTotal > 0 && nuevoAcumulado >= metaTotal) {
     nuevoEstado = '04_Completado';
     metaCompletada = true;
+    ultimaFechaCompletado = hoyStr;
+    if (!nuevoHistorial.includes(hoyStr)) {
+      nuevoHistorial.push(hoyStr);
+    }
   }
 
   const nowIso = new Date().toISOString();
   const actividadActualizada: ActividadPersonal = {
-    ...actividad,
+    ...actividadBase,
     valor_acumulado_actual: nuevoAcumulado,
     racha_actual: nuevaRacha,
     estado: nuevoEstado,
-    version: (actividad.version || 1) + 1,
+    ultima_fecha_completado: ultimaFechaCompletado,
+    historial_fechas: nuevoHistorial,
+    version: (actividadBase.version || 1) + 1,
     sync_status: 'pending',
     updated_at: nowIso
   };
@@ -393,7 +478,7 @@ export async function eliminarActividadConAlcance(
   id: string,
   alcance: 'SINGLE' | 'FUTURE' | 'ALL',
   fechaReferencia: string
-): Promise<{ success: boolean; alcanceAplicado: 'SINGLE' | 'FUTURE' | 'ALL' }> {
+): Promise<{ success: boolean; alcanceAplicado: 'SINGLE' | 'FUTURE' | 'ALL'; calendarResult?: ResultadoCalendarSync }> {
   const act = await db.actividades_personales.get(id);
   if (!act) {
     return { success: false, alcanceAplicado: alcance };
@@ -409,14 +494,30 @@ export async function eliminarActividadConAlcance(
   if (!tieneRecurrencia || alcance === 'ALL') {
     await registrarTombstone('actividades_personales', id);
     await db.actividades_personales.delete(id);
-    if (act.codigo_legado) {
-      await db.subtareas_pasos.where('id_padre_vinculado').equals(act.codigo_legado).delete();
+
+    const padresAEliminar = Array.from(new Set([act.codigo_legado, id].filter(Boolean) as string[]));
+    for (const padreRef of padresAEliminar) {
+      try {
+        const subs = await db.subtareas_pasos.where('id_padre_vinculado').equals(padreRef).toArray?.();
+        if (Array.isArray(subs)) {
+          for (const sub of subs) {
+            await registrarTombstone('subtareas_pasos', sub.id);
+          }
+        }
+      } catch {
+        // Ignorar si toArray no está disponible en mocks parciales
+      }
+      await db.subtareas_pasos.where('id_padre_vinculado').equals(padreRef).delete();
     }
-    if (act.agendado_calendar === 'Sí') {
-      sincronizarActividadCalendar(act, 'DELETE', { alcance: 'ALL', fechaRef: fechaReferencia })
-        .catch((e) => console.warn('[habitosService] Fallo en sincronización Calendar (DELETE ALL):', e));
+
+    let calendarResult: ResultadoCalendarSync | undefined;
+    if (act.agendado_calendar === 'Sí' || Boolean(act.id_evento_calendar)) {
+      calendarResult = await sincronizarEliminacionCalendar(act, 'ALL', fechaReferencia).catch((e) => {
+        console.warn('[habitosService] Fallo en sincronización Calendar (DELETE ALL):', e);
+        return undefined;
+      });
     }
-    return { success: true, alcanceAplicado: 'ALL' };
+    return { success: true, alcanceAplicado: 'ALL', calendarResult };
   }
 
   const nowIso = new Date().toISOString();
@@ -448,12 +549,20 @@ export async function eliminarActividadConAlcance(
       sync_status: 'pending'
     });
 
-    if (act.agendado_calendar === 'Sí') {
-      sincronizarActividadCalendar(act, 'DELETE', { alcance: 'SINGLE', fechaRef: fechaReferencia })
-        .catch((e) => console.warn('[habitosService] Fallo en sincronización Calendar (DELETE SINGLE):', e));
+    let calendarResult: ResultadoCalendarSync | undefined;
+    if (act.agendado_calendar === 'Sí' || Boolean(act.id_evento_calendar)) {
+      const actActualizada: ActividadPersonal = {
+        ...act,
+        excepciones_fechas: excepciones,
+        fecha_programada: proximaFecha
+      };
+      calendarResult = await sincronizarEliminacionCalendar(actActualizada, 'SINGLE', fechaReferencia).catch((e) => {
+        console.warn('[habitosService] Fallo en sincronización Calendar (DELETE SINGLE):', e);
+        return undefined;
+      });
     }
 
-    return { success: true, alcanceAplicado: 'SINGLE' };
+    return { success: true, alcanceAplicado: 'SINGLE', calendarResult };
   }
 
   if (alcance === 'FUTURE') {
@@ -475,12 +584,19 @@ export async function eliminarActividadConAlcance(
 
     await db.actividades_personales.update(id, updates);
 
-    if (act.agendado_calendar === 'Sí') {
-      sincronizarActividadCalendar(act, 'DELETE', { alcance: 'FUTURE', fechaRef: fechaReferencia })
-        .catch((e) => console.warn('[habitosService] Fallo en sincronización Calendar (DELETE FUTURE):', e));
+    let calendarResult: ResultadoCalendarSync | undefined;
+    if (act.agendado_calendar === 'Sí' || Boolean(act.id_evento_calendar)) {
+      calendarResult = await sincronizarEliminacionCalendar(
+        { ...act, fecha_fin: fechaFin },
+        'FUTURE',
+        fechaReferencia
+      ).catch((e) => {
+        console.warn('[habitosService] Fallo en sincronización Calendar (DELETE FUTURE):', e);
+        return undefined;
+      });
     }
 
-    return { success: true, alcanceAplicado: 'FUTURE' };
+    return { success: true, alcanceAplicado: 'FUTURE', calendarResult };
   }
 
   return { success: false, alcanceAplicado: alcance };
@@ -499,6 +615,7 @@ export async function editarActividadConAlcance(
   actividadPrincipal: ActividadPersonal;
   instanciaDesacoplada?: ActividadPersonal;
   alcanceAplicado: 'SINGLE' | 'FUTURE' | 'ALL';
+  calendarResult?: ResultadoCalendarSync;
 }> {
   const tieneRecurrencia = Boolean(
     (actividadOriginal.frecuencia_ciclo && actividadOriginal.frecuencia_ciclo !== 'NINGUNA') ||
@@ -520,11 +637,14 @@ export async function editarActividadConAlcance(
       sync_status: 'pending'
     };
     await db.actividades_personales.put(actualizada);
-    if (actualizada.agendado_calendar === 'Sí') {
-      sincronizarActividadCalendar(actualizada, 'UPSERT', { alcance: 'ALL', fechaRef: fechaReferencia })
-        .catch((e) => console.warn('[habitosService] Fallo en sincronización Calendar (EDIT ALL):', e));
+    let calendarResult: ResultadoCalendarSync | undefined;
+    if (actualizada.agendado_calendar === 'Sí' || Boolean(actualizada.id_evento_calendar)) {
+      calendarResult = await sincronizarActualizacionCalendar(actualizada).catch((e) => {
+        console.warn('[habitosService] Fallo en sincronización Calendar (EDIT ALL):', e);
+        return undefined;
+      });
     }
-    return { actividadPrincipal: actualizada, alcanceAplicado: 'ALL' };
+    return { actividadPrincipal: actualizada, alcanceAplicado: 'ALL', calendarResult };
   }
 
   if (alcance === 'SINGLE') {
@@ -558,6 +678,11 @@ export async function editarActividadConAlcance(
     };
     await db.actividades_personales.put(maestraActualizada);
 
+    if (actividadOriginal.agendado_calendar === 'Sí' || Boolean(actividadOriginal.id_evento_calendar)) {
+      sincronizarEliminacionCalendar(maestraActualizada, 'SINGLE', fechaReferencia)
+        .catch((e) => console.warn('[habitosService] Fallo excluyendo instancia previa en Calendar (EDIT SINGLE):', e));
+    }
+
     // 2. Crear una instancia puntual desacoplada para la fecha referenciada
     const count = await db.actividades_personales.count();
     const nuevoCodigo = `ACT-${String(count + 1).padStart(3, '0')}`;
@@ -571,6 +696,7 @@ export async function editarActividadConAlcance(
       regla_repeticion: '',
       fecha_programada: fechaReferencia,
       actividad_padre_id: actividadOriginal.id,
+      id_evento_calendar: undefined,
       version: 1,
       created_at: nowIso,
       updated_at: nowIso,
@@ -578,15 +704,19 @@ export async function editarActividadConAlcance(
     };
     await db.actividades_personales.add(instanciaDesacoplada);
 
+    let calendarResult: ResultadoCalendarSync | undefined;
     if (instanciaDesacoplada.agendado_calendar === 'Sí') {
-      sincronizarActividadCalendar(instanciaDesacoplada, 'UPSERT', { alcance: 'SINGLE', fechaRef: fechaReferencia })
-        .catch((e) => console.warn('[habitosService] Fallo en sincronización Calendar (EDIT SINGLE):', e));
+      calendarResult = await sincronizarCreacionCalendar(instanciaDesacoplada).catch((e) => {
+        console.warn('[habitosService] Fallo en sincronización Calendar (EDIT SINGLE):', e);
+        return undefined;
+      });
     }
 
     return {
       actividadPrincipal: maestraActualizada,
       instanciaDesacoplada,
-      alcanceAplicado: 'SINGLE'
+      alcanceAplicado: 'SINGLE',
+      calendarResult
     };
   }
 
@@ -606,6 +736,11 @@ export async function editarActividadConAlcance(
     };
     await db.actividades_personales.put(maestraAnterior);
 
+    if (actividadOriginal.agendado_calendar === 'Sí' || Boolean(actividadOriginal.id_evento_calendar)) {
+      sincronizarEliminacionCalendar(maestraAnterior, 'FUTURE', fechaReferencia)
+        .catch((e) => console.warn('[habitosService] Fallo recortando serie anterior en Calendar (EDIT FUTURE):', e));
+    }
+
     // 2. Crear una nueva serie recurrente que arranca en fechaReferencia con los cambios aplicados
     const count = await db.actividades_personales.count();
     const nuevoCodigo = `ACT-${String(count + 1).padStart(3, '0')}`;
@@ -616,6 +751,7 @@ export async function editarActividadConAlcance(
       codigo_legado: nuevoCodigo,
       fecha_programada: fechaReferencia,
       actividad_padre_id: actividadOriginal.id,
+      id_evento_calendar: undefined,
       version: 1,
       created_at: nowIso,
       updated_at: nowIso,
@@ -623,14 +759,18 @@ export async function editarActividadConAlcance(
     };
     await db.actividades_personales.add(nuevaSerieFutura);
 
+    let calendarResult: ResultadoCalendarSync | undefined;
     if (nuevaSerieFutura.agendado_calendar === 'Sí') {
-      sincronizarActividadCalendar(nuevaSerieFutura, 'UPSERT', { alcance: 'FUTURE', fechaRef: fechaReferencia })
-        .catch((e) => console.warn('[habitosService] Fallo en sincronización Calendar (EDIT FUTURE):', e));
+      calendarResult = await sincronizarCreacionCalendar(nuevaSerieFutura).catch((e) => {
+        console.warn('[habitosService] Fallo en sincronización Calendar (EDIT FUTURE):', e);
+        return undefined;
+      });
     }
 
     return {
       actividadPrincipal: nuevaSerieFutura,
-      alcanceAplicado: 'FUTURE'
+      alcanceAplicado: 'FUTURE',
+      calendarResult
     };
   }
 
@@ -668,15 +808,15 @@ export async function autoHidratarVinculosHabitosActividades(): Promise<{
       idProyecto?: string;
       keywords: string[];
     }> = [
-      { codigoHabito: 'ACT-001', idProyecto: 'PRO-004', keywords: ['fuerza', 'gimnasio', 'entrenamiento', 'acondicionamiento'] },
-      { codigoHabito: 'ACT-002', idProyecto: 'PRO-004', keywords: ['10k', 'carrera', 'series', 'atletismo', 'trote'] },
-      { codigoHabito: 'ACT-003', idProyecto: 'PRO-001', keywords: ['pmp', 'simulador', 'estudio', 'examen', 'predictivo'] },
-      { codigoHabito: 'ACT-004', idProyecto: 'PRO-001', keywords: ['lectura', 'libro', 'técnica', 'estudio'] },
-      { codigoHabito: 'ACT-005', idProyecto: 'PRO-011', keywords: ['gasto', 'flujo', 'caja', 'conciliación', 'factura', 'ocr'] },
-      { codigoHabito: 'ACT-006', idProyecto: 'PRO-002', keywords: ['inversión', 'portafolio', 'dividendo', 'broker', 'voo', 'qqq'] },
-      { codigoHabito: 'ACT-011', idProyecto: 'PRO-008', keywords: ['pmo', 'ágil', 'gobernanza', 'dashboard', 'delivery', 'alineamiento'] },
-      { codigoHabito: 'ACT-012', idProyecto: 'PRO-003', keywords: ['predial', 'inmueble', 'laredo', 'suministro', 'habilitación'] }
-    ];
+        { codigoHabito: 'ACT-001', idProyecto: 'PRO-004', keywords: ['fuerza', 'gimnasio', 'entrenamiento', 'acondicionamiento'] },
+        { codigoHabito: 'ACT-002', idProyecto: 'PRO-004', keywords: ['10k', 'carrera', 'series', 'atletismo', 'trote'] },
+        { codigoHabito: 'ACT-003', idProyecto: 'PRO-001', keywords: ['pmp', 'simulador', 'estudio', 'examen', 'predictivo'] },
+        { codigoHabito: 'ACT-004', idProyecto: 'PRO-001', keywords: ['lectura', 'libro', 'técnica', 'estudio'] },
+        { codigoHabito: 'ACT-005', idProyecto: 'PRO-011', keywords: ['gasto', 'flujo', 'caja', 'conciliación', 'factura', 'ocr'] },
+        { codigoHabito: 'ACT-006', idProyecto: 'PRO-002', keywords: ['inversión', 'portafolio', 'dividendo', 'broker', 'voo', 'qqq'] },
+        { codigoHabito: 'ACT-011', idProyecto: 'PRO-008', keywords: ['pmo', 'ágil', 'gobernanza', 'dashboard', 'delivery', 'alineamiento'] },
+        { codigoHabito: 'ACT-012', idProyecto: 'PRO-003', keywords: ['predial', 'inmueble', 'laredo', 'suministro', 'habilitación'] }
+      ];
 
     const mapaHabitosPorCodigo = new Map<string, ActividadPersonal>();
     for (const h of habitos) {
@@ -724,6 +864,8 @@ export async function autoHidratarVinculosHabitosActividades(): Promise<{
         (tar as any).habito_id = habitoAsignado.id;
         (tar as any).habitoId = habitoAsignado.id;
         (tar as any).habito_codigo = habitoAsignado.codigo_legado;
+        tar.updated_at = new Date().toISOString();
+        tar.sync_status = 'pending';
         tareasActualizadas.push(tar);
         tareasVinculadas++;
       }

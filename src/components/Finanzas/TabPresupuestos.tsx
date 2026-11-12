@@ -121,7 +121,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
   return (
     <div id="vista-fin-tab-presupuesto" className="tab-fin-view p-4 md:p-6 space-y-5 flex-1 animate-in fade-in duration-150">
       {/* HEADER PRESUPUESTOS */}
-      <div className="p-4 rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
             <Target className="w-4 h-4 text-emerald-400 shrink-0" strokeWidth={1.75} />
@@ -135,7 +135,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
           type="button"
           id="btn-configurar-techos-presupuesto"
           onClick={onConfigurarTechos}
-          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+          className="h-10 px-4 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
         >
           <span>Configurar Techos</span>
         </button>
@@ -156,7 +156,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
             return (
               <div
                 key={pItem.cat}
-                className="p-4 rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 space-y-2.5 transform-gpu hover:translate-y-[-2px] transition duration-150"
+                className="p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 space-y-2.5 transition-colors"
               >
                 <div className="flex justify-between items-start text-xs">
                   <span className="font-bold text-slate-200">{pItem.cat}</span>
@@ -166,7 +166,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
                 </div>
                 <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden shadow-inner">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${excede ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]' : 'bg-emerald-500 shadow-[0_0_8px_#10b981]'}`}
+                    className={`h-full rounded-full transition-all duration-500 ${excede ? 'bg-rose-500' : 'bg-emerald-500'}`}
                     style={{ width: `${Math.min(pItem.pct, 100)}%` }}
                   />
                 </div>
@@ -210,7 +210,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
             habitosPresupuestos.map((act) => (
               <div
                 key={act.id}
-                className="p-3.5 rounded-xl border border-slate-800 bg-[#0D1526] shadow-cobalt-1 space-y-2 transform-gpu hover:translate-y-[-2px] transition duration-150"
+                className="p-3.5 rounded-xl border border-slate-800/80 hover:border-sky-500/40 bg-[#0D1526]/90 space-y-2 transition-colors"
               >
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-200 truncate pr-2">
@@ -222,7 +222,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
                 </div>
                 <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden shadow-inner">
                   <div
-                    className="bg-teal-500 shadow-[0_0_8px_#14b8a6] h-full rounded-full transition-all duration-500"
+                    className="bg-teal-500 h-full rounded-full transition-all duration-500"
                     style={{ width: `${Math.min(act.pct, 100)}%` }}
                   />
                 </div>
@@ -262,7 +262,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
             proyectosBurnRate.map((p) => (
               <div
                 key={p.id}
-                className="p-4 rounded-2xl bg-[#0D1526] border border-slate-800/60 shadow-cobalt-1 space-y-3 transform-gpu hover:translate-y-[-2px] transition duration-150"
+                className="p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 space-y-3 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -276,7 +276,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
 
                 <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden shadow-inner">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${p.burnRate > 80 ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]' : 'bg-sky-500 shadow-[0_0_8px_#0ea5e9]'}`}
+                    className={`h-full rounded-full transition-all duration-500 ${p.burnRate > 80 ? 'bg-rose-500' : 'bg-sky-500'}`}
                     style={{ width: `${Math.min(p.burnRate, 100)}%` }}
                   />
                 </div>

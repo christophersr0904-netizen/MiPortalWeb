@@ -208,7 +208,7 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
       {/* 1. HERO BENTO CARDS DE MÉTRICAS GLOBALES */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         {/* Card 1: Total Metas */}
-        <div className="portal-surface p-4 rounded-2xl bg-[#0D1526] border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between">
+        <div className="portal-surface p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 transition-colors flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider">Metas Estratégicas</span>
             <div className="w-8 h-8 rounded-xl bg-teal-950/60 flex items-center justify-center text-teal-500">
@@ -226,7 +226,7 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
         </div>
 
         {/* Card 2: Hitos Cumplidos */}
-        <div className="portal-surface p-4 rounded-2xl bg-[#0D1526] border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between">
+        <div className="portal-surface p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 transition-colors flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider">Hitos de Plan</span>
             <div className="w-8 h-8 rounded-xl bg-sky-950/60 flex items-center justify-center text-sky-400">
@@ -244,7 +244,7 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
         </div>
 
         {/* Card 3: Avance Global Bimodal */}
-        <div className="portal-surface p-4 rounded-2xl bg-[#0D1526] border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between">
+        <div className="portal-surface p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 transition-colors flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider">Avance Global</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-950/60 flex items-center justify-center text-emerald-400">
@@ -262,7 +262,7 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
         </div>
 
         {/* Card 4: Hábitos Motores */}
-        <div className="portal-surface p-4 rounded-2xl bg-[#0D1526] border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between">
+        <div className="portal-surface p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 transition-colors flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400 mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider">Hábitos Motores</span>
             <div className="w-8 h-8 rounded-xl bg-amber-950/60 flex items-center justify-center text-amber-400">
@@ -290,16 +290,16 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
       />
 
       {/* 2. BARRA DE CONTROL, FILTROS GHOST Y ACCIÓN PRIMARIA */}
-      <div className="portal-surface p-3.5 rounded-2xl bg-[#0D1526] border border-slate-800/40 shadow-cobalt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="portal-surface p-3 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         {/* Filtros por Categoría de Vida (Ghost Controls) */}
         <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-0.5">
           <button
             type="button"
             onClick={() => setFiltroCategoria('TODAS')}
-            className={`text-xs transition-colors px-2.5 py-1 rounded-lg cursor-pointer ${
+            className={`h-9 text-xs transition-colors px-3 rounded-lg cursor-pointer inline-flex items-center ${
               filtroCategoria === 'TODAS'
-                ? 'text-sky-300 font-semibold bg-sky-950/40 border border-sky-800/50 shadow-xs'
-                : 'text-slate-400 font-medium hover:text-sky-300'
+                ? 'text-sky-300 font-semibold bg-sky-950/40 border border-sky-500/40'
+                : 'text-slate-400 font-medium hover:text-sky-300 border border-transparent'
             }`}
           >
             Todas ({metasDetalladas.length})
@@ -316,14 +316,14 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
                 key={catKey}
                 type="button"
                 onClick={() => setFiltroCategoria(catKey)}
-                className={`text-xs transition-colors px-2.5 py-1 rounded-lg cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                className={`h-9 text-xs transition-colors px-3 rounded-lg cursor-pointer flex items-center gap-1.5 shrink-0 ${
                   activa
-                    ? 'text-sky-300 font-semibold bg-sky-950/40 border border-sky-800/50 shadow-xs'
-                    : 'text-slate-400 font-medium hover:text-sky-300'
+                    ? 'text-sky-300 font-semibold bg-sky-950/40 border border-sky-500/40'
+                    : 'text-slate-400 font-medium hover:text-sky-300 border border-transparent'
                 }`}
               >
                 <span>{cfg.nombre.split(' ')[0]}</span>
-                <span className="font-mono text-[10px] text-slate-500">({count})</span>
+                <span className="font-mono tabular-nums text-[10px] text-slate-500">({count})</span>
               </button>
             );
           })}
@@ -336,7 +336,7 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
             setMetaParaEditar(null);
             setModalFlowAbierto(true);
           }}
-          className="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-teal-900/30 transition cursor-pointer shrink-0"
+          className="h-10 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4" strokeWidth={1.75} />
           <span>Nueva Meta & Plan</span>
@@ -345,8 +345,8 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
 
       {/* 3. GRID DE TARJETAS DE METAS ESTRATÉGICAS */}
       {metasFiltradas.length === 0 ? (
-        <div className="portal-surface p-10 rounded-2xl bg-[#0D1526] border border-slate-800/40 text-center flex flex-col items-center justify-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-teal-950/40 flex items-center justify-center text-teal-400">
+        <div className="portal-surface p-10 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 text-center flex flex-col items-center justify-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-sky-950/60 border border-sky-800/40 flex items-center justify-center text-sky-400">
             <Target className="w-6 h-6" strokeWidth={1.75} />
           </div>
           <h4 className="text-sm font-bold text-slate-200">No hay metas ni planes configurados</h4>
@@ -359,7 +359,7 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
               setMetaParaEditar(null);
               setModalFlowAbierto(true);
             }}
-            className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md"
+            className="h-10 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" strokeWidth={1.75} />
             <span>Crear Primera Meta</span>
@@ -384,10 +384,7 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
             return (
               <div
                 key={meta.id}
-                className="portal-surface rounded-2xl bg-[#0D1526] border border-slate-800/40 p-4 lg:p-5 flex flex-col justify-between hover:translate-y-[-2px] transition-all group"
-                style={{
-                  boxShadow: '0 10px 25px -5px rgba(2, 6, 23, 0.8), 0 8px 10px -6px rgba(30, 58, 138, 0.18)'
-                }}
+                className="portal-surface rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 p-4 lg:p-5 flex flex-col justify-between transition-colors group"
               >
                 <div>
                   {/* Encabezado de la Tarjeta */}
@@ -480,12 +477,12 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
 
                     <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mb-2">
                       <div
-                        className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-500"
+                        className="bg-sky-500 h-full rounded-full transition-all duration-500"
                         style={{ width: `${meta.progresoGlobalPct}%` }}
                       />
                     </div>
 
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono tabular-nums">
                       <span>Hitos: <strong className="text-slate-200 font-bold">{meta.avanceHitosPct}%</strong> ({meta.peso_hitos_pct}%)</span>
                       <span>Hábitos: <strong className="text-slate-200 font-bold">{meta.avanceHabitosPct}%</strong> ({meta.peso_habitos_pct}%)</span>
                     </div>
