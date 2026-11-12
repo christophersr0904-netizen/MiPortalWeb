@@ -19,7 +19,8 @@ import {
   sanitizarActividadInbound,
   sanitizarSubtareaInbound,
   sanitizarHitoInbound,
-  sanitizarTareaInbound
+  sanitizarTareaInbound,
+  sanitizarNotaInbound
 } from './syncPayloadSanitizer';
 import type { TombstoneRecord } from '../types';
 
@@ -65,10 +66,35 @@ function sonRegistrosIdenticos(remoto: any, local: any): boolean {
     // Comparar tolerancias numéricas para decimales/porcentajes
     if (typeof valR === 'number' && typeof valL === 'number' && Math.abs(valR - valL) < 0.0001) continue;
 
+    // Normalizar version por defecto (1) frente a registros locales legacy sin versión explícita
+    if (k === 'version' && (valR === 1 || valR === undefined) && (valL === 1 || valL === undefined)) continue;
+
     return false;
   }
 
   return true;
+}
+
+/**
+ * REQ-SYNC-40-EXEC: Determina si el entorno actual corresponde a desarrollo local o runtime de escritorio.
+ * Retorna true exclusivamente si hostname es 'localhost' o '127.0.0.1', o si existe bandera de runtime Electron/Desktop.
+ * En dominios web remotos (Cloudflare Pages *.pages.dev, Vercel, etc.) retorna false para suprimir llamadas infructuosas a 127.0.0.1:48123.
+ */
+export function esEntornoEscritorioLocal(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const hostname = window.location?.hostname || '';
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isElectron = Boolean(
+      (window as any).IS_DESKTOP_WIDGET === true ||
+      (window as any).IS_ELECTRON_COCKPIT === true ||
+      (window as any).desktopWidget ||
+      (window as any).electronAPI
+    );
+    return isLocalhost || isElectron;
+  } catch {
+    return false;
+  }
 }
 
 class SyncManager {
@@ -77,6 +103,7 @@ class SyncManager {
   private syncState: SyncState = 'synced';
   private listeners: Array<(state: SyncState) => void> = [];
   private currentUserId: string = DEFAULT_USER_ID;
+  private inicializacionPromise: Promise<void> | null = null;
 
   // Realtime & Anti-Eco (TTL 10s & Debounce 800ms)
   private recentlyPushedIds = new Map<string, number>();
@@ -93,6 +120,57 @@ class SyncManager {
     this.initSupabaseClient();
     this.setupNetworkListeners();
     this.setupRealtimeSubscriptions();
+    this.inicializacionPromise = this.resolverUsuarioActivo().then(() => {}).catch(() => {});
+  }
+
+  /**
+   * REQ-SYNC-40-EXEC: Resuelve dinámicamente el usuario autenticado real desde Supabase Auth.
+   * Actualiza this.currentUserId con el UUID real de auth.users si existe una sesión válida.
+   */
+  public async resolverUsuarioActivo(): Promise<string> {
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      return this.currentUserId;
+    }
+    try {
+      if (typeof this.supabase.auth?.getSession === 'function') {
+        const { data: sessionData } = await this.supabase.auth.getSession();
+        const sessionUserId = sessionData?.session?.user?.id;
+        if (sessionUserId && isUuid(sessionUserId)) {
+          this.setUserId(sessionUserId);
+          return sessionUserId;
+        }
+      }
+      if (typeof this.supabase.auth?.getUser === 'function') {
+        const { data: userData } = await this.supabase.auth.getUser();
+        const authUserId = userData?.user?.id;
+        if (authUserId && isUuid(authUserId)) {
+          this.setUserId(authUserId);
+          return authUserId;
+        }
+      }
+    } catch (err) {
+      console.warn('[SyncManager] Error al resolver usuario activo en Supabase Auth:', err);
+    }
+    return this.currentUserId;
+  }
+
+  /**
+   * REQ-SYNC-40-EXEC: Espera de forma no bloqueante a que concluya la resolución inicial de autenticación
+   * y cualquier sincronización o descarga en vuelo antes de hidratar o auto-promover metas.
+   */
+  public async esperarSincronizacionInicial(timeoutMs: number = 2000): Promise<void> {
+    const inicio = Date.now();
+    if (this.inicializacionPromise) {
+      try {
+        await Promise.race([
+          this.inicializacionPromise,
+          new Promise((resolve) => setTimeout(resolve, timeoutMs))
+        ]);
+      } catch {}
+    }
+    while (this.isSyncing && Date.now() - inicio < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
   }
 
   /**
@@ -226,6 +304,15 @@ class SyncManager {
 
     try {
       this.supabase = createClient(supabaseUrl, supabaseAnonKey);
+      if (this.supabase?.auth && typeof this.supabase.auth.onAuthStateChange === 'function') {
+        try {
+          this.supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.user?.id && isUuid(session.user.id)) {
+              this.setUserId(session.user.id);
+            }
+          });
+        } catch {}
+      }
     } catch (err) {
       console.warn('[SyncManager] Error al inicializar cliente Supabase:', err);
     }
@@ -295,15 +382,27 @@ class SyncManager {
 
   /**
    * Configura las suscripciones WebSocket selectivas (Supabase Realtime)
-   * Monitorea únicamente las 5 entidades operativas críticas:
-   * tareas, actividades_personales, gastos, ingresos, proyectos.
+   * REQ-SYNC-41-EXEC: Monitorea las 12 entidades operativas para paridad multi-dispositivo en tiempo real.
    */
   public setupRealtimeSubscriptions() {
     if (!this.supabase || typeof this.supabase.channel !== 'function') return;
     if (import.meta.env.VITE_SUPABASE_URL?.includes('mock')) return;
 
     try {
-      const tablasMonitoreadas = ['tareas', 'actividades_personales', 'gastos', 'ingresos', 'proyectos'];
+      const tablasMonitoreadas = [
+        'proyectos',
+        'hitos_wbs',
+        'tareas',
+        'actividades_personales',
+        'subtareas_pasos',
+        'notas',
+        'metas_planes',
+        'planes_accion_hitos',
+        'habitos_metas_vinculos',
+        'gastos',
+        'ingresos',
+        'cuotas'
+      ];
       let channel: any = this.supabase.channel('pmo-realtime-channel');
 
       tablasMonitoreadas.forEach((tabla) => {
@@ -327,7 +426,7 @@ class SyncManager {
   }
 
   /**
-   * Manejador de eventos entrantes de Realtime con Filtro Anti-Eco y Trailing-Edge Debounce (800ms)
+   * Manejador de eventos entrantes de Realtime con Filtro Anti-Eco, Borrado Físico Propagado y Trailing-Edge Debounce (800ms)
    */
   public handleRealtimeChange(tabla: string, payload: any) {
     const recordId = payload?.new?.id || payload?.old?.id;
@@ -337,8 +436,29 @@ class SyncManager {
       return;
     }
 
-    // 2. Acumular la tabla afectada
     const targetTable = payload?.table || tabla;
+    const eventType = payload?.eventType || payload?.event;
+
+    // REQ-SYNC-41-EXEC: Propagación inmediata de DELETE para erradicar registros fantasma en todos los nodos
+    if (eventType === 'DELETE') {
+      const delId = payload?.old?.id;
+      if (delId) {
+        if ((db as any)[targetTable] && typeof (db as any)[targetTable].delete === 'function') {
+          (db as any)[targetTable].delete(delId).catch(() => {});
+        }
+        if (db.tombstones && typeof db.tombstones.put === 'function') {
+          db.tombstones.put({
+            id: delId,
+            tabla_afectada: targetTable,
+            fecha_eliminacion: new Date().toISOString(),
+            sync_status: 'synced'
+          } as any).catch(() => {});
+        }
+      }
+      return;
+    }
+
+    // 2. Acumular la tabla afectada para pull de INSERT / UPDATE
     this.tablasPendientesRealtime.add(targetTable);
 
     // 3. Trailing-Edge Debounce (800ms) para amortiguar ráfagas concurrentes (Thundering Herd)
@@ -949,6 +1069,13 @@ class SyncManager {
       return result;
     }
 
+    // REQ-SYNC-40-EXEC: Blindaje FK 23503 en metas_planes (REFERENCES auth.users(id)).
+    // Si no hay un usuario autenticado real (o sigue DEFAULT_USER_ID), omitir push para evitar 409 Conflict.
+    if (!this.currentUserId || this.currentUserId === DEFAULT_USER_ID) {
+      console.warn('[SyncManager] Omitiendo push de metas_planes: sin sesión de auth.users activa (evitando 409/23503).');
+      return result;
+    }
+
     for (const meta of pending) {
       if (this.registrosFkCuarentena.has(meta.id)) {
         continue;
@@ -1013,6 +1140,12 @@ class SyncManager {
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
       await Promise.all(pending.map((h) => db.planes_accion_hitos.update(h.id, { sync_status: 'synced' })));
       result.success = pending.length;
+      return result;
+    }
+
+    // REQ-SYNC-40-EXEC: Blindaje FK 23503 en planes_accion_hitos (REFERENCES auth.users(id)).
+    if (!this.currentUserId || this.currentUserId === DEFAULT_USER_ID) {
+      console.warn('[SyncManager] Omitiendo push de planes_accion_hitos: sin sesión de auth.users activa (evitando 409/23503).');
       return result;
     }
 
@@ -1096,6 +1229,12 @@ class SyncManager {
       return result;
     }
 
+    // REQ-SYNC-40-EXEC: Blindaje FK 23503 en habitos_metas_vinculos (REFERENCES auth.users(id)).
+    if (!this.currentUserId || this.currentUserId === DEFAULT_USER_ID) {
+      console.warn('[SyncManager] Omitiendo push de habitos_metas_vinculos: sin sesión de auth.users activa (evitando 409/23503).');
+      return result;
+    }
+
     const aMap = actividadMap || (await this.construirMapaActividades());
     const mMap = metaMap || (await this.construirMapaMetas());
 
@@ -1116,7 +1255,7 @@ class SyncManager {
         this.registrarPushedId(vinculo.id);
         const { error } = await this.supabase
           .from('habitos_metas_vinculos')
-          .upsert(payload, { onConflict: 'id' });
+          .upsert(payload, { onConflict: 'habito_id,meta_id' });
 
         if (error) {
           if (this.esErrorFkNoRecuperable(error)) {
@@ -1412,6 +1551,8 @@ class SyncManager {
       return;
     }
 
+    await this.resolverUsuarioActivo().catch(() => {});
+
     try {
       // 1. Verificar registros pendientes en IndexedDB a través de las 13 entidades (incluyendo tombstones)
       const pendingCounts = await Promise.all([
@@ -1550,7 +1691,7 @@ class SyncManager {
     const tombstonesLocalesSet = new Set<string>();
     try {
       if (db.tombstones && typeof db.tombstones.toArray === 'function') {
-        const todasLapidas = await db.tombstones.toArray();
+        const todasLapidas = (await db.tombstones.toArray().catch(() => [])) || [];
         todasLapidas.forEach((t) => {
           if (t.id) tombstonesLocalesSet.add(String(t.id));
         });
@@ -1559,13 +1700,14 @@ class SyncManager {
       // Tolerancia defensiva ante entornos sin IndexedDB
     }
 
-    // Pre-cargar mapas UUID -> Código de Proyectos, Hitos y Tareas existentes en Dexie (REQ-FIX-10 / REQ-FIX-17)
+    // Pre-cargar mapas UUID -> Código de Proyectos, Hitos, Tareas y Actividades existentes en Dexie (REQ-FIX-10 / REQ-FIX-17 / REQ-SYNC-41)
     const proyUuidToCod = new Map<string, string>();
     const hitoUuidToCod = new Map<string, string>();
     const tareaUuidToCod = new Map<string, string>();
+    const actividadUuidToCod = new Map<string, string>();
     try {
       if (db.proyectos && typeof (db.proyectos as any).toArray === 'function') {
-        const locProys = await (db.proyectos as any).toArray();
+        const locProys = (await (db.proyectos as any).toArray().catch(() => [])) || [];
         if (Array.isArray(locProys)) {
           locProys.forEach((p: any) => {
             const cod = extraerCodigoCanonico(p);
@@ -1580,7 +1722,7 @@ class SyncManager {
         }
       }
       if (db.hitos_wbs && typeof (db.hitos_wbs as any).toArray === 'function') {
-        const locHitos = await (db.hitos_wbs as any).toArray();
+        const locHitos = (await (db.hitos_wbs as any).toArray().catch(() => [])) || [];
         if (Array.isArray(locHitos)) {
           locHitos.forEach((h: any) => {
             const cod = extraerCodigoCanonico(h);
@@ -1595,7 +1737,7 @@ class SyncManager {
         }
       }
       if (db.tareas && typeof (db.tareas as any).toArray === 'function') {
-        const locTareas = await (db.tareas as any).toArray();
+        const locTareas = (await (db.tareas as any).toArray().catch(() => [])) || [];
         if (Array.isArray(locTareas)) {
           locTareas.forEach((t: any) => {
             const cod = extraerCodigoCanonico(t);
@@ -1605,6 +1747,21 @@ class SyncManager {
                 tareaUuidToCod.set(String(t.id).toUpperCase(), cod);
               }
               tareaUuidToCod.set(cod, cod);
+            }
+          });
+        }
+      }
+      if (db.actividades_personales && typeof (db.actividades_personales as any).toArray === 'function') {
+        const locActs = (await (db.actividades_personales as any).toArray().catch(() => [])) || [];
+        if (Array.isArray(locActs)) {
+          locActs.forEach((a: any) => {
+            const cod = extraerCodigoCanonico(a);
+            if (cod) {
+              if (a.id) {
+                actividadUuidToCod.set(String(a.id), cod);
+                actividadUuidToCod.set(String(a.id).toUpperCase(), cod);
+              }
+              actividadUuidToCod.set(cod, cod);
             }
           });
         }
@@ -1696,6 +1853,14 @@ class SyncManager {
               tareaUuidToCod.set(String(item.id).toUpperCase(), cod);
             }
           }
+        } else if (tabla === 'actividades_personales') {
+          for (const item of data) {
+            const cod = extraerCodigoCanonico(item);
+            if (item.id && cod) {
+              actividadUuidToCod.set(String(item.id), cod);
+              actividadUuidToCod.set(String(item.id).toUpperCase(), cod);
+            }
+          }
         }
 
         // Recuperar IDs pendientes o en error en local para proteger cambios sin sincronizar
@@ -1753,11 +1918,13 @@ class SyncManager {
           if (tabla === 'actividades_personales') {
             registroFinal = sanitizarActividadInbound(item, localPrevio);
           } else if (tabla === 'subtareas_pasos') {
-            registroFinal = sanitizarSubtareaInbound(item, localPrevio);
+            registroFinal = sanitizarSubtareaInbound(item, localPrevio, tareaUuidToCod, actividadUuidToCod);
           } else if (tabla === 'hitos_wbs') {
             registroFinal = sanitizarHitoInbound(item, localPrevio, proyUuidToCod);
           } else if (tabla === 'tareas') {
             registroFinal = sanitizarTareaInbound(item, localPrevio, proyUuidToCod, hitoUuidToCod, tareaUuidToCod);
+          } else if (tabla === 'notas') {
+            registroFinal = sanitizarNotaInbound(item, localPrevio);
           } else if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
             registroFinal = {
               ...fusionarRegistrosDuplicados(existentePorCodigo, registroFinal),
@@ -1768,6 +1935,23 @@ class SyncManager {
 
           if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
             idsObsoletosAEliminar.push(String(existentePorCodigo.id));
+          }
+
+          // REQ-SYNC-41-EXEC LWW (Last-Write-Wins): Si el registro local previo está sincronizado pero
+          // tiene timestamp o versión más reciente que el remoto recibido, descartar el dato remoto obsoleto.
+          if (localPrevio && localPrevio.sync_status === 'synced') {
+            const remoteTime = new Date(registroFinal.updated_at || 0).getTime();
+            const localTime = new Date(localPrevio.updated_at || 0).getTime();
+            if (!isNaN(remoteTime) && !isNaN(localTime) && localTime > remoteTime) {
+              continue;
+            }
+            if (
+              typeof localPrevio.version === 'number' &&
+              typeof registroFinal.version === 'number' &&
+              localPrevio.version > registroFinal.version
+            ) {
+              continue;
+            }
           }
 
           // Diffing Silencioso en Memoria: Si es idéntico al local previo, no mutar Dexie
@@ -1857,6 +2041,7 @@ class SyncManager {
    * 3. Sincronización de fallback con el puente HTTP local 127.0.0.1:48123
    */
   public async sincronizarTodo(): Promise<void> {
+    await this.resolverUsuarioActivo().catch(() => {});
     await this.procesarColaPendiente();
     const pullResult = await this.descargarDatosDescendientes();
 
@@ -1872,6 +2057,7 @@ class SyncManager {
    * Guarda un snapshot completo de las tablas operativas en el puente local HTTP 127.0.0.1:48123
    */
   public async guardarSnapshotEnPuenteLocal(): Promise<boolean> {
+    if (!esEntornoEscritorioLocal()) return false;
     if (typeof fetch === 'undefined') return false;
 
     try {
@@ -1927,6 +2113,7 @@ class SyncManager {
    * Descarga e hidrata un snapshot desde el puente local HTTP 127.0.0.1:48123 hacia Dexie
    */
   public async cargarSnapshotDesdePuenteLocal(): Promise<boolean> {
+    if (!esEntornoEscritorioLocal()) return false;
     if (typeof fetch === 'undefined') return false;
 
     try {

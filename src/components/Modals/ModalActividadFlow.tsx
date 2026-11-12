@@ -29,6 +29,7 @@ import {
   type EstadoConexionGoogleCalendar
 } from '../../services/calendarSyncService';
 import { syncManager } from '../../services/syncManager';
+import { generarCodigoCorrelativoSeguro } from '../../utils/entityNormalizer';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import {
   vincularHabitoAMetaLocal,
@@ -865,8 +866,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
     if (!actividadEditar) {
       idActividad = crypto.randomUUID();
-      const count = await db.actividades_personales.count();
-      codigoLegado = `ACT-${String(count + 1).padStart(3, '0')}`;
+      codigoLegado = await generarCodigoCorrelativoSeguro(db.actividades_personales, 'ACT', 3);
     }
 
     const montoGastoFinal = parseFloat(gastoMonto) || undefined;

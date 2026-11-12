@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { db } from '../../db/db';
-import { syncManager } from '../syncManager';
+import { syncManager, esEntornoEscritorioLocal } from '../syncManager';
 import {
   sanitizarProyectoPayload,
   sanitizarHitoPayload,
@@ -13,7 +13,9 @@ import {
   sanitizarHitoInbound,
   sanitizarTareaInbound,
   sanitizeDate,
-  isUuid
+  isUuid,
+  DEFAULT_USER_ID,
+  resolverUserIdSeguro
 } from '../syncPayloadSanitizer';
 import type {
   ProyectoRecord,
@@ -223,10 +225,10 @@ describe('REQ-SYNC-02: syncPayloadSanitizer (Sanitización Pura de Payloads)', (
       expect(payload.hito_id).toBe('550e8400-e29b-41d4-a716-446655440010');
     });
 
-    it('omite campos operativos locales es_mav y costo_real_pen', () => {
+    it('incluye campos operativos es_mav y costo_real_pen bajo paridad REQ-SYNC-41-EXEC', () => {
       const payload = sanitizarTareaPayload(tareaBase, proyectoMap, hitoMap, dummyUser);
-      expect(payload).not.toHaveProperty('es_mav');
-      expect(payload).not.toHaveProperty('costo_real_pen');
+      expect(payload).toHaveProperty('es_mav', true);
+      expect(payload).toHaveProperty('costo_real_pen', 50);
     });
 
     it('mapea agendado_calendar a agendado_en_calendar y normaliza estado', () => {
@@ -258,10 +260,10 @@ describe('REQ-SYNC-02: syncPayloadSanitizer (Sanitización Pura de Payloads)', (
       sync_status: 'pending'
     };
 
-    it('omite tipo_nota y version para evitar error 400', () => {
+    it('incluye tipo_nota, block_nombre y version bajo paridad REQ-SYNC-41-EXEC', () => {
       const payload = sanitizarNotaPayload(notaBase, dummyUser);
-      expect(payload).not.toHaveProperty('tipo_nota');
-      expect(payload).not.toHaveProperty('version');
+      expect(payload).toHaveProperty('tipo_nota', 'CHECKLIST');
+      expect(payload).toHaveProperty('version', 1);
     });
 
     it('garantiza objetos y arrays válidos en campos JSONB NOT NULL', () => {
@@ -754,6 +756,7 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
 
   it('REQ-DESKTOP-11: aísla y pone en cuarentena errores de Foreign Key 23503 sin reintentos agresivos', async () => {
     syncManager.limpiarCuarentenaFk();
+    syncManager.setUserId('550e8400-e29b-41d4-a716-446655440099');
     const mockMetaFkError = {
       id: '550e8400-e29b-41d4-a716-446655440099',
       codigo_legado: 'MET-FK-01',
@@ -1156,6 +1159,98 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       );
 
       expect(payload.dependencia_tarea_id).toBe('84baab4f-dda8-45ca-aac8-d00000000014');
+    });
+  });
+
+  describe('REQ-SYNC-40-EXEC: Blindaje Multi-Dispositivo, Guardas Loopback y Resolución de Auth', () => {
+    it('esEntornoEscritorioLocal retorna false en dominio remoto pages.dev y suprime fetch loopback', async () => {
+      const originalWindow = globalThis.window;
+      // Simular dominio remoto de Cloudflare Pages
+      (globalThis as any).window = {
+        location: { hostname: 'miportalweb-aft.pages.dev' }
+      };
+
+      expect(esEntornoEscritorioLocal()).toBe(false);
+
+      const fetchSpy = vi.fn();
+      (globalThis as any).fetch = fetchSpy;
+
+      const guardado = await syncManager.guardarSnapshotEnPuenteLocal();
+      const cargado = await syncManager.cargarSnapshotDesdePuenteLocal();
+
+      expect(guardado).toBe(false);
+      expect(cargado).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      // Restaurar
+      (globalThis as any).window = originalWindow;
+    });
+
+    it('esEntornoEscritorioLocal retorna true en localhost o con flag Electron', () => {
+      const originalWindow = globalThis.window;
+
+      (globalThis as any).window = {
+        location: { hostname: 'localhost' }
+      };
+      expect(esEntornoEscritorioLocal()).toBe(true);
+
+      (globalThis as any).window = {
+        location: { hostname: '127.0.0.1' }
+      };
+      expect(esEntornoEscritorioLocal()).toBe(true);
+
+      (globalThis as any).window = {
+        location: { hostname: 'miportalweb-aft.pages.dev' },
+        IS_DESKTOP_WIDGET: true
+      };
+      expect(esEntornoEscritorioLocal()).toBe(true);
+
+      (globalThis as any).window = originalWindow;
+    });
+
+    it('syncManager omite push en metas_planes y habitos_metas_vinculos si currentUserId es DEFAULT_USER_ID', async () => {
+      syncManager.setUserId(DEFAULT_USER_ID);
+      const upsertSpy = vi.fn();
+      (syncManager as any).supabase = {
+        from: vi.fn().mockReturnValue({ upsert: upsertSpy })
+      };
+
+      vi.spyOn(db.metas_planes, 'where').mockReturnValue({
+        anyOf: () => ({
+          toArray: async () => [{ id: 'm1', sync_status: 'pending' }],
+          count: async () => 1
+        })
+      } as any);
+
+      vi.spyOn(db.habitos_metas_vinculos, 'where').mockReturnValue({
+        anyOf: () => ({
+          toArray: async () => [{ id: 'v1', sync_status: 'pending' }],
+          count: async () => 1
+        })
+      } as any);
+
+      const resMetas = await syncManager.sincronizarMetasPlanes();
+      const resVinc = await syncManager.sincronizarVinculosMeta();
+
+      expect(resMetas.success).toBe(0);
+      expect(resMetas.failed).toBe(0);
+      expect(resVinc.success).toBe(0);
+      expect(resVinc.failed).toBe(0);
+      expect(upsertSpy).not.toHaveBeenCalled();
+    });
+
+    it('resolverUserIdSeguro sustituye DEFAULT_USER_ID por el usuario autenticado real', () => {
+      const authUser = '550e8400-e29b-41d4-a716-446655440001';
+      expect(resolverUserIdSeguro(DEFAULT_USER_ID, authUser)).toBe(authUser);
+      expect(resolverUserIdSeguro(null, authUser)).toBe(authUser);
+      expect(resolverUserIdSeguro(undefined, authUser)).toBe(authUser);
+
+      // Si no hay auth real (sigue DEFAULT_USER_ID), mantiene el raw o el fallback
+      expect(resolverUserIdSeguro(DEFAULT_USER_ID, DEFAULT_USER_ID)).toBe(DEFAULT_USER_ID);
+
+      // Si el registro ya tenía un UUID distinto legítimo, lo respeta
+      const otherUser = '770e8400-e29b-41d4-a716-446655440002';
+      expect(resolverUserIdSeguro(otherUser, authUser)).toBe(otherUser);
     });
   });
 });

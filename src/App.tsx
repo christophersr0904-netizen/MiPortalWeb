@@ -375,6 +375,11 @@ export const App: React.FC = () => {
           await syncManager.sincronizarTodo().catch((err) => {
             console.warn('[App] Error en syncManager.sincronizarTodo al arrancar modo HUD:', err);
           });
+        } else if (typeof navigator !== 'undefined' && navigator.onLine) {
+          // REQ-SYNC-41-EXEC: En arranque web normal, descargar inmediatamente datos frescos de Supabase
+          syncManager.descargarDatosDescendientes().catch((err) => {
+            console.warn('[App] Error en syncManager.descargarDatosDescendientes al arrancar web:', err);
+          });
         }
       } catch (err) {
         console.warn('[App] Error al inicializar semilla de datos:', err);

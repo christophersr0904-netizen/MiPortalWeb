@@ -1,5 +1,6 @@
 import { db, registrarTombstone } from '../db/db';
 import type { ActividadPersonal, SubtareaPaso, FrecuenciaCiclo, TareaRecord } from '../types';
+import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
 import {
   sincronizarActividadCalendar,
   sincronizarCreacionCalendar,
@@ -683,9 +684,8 @@ export async function editarActividadConAlcance(
         .catch((e) => console.warn('[habitosService] Fallo excluyendo instancia previa en Calendar (EDIT SINGLE):', e));
     }
 
-    // 2. Crear una instancia puntual desacoplada para la fecha referenciada
-    const count = await db.actividades_personales.count();
-    const nuevoCodigo = `ACT-${String(count + 1).padStart(3, '0')}`;
+    // 2. Crear una instancia puntual desacoplada para la fecha referenciada (Anti-colisión)
+    const nuevoCodigo = await generarCodigoCorrelativoSeguro(db.actividades_personales, 'ACT', 3);
     const instanciaDesacoplada: ActividadPersonal = {
       ...actividadOriginal,
       ...cambios,
@@ -741,9 +741,8 @@ export async function editarActividadConAlcance(
         .catch((e) => console.warn('[habitosService] Fallo recortando serie anterior en Calendar (EDIT FUTURE):', e));
     }
 
-    // 2. Crear una nueva serie recurrente que arranca en fechaReferencia con los cambios aplicados
-    const count = await db.actividades_personales.count();
-    const nuevoCodigo = `ACT-${String(count + 1).padStart(3, '0')}`;
+    // 2. Crear una nueva serie recurrente que arranca en fechaReferencia con los cambios aplicados (Anti-colisión)
+    const nuevoCodigo = await generarCodigoCorrelativoSeguro(db.actividades_personales, 'ACT', 3);
     const nuevaSerieFutura: ActividadPersonal = {
       ...actividadOriginal,
       ...cambios,

@@ -48,7 +48,8 @@ import {
   type HorizonteAgenda,
   type DailyScheduleItem
 } from '../../hooks/useDailySchedule';
-import { syncManager } from '../../services/syncManager';
+import { syncManager, esEntornoEscritorioLocal } from '../../services/syncManager';
+import { generarCodigoCorrelativoSeguro } from '../../utils/entityNormalizer';
 import {
   obtenerIdentificadoresWbs,
   resolverSiguienteTareaFoco,
@@ -838,9 +839,18 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
     if (modoForzadoDesacoplado) return;
 
+    if (!esEntornoEscritorioLocal()) {
+      setHayWidgetDeEscritorioActivo(false);
+      return;
+    }
+
     let cancelado = false;
 
     const pingLoopbackDesktop = async () => {
+      if (!esEntornoEscritorioLocal()) {
+        if (!cancelado) setHayWidgetDeEscritorioActivo(false);
+        return;
+      }
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 300);
 
@@ -1042,8 +1052,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     if (!texto || guardandoTareaRapida) return;
     try {
       setGuardandoTareaRapida(true);
-      const totalTareas = await db.tareas.count();
-      const nuevoCodigoTar = `TAR-${String(totalTareas + 1).padStart(3, '0')}`;
+      const nuevoCodigoTar = await generarCodigoCorrelativoSeguro(db.tareas, 'TAR', 3);
       const nuevaTareaId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}`;
       const fechaHoy = formatFechaIsoLocal(new Date());
 

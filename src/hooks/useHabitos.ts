@@ -474,9 +474,24 @@ export function useHabitos() {
   useEffect(() => {
     if (autoHidratacionEjecutadaGlobal) return;
     autoHidratacionEjecutadaGlobal = true;
-    autoHidratarVinculosHabitosActividades().catch((err) => {
-      console.warn('[useHabitos] Error en auto-hidratación de vínculos:', err);
-    });
+
+    const coordinarHidratacion = async () => {
+      try {
+        if (typeof syncManager.esperarSincronizacionInicial === 'function') {
+          await syncManager.esperarSincronizacionInicial(2000);
+        }
+      } catch {
+        // Fallback no bloqueante
+      }
+
+      try {
+        await autoHidratarVinculosHabitosActividades();
+      } catch (err) {
+        console.warn('[useHabitos] Error en auto-hidratación de vínculos:', err);
+      }
+    };
+
+    coordinarHidratacion();
   }, []);
 
   return {

@@ -357,9 +357,11 @@ export async function vincularHabitoAMetaLocal(
   modoComputo: ModoComputoVinculo = 'VOLUMEN_DIRECTO',
   factorConversion: number = 1.0,
   pesoContribucionPct: number = 100.0,
-  metaVolumenEsperada: number = 0
+  metaVolumenEsperada: number = 0,
+  syncStatus: 'pending' | 'synced' = 'pending'
 ): Promise<HabitoMetaVinculo> {
   const nowIso = new Date().toISOString();
+  const userId = syncManager.getUserId() || '00000000-0000-0000-0000-000000000001';
 
   // Buscar si ya existe el vínculo
   const existente = await db.habitos_metas_vinculos
@@ -370,7 +372,7 @@ export async function vincularHabitoAMetaLocal(
 
   const vinculoFinal: HabitoMetaVinculo = {
     id: existente?.id || crypto.randomUUID(),
-    user_id: existente?.user_id || '00000000-0000-0000-0000-000000000001',
+    user_id: existente?.user_id && existente.user_id !== '00000000-0000-0000-0000-000000000001' ? existente.user_id : userId,
     habito_id: habitoId,
     meta_id: metaId,
     modo_computo: modoComputo,
@@ -379,7 +381,7 @@ export async function vincularHabitoAMetaLocal(
     meta_volumen_esperada: metaVolumenEsperada,
     created_at: existente?.created_at || nowIso,
     updated_at: nowIso,
-    sync_status: 'pending'
+    sync_status: syncStatus
   };
 
   await db.habitos_metas_vinculos.put(vinculoFinal);
@@ -468,8 +470,11 @@ export async function crearMetaRapidaDesdeActividadLocal(params: {
   unidad?: string;
   nivelRescate?: number;
   habitoId?: string;
+  syncStatus?: 'synced' | 'pending';
+  dispararSync?: boolean;
 }): Promise<MetaPlanRecord> {
-  const userId = '00000000-0000-0000-0000-000000000001';
+  const syncStatus = params.syncStatus || 'pending';
+  const userId = syncManager.getUserId() || '00000000-0000-0000-0000-000000000001';
   const nowIso = new Date().toISOString();
   const nuevoCodigo = await generarSiguienteCodigoMetaLocal();
   const metaId = crypto.randomUUID();
@@ -494,7 +499,7 @@ export async function crearMetaRapidaDesdeActividadLocal(params: {
     created_at: nowIso,
     updated_at: nowIso,
     version: 1,
-    sync_status: 'pending'
+    sync_status: syncStatus
   };
 
   await db.metas_planes.put(nuevaMeta);
@@ -511,16 +516,18 @@ export async function crearMetaRapidaDesdeActividadLocal(params: {
       meta_volumen_esperada: params.metaTotal !== undefined ? params.metaTotal : 100,
       created_at: nowIso,
       updated_at: nowIso,
-      sync_status: 'pending'
+      sync_status: syncStatus
     };
     await db.habitos_metas_vinculos.put(vinculo);
     await recalcularProgresoMetaLocal(nuevaMeta.id);
   }
 
-  try {
-    syncManager.syncPendingRecords();
-  } catch {
-    // Offline tolerado
+  if (params.dispararSync !== false && syncStatus === 'pending') {
+    try {
+      syncManager.syncPendingRecords();
+    } catch {
+      // Offline tolerado
+    }
   }
 
   return nuevaMeta;
@@ -576,7 +583,9 @@ export async function sincronizarMetasInternasHaciaPlanesLocal(): Promise<number
               valorAcumulado: act.valor_acumulado_actual || 0,
               unidad: act.unidad_medida || 'unidades',
               nivelRescate: act.nivel_rescate_minimo || 0,
-              habitoId: act.id
+              habitoId: act.id,
+              syncStatus: 'synced',
+              dispararSync: false
             });
             metasPorNombre.set(nombreKey, metaDestino);
             metasPromovidas++;
@@ -587,7 +596,8 @@ export async function sincronizarMetasInternasHaciaPlanesLocal(): Promise<number
               'VOLUMEN_DIRECTO',
               1.0,
               100,
-              act.meta_objetivo_total || metaDestino.meta_objetivo_total
+              act.meta_objetivo_total || metaDestino.meta_objetivo_total,
+              'synced'
             );
             await recalcularProgresoMetaLocal(metaDestino.id);
           }

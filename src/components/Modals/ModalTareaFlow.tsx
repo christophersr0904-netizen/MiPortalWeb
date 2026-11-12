@@ -27,7 +27,7 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { TareaRecord, SubtareaPaso } from '../../types';
-import { getProp } from '../../utils/entityNormalizer';
+import { getProp, generarCodigoCorrelativoSeguro } from '../../utils/entityNormalizer';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 
@@ -389,9 +389,8 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         updated_at: nowIso
       });
     } else {
-      // Crear nueva tarea
-      const totalTareas = await db.tareas.count();
-      const nuevoCodigoTar = `TAR-${String(totalTareas + 1).padStart(3, '0')}`;
+      // Crear nueva tarea (Anti-colisión multi-dispositivo)
+      const nuevoCodigoTar = await generarCodigoCorrelativoSeguro(db.tareas, 'TAR', 3);
       codTarFinal = nuevoCodigoTar;
       const nuevaTareaId = crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}`;
 

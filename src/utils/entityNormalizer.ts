@@ -1378,5 +1378,37 @@ export function resolverDependenciasTarea(
   return resueltas;
 }
 
+/**
+ * REQ-SYNC-41-EXEC: Generador de correlativo numérico anti-colisión seguro (MAX + 1).
+ * Evita colisiones por conteos reducidos tras borrados o desfasajes entre múltiples dispositivos.
+ */
+export async function generarCodigoCorrelativoSeguro(
+  tableRef: any,
+  prefijo: string,
+  padding: number = 3
+): Promise<string> {
+  try {
+    if (!tableRef || typeof tableRef.toArray !== 'function') {
+      const cnt = (await tableRef?.count?.().catch(() => 0)) || 0;
+      return `${prefijo}-${String(cnt + 1).padStart(padding, '0')}`;
+    }
+    const items = await tableRef.toArray();
+    let maxNum = 0;
+    const regex = new RegExp(`^${prefijo}-(\\d+)`, 'i');
+    for (const item of items) {
+      const cod = String(item.codigo_legado || item.codigo || item.id || '');
+      const m = cod.match(regex);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    }
+    return `${prefijo}-${String(maxNum + 1).padStart(padding, '0')}`;
+  } catch {
+    const cnt = (await tableRef?.count?.().catch(() => 0)) || 0;
+    return `${prefijo}-${String(cnt + 1).padStart(padding, '0')}`;
+  }
+}
+
 
 

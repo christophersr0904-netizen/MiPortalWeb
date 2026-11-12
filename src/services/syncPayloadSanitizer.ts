@@ -370,6 +370,11 @@ export function sanitizarTareaPayload(
     dependencia_tarea_id: resolvedDependenciaUuid,
     responsable_ejecutor: raw.responsable_ejecutor?.trim() || 'Christopher',
     notas_impedimentos: raw.notas_impedimentos?.trim() || null,
+    es_mav: Boolean(raw.es_mav),
+    costo_real_pen: Math.max(0, Number(raw.costo_real_pen) || 0),
+    archivado: Boolean(raw.archivado),
+    hora_inicio: raw.hora_inicio?.trim() || null,
+    version: Math.max(1, Number((raw as any).version) || 1),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
   };
@@ -474,6 +479,7 @@ export function sanitizarTareaInbound(
     es_mav: Boolean(remoto.es_mav ?? localPrevio?.es_mav ?? false),
     costo_real_pen: Math.max(0, Number(remoto.costo_real_pen ?? localPrevio?.costo_real_pen ?? 0)),
     archivado: Boolean(remoto.archivado ?? localPrevio?.archivado ?? false),
+    version: Math.max(1, Number(remoto.version ?? localPrevio?.version ?? 1)),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(remoto.updated_at) || localPrevio?.updated_at || new Date().toISOString()
   };
@@ -500,6 +506,9 @@ export function sanitizarNotaPayload(raw: NotaRecord, userId: string = DEFAULT_U
     wishlist_json: wishlist,
     color_tema: raw.color_tema || 'default',
     es_fijada: Boolean(raw.es_fijada),
+    tipo_nota: (raw as any).tipo_nota || 'GENERAL',
+    block_nombre: (raw as any).block_nombre || 'General',
+    version: Math.max(1, Number((raw as any).version) || 1),
     adjuntos_drive_json: adjuntos,
     enlaces_entidades_json: enlaces,
     etiquetas: etiquetas,
@@ -507,6 +516,62 @@ export function sanitizarNotaPayload(raw: NotaRecord, userId: string = DEFAULT_U
     fecha_actualizacion: sanitizeTimestamp(raw.updated_at) || new Date().toISOString(),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+/**
+ * Normalizador inverso Inbound para notas (Supabase -> Dexie)
+ * Protege contra la degradación de esquemas y preserva cuadernos (block_nombre) y checklists.
+ */
+export function sanitizarNotaInbound(remoto: any, localPrevio?: any): NotaRecord {
+  const checklists = Array.isArray(remoto.checklists_json)
+    ? remoto.checklists_json
+    : Array.isArray(localPrevio?.checklists_json)
+    ? localPrevio.checklists_json
+    : [];
+  const wishlist =
+    remoto.wishlist_json && typeof remoto.wishlist_json === 'object'
+      ? remoto.wishlist_json
+      : localPrevio?.wishlist_json || {};
+  const adjuntos = Array.isArray(remoto.adjuntos_drive_json)
+    ? remoto.adjuntos_drive_json
+    : Array.isArray(localPrevio?.adjuntos_drive_json)
+    ? localPrevio.adjuntos_drive_json
+    : [];
+  const enlaces = Array.isArray(remoto.enlaces_entidades_json)
+    ? remoto.enlaces_entidades_json
+    : Array.isArray(localPrevio?.enlaces_entidades_json)
+    ? localPrevio.enlaces_entidades_json
+    : [];
+  const etiquetas = Array.isArray(remoto.etiquetas)
+    ? remoto.etiquetas
+    : Array.isArray(localPrevio?.etiquetas)
+    ? localPrevio.etiquetas
+    : [];
+
+  return {
+    ...localPrevio,
+    ...remoto,
+    id: remoto.id || localPrevio?.id,
+    user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
+    codigo_legado: remoto.codigo_legado || localPrevio?.codigo_legado || '',
+    titulo: remoto.titulo?.trim() || localPrevio?.titulo || 'Sin Título',
+    contenido_markdown: remoto.contenido_markdown ?? localPrevio?.contenido_markdown ?? '',
+    tipo_nota: remoto.tipo_nota || localPrevio?.tipo_nota || 'GENERAL',
+    block_nombre: remoto.block_nombre || localPrevio?.block_nombre || 'General',
+    checklists_json: checklists,
+    wishlist_json: wishlist,
+    color_tema: remoto.color_tema || localPrevio?.color_tema || 'default',
+    color: remoto.color || localPrevio?.color || remoto.color_tema || localPrevio?.color_tema || 'default',
+    es_fijada: Boolean(remoto.es_fijada ?? localPrevio?.es_fijada ?? false),
+    fijada: Boolean(remoto.es_fijada ?? localPrevio?.es_fijada ?? false),
+    adjuntos_drive_json: adjuntos,
+    enlaces_entidades_json: enlaces,
+    etiquetas: etiquetas,
+    created_at: sanitizeTimestamp(remoto.created_at || remoto.fecha_creacion) || localPrevio?.created_at || new Date().toISOString(),
+    version: Math.max(1, Number(remoto.version ?? localPrevio?.version ?? 1)),
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(remoto.updated_at || remoto.fecha_actualizacion) || localPrevio?.updated_at || new Date().toISOString()
   };
 }
 
@@ -547,6 +612,17 @@ export function sanitizarActividadPayload(raw: ActividadPersonal, userId: string
     duracion_horas: Math.max(0, Number(raw.duracion_horas) || 1.00),
     agendado_calendar: raw.agendado_calendar || 'No',
     id_evento_calendar: raw.id_evento_calendar?.trim() || null,
+    frecuencia_ciclo: raw.frecuencia_ciclo || 'DIARIA',
+    regla_repeticion: raw.regla_repeticion || '',
+    fecha_fin: sanitizeDate(raw.fecha_fin),
+    excepciones_fechas: Array.isArray(raw.excepciones_fechas) ? raw.excepciones_fechas : [],
+    ultima_fecha_completado: sanitizeDate(raw.ultima_fecha_completado),
+    proxima_fecha_programada: sanitizeDate((raw as any).proxima_fecha_programada),
+    historial_fechas: Array.isArray(raw.historial_fechas) ? raw.historial_fechas : [],
+    actividad_padre_id: isUuid(raw.actividad_padre_id) ? raw.actividad_padre_id : null,
+    notas_checklist: raw.notas_checklist || '',
+    monto_gasto_asociado: Math.max(0, Number(raw.monto_gasto_asociado) || 0),
+    version: Math.max(1, Number((raw as any).version) || 1),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
   };
@@ -656,22 +732,32 @@ export function sanitizarSubtareaPayload(
 
 /**
  * Normalizador inverso Inbound para subtareas_pasos (Supabase -> Dexie)
- * Reconstruye id_padre_vinculado y tipo_padre a partir de tarea_id o actividad_id.
+ * Reconstruye id_padre_vinculado y tipo_padre a partir de tarea_id o actividad_id,
+ * resolviendo UUIDs hacia códigos legados canónicos (TAR-XXX / ACT-XXX) mediante mapas en memoria.
  */
-export function sanitizarSubtareaInbound(remoto: any, localPrevio?: any): SubtareaPaso {
+export function sanitizarSubtareaInbound(
+  remoto: any,
+  localPrevio?: any,
+  tareaUuidToCod?: Map<string, string>,
+  actividadUuidToCod?: Map<string, string>
+): SubtareaPaso {
   let tipoPadre: 'TAREA' | 'ACTIVIDAD' = localPrevio?.tipo_padre || 'TAREA';
   let idPadre: string = localPrevio?.id_padre_vinculado || '';
 
   if (remoto.tarea_id) {
     tipoPadre = 'TAREA';
-    if (!idPadre || isUuid(idPadre)) {
-      idPadre = localPrevio?.id_padre_vinculado || remoto.tarea_id;
-    }
+    const resCod =
+      tareaUuidToCod?.get(remoto.tarea_id) ||
+      tareaUuidToCod?.get(remoto.tarea_id.toUpperCase()) ||
+      tareaUuidToCod?.get(remoto.tarea_id.toLowerCase());
+    idPadre = resCod || (localPrevio?.id_padre_vinculado && !isUuid(localPrevio.id_padre_vinculado) ? localPrevio.id_padre_vinculado : remoto.tarea_id);
   } else if (remoto.actividad_id) {
     tipoPadre = 'ACTIVIDAD';
-    if (!idPadre || isUuid(idPadre)) {
-      idPadre = localPrevio?.id_padre_vinculado || remoto.actividad_id;
-    }
+    const resCod =
+      actividadUuidToCod?.get(remoto.actividad_id) ||
+      actividadUuidToCod?.get(remoto.actividad_id.toUpperCase()) ||
+      actividadUuidToCod?.get(remoto.actividad_id.toLowerCase());
+    idPadre = resCod || (localPrevio?.id_padre_vinculado && !isUuid(localPrevio.id_padre_vinculado) ? localPrevio.id_padre_vinculado : remoto.actividad_id);
   } else if (remoto.tipo_padre) {
     tipoPadre = remoto.tipo_padre;
     if (remoto.id_padre_vinculado) {
@@ -775,10 +861,25 @@ export function sanitizarCuotaPayload(raw: CuotaRecord, userId: string = DEFAULT
 // 10. SANITIZADOR DE METAS Y PLANES
 // ============================================================================
 
+/**
+ * REQ-SYNC-40-EXEC: Resuelve el user_id para entidades con restricción Foreign Key hacia auth.users.
+ * Si se dispone de un userId de sesión autenticada real (distinto de DEFAULT_USER_ID),
+ * éste sustituye de forma segura cualquier user_id sintético o nulo preexistente en local.
+ */
+export function resolverUserIdSeguro(rawUserId?: string | null, fallbackUserId: string = DEFAULT_USER_ID): string {
+  if (fallbackUserId && fallbackUserId !== DEFAULT_USER_ID && isUuid(fallbackUserId)) {
+    if (!rawUserId || rawUserId === DEFAULT_USER_ID || !isUuid(rawUserId)) {
+      return fallbackUserId;
+    }
+    return rawUserId;
+  }
+  return isUuid(rawUserId) ? (rawUserId as string) : fallbackUserId;
+}
+
 export function sanitizarMetaPlanPayload(raw: MetaPlanRecord, userId: string = DEFAULT_USER_ID) {
   return {
     id: isUuid(raw.id) ? raw.id : undefined,
-    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    user_id: resolverUserIdSeguro(raw.user_id, userId),
     codigo_legado: raw.codigo_legado,
     nombre_meta: raw.nombre_meta?.trim() || 'Meta sin nombre',
     descripcion: raw.descripcion?.trim() || null,
@@ -818,7 +919,7 @@ export function sanitizarHitoPlanPayload(
 
   return {
     id: isUuid(raw.id) ? raw.id : undefined,
-    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    user_id: resolverUserIdSeguro(raw.user_id, userId),
     codigo_legado: raw.codigo_legado,
     meta_id: resolvedMetaUuid,
     titulo_hito: raw.titulo_hito?.trim() || 'Hito sin título',
@@ -860,7 +961,7 @@ export function sanitizarVinculoPayload(
 
   return {
     id: isUuid(raw.id) ? raw.id : undefined,
-    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    user_id: resolverUserIdSeguro(raw.user_id, userId),
     habito_id: resolvedHabitoUuid,
     meta_id: resolvedMetaUuid,
     modo_computo: raw.modo_computo || 'VOLUMEN_DIRECTO',
