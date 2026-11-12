@@ -28,6 +28,8 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { crearNota, actualizarNota, eliminarNota } from '../../services/notasService';
+import { crearGasto } from '../../services/gastosService';
 
 type ModoVista = 'masonry' | 'lista';
 
@@ -183,7 +185,7 @@ export const VisorNotas: React.FC = () => {
       etiqueta: `Nota: ${titulo}`,
       tipo: 'NOTA',
       commit: async () => {
-        await db.notas.delete(id);
+        await eliminarNota(id);
       }
     });
   }, [notasRaw, programarEliminacion]);
@@ -199,13 +201,9 @@ export const VisorNotas: React.FC = () => {
     const costoEstimado = Number(notaParaConvertirGasto.wishlist_json?.costoEstimado || 0);
     const moneda = notaParaConvertirGasto.wishlist_json?.moneda || 'PEN';
     const nowIso = new Date().toISOString();
-    const count = await db.gastos.count();
     const montoPen = moneda === 'USD' ? costoEstimado * 3.75 : costoEstimado;
 
-    await db.gastos.add({
-      id: crypto.randomUUID ? crypto.randomUUID() : `gas_${Date.now()}`,
-      user_id: '00000000-0000-0000-0000-000000000001',
-      codigo_legado: `GAS-${String(count + 1).padStart(3, '0')}`,
+    await crearGasto({
       tipo_origen: 'Personal',
       categoria_gasto: 'Deseos / Wishlist',
       fecha_gasto: nowIso.split('T')[0],
@@ -214,18 +212,15 @@ export const VisorNotas: React.FC = () => {
       monto_original: costoEstimado,
       tipo_cambio: 3.75,
       monto_pen: montoPen,
-      estado_pago: 'PAGADO',
-      updated_at: nowIso,
-      sync_status: 'pending'
+      estado_pago: 'PAGADO'
     });
 
-    await db.notas.update(notaParaConvertirGasto.id, {
+    await actualizarNota(notaParaConvertirGasto.id, {
       wishlist_json: {
         ...notaParaConvertirGasto.wishlist_json,
         montoRealGastado: costoEstimado,
         estado: 'CONSEGUIDO'
-      },
-      updated_at: nowIso
+      }
     });
 
     setNotaParaConvertirGasto(null);
@@ -519,10 +514,6 @@ export const VisorNotas: React.FC = () => {
       return;
     }
 
-    const nowIso = new Date().toISOString();
-    const count = await db.notas.count();
-    const codigoLegado = `NOT-${String(count + 1).padStart(3, '0')}`;
-
     let wishlistPayload: WishlistMeta | undefined = undefined;
     if (quickTipo === 'wishlist' && quickWishlistCosto > 0) {
       wishlistPayload = {
@@ -538,10 +529,7 @@ export const VisorNotas: React.FC = () => {
 
     const blockAsignado = blockActivo && blockActivo !== '__sin_block__' ? blockActivo : undefined;
 
-    await db.notas.add({
-      id: crypto.randomUUID ? crypto.randomUUID() : `not_${Date.now()}`,
-      user_id: '00000000-0000-0000-0000-000000000001',
-      codigo_legado: codigoLegado,
+    await crearNota({
       titulo: quickTitulo.trim() || 'Nota Rápida',
       contenido_markdown: quickContenido.trim(),
       tipo_nota: quickTipo === 'wishlist' ? 'WISHLIST' : quickTipo === 'checklist' ? 'CHECKLIST' : 'TEXTO',
@@ -552,11 +540,7 @@ export const VisorNotas: React.FC = () => {
       block_nombre: blockAsignado,
       adjuntos_drive_json: [],
       enlaces_entidades_json: [],
-      etiquetas: quickTags,
-      created_at: nowIso,
-      updated_at: nowIso,
-      version: 1,
-      sync_status: 'pending'
+      etiquetas: quickTags
     });
 
     // Reset formulario

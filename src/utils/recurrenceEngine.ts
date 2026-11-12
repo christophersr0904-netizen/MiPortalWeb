@@ -370,12 +370,20 @@ function calcularFinLocalLima(fechaIso: string, horaInicio: string, duracionHora
 }
 
 function construirDescripcionCalendar(actividad: ActividadRecurrenciaInput): string {
+  const rec = actividad as Record<string, any>;
   const lineas: string[] = [];
-  if (actividad.codigo_legado) lineas.push(`Código: ${actividad.codigo_legado}`);
-  if (actividad.categoria_vida) lineas.push(`Pilar: ${String(actividad.categoria_vida).replace(/_/g, ' ')}`);
-  if (actividad.meta_macro_nombre) lineas.push(`Meta: ${actividad.meta_macro_nombre}`);
-  if (actividad.notas_checklist && String(actividad.notas_checklist).trim()) {
-    lineas.push('', String(actividad.notas_checklist).trim());
+  if (rec.codigo_legado) lineas.push(`Código: ${rec.codigo_legado}`);
+  if (rec.proyecto_codigo) lineas.push(`Proyecto: ${rec.proyecto_codigo}`);
+  if (rec.hito_codigo) lineas.push(`Hito: ${rec.hito_codigo}`);
+  if (rec.categoria_vida) lineas.push(`Pilar: ${String(rec.categoria_vida).replace(/_/g, ' ')}`);
+  if (rec.meta_macro_nombre) lineas.push(`Meta: ${rec.meta_macro_nombre}`);
+  const notasTexto =
+    rec.notas_checklist ||
+    rec.notas_impedimentos ||
+    rec.descripcion_gasto ||
+    rec.descripcion_ingreso;
+  if (notasTexto && String(notasTexto).trim()) {
+    lineas.push('', String(notasTexto).trim());
   }
   return lineas.join('\n');
 }
@@ -387,14 +395,33 @@ export function construirEventoGoogleCalendarV3(
   actividad: ActividadRecurrenciaInput
 ): EventoGoogleCalendarV3 {
   const fechaBase =
-    normalizarFechaIso(resolverCampo(actividad, 'fecha_programada', 'Fecha_Programada')) ||
-    formatFechaIsoLocal();
+    normalizarFechaIso(
+      resolverCampo(
+        actividad,
+        'fecha_programada',
+        'Fecha_Programada',
+        'fecha_gasto',
+        'fecha_ingreso',
+        'fecha_vencimiento'
+      )
+    ) || formatFechaIsoLocal();
   const horaBase = normalizarHora24(resolverCampo(actividad, 'hora_inicio', 'Hora_Inicio'), '08:00');
-  const durHoras = Number(resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas') ?? 1) || 1;
+  const durHoras = Number(
+    resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas', 'horas_estimadas') ?? 1
+  ) || 1;
   const { fechaFin, horaFin } = calcularFinLocalLima(fechaBase, horaBase, durHoras);
 
   const summary = String(
-    resolverCampo(actividad, 'nombre_actividad', 'nombre', 'Nombre_Actividad', 'titulo') || 'Actividad PMO'
+    resolverCampo(
+      actividad,
+      'nombre_actividad',
+      'nombre',
+      'Nombre_Actividad',
+      'titulo',
+      'nombre_tarea_actividad',
+      'descripcion_gasto',
+      'descripcion_ingreso'
+    ) || 'Actividad PMO'
   ).trim();
 
   const rrule = construirRRuleRFC5545(actividad);
@@ -444,17 +471,36 @@ export function construirUrlGoogleCalendar(
   actividad: ActividadRecurrenciaInput
 ): string {
   const fechaBase =
-    normalizarFechaIso(resolverCampo(actividad, 'fecha_programada', 'Fecha_Programada')) ||
-    formatFechaIsoLocal();
+    normalizarFechaIso(
+      resolverCampo(
+        actividad,
+        'fecha_programada',
+        'Fecha_Programada',
+        'fecha_gasto',
+        'fecha_ingreso',
+        'fecha_vencimiento'
+      )
+    ) || formatFechaIsoLocal();
   const horaBase = normalizarHora24(resolverCampo(actividad, 'hora_inicio', 'Hora_Inicio'), '08:00');
-  const durHoras = Number(resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas') ?? 1) || 1;
+  const durHoras = Number(
+    resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas', 'horas_estimadas') ?? 1
+  ) || 1;
   const { fechaFin, horaFin } = calcularFinLocalLima(fechaBase, horaBase, durHoras);
 
   const startCompact = `${fechaBase.replace(/-/g, '')}T${horaBase.replace(':', '')}00`;
   const endCompact = `${fechaFin.replace(/-/g, '')}T${horaFin.replace(':', '')}00`;
 
   const summary = String(
-    resolverCampo(actividad, 'nombre_actividad', 'nombre', 'Nombre_Actividad', 'titulo') || 'Actividad PMO'
+    resolverCampo(
+      actividad,
+      'nombre_actividad',
+      'nombre',
+      'Nombre_Actividad',
+      'titulo',
+      'nombre_tarea_actividad',
+      'descripcion_gasto',
+      'descripcion_ingreso'
+    ) || 'Actividad PMO'
   ).trim();
 
   const params = new URLSearchParams({
@@ -488,10 +534,20 @@ export function generarArchivoICS(
   actividad: ActividadRecurrenciaInput
 ): string {
   const fechaBase =
-    normalizarFechaIso(resolverCampo(actividad, 'fecha_programada', 'Fecha_Programada')) ||
-    formatFechaIsoLocal();
+    normalizarFechaIso(
+      resolverCampo(
+        actividad,
+        'fecha_programada',
+        'Fecha_Programada',
+        'fecha_gasto',
+        'fecha_ingreso',
+        'fecha_vencimiento'
+      )
+    ) || formatFechaIsoLocal();
   const horaBase = normalizarHora24(resolverCampo(actividad, 'hora_inicio', 'Hora_Inicio'), '08:00');
-  const durHoras = Number(resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas') ?? 1) || 1;
+  const durHoras = Number(
+    resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas', 'horas_estimadas') ?? 1
+  ) || 1;
   const { fechaFin, horaFin } = calcularFinLocalLima(fechaBase, horaBase, durHoras);
 
   const startCompact = `${fechaBase.replace(/-/g, '')}T${horaBase.replace(':', '')}00`;
@@ -500,7 +556,16 @@ export function generarArchivoICS(
   const uid = `${actividad.id || actividad.codigo_legado || Date.now()}@miportalweb.local`;
 
   const summary = String(
-    resolverCampo(actividad, 'nombre_actividad', 'nombre', 'Nombre_Actividad', 'titulo') || 'Actividad PMO'
+    resolverCampo(
+      actividad,
+      'nombre_actividad',
+      'nombre',
+      'Nombre_Actividad',
+      'titulo',
+      'nombre_tarea_actividad',
+      'descripcion_gasto',
+      'descripcion_ingreso'
+    ) || 'Actividad PMO'
   ).trim();
 
   const lineas = [

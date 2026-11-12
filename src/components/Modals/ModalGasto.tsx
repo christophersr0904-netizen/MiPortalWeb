@@ -24,6 +24,7 @@ import {
   Save
 } from 'lucide-react';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { crearGasto, actualizarGasto, eliminarGasto } from '../../services/gastosService';
 
 export interface ModalGastoProps {
   isOpen: boolean;
@@ -156,19 +157,8 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
     }
 
     const nowIso = new Date().toISOString();
-    let codigoLegado = gastoEditar?.codigo_legado;
-    let idGasto = gastoEditar?.id;
 
-    if (!gastoEditar) {
-      idGasto = crypto.randomUUID();
-      const count = await db.gastos.count();
-      codigoLegado = `GAS-${String(count + 1).padStart(3, '0')}`;
-    }
-
-    const payload: GastoRecord = {
-      id: idGasto!,
-      user_id: '00000000-0000-0000-0000-000000000001',
-      codigo_legado: codigoLegado!,
+    const payloadDatos: Partial<GastoRecord> = {
       tipo_origen: tipoOrigen === 'Tarea Proyecto' ? 'TAREA_PROYECTO' : 'ACTIVIDAD_PERSONAL',
       id_origen_vinculado: tipoOrigen === 'Tarea Proyecto' ? selectedTarea || undefined : undefined,
       categoria_gasto: categoriaGasto,
@@ -179,14 +169,17 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
       tipo_cambio: tipoCambio,
       monto_pen: montoPEN,
       metodo_pago: metodoPago,
-      estado_pago: modoDual === 'REAL' ? 'PAGADO' : 'PENDIENTE',
-      updated_at: nowIso,
-      sync_status: 'pending'
+      estado_pago: modoDual === 'REAL' ? 'PAGADO' : 'PENDIENTE'
     };
 
-    await db.gastos.put(payload);
+    let resultado: GastoRecord;
+    if (gastoEditar) {
+      resultado = await actualizarGasto(gastoEditar.id, payloadDatos);
+    } else {
+      resultado = await crearGasto(payloadDatos);
+    }
 
-    if (onGuardadoExitoso) onGuardadoExitoso(payload);
+    if (onGuardadoExitoso) onGuardadoExitoso(resultado);
     onClose();
   };
 
@@ -215,7 +208,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
       etiqueta: desc,
       tipo: 'GASTO',
       commit: async () => {
-        await db.gastos.delete(targetId);
+        await eliminarGasto(targetId);
       }
     });
     onClose();

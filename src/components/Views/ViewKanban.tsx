@@ -50,6 +50,7 @@ import {
 import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
 import { ModalDoDAdvertencia } from '../Modals/ModalDoDAdvertencia';
+import { actualizarTarea, eliminarTarea } from '../../services/tareasService';
 import { ColumnaKanban } from '../PMO/ColumnaKanban';
 import { IconoCategoriaIniciativa, coincideCategoriaIniciativa } from '../PMO/IconoCategoriaIniciativa';
 import AnimatedContent from '../AnimatedContent';
@@ -728,10 +729,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
   // Columnas Kanban Canónicas Dark Cobalt
   const getFiltroTriggerClass = (activo: boolean, disabled = false) =>
-    `h-9 px-2.5 rounded-lg text-xs font-medium tracking-wide transition-colors inline-flex items-center gap-1.5 shrink-0 select-none border ${
-      disabled
-        ? 'opacity-40 cursor-not-allowed border-slate-800/60 bg-[#0D1526]/60 text-slate-500'
-        : activo
+    `h-9 px-2.5 rounded-lg text-xs font-medium tracking-wide transition-colors inline-flex items-center gap-1.5 shrink-0 select-none border ${disabled
+      ? 'opacity-40 cursor-not-allowed border-slate-800/60 bg-[#0D1526]/60 text-slate-500'
+      : activo
         ? 'bg-sky-950/40 text-sky-300 border-sky-500/50 cursor-pointer'
         : 'bg-[#0D1526] border-slate-800/80 hover:border-sky-500/40 text-slate-300 hover:text-slate-100 cursor-pointer'
     }`;
@@ -785,7 +785,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     setEstadosOptimistas((prev) => new Map(prev).set(tarea.id, nuevoEstado));
 
     try {
-      await db.tareas.update(tarea.id, {
+      await actualizarTarea(tarea.id, {
         estado_tarea: nuevoEstado,
         updated_at: new Date().toISOString()
       });
@@ -884,7 +884,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         etiqueta: nombre || 'Tarea',
         tipo: 'TAREA',
         commit: async () => {
-          await db.tareas.delete(id);
+          const tar = rawTareasLive?.find((t) => t.id === id);
+          await eliminarTarea(id, tar?.codigo_legado);
         }
       });
     }
@@ -1072,8 +1073,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     type="button"
                     onClick={() => setFiltroTipoProyecto(tipo)}
                     className={`text-[10px] px-2 py-0.5 rounded-full font-semibold transition cursor-pointer ${filtroTipoProyecto === tipo
-                        ? 'bg-sky-600 text-white shadow-xs'
-                        : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                      ? 'bg-sky-600 text-white shadow-xs'
+                      : 'bg-slate-800/80 text-slate-400 hover:text-white'
                       }`}
                   >
                     {tipo || 'Todos'}
@@ -1266,8 +1267,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
             id="btn-selector-proyecto-movil"
             onClick={() => setSelectorProyectosMovilAbierto(true)}
             className={`h-9 min-w-[44px] max-w-[104px] px-2 rounded-xl text-[11px] font-semibold flex items-center gap-1 shrink-0 cursor-pointer active:scale-95 transition-[transform,colors] ${proyectoSeleccionadoCodigo
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                : 'bg-slate-900/90 text-slate-300 border border-slate-800 hover:text-white'
+              ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+              : 'bg-slate-900/90 text-slate-300 border border-slate-800 hover:text-white'
               }`}
             title={proyectoActivo ? `${proyectoActivo.codigo_legado} · ${proyectoActivo.nombre}` : 'Seleccionar proyecto'}
           >
@@ -1297,8 +1298,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   type="button"
                   onClick={() => setColumnaMovilActiva(col.id)}
                   className={`snap-start shrink-0 h-9 px-2.5 rounded-xl text-[11px] font-semibold transition-[transform,colors] flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 ${isActiva
-                      ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-sm'
-                      : 'text-slate-400 bg-slate-900/60 border border-slate-800/80 hover:text-slate-200'
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-sm'
+                    : 'text-slate-400 bg-slate-900/60 border border-slate-800/80 hover:text-slate-200'
                     }`}
                 >
                   <span>{col.titulo.replace(/^\d+\.\s*/, '')}</span>
@@ -1322,8 +1323,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
             aria-label="Abrir búsqueda y filtros Kanban"
             title="Buscar y Filtrar"
             className={`min-w-[40px] h-9 px-2 rounded-xl text-xs font-semibold transition-[transform,colors] flex items-center justify-center gap-1 cursor-pointer active:scale-95 shrink-0 ${totalFiltrosActivosCount > 0 || drawerFiltrosMovilAbierto
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
-                : 'text-slate-300 bg-slate-900/90 border border-slate-800 hover:text-white'
+              ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
+              : 'text-slate-300 bg-slate-900/90 border border-slate-800 hover:text-white'
               }`}
           >
             <SlidersHorizontal className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.75} />
@@ -1483,8 +1484,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                           setDropdownTiempoAbierto(false);
                         }}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroTemporal === opt.id
-                            ? 'bg-sky-950/50 text-sky-300 font-bold'
-                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
+                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                           }`}
                       >
                         <span className="flex items-center gap-2">
@@ -1517,8 +1518,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     </span>
                     <span
                       className={`font-mono tabular-nums text-[10px] px-1.5 py-0.5 leading-none rounded border ${gastoContextualPen > presupuestoContextualPen
-                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                         }`}
                       title="Consumo presupuestal"
                     >
@@ -1568,8 +1569,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   type="button"
                   onClick={() => setCriterioOrden('PRIORITY')}
                   className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'PRIORITY'
-                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
+                    ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar por Prioridad (Eisenhower)"
                 >
@@ -1580,8 +1581,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   type="button"
                   onClick={() => setCriterioOrden('DATE')}
                   className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'DATE'
-                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
+                    ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar por Fecha / Vencimiento"
                 >
@@ -1592,8 +1593,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   type="button"
                   onClick={() => setCriterioOrden('ENERGY')}
                   className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'ENERGY'
-                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
+                    ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar por Nivel de Energía"
                 >
@@ -1604,8 +1605,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   type="button"
                   onClick={() => setCriterioOrden('HOURS')}
                   className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'HOURS'
-                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
+                    ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar por Horas Estimadas"
                 >
@@ -1616,8 +1617,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   type="button"
                   onClick={() => setCriterioOrden('ALPHA')}
                   className={`h-full w-8 rounded-md flex items-center justify-center transition-colors cursor-pointer border ${criterioOrden === 'ALPHA'
-                      ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
+                    ? 'bg-sky-950/50 text-sky-300 border-sky-500/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
                     }`}
                   title="Ordenar Alfabético (A-Z)"
                 >
@@ -1702,8 +1703,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                           setPopoverHitoAbierto(false);
                         }}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between truncate transition cursor-pointer text-xs font-medium ${filtroHito === h.codigo_legado
-                            ? 'bg-sky-950/50 text-sky-300 font-bold'
-                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
+                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                           }`}
                       >
                         <span className="flex items-center gap-2 truncate">
@@ -1760,8 +1761,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                           setPopoverPrioAbierto(false);
                         }}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroPrioridad === p.id
-                            ? 'bg-sky-950/50 text-sky-300 font-bold'
-                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
+                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                           }`}
                       >
                         <span className="flex items-center gap-2">
@@ -1817,8 +1818,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                           setPopoverEnergiaAbierto(false);
                         }}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroEnergia === e.id
-                            ? 'bg-sky-950/50 text-sky-300 font-bold'
-                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
+                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                           }`}
                       >
                         <span className="flex items-center gap-2">
@@ -1877,8 +1878,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                           setPopoverPlazoAbierto(false);
                         }}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroPlazo === p.id
-                            ? 'bg-sky-950/50 text-sky-300 font-bold'
-                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
+                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                           }`}
                       >
                         <span className="flex items-center gap-2">
@@ -1931,8 +1932,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                           setPopoverDepAbierto(false);
                         }}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroDependencia === d.id
-                            ? 'bg-sky-950/50 text-sky-300 font-bold'
-                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                          ? 'bg-sky-950/50 text-sky-300 font-bold'
+                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                           }`}
                       >
                         <span className="flex items-center gap-2">
@@ -2010,6 +2011,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         onClose={() => setModalTareaFlowAbierto(false)}
         tareaId={tareaSeleccionadaId}
         initialColumna={columnaNuevaTarea}
+        estadoInicial={columnaNuevaTarea}
         initialProyectoCodigo={proyectoSeleccionadoCodigo}
         onGuardado={() => {
           setModalTareaFlowAbierto(false);
@@ -2106,8 +2108,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   setSelectorProyectosMovilAbierto(false);
                 }}
                 className={`w-full min-h-[48px] px-3.5 py-2.5 rounded-2xl border flex items-center justify-between gap-2 text-xs font-semibold cursor-pointer active:scale-[0.99] transition-[colors,transform] ${!proyectoSeleccionadoCodigo
-                    ? 'bg-sky-950/50 border-sky-500/50 text-sky-200'
-                    : 'bg-slate-900/60 border-slate-800/70 text-slate-300 hover:bg-slate-800/70'
+                  ? 'bg-sky-950/50 border-sky-500/50 text-sky-200'
+                  : 'bg-slate-900/60 border-slate-800/70 text-slate-300 hover:bg-slate-800/70'
                   }`}
               >
                 <span className="flex items-center gap-2">
@@ -2133,8 +2135,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       setSelectorProyectosMovilAbierto(false);
                     }}
                     className={`w-full min-h-[52px] px-3.5 py-2.5 rounded-2xl border flex items-center justify-between gap-3 text-left cursor-pointer active:scale-[0.99] transition-[colors,transform] ${isActivo
-                        ? 'bg-sky-950/50 border-sky-500/50 text-white'
-                        : 'bg-slate-900/60 border-slate-800/70 text-slate-300 hover:bg-slate-800/70'
+                      ? 'bg-sky-950/50 border-sky-500/50 text-white'
+                      : 'bg-slate-900/60 border-slate-800/70 text-slate-300 hover:bg-slate-800/70'
                       }`}
                   >
                     <div className="min-w-0 flex-1">
@@ -2261,8 +2263,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       type="button"
                       onClick={() => setCriterioOrden(ord.id)}
                       className={`h-10 px-3 rounded-xl text-xs font-semibold cursor-pointer active:scale-95 transition-[transform,colors] ${criterioOrden === ord.id
-                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                          : 'bg-slate-900/70 text-slate-300 border border-slate-800'
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                        : 'bg-slate-900/70 text-slate-300 border border-slate-800'
                         }`}
                     >
                       {ord.label}
@@ -2290,8 +2292,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       type="button"
                       onClick={() => setFiltroTemporal(opt.id)}
                       className={`h-10 px-3 rounded-xl text-xs font-semibold cursor-pointer active:scale-95 transition-[transform,colors] ${filtroTemporal === opt.id
-                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                          : 'bg-slate-900/70 text-slate-300 border border-slate-800'
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                        : 'bg-slate-900/70 text-slate-300 border border-slate-800'
                         }`}
                     >
                       {opt.label}
@@ -2311,8 +2313,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       type="button"
                       onClick={() => setFiltroHito('')}
                       className={`h-10 px-3 rounded-xl text-xs font-semibold cursor-pointer active:scale-95 ${!filtroHito
-                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                          : 'bg-slate-900/70 text-slate-300 border border-slate-800'
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                        : 'bg-slate-900/70 text-slate-300 border border-slate-800'
                         }`}
                     >
                       Todos
@@ -2323,8 +2325,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         type="button"
                         onClick={() => setFiltroHito(filtroHito === h.codigo_legado ? '' : h.codigo_legado)}
                         className={`h-10 px-3 rounded-xl text-xs font-semibold cursor-pointer active:scale-95 max-w-full truncate ${filtroHito === h.codigo_legado
-                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                            : 'bg-slate-900/70 text-slate-300 border border-slate-800'
+                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                          : 'bg-slate-900/70 text-slate-300 border border-slate-800'
                           }`}
                       >
                         {h.codigo_legado} · {h.nombre_elemento}
@@ -2352,8 +2354,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       type="button"
                       onClick={() => setFiltroPrioridad(p.id)}
                       className={`h-10 px-3 rounded-xl text-xs font-semibold cursor-pointer active:scale-95 ${filtroPrioridad === p.id
-                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                          : 'bg-slate-900/70 text-slate-300 border border-slate-800'
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                        : 'bg-slate-900/70 text-slate-300 border border-slate-800'
                         }`}
                     >
                       {p.label}
@@ -2379,8 +2381,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       type="button"
                       onClick={() => setFiltroEnergia(e.id)}
                       className={`h-10 px-3 rounded-xl text-xs font-semibold cursor-pointer active:scale-95 ${filtroEnergia === e.id
-                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                          : 'bg-slate-900/70 text-slate-300 border border-slate-800'
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                        : 'bg-slate-900/70 text-slate-300 border border-slate-800'
                         }`}
                     >
                       {e.label}
@@ -2408,8 +2410,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         type="button"
                         onClick={() => setFiltroPlazo(p.id)}
                         className={`h-10 px-3 rounded-xl text-xs font-semibold cursor-pointer active:scale-95 ${filtroPlazo === p.id
-                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                            : 'bg-slate-900/70 text-slate-300 border border-slate-800'
+                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                          : 'bg-slate-900/70 text-slate-300 border border-slate-800'
                           }`}
                       >
                         {p.label}
@@ -2433,8 +2435,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         type="button"
                         onClick={() => setFiltroDependencia(d.id)}
                         className={`h-10 px-3 rounded-xl text-xs font-semibold cursor-pointer active:scale-95 ${filtroDependencia === d.id
-                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
-                            : 'bg-slate-900/70 text-slate-300 border border-slate-800'
+                          ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                          : 'bg-slate-900/70 text-slate-300 border border-slate-800'
                           }`}
                       >
                         {d.label}

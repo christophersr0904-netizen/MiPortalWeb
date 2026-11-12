@@ -22,6 +22,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { crearIngreso, actualizarIngreso, eliminarIngreso } from '../../services/ingresosService';
 
 export interface ModalIngresoProps {
   isOpen: boolean;
@@ -120,19 +121,8 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
     setErrorMsg(null);
 
     const nowIso = new Date().toISOString();
-    let codigoLegado = ingresoEditar?.codigo_legado;
-    let idIngreso = ingresoEditar?.id;
 
-    if (!ingresoEditar) {
-      idIngreso = crypto.randomUUID();
-      const count = await db.ingresos.count();
-      codigoLegado = `ING-${String(count + 1).padStart(3, '0')}`;
-    }
-
-    const payload: IngresoRecord = {
-      id: idIngreso!,
-      user_id: '00000000-0000-0000-0000-000000000001',
-      codigo_legado: codigoLegado!,
+    const payloadDatos: Partial<IngresoRecord> = {
       tipo_origen: proyectoAsociado === 'PERSONAL' ? 'LIBRE_CORRIENTE' : 'PROYECTO',
       categoria_ingreso: categoriaIngreso,
       fecha_ingreso: fecha || nowIso.split('T')[0],
@@ -142,14 +132,17 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
       tipo_cambio: tipoCambio,
       monto_pen: montoPEN,
       cuenta_destino: cuentaDestino,
-      estado_cobro: modoDual === 'REAL' ? 'COBRADO' : 'PENDIENTE',
-      updated_at: nowIso,
-      sync_status: 'pending'
+      estado_cobro: modoDual === 'REAL' ? 'COBRADO' : 'PENDIENTE'
     };
 
-    await db.ingresos.put(payload);
+    let resultado: IngresoRecord;
+    if (ingresoEditar) {
+      resultado = await actualizarIngreso(ingresoEditar.id, payloadDatos);
+    } else {
+      resultado = await crearIngreso(payloadDatos);
+    }
 
-    if (onGuardadoExitoso) onGuardadoExitoso(payload);
+    if (onGuardadoExitoso) onGuardadoExitoso(resultado);
     onClose();
   };
 
@@ -178,7 +171,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
       etiqueta: desc,
       tipo: 'INGRESO',
       commit: async () => {
-        await db.ingresos.delete(targetId);
+        await eliminarIngreso(targetId);
       }
     });
     onClose();

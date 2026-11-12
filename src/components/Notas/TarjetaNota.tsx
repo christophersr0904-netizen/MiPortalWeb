@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import type { NotaRecord, VinculoEntidad } from '../../types';
-import { db } from '../../db/db';
+import { actualizarNota } from '../../services/notasService';
 import { serializarNotaATextoPlano } from '../../utils/entityNormalizer';
 import { toastCobalt } from '../../utils/toastCobalt';
 import {
@@ -224,12 +224,9 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
   // Toggle de fijado/pin optimista en Dexie
   const handleTogglePin = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const nowIso = new Date().toISOString();
-    await db.notas.update(nota.id, {
+    await actualizarNota(nota.id, {
       es_fijada: !nota.es_fijada,
-      updated_at: nowIso,
-      version: (nota.version || 1) + 1,
-      sync_status: 'pending'
+      version: (nota.version || 1) + 1
     });
   };
 
@@ -252,13 +249,10 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
       nuevoMarkdown = nuevoMarkdown.replace(regexOld, replacement);
     }
 
-    const nowIso = new Date().toISOString();
-    await db.notas.update(nota.id, {
+    await actualizarNota(nota.id, {
       checklists_json: updatedChecklist,
       contenido_markdown: nuevoMarkdown,
-      updated_at: nowIso,
-      version: (nota.version || 1) + 1,
-      sync_status: 'pending'
+      version: (nota.version || 1) + 1
     });
   };
 

@@ -10,7 +10,7 @@
  */
 
 import { db } from '../db/db';
-import type { ActividadPersonal, AlcanceRecurrencia } from '../types';
+import type { ActividadPersonal, AlcanceRecurrencia, TareaRecord } from '../types';
 import { syncManager } from './syncManager';
 import {
   construirEventoGoogleCalendarV3,
@@ -28,6 +28,42 @@ export const GCAL_EVENT_MAP_KEY = 'pmo_gcal_event_map';
 export const GCAL_TOKEN_STORAGE_KEY = 'pmo_gcal_access_token';
 export const GCAL_EXPIRES_STORAGE_KEY = 'pmo_gcal_expires_at';
 export const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+
+export interface EntidadAgendable {
+  id?: string;
+  user_id?: string;
+  codigo_legado?: string;
+  nombre?: string;
+  nombre_actividad?: string;
+  nombre_tarea_actividad?: string;
+  descripcion_gasto?: string;
+  descripcion_ingreso?: string;
+  titulo?: string;
+  fecha_programada?: string;
+  fecha_gasto?: string;
+  fecha_ingreso?: string;
+  fecha_vencimiento?: string;
+  hora_inicio?: string;
+  duracion_horas?: number;
+  horas_estimadas?: number;
+  agendado_calendar?: 'Sí' | 'No' | string;
+  agendado_en_calendar?: 'Sí' | 'No' | string;
+  id_evento_calendar?: string;
+  notas_impedimentos?: string;
+  notas_checklist?: string;
+  tipo_entidad?: 'ACTIVIDAD' | 'TAREA' | 'GASTO' | 'INGRESO' | 'CUOTA' | string;
+  categoria_vida?: string;
+  meta_macro_nombre?: string;
+  proyecto_codigo?: string;
+  hito_codigo?: string;
+  frecuencia_ciclo?: string;
+  regla_repeticion?: string;
+  tipo_compromiso?: string;
+  excepciones_fechas?: string[];
+  [key: string]: any;
+}
+
+export type AgendableCalendarInput = EntidadAgendable | ActividadPersonal | TareaRecord | any;
 
 export interface OpcionesAlcanceCalendar {
   alcance?: AlcanceRecurrencia | string;
@@ -284,7 +320,7 @@ function guardarMapaEventosGoogleCalendar(mapa: Record<string, string>): void {
   }
 }
 
-export function obtenerGoogleEventId(actividad: Partial<ActividadPersonal>): string | undefined {
+export function obtenerGoogleEventId(actividad: Partial<EntidadAgendable>): string | undefined {
   const mapa = obtenerMapaEventosGoogleCalendar();
   if (actividad.id && mapa[actividad.id]) return mapa[actividad.id];
   if (actividad.codigo_legado && mapa[actividad.codigo_legado]) return mapa[actividad.codigo_legado];
@@ -294,7 +330,7 @@ export function obtenerGoogleEventId(actividad: Partial<ActividadPersonal>): str
   return undefined;
 }
 
-export function guardarGoogleEventId(actividad: Partial<ActividadPersonal>, eventId: string): void {
+export function guardarGoogleEventId(actividad: Partial<EntidadAgendable>, eventId: string): void {
   if (!eventId) return;
   const mapa = obtenerMapaEventosGoogleCalendar();
   if (actividad.id) mapa[actividad.id] = eventId;
@@ -302,7 +338,7 @@ export function guardarGoogleEventId(actividad: Partial<ActividadPersonal>, even
   guardarMapaEventosGoogleCalendar(mapa);
 }
 
-export function eliminarGoogleEventId(actividad: Partial<ActividadPersonal>): void {
+export function eliminarGoogleEventId(actividad: Partial<EntidadAgendable>): void {
   const mapa = obtenerMapaEventosGoogleCalendar();
   let changed = false;
   if (actividad.id && actividad.id in mapa) {
@@ -316,20 +352,38 @@ export function eliminarGoogleEventId(actividad: Partial<ActividadPersonal>): vo
   if (changed) guardarMapaEventosGoogleCalendar(mapa);
 }
 
-async function persistirEventIdEnDexie(actividadId: string | undefined, eventId: string | null): Promise<void> {
+async function persistirEventIdEnDexie(actividad: AgendableCalendarInput, eventId: string | null): Promise<void> {
+  const actividadId = actividad?.id;
   if (!actividadId) return;
   try {
-    await db.actividades_personales.update(actividadId, {
-      id_evento_calendar: eventId ?? undefined,
-      updated_at: new Date().toISOString()
-    });
+    const eid = eventId ?? undefined;
+    const now = new Date().toISOString();
+    const isTarea = Boolean(
+      actividad.nombre_tarea_actividad ||
+      actividad.proyecto_codigo ||
+      actividad.hito_codigo ||
+      String(actividad.codigo_legado || '').startsWith('TAR')
+    );
+
+    if (isTarea && db.tareas && typeof db.tareas.update === 'function') {
+      await db.tareas.update(actividadId, {
+        id_evento_calendar: eid,
+        agendado_calendar: eventId ? 'Sí' : 'No',
+        updated_at: now
+      } as any);
+    } else if (db.actividades_personales && typeof db.actividades_personales.update === 'function') {
+      await db.actividades_personales.update(actividadId, {
+        id_evento_calendar: eid,
+        updated_at: now
+      });
+    }
   } catch {
     // Tolerar entorno de test donde IndexedDB no está disponible
   }
 }
 
 function construirResultadoAuthRequerida(
-  actividad: ActividadPersonal,
+  actividad: AgendableCalendarInput,
   rrule: string | null,
   eventoV3: EventoGoogleCalendarV3
 ): ResultadoCalendarSync {
@@ -353,9 +407,10 @@ function construirResultadoAuthRequerida(
  * CREATE: Crea un evento puntual o serie recurrente (RRULE RFC-5545) en Google Calendar API v3.
  */
 export async function sincronizarCreacionCalendar(
-  actividad: ActividadPersonal
+  actividad: AgendableCalendarInput
 ): Promise<ResultadoCalendarSync> {
-  if (actividad.agendado_calendar !== 'Sí') {
+  const agendadoVal = actividad.agendado_calendar || actividad.agendado_en_calendar;
+  if (agendadoVal !== 'Sí') {
     return { success: true, mode: 'SKIPPED' };
   }
 
@@ -416,7 +471,7 @@ export async function sincronizarCreacionCalendar(
     const eventId = String(data?.id || '').trim();
     if (eventId) {
       guardarGoogleEventId(actividad, eventId);
-      await persistirEventIdEnDexie(actividad.id, eventId);
+      await persistirEventIdEnDexie(actividad, eventId);
     }
 
     return {
@@ -446,11 +501,12 @@ export async function sincronizarCreacionCalendar(
  * UPDATE: Actualiza un evento existente en Google Calendar (`PATCH /events/{eventId}`) o lo crea si no existía.
  */
 export async function sincronizarActualizacionCalendar(
-  actividad: ActividadPersonal
+  actividad: AgendableCalendarInput
 ): Promise<ResultadoCalendarSync> {
   const eventId = obtenerGoogleEventId(actividad);
+  const agendadoVal = actividad.agendado_calendar || actividad.agendado_en_calendar;
 
-  if (actividad.agendado_calendar !== 'Sí') {
+  if (agendadoVal !== 'Sí') {
     if (eventId) {
       return sincronizarEliminacionCalendar(actividad, 'ALL');
     }
@@ -555,7 +611,7 @@ export async function sincronizarActualizacionCalendar(
  * o recorta la serie (`FUTURE` -> `PATCH` con `UNTIL`).
  */
 export async function sincronizarEliminacionCalendar(
-  actividad: ActividadPersonal,
+  actividad: AgendableCalendarInput,
   alcance: AlcanceRecurrencia | string = 'ALL',
   fechaReferencia?: string
 ): Promise<ResultadoCalendarSync> {
@@ -738,7 +794,7 @@ export async function sincronizarEliminacionCalendar(
     // 200, 204 o 410 Gone se consideran eliminación exitosa
     if (response.ok || response.status === 204 || response.status === 410) {
       eliminarGoogleEventId(actividad);
-      await persistirEventIdEnDexie(actividad.id, null);
+      await persistirEventIdEnDexie(actividad, null);
       return {
         success: true,
         mode: 'API_V3',
@@ -768,7 +824,7 @@ export async function sincronizarEliminacionCalendar(
  * Facade unificado para despachar CREATE / UPDATE / DELETE hacia Google Calendar API v3.
  */
 export async function sincronizarActividadCalendar(
-  actividad: ActividadPersonal,
+  actividad: AgendableCalendarInput,
   accion: 'UPSERT' | 'DELETE',
   opcionesAlcance?: OpcionesAlcanceCalendar
 ): Promise<ResultadoCalendarSync> {
@@ -780,6 +836,17 @@ export async function sincronizarActividadCalendar(
     return sincronizarActualizacionCalendar(actividad);
   }
   return sincronizarCreacionCalendar(actividad);
+}
+
+/**
+ * Facade polimórfico universal para despachar Tareas hacia Google Calendar API v3.
+ */
+export async function sincronizarTareaCalendar(
+  tarea: AgendableCalendarInput,
+  accion: 'UPSERT' | 'DELETE' = 'UPSERT',
+  opcionesAlcance?: OpcionesAlcanceCalendar
+): Promise<ResultadoCalendarSync> {
+  return sincronizarActividadCalendar(tarea, accion, opcionesAlcance);
 }
 
 /**

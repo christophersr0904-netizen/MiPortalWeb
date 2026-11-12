@@ -27,9 +27,17 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { TareaRecord, SubtareaPaso } from '../../types';
-import { getProp, generarCodigoCorrelativoSeguro } from '../../utils/entityNormalizer';
+import { getProp } from '../../utils/entityNormalizer';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { crearTarea, actualizarTarea, eliminarTarea } from '../../services/tareasService';
+import { crearGasto, actualizarGasto } from '../../services/gastosService';
+import {
+  autorizarGoogleCalendarOAuth,
+  obtenerEstadoConexionGoogleCalendar,
+  suscribirEstadoGoogleCalendar
+} from '../../services/calendarSyncService';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 import {
   convertirStringToHorasDecimal,
@@ -48,6 +56,7 @@ interface ModalTareaFlowProps {
   onClose: () => void;
   tareaId: string | null; // ID de Tarea a editar, o null si es creación
   initialColumna?: string; // '01_Backlog' | '02_Por_Hacer' | '03_En_Proceso' | '04_Completado'
+  estadoInicial?: string;
   initialProyectoCodigo?: string | null;
   initialTitulo?: string;
   initialNotas?: string;
@@ -59,14 +68,23 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
   onClose,
   tareaId,
   initialColumna = '01_Backlog',
+  estadoInicial,
   initialProyectoCodigo = null,
   initialTitulo = '',
   initialNotas = '',
   onGuardado
 }) => {
+  const estadoBase = estadoInicial || initialColumna || '01_Backlog';
   // Bloquear scroll de fondo incondicionalmente según isOpen
   useBodyScrollLock(isOpen);
   const { programarEliminacion } = useUndoDelete();
+
+  // Estado reactivo de conexión Google Calendar
+  const [gcalEstado, setGcalEstado] = useState(obtenerEstadoConexionGoogleCalendar);
+
+  useEffect(() => {
+    return suscribirEstadoGoogleCalendar(setGcalEstado);
+  }, []);
 
   // Proyectos e Hitos disponibles en Dexie
   const proyectos = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
@@ -103,7 +121,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
   // Form states
   const [codigoLegado, setCodigoLegado] = useState('');
   const [nombre, setNombre] = useState('');
-  const [estado, setEstado] = useState(initialColumna);
+  const [estado, setEstado] = useState(estadoBase);
   const [proyectoCodigo, setProyectoCodigo] = useState('');
   const [hitoCodigo, setHitoCodigo] = useState('');
   const [idDependencia, setIdDependencia] = useState('');
@@ -234,7 +252,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       const now = new Date();
       setCodigoLegado('NUEVA TAREA');
       setNombre(initialTitulo || '');
-      setEstado(initialColumna);
+      setEstado(estadoBase);
       setProyectoCodigo(initialProyectoCodigo || (proyectos[0]?.codigo_legado ?? 'PRO-001'));
       setHitoCodigo('');
       setIdDependencia('');
@@ -261,7 +279,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       setModoGasto('NUEVO');
       setMostrarGasto(false);
     }
-  }, [isOpen, tareaId, tareaExistente, initialColumna, initialProyectoCodigo, initialTitulo, initialNotas, proyectos]);
+  }, [isOpen, tareaId, tareaExistente, estadoBase, initialColumna, initialProyectoCodigo, initialTitulo, initialNotas, proyectos]);
 
   // Lista de subtareas activa (existentes de Dexie si estamos editando, o locales si creando)
   const listaSubtareasActiva = tareaId ? subtareasExistentes : subtareasLocal;
@@ -365,11 +383,11 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     const costoPenCalculado = montoGastoFinal > 0 ? Number((montoGastoFinal * tc).toFixed(2)) : (Number(costoRealPen) || 0);
 
     let codTarFinal = '';
+    let calRes: any = undefined;
 
     if (tareaId && tareaExistente) {
       codTarFinal = tareaExistente.codigo_legado || tareaId;
-      // Actualizar tarea existente
-      await db.tareas.update(tareaId, {
+      const res = await actualizarTarea(tareaId, {
         nombre_tarea_actividad: nombre.trim(),
         estado_tarea: estado,
         proyecto_codigo: proyectoCodigo,
@@ -388,16 +406,9 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         notas_impedimentos: notas || undefined,
         updated_at: nowIso
       });
+      calRes = res.calendarResult;
     } else {
-      // Crear nueva tarea (Anti-colisión multi-dispositivo)
-      const nuevoCodigoTar = await generarCodigoCorrelativoSeguro(db.tareas, 'TAR', 3);
-      codTarFinal = nuevoCodigoTar;
-      const nuevaTareaId = crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}`;
-
-      await db.tareas.add({
-        id: nuevaTareaId,
-        user_id: '00000000-0000-0000-0000-000000000001',
-        codigo_legado: nuevoCodigoTar,
+      const res = await crearTarea({
         nombre_tarea_actividad: nombre.trim(),
         estado_tarea: estado,
         proyecto_codigo: proyectoCodigo || 'PRO-001',
@@ -414,30 +425,22 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         costo_real_pen: costoPenCalculado,
         responsable_ejecutor: responsable || undefined,
         notas_impedimentos: notas || undefined,
-        updated_at: nowIso,
-        sync_status: 'synced'
+        subtareas: subtareasLocal.map((item) => ({
+          descripcion_paso: item.descripcion_paso,
+          completado: item.completado
+        }))
       });
+      codTarFinal = res.tarea.codigo_legado;
+      calRes = res.calendarResult;
+    }
 
-      // Persistir subtareas locales si se agregaron
-      if (subtareasLocal.length > 0) {
-        let subIndex = await db.subtareas_pasos.count();
-        for (let i = 0; i < subtareasLocal.length; i++) {
-          const item = subtareasLocal[i];
-          subIndex++;
-          await db.subtareas_pasos.add({
-            id: crypto.randomUUID ? crypto.randomUUID() : `sub-${Date.now()}-${i}`,
-            user_id: '00000000-0000-0000-0000-000000000001',
-            codigo_legado: `SUB-${String(subIndex).padStart(3, '0')}`,
-            id_padre_vinculado: nuevoCodigoTar,
-            tipo_padre: 'TAREA',
-            numero_paso: i + 1,
-            descripcion_paso: item.descripcion_paso,
-            completado: item.completado,
-            version: 1,
-            updated_at: nowIso,
-            sync_status: 'synced'
-          });
-        }
+    if (calRes) {
+      if (calRes.success && calRes.mode === 'API_V3') {
+        mostrarToastCobalt(calRes.message || 'Sincronizado en Google Calendar', 'success');
+      } else if (calRes.requiereAuth) {
+        mostrarToastCobalt('Tarea guardada · Conecta Google Calendar para sync automático', 'info', 3500);
+      } else if (!calRes.success && calRes.error) {
+        mostrarToastCobalt(`Guardado local · ${calRes.error}`, 'warning', 3500);
       }
     }
 
@@ -451,11 +454,9 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             .first();
 
           if (gastoAEnlazar) {
-            await db.gastos.update(gastoAEnlazar.id, {
+            await actualizarGasto(gastoAEnlazar.id, {
               id_origen_vinculado: codTarFinal,
-              tipo_origen: 'TAREA',
-              updated_at: nowIso,
-              sync_status: 'pending'
+              tipo_origen: 'TAREA'
             });
           }
         }
@@ -466,24 +467,17 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
           .first();
 
         if (gastoExistente) {
-          await db.gastos.update(gastoExistente.id, {
+          await actualizarGasto(gastoExistente.id, {
             moneda_original: gastoMoneda,
             monto_original: montoGastoFinal,
             tipo_cambio: tc,
             monto_pen: costoPenCalculado,
             categoria_gasto: gastoCategoria,
             descripcion_gasto: gastoConcepto.trim() || `Gasto en ${nombre.trim()}`,
-            fecha_gasto: fechaProgramada || nowIso.split('T')[0],
-            updated_at: nowIso,
-            sync_status: 'pending'
+            fecha_gasto: fechaProgramada || nowIso.split('T')[0]
           });
         } else {
-          const countGastos = await db.gastos.count();
-          const codGasto = `GAS-${String(countGastos + 1).padStart(3, '0')}`;
-          await db.gastos.add({
-            id: crypto.randomUUID ? crypto.randomUUID() : `gas-${Date.now()}`,
-            user_id: '00000000-0000-0000-0000-000000000001',
-            codigo_legado: codGasto,
+          await crearGasto({
             tipo_origen: 'TAREA',
             id_origen_vinculado: codTarFinal,
             categoria_gasto: gastoCategoria,
@@ -494,8 +488,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             tipo_cambio: tc,
             monto_pen: costoPenCalculado,
             estado_pago: 'PAGADO',
-            updated_at: nowIso,
-            sync_status: 'pending'
+            metodo_pago: 'Efectivo'
           });
         }
       }
@@ -507,9 +500,8 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
 
   const handleArchivar = async () => {
     if (!tareaId) return;
-    await db.tareas.update(tareaId, {
-      estado_tarea: '05_Archivado',
-      updated_at: new Date().toISOString()
+    await actualizarTarea(tareaId, {
+      estado_tarea: '05_Archivado'
     });
     if (onGuardado) onGuardado();
     onClose();
@@ -526,16 +518,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       etiqueta,
       tipo: 'TAREA',
       commit: async () => {
-        if (targetCodigoLegado) {
-          const subs = await db.subtareas_pasos
-            .where('id_padre_vinculado')
-            .equals(targetCodigoLegado)
-            .toArray();
-          for (const s of subs) {
-            await db.subtareas_pasos.delete(s.id);
-          }
-        }
-        await db.tareas.delete(targetId);
+        await eliminarTarea(targetId, targetCodigoLegado);
       }
     });
     if (onGuardado) onGuardado();
@@ -790,6 +773,36 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                           <span>{agendadoCalendar === 'Sí' ? 'Sí' : 'No'}</span>
                         </button>
                       </div>
+
+                      {agendadoCalendar === 'Sí' && (
+                        <div className="pt-1 flex items-center justify-between gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (gcalEstado.conectado) return;
+                              const authRes = await autorizarGoogleCalendarOAuth();
+                              if (authRes.success) {
+                                mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
+                              } else {
+                                mostrarToastCobalt(authRes.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
+                              }
+                            }}
+                            className={`h-6 px-2 rounded-lg border text-[10px] font-semibold inline-flex items-center gap-1 transition cursor-pointer ${
+                              gcalEstado.conectado
+                                ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-300 cursor-default'
+                                : 'border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300'
+                            }`}
+                            title={
+                              gcalEstado.conectado
+                                ? 'Sincronización automática con Google Calendar API v3 activa'
+                                : 'Conectar cuenta Google Calendar (OAuth2)'
+                            }
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${gcalEstado.conectado ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'}`} />
+                            <span>{gcalEstado.conectado ? 'GCalendar Activo' : 'Conectar GCalendar'}</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 

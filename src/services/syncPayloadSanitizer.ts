@@ -322,6 +322,13 @@ export function sanitizarTareaPayload(
       resolvedProyectoUuid = raw.proyecto_codigo;
     }
   }
+  if (!resolvedProyectoUuid && proyectoUuidMap.size > 0) {
+    resolvedProyectoUuid =
+      proyectoUuidMap.get('PRO-001') ||
+      proyectoUuidMap.get('pro-001') ||
+      Array.from(proyectoUuidMap.values())[0] ||
+      null;
+  }
 
   let resolvedHitoUuid: string | null = null;
   if (raw.hito_codigo) {
@@ -330,6 +337,15 @@ export function sanitizarTareaPayload(
     } else if (isUuid(raw.hito_codigo)) {
       resolvedHitoUuid = raw.hito_codigo;
     }
+  }
+  if (!resolvedHitoUuid && hitoUuidMap.size > 0) {
+    resolvedHitoUuid =
+      hitoUuidMap.get('HIT-001') ||
+      hitoUuidMap.get('hit-001') ||
+      hitoUuidMap.get('WP-001') ||
+      hitoUuidMap.get('wp-001') ||
+      Array.from(hitoUuidMap.values())[0] ||
+      null;
   }
 
   let resolvedDependenciaUuid: string | null = null;

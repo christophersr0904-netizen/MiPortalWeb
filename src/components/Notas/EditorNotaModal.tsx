@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import type { NotaRecord, ChecklistItem, WishlistMeta, VinculoEntidad } from '../../types';
-import { db } from '../../db/db';
+import { crearNota, actualizarNota } from '../../services/notasService';
 import { serializarNotaATextoPlano } from '../../utils/entityNormalizer';
 import { toastCobalt } from '../../utils/toastCobalt';
 import { ModalVincularEntidades } from './ModalVincularEntidades';
@@ -205,7 +205,6 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
       return;
     }
 
-    const nowIso = new Date().toISOString();
     const etiquetas = tagsInput
       .split(',')
       .map((t) => t.trim().toLowerCase().replace(/^#+/, ''))
@@ -228,9 +227,8 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
     }
 
     if (nota) {
-      // Edición existente
-      await db.notas.put({
-        ...nota,
+      // Edición existente con notasService
+      await actualizarNota(nota.id, {
         titulo: titulo.trim() || 'Nota sin título',
         contenido_markdown: contenidoMarkdown,
         block_nombre: blockAsignado,
@@ -240,20 +238,11 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
         checklists_json: checklists,
         wishlist_json: wishlistPayload,
         enlaces_entidades_json: enlacesEntidades,
-        updated_at: nowIso,
-        version: (nota.version || 1) + 1,
-        sync_status: 'pending'
+        version: (nota.version || 1) + 1
       });
     } else {
-      // Creación nueva
-      const count = await db.notas.count();
-      const codigoCorrelativo = `NOT-${String(count + 1).padStart(5, '0')}`;
-      const nuevoId = crypto.randomUUID ? crypto.randomUUID() : `not_${Date.now()}`;
-
-      await db.notas.add({
-        id: nuevoId,
-        user_id: '00000000-0000-0000-0000-000000000001',
-        codigo_legado: codigoCorrelativo,
+      // Creación nueva con notasService
+      await crearNota({
         titulo: titulo.trim() || 'Nueva Nota',
         contenido_markdown: contenidoMarkdown,
         tipo_nota: 'MODULAR',
@@ -264,11 +253,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
         wishlist_json: wishlistPayload,
         adjuntos_drive_json: [],
         enlaces_entidades_json: enlacesEntidades,
-        etiquetas,
-        created_at: nowIso,
-        updated_at: nowIso,
-        version: 1,
-        sync_status: 'pending'
+        etiquetas
       });
     }
 

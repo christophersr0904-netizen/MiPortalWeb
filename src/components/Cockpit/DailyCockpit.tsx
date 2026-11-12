@@ -38,8 +38,10 @@ import {
   VolumeX,
   Link2,
   Repeat,
-  BellRing
+  BellRing,
+  Milestone
 } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import SpotlightCard from '../SpotlightCard';
 import { db } from '../../db/db';
 import {
@@ -49,7 +51,8 @@ import {
   type DailyScheduleItem
 } from '../../hooks/useDailySchedule';
 import { syncManager, esEntornoEscritorioLocal } from '../../services/syncManager';
-import { generarCodigoCorrelativoSeguro } from '../../utils/entityNormalizer';
+import { crearTarea } from '../../services/tareasService';
+import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import {
   obtenerIdentificadoresWbs,
   resolverSiguienteTareaFoco,
@@ -1042,42 +1045,54 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     await toggleCompletar(item);
   };
 
-  // Quick-Add de Tareas Clave (REQ-DESKTOP-17 Paso 1 / REQ-UI-33-EXEC Paso 5)
+  // Quick-Add de Tareas Clave con WBS Selectors (REQ-SYNC-44-EXEC)
   const [quickAddTareaAbierto, setQuickAddTareaAbierto] = useState(false);
   const [inputQuickAddTarea, setInputQuickAddTarea] = useState('');
   const [guardandoTareaRapida, setGuardandoTareaRapida] = useState(false);
+  const [proyectoQuickAdd, setProyectoQuickAdd] = useState<string>('PRO-001');
+  const [hitoQuickAdd, setHitoQuickAdd] = useState<string>('');
+  const [modalTareaFlowAbierto, setModalTareaFlowAbierto] = useState<boolean>(false);
+
+  const proyectosLive = useLiveQuery(() => db.proyectos.toArray(), []);
+  const hitosLive = useLiveQuery(() => db.hitos_wbs.toArray(), []);
+
+  const hitosFiltradosQuickAdd = useMemo(() => {
+    if (!hitosLive || !proyectoQuickAdd) return [];
+    return hitosLive.filter(
+      (h) => h.proyecto_codigo === proyectoQuickAdd || h.proyecto_id === proyectoQuickAdd
+    );
+  }, [hitosLive, proyectoQuickAdd]);
 
   const handleCrearTareaRapida = async () => {
     const texto = inputQuickAddTarea.trim();
     if (!texto || guardandoTareaRapida) return;
     try {
       setGuardandoTareaRapida(true);
-      const nuevoCodigoTar = await generarCodigoCorrelativoSeguro(db.tareas, 'TAR', 3);
-      const nuevaTareaId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}`;
       const fechaHoy = formatFechaIsoLocal(new Date());
 
-      await db.tareas.add({
-        id: nuevaTareaId,
-        user_id: '00000000-0000-0000-0000-000000000001',
-        codigo_legado: nuevoCodigoTar,
+      await crearTarea({
         nombre_tarea_actividad: texto,
+        proyecto_codigo: proyectoQuickAdd || 'PRO-001',
+        hito_codigo: hitoQuickAdd || undefined,
         estado_tarea: '02_Por_Hacer',
         prioridad_eisenhower: 'DO_FIRST',
         nivel_energia_requerido: 'Medio',
         fecha_programada: fechaHoy,
         horas_estimadas: 1,
         horas_reales: 0,
-        sync_status: 'pending',
-        updated_at: new Date().toISOString()
+        agendado_calendar: 'Sí'
       });
 
-      syncManager.syncPendingRecords().catch(() => {});
-      syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
+      mostrarToastCobalt(
+        `Tarea creada en ${proyectoQuickAdd || 'PRO-001'} con sync en segundo plano.`,
+        'success'
+      );
 
       setInputQuickAddTarea('');
       setQuickAddTareaAbierto(false);
     } catch (err) {
       console.error('[Cockpit QuickAdd] Error al crear tarea rápida:', err);
+      mostrarToastCobalt(`Error al crear tarea: ${String(err)}`, 'error');
     } finally {
       setGuardandoTareaRapida(false);
     }
@@ -1923,45 +1938,99 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                   </div>
                 </div>
 
-                {/* Campo Inline de Creación Rápida */}
+                {/* Campo Inline de Creación Rápida con Selectores WBS y Acceso a ModalTareaFlow */}
                 {quickAddTareaAbierto && (
-                  <div className="mb-2.5 p-1.5 rounded-xl bg-slate-950/90 border border-sky-500/40 flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={inputQuickAddTarea}
-                      onChange={(e) => setInputQuickAddTarea(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleCrearTareaRapida();
-                        if (e.key === 'Escape') {
+                  <div className="mb-2.5 p-2 rounded-xl bg-slate-950/95 border border-sky-500/40 shadow-xl space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={inputQuickAddTarea}
+                        onChange={(e) => setInputQuickAddTarea(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleCrearTareaRapida();
+                          if (e.key === 'Escape') {
+                            setInputQuickAddTarea('');
+                            setQuickAddTareaAbierto(false);
+                          }
+                        }}
+                        autoFocus
+                        placeholder="Nueva tarea clave..."
+                        className="flex-1 bg-slate-900/60 border border-slate-800/60 rounded-lg text-xs text-slate-100 placeholder-slate-500 outline-none px-2.5 py-1.5 focus:border-sky-500/50"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setModalTareaFlowAbierto(true)}
+                        className="min-h-[32px] px-2 rounded-lg border border-slate-700/60 bg-slate-800/40 hover:bg-slate-800 text-sky-400 hover:text-sky-300 text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Abrir formulario completo TareaFlow"
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      </button>
+                    </div>
+
+                    {/* Micro-selectores WBS (Proyecto e Hito) */}
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono">
+                      <div className="flex-1 flex items-center gap-1 bg-slate-900/80 border border-slate-800/80 rounded-lg px-2 py-1 min-w-0">
+                        <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                        <select
+                          value={proyectoQuickAdd}
+                          onChange={(e) => {
+                            setProyectoQuickAdd(e.target.value);
+                            setHitoQuickAdd('');
+                          }}
+                          className="w-full bg-transparent text-slate-200 outline-none cursor-pointer truncate"
+                          title="Proyecto WBS"
+                        >
+                          {(proyectosLive && proyectosLive.length > 0) ? (
+                            proyectosLive.map((p) => (
+                              <option key={p.id} value={p.codigo_legado || p.id} className="bg-slate-900 text-slate-200">
+                                {p.codigo_legado || p.id}: {p.nombre_proyecto || 'Sin nombre'}
+                              </option>
+                            ))
+                          ) : (
+                            <option value="PRO-001" className="bg-slate-900 text-slate-200">PRO-001: Vida & Personal</option>
+                          )}
+                        </select>
+                      </div>
+
+                      <div className="flex-1 flex items-center gap-1 bg-slate-900/80 border border-slate-800/80 rounded-lg px-2 py-1 min-w-0">
+                        <Milestone className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} />
+                        <select
+                          value={hitoQuickAdd}
+                          onChange={(e) => setHitoQuickAdd(e.target.value)}
+                          className="w-full bg-transparent text-slate-200 outline-none cursor-pointer truncate"
+                          title="Hito WBS (Opcional)"
+                        >
+                          <option value="" className="bg-slate-900 text-slate-400">Sin Hito WBS</option>
+                          {hitosFiltradosQuickAdd.map((h) => (
+                            <option key={h.id} value={h.codigo_legado || h.id} className="bg-slate-900 text-slate-200">
+                              {h.codigo_legado || h.id}: {h.nombre_hito || 'Hito'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCrearTareaRapida}
+                        disabled={!inputQuickAddTarea.trim() || guardandoTareaRapida}
+                        title="Guardar tarea rápida"
+                        className="px-2.5 py-1 rounded-lg bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-slate-950 font-bold text-[11px] font-mono transition-colors cursor-pointer shrink-0"
+                      >
+                        Enter
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
                           setInputQuickAddTarea('');
                           setQuickAddTareaAbierto(false);
-                        }
-                      }}
-                      autoFocus
-                      placeholder="Nueva tarea clave..."
-                      className="flex-1 bg-transparent text-xs text-slate-100 placeholder-slate-500 outline-none px-1.5"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCrearTareaRapida}
-                      disabled={!inputQuickAddTarea.trim() || guardandoTareaRapida}
-                      title="Guardar tarea rápida"
-                      className="min-h-[36px] px-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 disabled:opacity-40 text-slate-950 font-bold text-[11px] font-mono transition-colors cursor-pointer"
-                    >
-                      Enter
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInputQuickAddTarea('');
-                        setQuickAddTareaAbierto(false);
-                      }}
-                      className="min-w-[36px] min-h-[36px] w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                      title="Cancelar (Esc)"
-                      aria-label="Cancelar"
-                    >
-                      <X className="w-3.5 h-3.5" strokeWidth={2} />
-                    </button>
+                        }}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer shrink-0"
+                        title="Cancelar (Esc)"
+                        aria-label="Cancelar"
+                      >
+                        <X className="w-3.5 h-3.5" strokeWidth={2} />
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -2949,6 +3018,22 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             </CockpitInternalErrorBoundary>
           </div>
         </div>
+      )}
+
+      {/* C. MODAL TAREAFLOW INVOCADO DESDE COCKPIT */}
+      {modalTareaFlowAbierto && (
+        <ModalTareaFlow
+          isOpen={modalTareaFlowAbierto}
+          onClose={() => setModalTareaFlowAbierto(false)}
+          tareaId={null}
+          initialTitulo={inputQuickAddTarea}
+          initialProyectoCodigo={proyectoQuickAdd}
+          onGuardado={() => {
+            setModalTareaFlowAbierto(false);
+            setInputQuickAddTarea('');
+            setQuickAddTareaAbierto(false);
+          }}
+        />
       )}
     </>
   );

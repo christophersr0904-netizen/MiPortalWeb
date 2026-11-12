@@ -11,8 +11,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Building, Calendar, DollarSign, Layers } from 'lucide-react';
-import { db } from '../../db/db';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { crearCuota } from '../../services/cuotasService';
 
 export interface ModalNuevoPlanCuotasProps {
   isOpen: boolean;
@@ -65,22 +65,16 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
     }
     setErrorMsg(null);
 
-    const count = await db.cuotas.count();
     const nowIso = new Date().toISOString();
 
-    await db.cuotas.add({
-      id: crypto.randomUUID ? crypto.randomUUID() : `cuo_${Date.now()}`,
-      user_id: '00000000-0000-0000-0000-000000000001',
-      codigo_legado: `CUO-${String(count + 1).padStart(3, '0')}`,
+    await crearCuota({
       entidad_financiera: entidad.trim(),
       numero_cuota: 1,
       total_cuotas: totalCuotas,
       monto_cuota: montoCuota,
       moneda: moneda,
       fecha_vencimiento: fechaVencimiento || nowIso.split('T')[0],
-      estado_cuota: 'PENDIENTE',
-      updated_at: nowIso,
-      sync_status: 'pending'
+      estado_cuota: 'PENDIENTE'
     });
 
     if (onCreadoExitoso) onCreadoExitoso();
