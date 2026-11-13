@@ -12,7 +12,6 @@ import {
   Trash2,
   Archive,
   DollarSign,
-  Check,
   Lock,
   Flame,
   AlertCircle,
@@ -29,6 +28,7 @@ import { db } from '../../db/db';
 import type { TareaRecord, SubtareaPaso } from '../../types';
 import { getProp } from '../../utils/entityNormalizer';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
+import { SwitchCobalt } from '../UI/SwitchCobalt';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { crearTarea, actualizarTarea, eliminarTarea } from '../../services/tareasService';
 import { crearGasto, actualizarGasto } from '../../services/gastosService';
@@ -783,51 +783,44 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                         </div>
                       </div>
 
-                      <div className="pt-1.5 flex items-center justify-between text-[11px] border-t border-slate-800/60">
-                        <span className="text-slate-400">Agendar en Calendar</span>
-                        <button
-                          type="button"
-                          onClick={() => setAgendadoCalendar(agendadoCalendar === 'Sí' ? 'No' : 'Sí')}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
-                            agendadoCalendar === 'Sí'
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                              : 'bg-[#040711] border border-slate-800 text-slate-500 hover:text-slate-300'
-                          }`}
-                        >
-                          {agendadoCalendar === 'Sí' && <Check className="w-3 h-3" />}
-                          <span>{agendadoCalendar === 'Sí' ? 'Sí' : 'No'}</span>
-                        </button>
+                      <div className="pt-2 flex items-center justify-between border-t border-slate-800/60">
+                        <SwitchCobalt
+                          id="switch-tarea-calendar"
+                          checked={agendadoCalendar === 'Sí'}
+                          onChange={(val) => setAgendadoCalendar(val ? 'Sí' : 'No')}
+                          label="Agendar en Calendar"
+                          size="sm"
+                        />
+                        {agendadoCalendar === 'Sí' && (
+                          <div className="flex items-center gap-1.5">
+                            {gcalEstado.conectado ? (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400"
+                                title="Google Calendar conectado para sync automático"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>Sincronizado</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const authRes = await autorizarGoogleCalendarOAuth();
+                                  if (authRes.success) {
+                                    mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
+                                  } else {
+                                    mostrarToastCobalt(authRes.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
+                                  }
+                                }}
+                                className="text-[10px] font-mono text-sky-400 hover:text-sky-300 underline transition cursor-pointer"
+                                title="Conectar cuenta Google Calendar (OAuth2)"
+                              >
+                                Conectar
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
-
-                      {agendadoCalendar === 'Sí' && (
-                        <div className="pt-1 flex items-center justify-between gap-1.5 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (gcalEstado.conectado) return;
-                              const authRes = await autorizarGoogleCalendarOAuth();
-                              if (authRes.success) {
-                                mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
-                              } else {
-                                mostrarToastCobalt(authRes.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
-                              }
-                            }}
-                            className={`h-6 px-2 rounded-lg border text-[10px] font-semibold inline-flex items-center gap-1 transition cursor-pointer ${
-                              gcalEstado.conectado
-                                ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-300 cursor-default'
-                                : 'border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300'
-                            }`}
-                            title={
-                              gcalEstado.conectado
-                                ? 'Sincronización automática con Google Calendar API v3 activa'
-                                : 'Conectar cuenta Google Calendar (OAuth2)'
-                            }
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${gcalEstado.conectado ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'}`} />
-                            <span>{gcalEstado.conectado ? 'GCalendar Activo' : 'Conectar GCalendar'}</span>
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </div>
 

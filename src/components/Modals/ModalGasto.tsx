@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { crearGasto, actualizarGasto, eliminarGasto } from '../../services/gastosService';
+import { SwitchCobalt } from '../UI/SwitchCobalt';
 
 export interface ModalGastoProps {
   isOpen: boolean;
@@ -573,22 +574,16 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
                   </div>
                 </div>
 
-                <label className="flex items-center gap-2.5 p-2 rounded-lg bg-slate-900 border border-amber-800/50 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
+                <div className="pt-1 border-t border-amber-800/40">
+                  <SwitchCobalt
+                    id="switch-gasto-calendar"
                     checked={agendarCalendar}
-                    onChange={(e) => setAgendarCalendar(e.target.checked)}
-                    className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 border-slate-700 bg-slate-800"
+                    onChange={setAgendarCalendar}
+                    label="Agendar en Google Calendar"
+                    sublabel="Recordatorio financiero sincronizado"
+                    size="sm"
                   />
-                  <div className="min-w-0 flex-1">
-                    <span className="text-xs font-bold text-slate-100 block">
-                      Agendar recordatorio en Google Calendar
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      Crea el evento en &quot;PMO - Gastos Programados&quot;
-                    </span>
-                  </div>
-                </label>
+                </div>
               </div>
             )}
 

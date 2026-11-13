@@ -22,7 +22,6 @@ import {
 import {
   sincronizarCreacionCalendar,
   abrirGoogleCalendarActividad,
-  descargarICSActividad,
   autorizarGoogleCalendarOAuth,
   obtenerEstadoConexionGoogleCalendar,
   suscribirEstadoGoogleCalendar,
@@ -38,6 +37,7 @@ import {
 } from '../../services/metasService';
 import { ModalAlcanceRecurrencia } from './ModalAlcanceRecurrencia';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
+import { SwitchCobalt } from '../UI/SwitchCobalt';
 import {
   CATEGORIAS_VIDA_MAP,
   type ActividadPersonal,
@@ -70,8 +70,7 @@ import {
   Clock,
   Tag,
   AlertTriangle,
-  ExternalLink,
-  Download
+  ExternalLink
 } from 'lucide-react';
 import {
   formatearDuracionLegible,
@@ -1374,106 +1373,68 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   </div>
 
-                  {/* Sincronización Google Calendar (Estándar RFC-5545 + Acción Inmediata) */}
-                  <div className="pt-1.5 space-y-1.5 border-t border-slate-800/60">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-slate-400">Agendar en Calendar</span>
-                      <button
-                        type="button"
-                        onClick={() => setCalendarSync(calendarSync === 'Sí' ? 'No' : 'Sí')}
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${calendarSync === 'Sí'
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                            : 'bg-[#040711] border border-slate-800 text-slate-500 hover:text-slate-300'
-                          }`}
-                      >
-                        {calendarSync === 'Sí' && <Check className="w-3 h-3" strokeWidth={1.75} />}
-                        <span>{calendarSync === 'Sí' ? 'Sí' : 'No'}</span>
-                      </button>
-                    </div>
-
+                  {/* Sincronización Google Calendar (Switch Minimalista Cobalt) */}
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-800/60">
+                    <SwitchCobalt
+                      id="switch-actividad-calendar"
+                      checked={calendarSync === 'Sí'}
+                      onChange={(val) => setCalendarSync(val ? 'Sí' : 'No')}
+                      label="Agendar en Calendar"
+                      size="sm"
+                    />
                     {calendarSync === 'Sí' && (
-                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        {gcalEstado.conectado ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400"
+                            title="Google Calendar conectado para sync automático"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>Sincronizado</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const authRes = await autorizarGoogleCalendarOAuth();
+                              if (authRes.success) {
+                                mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
+                              } else {
+                                mostrarToastCobalt(authRes.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
+                              }
+                            }}
+                            className="text-[10px] font-mono text-sky-400 hover:text-sky-300 underline transition cursor-pointer"
+                            title="Conectar cuenta Google Calendar (OAuth2)"
+                          >
+                            Conectar
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={async () => {
-                            if (gcalEstado.conectado) return;
-                            const authRes = await autorizarGoogleCalendarOAuth();
-                            if (authRes.success) {
-                              mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
-                            } else {
-                              mostrarToastCobalt(authRes.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
-                            }
+                          onClick={() => {
+                            const { freqFinal, reglaFinal, fechaFinFinal } = construirReglaYFrecuencia();
+                            abrirGoogleCalendarActividad({
+                              id: actividadEditar?.id,
+                              codigo_legado: actividadEditar?.codigo_legado || 'ACT-NEW',
+                              nombre_actividad: titulo.trim() || nombreDisplay.trim() || 'Actividad PMO',
+                              categoria_vida: categoria,
+                              tipo_compromiso: tipoRecurrencia === 'NINGUNA' ? 'PUNTUAL' : tipoCompromiso,
+                              meta_macro_nombre: metaMacro || undefined,
+                              notas_checklist: notas || undefined,
+                              fecha_programada: fecha || formatFechaIsoLocal(),
+                              fecha_fin: fechaFinFinal,
+                              hora_inicio: hora || '08:00',
+                              duracion_horas: duracionHoras,
+                              frecuencia_ciclo: freqFinal,
+                              regla_repeticion: reglaFinal
+                            });
                           }}
-                          className={`h-7 px-2 rounded-lg border text-[10px] font-semibold inline-flex items-center gap-1 transition cursor-pointer ${
-                            gcalEstado.conectado
-                              ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-300 cursor-default'
-                              : 'border-sky-500/40 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300'
-                          }`}
-                          title={
-                            gcalEstado.conectado
-                              ? 'Sincronización automática con Google Calendar API v3 activa'
-                              : 'Conectar cuenta Google Calendar (OAuth2)'
-                          }
+                          className="p-1 rounded text-slate-400 hover:text-sky-300 hover:bg-slate-800 transition cursor-pointer"
+                          title="Abrir en Google Calendar"
+                          aria-label="Abrir en Google Calendar"
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full ${gcalEstado.conectado ? 'bg-emerald-400' : 'bg-sky-400'}`} />
-                          <span>{gcalEstado.conectado ? 'OAuth Activo' : 'Conectar OAuth'}</span>
+                          <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} />
                         </button>
-
-                        <div className="flex items-center gap-1.5 ml-auto">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const { freqFinal, reglaFinal, fechaFinFinal } = construirReglaYFrecuencia();
-                              abrirGoogleCalendarActividad({
-                                id: actividadEditar?.id,
-                                codigo_legado: actividadEditar?.codigo_legado || 'ACT-NEW',
-                                nombre_actividad: titulo.trim() || nombreDisplay.trim() || 'Actividad PMO',
-                                categoria_vida: categoria,
-                                tipo_compromiso: tipoRecurrencia === 'NINGUNA' ? 'PUNTUAL' : tipoCompromiso,
-                                meta_macro_nombre: metaMacro || undefined,
-                                notas_checklist: notas || undefined,
-                                fecha_programada: fecha || formatFechaIsoLocal(),
-                                fecha_fin: fechaFinFinal,
-                                hora_inicio: hora || '08:00',
-                                duracion_horas: duracionHoras,
-                                frecuencia_ciclo: freqFinal,
-                                regla_repeticion: reglaFinal
-                              });
-                            }}
-                            className="h-7 px-2 rounded-lg border border-sky-500/40 bg-sky-500/10 hover:bg-sky-500 hover:text-slate-950 text-sky-300 text-[10px] font-semibold inline-flex items-center gap-1 transition cursor-pointer"
-                            title="Abrir directamente en Google Calendar con regla RRULE RFC-5545"
-                          >
-                            <ExternalLink className="w-3 h-3" strokeWidth={1.75} />
-                            <span>Google Calendar</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const { freqFinal, reglaFinal, fechaFinFinal } = construirReglaYFrecuencia();
-                              descargarICSActividad({
-                                id: actividadEditar?.id,
-                                codigo_legado: actividadEditar?.codigo_legado || 'ACT-NEW',
-                                nombre_actividad: titulo.trim() || nombreDisplay.trim() || 'Actividad PMO',
-                                categoria_vida: categoria,
-                                tipo_compromiso: tipoRecurrencia === 'NINGUNA' ? 'PUNTUAL' : tipoCompromiso,
-                                meta_macro_nombre: metaMacro || undefined,
-                                notas_checklist: notas || undefined,
-                                fecha_programada: fecha || formatFechaIsoLocal(),
-                                fecha_fin: fechaFinFinal,
-                                hora_inicio: hora || '08:00',
-                                duracion_horas: duracionHoras,
-                                frecuencia_ciclo: freqFinal,
-                                regla_repeticion: reglaFinal,
-                                excepciones_fechas: actividadEditar?.excepciones_fechas
-                              });
-                            }}
-                            className="h-7 px-2 rounded-lg border border-slate-700/80 bg-[#040711] hover:border-sky-500/40 text-slate-300 hover:text-sky-300 text-[10px] font-mono font-semibold inline-flex items-center gap-1 transition cursor-pointer"
-                            title="Descargar archivo .ics RFC-5545"
-                          >
-                            <Download className="w-3 h-3" strokeWidth={1.75} />
-                            <span>.ics</span>
-                          </button>
-                        </div>
                       </div>
                     )}
                   </div>

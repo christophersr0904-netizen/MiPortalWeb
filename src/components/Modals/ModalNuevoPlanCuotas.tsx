@@ -14,6 +14,8 @@ import { X, Building, Calendar, DollarSign, Layers } from 'lucide-react';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { crearCuota } from '../../services/cuotasService';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
+import { SwitchCobalt } from '../UI/SwitchCobalt';
+import { sincronizarCreacionCalendar } from '../../services/calendarSyncService';
 
 export interface ModalNuevoPlanCuotasProps {
   isOpen: boolean;
@@ -33,6 +35,7 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
   const [montoCuota, setMontoCuota] = useState<number>(0);
   const [moneda, setMoneda] = useState<'PEN' | 'USD'>('PEN');
   const [fechaVencimiento, setFechaVencimiento] = useState('');
+  const [agendarCalendar, setAgendarCalendar] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Reset y fecha por defecto
@@ -43,6 +46,7 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
     setMontoCuota(0);
     setMoneda('PEN');
     setFechaVencimiento(formatFechaIsoLocal(new Date()));
+    setAgendarCalendar(true);
     setErrorMsg(null);
   }, [isOpen]);
 
@@ -66,7 +70,7 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
     }
     setErrorMsg(null);
 
-    await crearCuota({
+    const cuotaCreada = await crearCuota({
       entidad_financiera: entidad.trim(),
       numero_cuota: 1,
       total_cuotas: totalCuotas,
@@ -75,6 +79,21 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
       fecha_vencimiento: fechaVencimiento || formatFechaIsoLocal(new Date()),
       estado_cuota: 'PENDIENTE'
     });
+
+    if (agendarCalendar) {
+      sincronizarCreacionCalendar({
+        ...cuotaCreada,
+        nombre_actividad: `Vencimiento Cuota 1/${totalCuotas} - ${entidad.trim()}`,
+        fecha_programada: fechaVencimiento || formatFechaIsoLocal(new Date()),
+        hora_inicio: '09:00',
+        duracion_horas: 0.5,
+        categoria_vida: 'Finanzas',
+        tipo_compromiso: 'PUNTUAL',
+        agendado_calendar: 'Sí'
+      }).catch((err) => {
+        console.warn('[ModalNuevoPlanCuotas] Error al sincronizar con Calendar:', err);
+      });
+    }
 
     if (onCreadoExitoso) onCreadoExitoso();
     onClose();
@@ -200,6 +219,17 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
                 className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 outline-none focus:ring-1 focus:ring-violet-500 font-mono tabular-nums"
               />
             </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-800/60">
+            <SwitchCobalt
+              id="switch-cuotas-calendar"
+              checked={agendarCalendar}
+              onChange={setAgendarCalendar}
+              label="Agendar en Google Calendar"
+              sublabel="Recordatorio financiero sincronizado"
+              size="sm"
+            />
           </div>
 
           <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2 sticky bottom-0 bg-[#0D1526] z-10">

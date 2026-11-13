@@ -1391,20 +1391,24 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                 mostrarToastCobalt(res.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
               }
             }}
-            className={`h-8 px-2 rounded-lg border text-[10px] font-mono font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+            className={`min-w-[36px] min-h-[36px] w-9 h-9 rounded-lg border transition-colors cursor-pointer flex items-center justify-center relative ${
               gcalEstado.conectado
                 ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
                 : 'bg-[#040711]/90 border-slate-800/80 text-slate-400 hover:text-sky-300 hover:border-sky-500/40'
             }`}
             title={
               gcalEstado.conectado
-                ? 'Google Calendar conectado (clic para desconectar)'
-                : 'Conectar Google Calendar automáticamente'
+                ? 'Google Calendar sincronizado (clic para desconectar)'
+                : 'Conectar Google Calendar (OAuth2)'
             }
+            aria-label="Google Calendar Sync"
           >
-            <Calendar className={`w-3 h-3 ${gcalEstado.conectado ? 'text-emerald-400' : 'text-sky-400'}`} strokeWidth={1.75} />
-            <span className={`w-1.5 h-1.5 rounded-full ${gcalEstado.conectado ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-            <span>GCal</span>
+            <Calendar className={`w-3.5 h-3.5 ${gcalEstado.conectado ? 'text-emerald-400' : 'text-slate-400'}`} strokeWidth={1.75} />
+            <span
+              className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${
+                gcalEstado.conectado ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'
+              }`}
+            />
           </button>
 
           {/* Botón Desacople Always-on-Top PiP */}

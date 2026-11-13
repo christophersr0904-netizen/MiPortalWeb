@@ -52,6 +52,20 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 6.5 — Minimalismo UI/UX, Erradicación de Ruido Visual de Sincronización y SwitchCobalt (REQ-UI-49-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/UI/SwitchCobalt.tsx` (Nuevo), `src/components/Modals/ModalTareaFlow.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalIngreso.tsx`, `src/components/Modals/ModalNuevoPlanCuotas.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/PMO/TarjetaTransaccion.tsx`, `src/components/Cockpit/DailyCockpit.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/components/UI/SwitchCobalt.tsx`: Creación del componente canónico de interruptor toggle animado estilo React Bits / Shadcn y adaptado a los tokens Cobalt Aerodynamic (`#040711`, `#0D1526`, `border-slate-800/40`, halo resplandeciente `shadow-[0_0_12px_rgba(14,165,233,0.35)]` al activarse). Cumple con atributos de accesibilidad WAI-ARIA (`role="switch"`, `aria-checked`), teclado interactivo (Space / Enter) y soporta variantes de tamaño `sm` y `md`.
+  - Modales de Creación y Edición (`ModalTareaFlow.tsx`, `ModalActividadFlow.tsx`, `ModalGasto.tsx`, `ModalIngreso.tsx`, `ModalNuevoPlanCuotas.tsx`):
+    - Reemplazados los botones binarios toscos (`Sí` / `No`) y checkboxes nativos por `<SwitchCobalt checked={...} onChange={...} label="Agendar en Calendar" size="sm" />`.
+    - Erradicado el ruido textual de diagnóstico ("OAuth Activo", "Google Calendar", ".ics", "Descargar .ics"). Sustituido por un micro-indicador inline de estado: punto pulsante esmeralda + texto "Sincronizado" cuando OAuth está activo, o enlace sutil "Conectar" cuando está pendiente. En `ModalActividadFlow`, se añade un micro-botón ícono `ExternalLink` para apertura instantánea del evento en Google Calendar.
+  - Tarjetas de Entidades (`TarjetaHabito.tsx`, `TarjetaTareaKanban.tsx`, `TarjetaTransaccion.tsx`):
+    - Implementación de un micro-botón ícono funcional minimalista (`CalendarClock` de Lucide React con `strokeWidth={1.75}`) condicionado a que la entidad esté agendada (`agendado_calendar === 'Sí' || id_evento_calendar`).
+    - Al hacer clic, detiene la propagación del evento (`e.stopPropagation()`) e invoca `abrirGoogleCalendarActividad(entidad)` abriendo la URL del evento en Google Calendar en una pestaña nueva sin perturbar el arrastre ni la apertura del modal.
+    - En `TarjetaHabito.tsx`, se integró en la comparación atómica de `areHabitoPropsEqual` para asegurar re-renderizado reactivo sin impactar los 60-120 FPS.
+  - `DailyCockpit.tsx`: Limpieza del botón de Google Calendar en el HUD flotante, erradicando el texto plano "GCal" y transformándolo en un micro-botón cuadrado ergonómico (`36x36px`) con ícono `Calendar`, micro-LED pulsante de estado en la esquina superior derecha y tooltip descriptivo con modo de desconexión.
+  - Verificación Integral de Calidad: 31 suites de pruebas Vitest 100% aprobadas (306/306 tests en verde). TypeScript sin errores (`npx tsc --noEmit`: 0 errores) y bundle de producción generado con éxito vía `npm run build`.
+
 ### FASE 6.4 — Inyección de Google Client ID y Aceleración GIS (REQ-OAUTH-48-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `.env`, `index.html`, `app.html`, `dist/index.html`, `dist/app.html`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**

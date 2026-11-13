@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
-import { Check, Edit3, Trash2 } from 'lucide-react';
+import { Check, Edit3, Trash2, CalendarClock } from 'lucide-react';
 import { formatearFechaDdMmYyyy } from '../../utils/timeFormatters';
+import { abrirGoogleCalendarActividad } from '../../services/calendarSyncService';
 
 export interface TransaccionUnificada {
   id: string;
@@ -51,6 +52,20 @@ const TarjetaTransaccionComponent: React.FC<TarjetaTransaccionProps> = ({
             <span className="text-[10px] text-slate-400 font-mono tabular-nums">
               {formatearFechaDdMmYyyy(trx.fecha)}
             </span>
+            {(trx.raw?.agendado_calendar === 'Sí' || trx.raw?.agendar_calendar || trx.raw?.id_evento_calendar) && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  abrirGoogleCalendarActividad(trx.raw);
+                }}
+                className="inline-flex items-center justify-center p-0.5 rounded text-sky-400 hover:text-sky-300 hover:bg-sky-500/15 transition cursor-pointer"
+                title="Agendado en Google Calendar (clic para abrir)"
+                aria-label="Abrir en Google Calendar"
+              >
+                <CalendarClock className="w-3.5 h-3.5" strokeWidth={1.75} />
+              </button>
+            )}
           </div>
 
           {/* Micro-LED Orgánico con Tooltip Nativo (Sin texto invasivo) */}

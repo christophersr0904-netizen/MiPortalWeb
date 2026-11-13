@@ -3,13 +3,14 @@ import type { ActividadPersonal, SubtareaPaso, AlcanceRecurrencia, MetaPlanRecor
 import { CATEGORIAS_VIDA_MAP } from '../../types';
 import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
 import {
-  Check, Flame, Calendar, Clock, Pencil, Trash2,
+  Check, Flame, Calendar, Clock, CalendarClock, Pencil, Trash2,
   HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee, AlertTriangle,
   Target, ListTodo, Repeat, TrendingUp
 } from 'lucide-react';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
 import { formatFechaIsoLocal, formatearFechaDdMmYyyy, formatearFechaDdMm } from '../../utils/timeFormatters';
 import { esActividadCompletadaHoy } from '../../services/habitosService';
+import { abrirGoogleCalendarActividad } from '../../services/calendarSyncService';
 
 /** Traduce el código técnico de recurrencia a etiqueta humana para tooltips. */
 const formatearCicloLegible = (frecuencia?: string, regla?: string): string => {
@@ -541,6 +542,21 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               <span>{actividad.hora_inicio}</span>
             </span>
           )}
+
+          {(actividad.agendado_calendar === 'Sí' || (actividad as any).id_evento_calendar) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                abrirGoogleCalendarActividad(actividad);
+              }}
+              className="inline-flex items-center justify-center p-0.5 rounded text-sky-400 hover:text-sky-300 hover:bg-sky-500/15 transition cursor-pointer"
+              title="Agendado en Google Calendar (clic para abrir)"
+              aria-label="Abrir en Google Calendar"
+            >
+              <CalendarClock className="w-3.5 h-3.5" strokeWidth={1.75} />
+            </button>
+          )}
         </div>
 
         {typeof actividad.monto_gasto_asociado === 'number' && actividad.monto_gasto_asociado > 0 && (
@@ -562,6 +578,8 @@ export const areHabitoPropsEqual = (prev: TarjetaHabitoProps, next: TarjetaHabit
     prev.actividad.racha_actual === next.actividad.racha_actual &&
     prev.actividad.valor_acumulado_actual === next.actividad.valor_acumulado_actual &&
     prev.actividad.fecha_programada === next.actividad.fecha_programada &&
+    prev.actividad.agendado_calendar === next.actividad.agendado_calendar &&
+    (prev.actividad as any).id_evento_calendar === (next.actividad as any).id_evento_calendar &&
     prev.actividad.ultima_fecha_completado === next.actividad.ultima_fecha_completado &&
     prev.optimisticCompletado === next.optimisticCompletado &&
     prev.subtareas?.length === next.subtareas?.length &&

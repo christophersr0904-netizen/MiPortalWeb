@@ -3,6 +3,7 @@ import { resolverDependenciasTarea, type CanonicalTarea } from '../../utils/enti
 import { formatearFechaDdMmYyyy, formatearFechaDdMm, formatFechaIsoLocal } from '../../utils/timeFormatters';
 import type { SubtareaPaso } from '../../types';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
+import { abrirGoogleCalendarActividad } from '../../services/calendarSyncService';
 import {
   Zap,
   CornerDownRight,
@@ -12,6 +13,7 @@ import {
   Lock,
   CheckCircle2,
   Calendar,
+  CalendarClock,
   Clock,
   RotateCcw,
   Check,
@@ -305,21 +307,48 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
         )}
 
         <div className="flex items-center justify-between gap-1 text-[11px] font-mono tabular-nums pt-0.5 flex-wrap">
-          <span
-            className={`px-1.5 py-0.5 text-[11px] font-mono tabular-nums rounded flex items-center gap-1 border ${
-              estaVencida
-                ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-semibold'
-                : 'bg-slate-900/70 text-slate-300 border-slate-800/60'
-            }`}
-            title={
-              tar.fecha_programada
-                ? `${estaVencida ? 'Vencida' : 'Vencimiento'}: ${formatearFechaDdMmYyyy(tar.fecha_programada)}`
-                : 'Sin fecha límite'
-            }
-          >
-            <Calendar className={`w-3.5 h-3.5 shrink-0 ${estaVencida ? 'text-rose-400' : 'text-slate-400'}`} strokeWidth={1.75} />
-            <span>{formatFechaCorta(tar.fecha_programada)}</span>
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`px-1.5 py-0.5 text-[11px] font-mono tabular-nums rounded flex items-center gap-1 border ${
+                estaVencida
+                  ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 font-semibold'
+                  : 'bg-slate-900/70 text-slate-300 border-slate-800/60'
+              }`}
+              title={
+                tar.fecha_programada
+                  ? `${estaVencida ? 'Vencida' : 'Vencimiento'}: ${formatearFechaDdMmYyyy(tar.fecha_programada)}`
+                  : 'Sin fecha límite'
+              }
+            >
+              <Calendar className={`w-3.5 h-3.5 shrink-0 ${estaVencida ? 'text-rose-400' : 'text-slate-400'}`} strokeWidth={1.75} />
+              <span>{formatFechaCorta(tar.fecha_programada)}</span>
+            </span>
+
+            {(tar.raw?.agendado_calendar === 'Sí' || tar.raw?.id_evento_calendar) && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  abrirGoogleCalendarActividad({
+                    ...tar.raw,
+                    id: tar.id,
+                    codigo_legado: tar.codigo_legado,
+                    nombre_actividad: tar.nombre,
+                    fecha_programada: tar.fecha_programada,
+                    hora_inicio: tar.raw?.hora_inicio || '09:00',
+                    duracion_horas: tar.horas_estimadas || 1,
+                    categoria_vida: 'Profesional',
+                    tipo_compromiso: 'PUNTUAL'
+                  });
+                }}
+                className="inline-flex items-center justify-center p-1 rounded-md text-sky-400 hover:text-sky-300 hover:bg-sky-500/15 transition cursor-pointer"
+                title="Agendado en Google Calendar (clic para abrir)"
+                aria-label="Abrir en Google Calendar"
+              >
+                <CalendarClock className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+              </button>
+            )}
+          </div>
 
           <span
             className="bg-slate-900/70 text-slate-300 border border-slate-800/60 px-1.5 py-0.5 rounded flex items-center gap-1 text-[11px] font-mono tabular-nums"
