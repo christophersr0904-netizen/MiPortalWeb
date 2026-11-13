@@ -34,7 +34,6 @@ export const CanaletaEdge: React.FC<EdgeProps> = ({
   const pistaIndex = d?.pistaIndex ?? 0;
   // Escalonamiento de canal para evitar que todas las aristas se solapen en la misma línea
   const canalY = (d?.canalY ?? 700) + (pistaIndex % 6) * 12;
-  const r = 8; // Radio para codos limpios y sin torsiones
 
   // 1. Flecha horizontal directa y recta entre tareas adyacentes en la misma fila
   if (esVecino) {
@@ -42,40 +41,22 @@ export const CanaletaEdge: React.FC<EdgeProps> = ({
       <BaseEdge
         id={id}
         path={`M ${sourceX} ${sourceY} L ${targetX} ${targetY}`}
-        style={style}
+        style={{ strokeLinejoin: 'miter', ...style }}
         markerEnd={markerEnd}
       />
     );
   }
 
-  // 2. Trazo ortogonal rectangular Manhattan en canal despejado inferior
+  // 2. Trazo ortogonal rectangular Manhattan puro (90°) en canal despejado inferior
   // Pasillo vertical libre a la izquierda del target card (GAP_X = 52px, centro libre en targetX - 26px)
   const turnX = targetX - 24;
-  const dirSalida = turnX >= sourceX ? 1 : -1;
-
-  const path = [
-    `M ${sourceX} ${sourceY}`,
-    // Descenso vertical al canal inferior
-    `V ${canalY - r}`,
-    // Giro de 90° hacia la dirección horizontal de turnX
-    `Q ${sourceX} ${canalY} ${sourceX + dirSalida * r} ${canalY}`,
-    // Trayecto horizontal por la pista escalonada
-    `H ${turnX - dirSalida * r}`,
-    // Giro de 90° hacia arriba hacia la tarea destino
-    `Q ${turnX} ${canalY} ${turnX} ${canalY - r}`,
-    // Ascenso vertical hasta la altura del handle target
-    `V ${targetY + r}`,
-    // Giro de 90° hacia la derecha hacia targetX
-    `Q ${turnX} ${targetY} ${turnX + r} ${targetY}`,
-    // Entrada horizontal directa al handle lateral de la tarea
-    `H ${targetX}`
-  ].join(' ');
+  const path = `M ${sourceX} ${sourceY} V ${canalY} H ${turnX} V ${targetY} H ${targetX}`;
 
   return (
     <BaseEdge
       id={id}
       path={path}
-      style={style}
+      style={{ strokeLinejoin: 'miter', ...style }}
       markerEnd={markerEnd}
     />
   );

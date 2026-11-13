@@ -9858,3 +9858,91 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 32/32 suites passed (313/313 tests: +7 tests en `HeaderProyectoActivo.test.ts`).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,982 módulos transformados en 13.12s).
+
+
+---
+
+### [REQ-UI-55-EXEC: Despliegue de Balizas de Salud y Modal PDF Glassmorphism]
+**Fecha:** Noviembre 2026 | **Fase:** 6.9 | **Archivos Modificados:** `src/components/Views/ViewPortafolio.tsx`, `src/components/Modals/ModalExportarPdf.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+1. **Indicador de Salud y Semáforo Planos en Portafolio:**
+   - Previamente, el KPI 4 de salud y el semáforo interactivo de distribución utilizaban un dot estático sin baliza animada y un botón de "Bloqueados" (el botón rojo) estático con borde plano y `ring-2 ring-sky-500` discordante al seleccionarse, careciendo de señales ejecutivas visuales ante proyectos en riesgo crítico.
+2. **Selector Nativo Crudo y Botón Plano en `ModalExportarPdf.tsx`:**
+   - El modal de exportación PDF utilizaba un elemento HTML `<select id="selector-proyecto-pdf">` con `<option>` planos, desentonando con el sistema Cobalt Aerodynamic. El botón de compilación `#btn-compilar-pdf` era plano sin halo glow, física spring ni spinner real de carga.
+3. **Trigger de Exportar PDF Rezagado:**
+   - El botón rápido "Exportar PDF" en la cabecera de `ViewPortafolio.tsx` era un contenedor gris oscuro plano sin micro-interacciones ni respuesta al hover.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Baliza de Salud Dinámica y Semáforo Interactivo (`ViewPortafolio.tsx`):**
+   - KPI 4: Inyección de baliza condicional según estado general:
+     - *Bloqueados ($countBloqueado > 0$):* Contenedor `bg-rose-950/60 border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.35)]` con baliza `<span className="animate-ping ... bg-rose-500" />` e ícono `<Siren className="animate-pulse text-rose-400" />`.
+     - *En Riesgo ($countRiesgo > 0$):* Contenedor ámbar con halo y `<HeartPulse className="animate-pulse text-amber-400" />`.
+     - *Saludable:* Contenedor esmeralda con `<Activity className="text-emerald-400" />`.
+   - Botón Rojo Semáforo (`Bloqueados`): Baliza animada `animate-ping` cuando $countBloqueado > 0$, halo dinámico `shadow-[0_0_12px_rgba(244,63,94,0.2)]`, física spring `active:scale-95` y anillo semántico `border-rose-500 shadow-[0_0_16px_rgba(244,63,94,0.4)]` al filtrarse.
+   - Botones "En Rango" y "En Riesgo" actualizados con íconos `Activity` y `HeartPulse`, micro-interacciones y halos correspondientes.
+   - Botón "Exportar PDF" en cabecera: Variante Glassmorphism con borde interactivo `hover:border-sky-500/40`, halo `hover:shadow-[0_0_20px_rgba(56,189,248,0.18)]`, elevación del ícono `FileDown` (`group-hover:-translate-y-0.5`) y `active:scale-95`.
+2. **Upgrade de `ModalExportarPdf.tsx` (Glassmorphism & `SelectIconicoCobalt`):**
+   - Chasis Glassmorphism `bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/80 shadow-[0_20px_50px_rgba(2,6,23,0.9),0_0_30px_rgba(56,189,248,0.15)]` con micro-glow superior de acento degradado cielo/cian.
+   - Erradicación del `<select>` HTML nativo e instanciación de `<SelectIconicoCobalt />` alimentado por un `useMemo` de `OpcionSelectCobalt` con ícono `FolderKanban`, código legado, nombre, tipo de iniciativa, avance ponderado y badges de salud semafóricos.
+   - Botón `#btn-compilar-pdf`: Degradado Cobalt `from-sky-600 via-sky-500 to-cyan-500`, resplandor `shadow-[0_0_25px_rgba(56,189,248,0.35)]`, física `active:scale-98` y spinner `<RotateCw className="animate-spin text-sky-400" />` durante la compilación.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 32/32 suites passed (313/313 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,982 módulos transformados en 17.64s).
+
+
+---
+
+### [REQ-BUGFIX-56-EXEC: Reparación de Regla de Hooks en ModalExportarPdf]
+**Fecha:** Noviembre 2026 | **Fase:** 6.9.1 | **Archivos Modificados:** `src/components/Modals/ModalExportarPdf.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Violación de la Regla de Hooks de React:**
+  - En la refactorización previa de `ModalExportarPdf.tsx`, el hook `const opcionesProyectos = useMemo(...)` y el filtro derivado `proyectosFiltrados` quedaron posicionados debajo de la cláusula de retorno condicional `if (!visible) return null;` (L73).
+  - Al abrir o cerrar el modal de exportación (cuando `visible` conmutaba entre `false` y `true`), el componente ejecutaba un número variable de hooks entre ciclos de renderizado, disparando la excepción reactiva de consola:
+    `Rendered more hooks than during the previous render`.
+
+#### 2. Solución Quirúrgica Implementada
+- **Reubicación Incondicional en la Zona Segura de Hooks:**
+  - Se extrajo el hook `const proyectosFiltrados = useMemo(...)` y `const opcionesProyectos = useMemo(...)` y se reubicaron estrictamente en la sección superior del cuerpo del componente, junto a `useLiveQuery` y `useUndoDelete`.
+  - La condición de salida temprana `if (!visible) return null;` se ejecuta ahora de manera estrictamente posterior a la declaración incondicional de todos los hooks de React.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 32/32 suites passed (313/313 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,982 módulos transformados en 12.45s).
+
+---
+
+### [REQ-UI-57-EXEC: Refactorización Premium Vista 360, Grafo WBS y Matriz Trade-Off]
+**Fecha:** Noviembre 2026 | **Fase:** 6.10 | **Archivos Modificados:** `src/components/WBS/OrtogonalTreeEdge.tsx`, `src/components/WBS/CanaletaEdge.tsx`, `src/components/Views/ViewDetalle360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+1. **Curvas Bezier Residuales y Quiebres en Grafo WBS:**
+   - En `OrtogonalTreeEdge.tsx` y `CanaletaEdge.tsx`, el cálculo de trayectorias SVG utilizaba curvas cuadráticas Bézier (`Q`) con aproximaciones de radio `r`. En distancias estrechas o desalineaciones del grafo, esto generaba dobleces deformados, jorobas y quiebres antiestéticos en vez de trayectos Manhattan puros a 90°.
+2. **Inputs Crudos con Spin-Buttons Nativos en Matriz Trade-Off:**
+   - La tabla de ponderación multicriterio en `ViewDetalle360.tsx` contenía 4 inputs numéricos por fila (`peso`, `scoreA`, `scoreB`, `scoreC`) con flechas (spinners) de incremento/decremento nativas del navegador, fondos oscuros sin microbordes Cobalt y alineación genérica.
+3. **Selector `<select>` Nativo y Botón de Aprobación Plano:**
+   - El "Tipo de Dilema" se seleccionaba mediante un `<select>` nativo sin soporte iconográfico ni micro-interacciones. El botón "Guardar y Aprobar Decisión" carecía de degradado Cobalt y efecto resplandor.
+4. **Subpestañas 360 Rígidas con Enumeradores y Botones con Icono `Plus` Genérico:**
+   - Las pestañas de `ViewDetalle360.tsx` exponían prefijos numéricos ("1.", "2.", "3.", "4.") con bordes estáticos sin física de resorte. Los botones de acción rápida ("Nuevo Hito / Entregable", "+ Entregable", "+ Tarea") empleaban el ícono `Plus` sin especificidad de dominio.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Enrutamiento Ortogonal Manhattan Puro (90°):**
+   - `OrtogonalTreeEdge.tsx`: Reemplazo del trazado Bézier por un vector Manhattan puro (`M ${sourceX} ${sourceY} V ${midY} H ${targetX} V ${targetY}`) con `strokeLinejoin: 'miter'`.
+   - `CanaletaEdge.tsx`: Extirpación de curvas `Q`, consolidando el trayecto en pista escalonada con 90° puros (`M ${sourceX} ${sourceY} V ${canalY} H ${turnX} V ${targetY} H ${targetX}`).
+2. **Upgrade de Matriz Trade-Off (`ViewDetalle360.tsx`):**
+   - Extirpación de spinners nativos vía utilidades Tailwind `[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`.
+   - Diseño Cobalt en inputs: fondo `bg-[#040711]/80`, microborde `border-slate-800/80`, tipografía `font-mono tabular-nums`, foco iluminado `focus:border-sky-500/60 focus:bg-[#080d1a]`, y colores semánticos por alternativa (`sky-400`, `indigo-400`, `purple-400`).
+   - Sustitución del `<select>` de Tipo de Dilema por `<SelectIconicoCobalt />` con iconografía contextual (`Cpu`, `Building2`, `Briefcase`, `Coins`).
+   - Botón "Guardar y Aprobar Decisión": Degradado Cobalt `from-sky-600 via-sky-500 to-cyan-500`, resplandor `shadow-[0_0_20px_rgba(56,189,248,0.25)]` y física spring `active:scale-95`.
+3. **Subpestañas Ergonómicas con Físicas Spring e Iconografía Contextual:**
+   - Integración de `<motion.div layoutId="tab-360-indicator" />` (`type: 'spring', stiffness: 500, damping: 35`) con eliminación de enumeradores rígidos.
+   - Reemplazo de `<Plus />` por íconos semánticos: `<Milestone />` para Nuevo Hito / Entregable, `<Flag />` para Entregable de fase, y `<CheckSquare />` para creación de Tarea con respuesta táctil `active:scale-95`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 32/32 suites passed (313/313 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0.

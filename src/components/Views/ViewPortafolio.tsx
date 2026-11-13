@@ -16,7 +16,10 @@ import {
   Briefcase,
   TrendingUp,
   Users,
-  AlertTriangle
+  AlertTriangle,
+  Siren,
+  HeartPulse,
+  Activity
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -372,10 +375,10 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
           <button
             type="button"
             onClick={() => setModalPdfAbierto(true)}
-            className="h-10 px-3.5 rounded-xl border border-slate-800/80 bg-[#0D1526] text-slate-300 hover:bg-slate-800/60 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="h-10 px-3.5 rounded-xl border border-slate-700/80 bg-[#0D1526] hover:bg-slate-800/90 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer shadow-[0_0_15px_rgba(15,23,42,0.6)] hover:shadow-[0_0_20px_rgba(56,189,248,0.18)] hover:border-sky-500/40 select-none group"
             title="Compilar y Descargar Ficha Ejecutiva en PDF"
           >
-            <FileDown className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
+            <FileDown className="w-4 h-4 text-sky-400 transition-transform duration-200 group-hover:-translate-y-0.5" strokeWidth={1.75} />
             <span>Exportar PDF</span>
           </button>
 
@@ -523,9 +526,22 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate leading-none">
               Salud
             </span>
-            <span id="kpi-health-icon" className="w-4 h-4 sm:w-7 sm:h-7 sm:rounded-xl sm:bg-slate-900/80 flex items-center justify-center text-xs font-bold relative shrink-0">
-              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${countBloqueado > 0 ? 'bg-rose-500' : countRiesgo > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-            </span>
+            <div id="kpi-health-icon" className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl flex items-center justify-center text-xs font-bold relative shrink-0">
+              {countBloqueado > 0 ? (
+                <div className="relative flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-rose-950/60 border border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.35)]">
+                  <span className="animate-ping absolute inline-flex h-3.5 w-3.5 rounded-full bg-rose-500 opacity-60" />
+                  <Siren className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400 animate-pulse relative z-10" strokeWidth={1.75} />
+                </div>
+              ) : countRiesgo > 0 ? (
+                <div className="relative flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-amber-950/60 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]">
+                  <HeartPulse className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 animate-pulse relative z-10" strokeWidth={1.75} />
+                </div>
+              ) : (
+                <div className="relative flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-emerald-950/60 border border-emerald-500/40 shadow-[0_0_12px_rgba(52,211,153,0.2)]">
+                  <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 relative z-10" strokeWidth={1.75} />
+                </div>
+              )}
+            </div>
           </div>
           <div className="mt-1 sm:my-2">
             <div className="text-base sm:text-2xl font-bold text-slate-100 tracking-tight flex items-center gap-1.5 font-mono tabular-nums leading-none" id="kpi-alertas-criticas">
@@ -590,31 +606,42 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <button
               type="button"
               onClick={() => setFiltroSalud(filtroSalud === 'En Rango' ? '' : 'En Rango')}
-              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-emerald-950/50 text-emerald-300 border border-emerald-800/60 transition-colors flex items-center gap-1.5 cursor-pointer ${
-                filtroSalud === 'En Rango' ? 'ring-2 ring-sky-500 font-bold' : 'hover:border-emerald-500/50'
+              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-emerald-950/50 text-emerald-300 border border-emerald-800/60 transition-all duration-200 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                filtroSalud === 'En Rango' ? 'ring-2 ring-emerald-500 font-bold bg-emerald-950/80 shadow-[0_0_12px_rgba(52,211,153,0.25)]' : 'hover:border-emerald-500/50'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+              <Activity className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} />
               <span className="font-mono tabular-nums">En Rango ({countRango})</span>
             </button>
             <button
               type="button"
               onClick={() => setFiltroSalud(filtroSalud === 'En Riesgo' ? '' : 'En Riesgo')}
-              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-amber-950/50 text-amber-300 border border-amber-800/60 transition-colors flex items-center gap-1.5 cursor-pointer ${
-                filtroSalud === 'En Riesgo' ? 'ring-2 ring-sky-500 font-bold' : 'hover:border-amber-500/50'
+              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-amber-950/50 text-amber-300 border border-amber-800/60 transition-all duration-200 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                filtroSalud === 'En Riesgo' ? 'ring-2 ring-amber-500 font-bold bg-amber-950/80 shadow-[0_0_12px_rgba(245,158,11,0.25)]' : 'hover:border-amber-500/50'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+              <HeartPulse className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} />
               <span className="font-mono tabular-nums">En Riesgo ({countRiesgo})</span>
             </button>
             <button
               type="button"
               onClick={() => setFiltroSalud(filtroSalud === 'Bloqueado' ? '' : 'Bloqueado')}
-              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-rose-950/50 text-rose-300 border border-rose-800/60 transition-colors flex items-center gap-1.5 cursor-pointer ${
-                filtroSalud === 'Bloqueado' ? 'ring-2 ring-sky-500 font-bold' : 'hover:border-rose-500/50'
+              className={`h-9 px-3 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all duration-200 active:scale-95 ${
+                filtroSalud === 'Bloqueado'
+                  ? 'bg-rose-900/70 text-white border border-rose-500 shadow-[0_0_16px_rgba(244,63,94,0.4)] font-bold'
+                  : countBloqueado > 0
+                  ? 'bg-rose-950/60 text-rose-300 border border-rose-800/80 hover:border-rose-500/60 shadow-[0_0_12px_rgba(244,63,94,0.2)]'
+                  : 'bg-rose-950/30 text-rose-400/80 border border-rose-900/50 hover:border-rose-700/60'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
+              {countBloqueado > 0 ? (
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500" />
+                </span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-rose-500/60 inline-block shrink-0" />
+              )}
               <span className="font-mono tabular-nums">Bloqueados ({countBloqueado})</span>
             </button>
           </div>

@@ -13,10 +13,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
-import { X, FileText, CheckCircle2, Download, Printer, Layers, DollarSign, TrendingUp } from 'lucide-react';
+import { X, FileText, CheckCircle2, Download, Printer, Layers, DollarSign, TrendingUp, RotateCw, FolderKanban } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
 
 type TabFiltroPdf = 'activos' | 'planificados' | 'cerrados' | 'todos';
 
@@ -69,16 +70,52 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
   const rawProyectos = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
   const proyectos = useMemo(() => rawProyectos.filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado)), [rawProyectos, estaOculto]);
 
-  if (!visible) return null;
+  // Filtrado de proyectos según tab (hook safety: antes de cualquier early return)
+  const proyectosFiltrados = useMemo(() => {
+    return proyectos.filter((p) => {
+      const estado = (p.estado_proyecto || '').toLowerCase();
+      if (tabPdf === 'activos') return estado.includes('ejecucion') || estado.includes('curso') || estado === '03_en_ejecucion';
+      if (tabPdf === 'planificados') return estado.includes('iniciacion') || estado.includes('planif') || estado === '01_iniciacion' || estado === '02_planificacion';
+      if (tabPdf === 'cerrados') return estado.includes('cerrado') || estado.includes('completad') || estado === '04_cerrado';
+      return true; // todos
+    });
+  }, [proyectos, tabPdf]);
 
-  // Filtrado de proyectos según tab
-  const proyectosFiltrados = proyectos.filter((p) => {
-    const estado = (p.estado_proyecto || '').toLowerCase();
-    if (tabPdf === 'activos') return estado.includes('ejecucion') || estado.includes('curso') || estado === '03_en_ejecucion';
-    if (tabPdf === 'planificados') return estado.includes('iniciacion') || estado.includes('planif') || estado === '01_iniciacion' || estado === '02_planificacion';
-    if (tabPdf === 'cerrados') return estado.includes('cerrado') || estado.includes('completad') || estado === '04_cerrado';
-    return true; // todos
-  });
+  const opcionesProyectos: OpcionSelectCobalt<string>[] = useMemo(() => {
+    const base: OpcionSelectCobalt<string>[] = [
+      {
+        valor: '',
+        etiqueta: 'Todos los Proyectos (Compilado Ejecutivo)',
+        subtitulo: `${proyectos.length} iniciativas totales en portafolio`,
+        icono: FileText,
+        badge: 'GLOBAL',
+        colorBadge: 'bg-sky-500/20 text-sky-300 border-sky-500/30'
+      }
+    ];
+
+    const items: OpcionSelectCobalt<string>[] = proyectosFiltrados.map((p) => {
+      const rawH = String(p.health_status || '').toLowerCase();
+      const isCrit = rawH.includes('bloq') || rawH.includes('crit');
+      const isRiesgo = rawH.includes('riesgo') || rawH.includes('alerta');
+
+      return {
+        valor: p.id,
+        etiqueta: `${p.codigo_legado} · ${p.nombre_proyecto}`,
+        subtitulo: `${p.tipo_iniciativa || 'Iniciativa'} · ${p.avance_real_pct ?? 0}% avance`,
+        icono: FolderKanban,
+        badge: (p.estado_proyecto || 'En Ejecución').replace(/^\d+_/, '').replace(/_/g, ' '),
+        colorBadge: isCrit
+          ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+          : isRiesgo
+          ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+      };
+    });
+
+    return [...base, ...items];
+  }, [proyectos.length, proyectosFiltrados]);
+
+  if (!visible) return null;
 
   const proyectoSeleccionado = proyectos.find((p) => p.id === proyectoId || p.codigo_legado === proyectoId);
 
@@ -104,15 +141,18 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
     >
       <div
         id="modal-exportar-pdf-card"
-        className="portal-surface elevation-3 w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-800/80 shadow-[0_10px_35px_-5px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.12)] relative bg-[#0D1526] text-slate-100"
+        className="portal-surface elevation-3 w-full max-w-lg max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-slate-800/80 shadow-[0_20px_50px_rgba(2,6,23,0.9),0_0_30px_rgba(56,189,248,0.15)] relative bg-[#0D1526]/95 backdrop-blur-xl text-slate-100"
       >
+        {/* Micro-glow superior de acento */}
+        <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-sky-500 via-cyan-400 to-sky-600 shadow-[0_0_12px_rgba(56,189,248,0.5)] z-20 pointer-events-none" />
+
         {/* DRAG HANDLE MÓVIL (BOTTOM SHEET) */}
         <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
 
         {/* Encabezado Cobalt Aerodynamic */}
         <div className="shrink-0 px-5 sm:px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0D1526]/80 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-sky-950/60 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-sky-950/60 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0 shadow-[0_0_12px_rgba(56,189,248,0.15)]">
               <FileText className="w-4 h-4" strokeWidth={1.75} />
             </div>
             <div>
@@ -153,9 +193,9 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
                   setTabPdf(t.id);
                   setCompiladoListo(false);
                 }}
-                className={`py-1.5 px-2 rounded-lg text-center truncate transition cursor-pointer text-[11px] ${
+                className={`py-1.5 px-2 rounded-lg text-center truncate transition-all duration-200 cursor-pointer text-[11px] active:scale-95 ${
                   tabPdf === t.id
-                    ? 'bg-sky-950/40 text-sky-300 border border-sky-500/30 font-bold shadow-xs'
+                    ? 'bg-sky-950/50 text-sky-300 border border-sky-500/40 font-bold shadow-xs'
                     : 'text-slate-400 hover:text-sky-300 border border-transparent'
                 }`}
               >
@@ -168,25 +208,18 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
         {/* Cuerpo del Modal */}
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 min-h-0 space-y-4 custom-scrollbar text-xs">
           <div>
-            <label className="block font-semibold mb-1.5 text-slate-300">
-              Seleccionar Proyecto para Ficha
-            </label>
-            <select
+            <SelectIconicoCobalt
               id="selector-proyecto-pdf"
-              value={proyectoId}
-              onChange={(e) => {
-                setProyectoId(e.target.value);
+              valor={proyectoId}
+              onChange={(val) => {
+                setProyectoId(val);
                 setCompiladoListo(false);
               }}
-              className="w-full border border-slate-800 rounded-xl p-2.5 bg-[#040711] text-slate-200 outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/40 text-xs font-medium"
-            >
-              <option value="">-- Todos los Proyectos (Compilado Ejecutivo) --</option>
-              {proyectosFiltrados.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.codigo_legado} · {p.nombre_proyecto} ({p.tipo_iniciativa})
-                </option>
-              ))}
-            </select>
+              opciones={opcionesProyectos}
+              label="Seleccionar Proyecto para Ficha"
+              sublabel="Filtra por estado arriba para acotar la lista"
+              placeholder="Seleccionar proyecto..."
+            />
           </div>
 
           {/* Tarjeta de Resumen Ejecutivo si hay proyecto seleccionado */}
@@ -263,10 +296,23 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
             id="btn-compilar-pdf"
             disabled={cargando}
             onClick={handleCompilarPdf}
-            className="w-full py-2.5 bg-sky-500/20 text-sky-400 border border-sky-500/40 hover:bg-sky-500/30 active:scale-98 font-bold rounded-xl shadow-sm transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 text-xs"
+            className={`relative overflow-hidden w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer active:scale-98 select-none group ${
+              cargando
+                ? 'bg-sky-950/40 text-sky-300 border border-sky-500/30 cursor-wait'
+                : 'bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 shadow-[0_0_25px_rgba(56,189,248,0.35)] hover:shadow-[0_0_35px_rgba(56,189,248,0.5)] border border-sky-300/40'
+            }`}
           >
-            <Download className="w-4 h-4" strokeWidth={1.75} />
-            <span>{cargando ? 'Compilando métricas EVM y Ficha 360...' : 'Compilar FICHA RESUMEN (PDF)'}</span>
+            {cargando ? (
+              <>
+                <RotateCw className="w-4 h-4 animate-spin text-sky-400" strokeWidth={2} />
+                <span className="font-mono">Compilando métricas EVM y Ficha 360...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4 text-slate-950 transition-transform duration-200 group-hover:-translate-y-0.5" strokeWidth={2} />
+                <span className="tracking-tight uppercase">Compilar Ficha Resumen (PDF)</span>
+              </>
+            )}
           </button>
         </div>
       </div>

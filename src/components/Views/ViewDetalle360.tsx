@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { motion } from 'motion/react';
 import {
   ArrowLeft,
   FileDown,
@@ -15,7 +16,6 @@ import {
   Sparkles,
   Trash2,
   Edit3,
-  Plus,
   DollarSign,
   Receipt,
   Calendar,
@@ -31,7 +31,14 @@ import {
   Tag,
   PlayCircle,
   PauseCircle,
-  AlertTriangle
+  AlertTriangle,
+  Cpu,
+  Building2,
+  Briefcase,
+  Coins,
+  Milestone,
+  Flag,
+  CheckSquare
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -43,6 +50,7 @@ import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
 import { ModalExportarPdf } from '../Modals/ModalExportarPdf';
 import { ModalNuevoHito } from '../Modals/ModalNuevoHito';
+import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import { deduplicarPorCodigoCanonico, sanitizarUrlExterna } from '../../utils/entityNormalizer';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
@@ -54,6 +62,20 @@ interface ViewDetalle360Props {
 }
 
 type SubTab360 = 'wbs' | 'evm' | 'tradeoff' | 'gobernanza';
+
+const PESTANAS_360: { id: SubTab360; etiqueta: string; icono: React.ComponentType<{ className?: string; strokeWidth?: number }> }[] = [
+  { id: 'wbs', etiqueta: 'WBS & Ruta Crítica', icono: GitFork },
+  { id: 'evm', etiqueta: 'Rendimiento EVM & Curva S', icono: TrendingUp },
+  { id: 'tradeoff', etiqueta: 'Matriz Trade-Off', icono: Scale },
+  { id: 'gobernanza', etiqueta: 'Gobernanza & Salud', icono: ShieldCheck }
+];
+
+const OPCIONES_TIPO_DILEMA: OpcionSelectCobalt[] = [
+  { valor: 'Tecnología / Software', etiqueta: 'Tecnología / Software', icono: Cpu },
+  { valor: 'Activo / Infraestructura', etiqueta: 'Activo / Infraestructura', icono: Building2 },
+  { valor: 'Servicio Profesional / Contrato', etiqueta: 'Servicio Profesional / Contrato', icono: Briefcase },
+  { valor: 'Inversión Patrimonial', etiqueta: 'Inversión Patrimonial', icono: Coins }
+];
 
 interface CriterioTradeOff {
   id: string;
@@ -840,9 +862,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
               </div>
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div
-                  className={`h-full ${
-                    burnPct > 100 ? 'bg-rose-500' : burnPct > 85 ? 'bg-amber-500' : 'bg-emerald-500'
-                  } rounded-full transition-all duration-500`}
+                  className={`h-full ${burnPct > 100 ? 'bg-rose-500' : burnPct > 85 ? 'bg-amber-500' : 'bg-emerald-500'
+                    } rounded-full transition-all duration-500`}
                   style={{ width: `${Math.min(burnPct, 100)}%` }}
                 />
               </div>
@@ -931,57 +952,36 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
         className="flex items-center gap-1.5 border-b border-slate-800 pb-1.5 overflow-x-auto scrollbar-none shrink-0"
         role="tablist"
       >
-        <button
-          type="button"
-          onClick={() => setSubTabActiva('wbs')}
-          className={`h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
-            subTabActiva === 'wbs'
-              ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
-              : 'text-slate-400 hover:text-white border border-transparent'
-          }`}
-        >
-          <GitFork className="w-4 h-4 shrink-0" strokeWidth={1.75} />
-          <span>1. WBS & Ruta Crítica</span>
-        </button>
+        {PESTANAS_360.map((tab) => {
+          const estaActiva = subTabActiva === tab.id;
+          const IconoTab = tab.icono;
 
-        <button
-          type="button"
-          onClick={() => setSubTabActiva('evm')}
-          className={`h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
-            subTabActiva === 'evm'
-              ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
-              : 'text-slate-400 hover:text-white border border-transparent'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4 shrink-0" strokeWidth={1.75} />
-          <span>2. Rendimiento EVM & Curva S</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setSubTabActiva('tradeoff')}
-          className={`h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
-            subTabActiva === 'tradeoff'
-              ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
-              : 'text-slate-400 hover:text-white border border-transparent'
-          }`}
-        >
-          <Scale className="w-4 h-4 shrink-0" strokeWidth={1.75} />
-          <span>3. Matriz Trade-Off</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setSubTabActiva('gobernanza')}
-          className={`h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer ${
-            subTabActiva === 'gobernanza'
-              ? 'bg-sky-500/15 text-sky-300 border border-sky-500/40'
-              : 'text-slate-400 hover:text-white border border-transparent'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4 shrink-0" strokeWidth={1.75} />
-          <span>4. Gobernanza & Salud</span>
-        </button>
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={estaActiva}
+              onClick={() => setSubTabActiva(tab.id)}
+              className={`relative h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer select-none ${estaActiva
+                  ? 'text-sky-300'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                }`}
+            >
+              {estaActiva && (
+                <motion.div
+                  layoutId="tab-360-indicator"
+                  className="absolute inset-0 rounded-xl bg-sky-500/15 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.15)]"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <span className="relative z-10 flex items-center gap-2">
+                <IconoTab className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                <span>{tab.etiqueta}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* ================================================================= */}
@@ -1046,9 +1046,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
               <button
                 type="button"
                 onClick={() => abrirModalCrearHitoFase('Fase General')}
-                className="h-9 px-3 rounded-xl border border-sky-500/40 bg-[#0D1526] text-sky-300 hover:bg-sky-500/15 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="h-9 px-3.5 rounded-xl border border-sky-500/40 bg-[#0D1526] hover:bg-sky-500/15 text-sky-300 text-xs font-semibold flex items-center gap-2 shadow-[0_0_12px_rgba(56,189,248,0.12)] transition-all duration-150 active:scale-95 cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <Milestone className="w-3.5 h-3.5 text-sky-300" strokeWidth={1.75} />
                 <span>Nuevo Hito / Entregable</span>
               </button>
             </div>
@@ -1095,9 +1095,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                           <button
                             type="button"
                             onClick={() => abrirModalCrearHitoFase(fase.nombre)}
-                            className="h-9 px-3 rounded-xl border border-slate-800 bg-[#0D1526] hover:border-sky-500/40 text-sky-300 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                            className="h-9 px-3 rounded-xl border border-slate-800 bg-[#0D1526] hover:border-sky-500/40 hover:bg-sky-500/10 text-sky-300 text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 active:scale-95 cursor-pointer"
                           >
-                            <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
+                            <Flag className="w-3.5 h-3.5 text-sky-300" strokeWidth={1.75} />
                             <span>Entregable</span>
                           </button>
                         </div>
@@ -1126,8 +1126,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               presEstimadoHito > 0
                                 ? Math.round((realEjecutadoHito / presEstimadoHito) * 100)
                                 : realEjecutadoHito > 0
-                                ? 100
-                                : 0;
+                                  ? 100
+                                  : 0;
 
                             const esCrit = cpmCalculo.rutaCritica.includes(hitoIdKey);
                             const tareasHechasHito = tareasHito.filter((t: any) =>
@@ -1145,11 +1145,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               <div
                                 key={h.id}
                                 id={`wbs-nodo-${hitoIdKey}`}
-                                className={`portal-surface bg-[#0D1526] rounded-2xl border border-slate-800/80 transition-colors ${
-                                  esElementoResaltado
+                                className={`portal-surface bg-[#0D1526] rounded-2xl border border-slate-800/80 transition-colors ${esElementoResaltado
                                     ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
                                     : ''
-                                }`}
+                                  }`}
                               >
                                 {/* Header Paquete WP */}
                                 <div className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/80 gap-3.5 bg-slate-950/40 rounded-t-2xl">
@@ -1249,13 +1248,12 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                             : 'Sin Techo'}
                                         </span>
                                         <span
-                                          className={`px-1.5 py-0.5 rounded-md border text-[9px] font-bold ${
-                                            pctConsumidoHito > 100
+                                          className={`px-1.5 py-0.5 rounded-md border text-[9px] font-bold ${pctConsumidoHito > 100
                                               ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                                               : pctConsumidoHito >= 80
-                                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                                          }`}
+                                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                                : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                            }`}
                                         >
                                           {pctConsumidoHito}%
                                         </span>
@@ -1270,10 +1268,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                           setTareaAEditarId(null);
                                           setIsModalTareaOpen(true);
                                         }}
-                                        className="h-8 px-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                        className="h-8 px-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-[11px] font-bold flex items-center gap-1.5 shadow-[0_0_10px_rgba(56,189,248,0.25)] transition-all duration-150 active:scale-95 cursor-pointer"
                                         title="Crear tarea en este paquete"
                                       >
-                                        <Plus className="w-3 h-3" strokeWidth={2} />
+                                        <CheckSquare className="w-3 h-3 text-slate-950" strokeWidth={2} />
                                         <span>Tarea</span>
                                       </button>
 
@@ -1374,10 +1372,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                             const franjaClase = esDone
                                               ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
                                               : esProg
-                                              ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]'
-                                              : esBloqOVenc
-                                              ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
-                                              : 'bg-slate-600';
+                                                ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)]'
+                                                : esBloqOVenc
+                                                  ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+                                                  : 'bg-slate-600';
 
                                             // Pasos/Subtareas vinculadas
                                             const pasosTarea =
@@ -1386,8 +1384,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                               (Array.isArray(t.pasos)
                                                 ? t.pasos
                                                 : Array.isArray(t.subtareas)
-                                                ? t.subtareas
-                                                : []);
+                                                  ? t.subtareas
+                                                  : []);
                                             const totalPasos = pasosTarea.length;
                                             const pasosHechos = pasosTarea.filter((p: any) => p.completado).length;
                                             const pctPasos = totalPasos > 0 ? Math.round((pasosHechos / totalPasos) * 100) : 0;
@@ -1418,11 +1416,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                               <div
                                                 key={t.id}
                                                 id={`wbs-tarea-${tareaIdKey}`}
-                                                className={`group relative rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-3.5 transition-colors hover:border-sky-500/40 hover:bg-[#0D1526] ${
-                                                  esTareaResaltada
+                                                className={`group relative rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-3.5 transition-colors hover:border-sky-500/40 hover:bg-[#0D1526] ${esTareaResaltada
                                                     ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
                                                     : ''
-                                                }`}
+                                                  }`}
                                               >
                                                 {/* Franja Lateral Izquierda Semántica (3.5px) */}
                                                 <div
@@ -1444,11 +1441,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                           updated_at: new Date().toISOString()
                                                         } as any);
                                                       }}
-                                                      className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center shrink-0 cursor-pointer transition ${
-                                                        esDone
+                                                      className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center shrink-0 cursor-pointer transition ${esDone
                                                           ? 'bg-emerald-600 border-emerald-500 text-white shadow-xs'
                                                           : 'border-slate-700 hover:border-slate-500 bg-slate-800/90'
-                                                      }`}
+                                                        }`}
                                                       title={
                                                         esDone ? 'Marcar como pendiente' : 'Marcar como completada'
                                                       }
@@ -1468,7 +1464,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                           <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/30">
                                                             <Flame className="w-2.5 h-2.5 text-rose-400" strokeWidth={1.75} />
                                                             <span>Alta</span>
-                                                         </span>
+                                                          </span>
                                                         ) : (
                                                           <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-800/60 text-slate-400 border border-slate-700/50">
                                                             Media
@@ -1514,9 +1510,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                                       {(
                                                                         parseFloat(
                                                                           gt.Monto_PEN ||
-                                                                            gt.monto_pen ||
-                                                                            gt.monto ||
-                                                                            0
+                                                                          gt.monto_pen ||
+                                                                          gt.monto ||
+                                                                          0
                                                                         ) || 0
                                                                       ).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                                     </span>
@@ -1534,9 +1530,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                           setTareaAEditarId(t.id);
                                                           setIsModalTareaOpen(true);
                                                         }}
-                                                        className={`text-xs font-semibold leading-snug cursor-pointer transition-colors group-hover:text-sky-300 break-words whitespace-normal ${
-                                                          esDone ? 'line-through text-slate-500' : 'text-slate-200'
-                                                        }`}
+                                                        className={`text-xs font-semibold leading-snug cursor-pointer transition-colors group-hover:text-sky-300 break-words whitespace-normal ${esDone ? 'line-through text-slate-500' : 'text-slate-200'
+                                                          }`}
                                                         title={t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}
                                                       >
                                                         {t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}
@@ -1555,9 +1550,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                         className="flex items-center gap-1.5 text-[10.5px] font-medium text-slate-400 hover:text-sky-300 transition-colors cursor-pointer"
                                                       >
                                                         <ChevronRight
-                                                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                                            pasosAbiertos ? 'rotate-90 text-sky-400' : 'text-slate-500'
-                                                          }`}
+                                                          className={`w-3.5 h-3.5 transition-transform duration-200 ${pasosAbiertos ? 'rotate-90 text-sky-400' : 'text-slate-500'
+                                                            }`}
                                                           strokeWidth={1.75}
                                                         />
                                                         <span>
@@ -1571,9 +1565,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                       {/* Micro barra segmentada de progreso */}
                                                       <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden shrink-0">
                                                         <div
-                                                          className={`h-full transition-all duration-300 ${
-                                                            pctPasos === 100 ? 'bg-emerald-400' : 'bg-sky-400'
-                                                          }`}
+                                                          className={`h-full transition-all duration-300 ${pctPasos === 100 ? 'bg-emerald-400' : 'bg-sky-400'
+                                                            }`}
                                                           style={{ width: `${pctPasos}%` }}
                                                         />
                                                       </div>
@@ -1597,22 +1590,20 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                                     updated_at: new Date().toISOString()
                                                                   });
                                                                 }}
-                                                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 cursor-pointer transition ${
-                                                                  paso.completado
+                                                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 cursor-pointer transition ${paso.completado
                                                                     ? 'bg-emerald-600 border-emerald-500 text-white'
                                                                     : 'border-slate-700 hover:border-slate-500 bg-slate-800'
-                                                                }`}
+                                                                  }`}
                                                               >
                                                                 {paso.completado && (
                                                                   <Check className="w-2.5 h-2.5" strokeWidth={2.5} />
                                                                 )}
                                                               </button>
                                                               <span
-                                                                className={`truncate ${
-                                                                  paso.completado
+                                                                className={`truncate ${paso.completado
                                                                     ? 'line-through text-slate-500'
                                                                     : 'text-slate-300'
-                                                                }`}
+                                                                  }`}
                                                               >
                                                                 {paso.descripcion_paso ||
                                                                   paso.nombre_paso ||
@@ -1710,13 +1701,12 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                       PEN {mGasto.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </div>
                                                     <span
-                                                      className={`inline-block text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider ${
-                                                        esDesvio
+                                                      className={`inline-block text-[9px] px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider ${esDesvio
                                                           ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
                                                           : esPagado
-                                                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                                                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                                                      }`}
+                                                            ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                                            : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                                        }`}
                                                     >
                                                       {esDesvio ? 'Desvío' : esPagado ? 'Pagado' : 'Pendiente'}
                                                     </span>
@@ -1766,19 +1756,17 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                 <div
                                   key={h.id}
                                   id={`wbs-nodo-${marcadorIdKey}`}
-                                  className={`portal-surface bg-[#0D1526] p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition-all ${
-                                    esMarcadorResaltado
+                                  className={`portal-surface bg-[#0D1526] p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition-all ${esMarcadorResaltado
                                       ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
                                       : ''
-                                  }`}
+                                    }`}
                                 >
                                   <div className="flex items-center gap-3 min-w-0 flex-1">
                                     <div
-                                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${
-                                        esComp
+                                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${esComp
                                           ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
                                           : 'bg-purple-500/20 border-purple-500/40 text-purple-400'
-                                      }`}
+                                        }`}
                                     >
                                       <Gem className="w-4 h-4" />
                                     </div>
@@ -1789,9 +1777,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                           {h.codigo_legado}
                                         </span>
                                         <h4
-                                          className={`font-bold break-words ${
-                                            esComp ? 'line-through text-slate-500' : 'text-slate-100'
-                                          }`}
+                                          className={`font-bold break-words ${esComp ? 'line-through text-slate-500' : 'text-slate-100'
+                                            }`}
                                         >
                                           {h.nombre_elemento || h.Nombre_Elemento || h.nombre_hito || h.Nombre_Hito || h.nombre || h.codigo_legado}
                                         </h4>
@@ -1819,11 +1806,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                     <button
                                       type="button"
                                       onClick={() => toggleCompletarMarcador(h)}
-                                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer active:scale-95 flex items-center gap-1.5 ${
-                                        esComp
+                                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer active:scale-95 flex items-center gap-1.5 ${esComp
                                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                                           : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500'
-                                      }`}
+                                        }`}
                                     >
                                       {esComp ? (
                                         <>
@@ -2231,17 +2217,12 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Tipo de Dilema</label>
-                <select
-                  value={toTipo}
-                  onChange={(e) => setToTipo(e.target.value)}
-                  className="w-full border border-slate-700 bg-slate-900 rounded-xl p-2.5 text-xs text-slate-100 outline-none"
-                >
-                  <option value="Tecnología / Software">Tecnología / Software</option>
-                  <option value="Activo / Infraestructura">Activo / Infraestructura</option>
-                  <option value="Servicio Profesional / Contrato">Servicio Profesional / Contrato</option>
-                  <option value="Inversión Patrimonial">Inversión Patrimonial</option>
-                </select>
+                <SelectIconicoCobalt
+                  label="Tipo de Dilema"
+                  valor={toTipo}
+                  onChange={(val) => setToTipo(val)}
+                  opciones={OPCIONES_TIPO_DILEMA}
+                />
               </div>
             </div>
 
@@ -2286,11 +2267,10 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                   const sumaPesos = criteriosTradeOff.reduce((acc, c) => acc + c.peso, 0);
                   return (
                     <div
-                      className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold ${
-                        sumaPesos === 100
+                      className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold ${sumaPesos === 100
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                           : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      }`}
+                        }`}
                     >
                       Suma: {sumaPesos}%
                     </div>
@@ -2335,7 +2315,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               nuevo[i].peso = parseFloat(e.target.value) || 0;
                               setCriteriosTradeOff(nuevo);
                             }}
-                            className="w-16 bg-slate-950 border border-slate-700 text-center rounded p-1 text-slate-100"
+                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-slate-200 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </td>
                         <td className="p-2.5 text-center">
@@ -2350,7 +2330,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               nuevo[i].scoreA = parseFloat(e.target.value) || 0;
                               setCriteriosTradeOff(nuevo);
                             }}
-                            className="w-16 bg-slate-950 border border-slate-700 text-center rounded p-1 text-sky-400 font-bold"
+                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-sky-400 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </td>
                         <td className="p-2.5 text-center">
@@ -2365,7 +2345,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               nuevo[i].scoreB = parseFloat(e.target.value) || 0;
                               setCriteriosTradeOff(nuevo);
                             }}
-                            className="w-16 bg-slate-950 border border-slate-700 text-center rounded p-1 text-indigo-400 font-bold"
+                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-indigo-400 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </td>
                         <td className="p-2.5 text-center">
@@ -2380,7 +2360,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               nuevo[i].scoreC = parseFloat(e.target.value) || 0;
                               setCriteriosTradeOff(nuevo);
                             }}
-                            className="w-16 bg-slate-950 border border-slate-700 text-center rounded p-1 text-purple-400 font-bold"
+                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-purple-400 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </td>
                       </tr>
@@ -2434,9 +2414,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                   <button
                     type="button"
                     onClick={guardarDecisionTradeOff}
-                    className="h-10 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="h-10 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-all duration-200 active:scale-95 cursor-pointer"
                   >
-                    <Check className="w-4 h-4" strokeWidth={2} />
+                    <Check className="w-4 h-4 stroke-[2.2]" />
                     <span>Guardar y Aprobar Decisión</span>
                   </button>
                 </div>
@@ -2527,13 +2507,12 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                 <div className="flex justify-between items-center py-2 border-b border-slate-800">
                   <span className="text-slate-400">Días sin Revisión:</span>
                   <span
-                    className={`font-mono font-bold px-2 py-0.5 rounded border text-[11px] ${
-                      diasSinRevision <= 7
+                    className={`font-mono font-bold px-2 py-0.5 rounded border text-[11px] ${diasSinRevision <= 7
                         ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                         : diasSinRevision <= 14
-                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-                        : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
-                    }`}
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                          : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                      }`}
                   >
                     {diasSinRevision} {diasSinRevision === 1 ? 'día' : 'días'}
                   </span>

@@ -23,12 +23,12 @@ export const OrtogonalTreeEdge: React.FC<EdgeProps> = ({
   markerEnd
 }) => {
   // Si los nodos están perfectamente alineados verticalmente, trazo recto vertical
-  if (Math.abs(sourceX - targetX) < 2) {
+  if (Math.abs(sourceX - targetX) < 1) {
     return (
       <BaseEdge
         id={id}
         path={`M ${sourceX} ${sourceY} V ${targetY}`}
-        style={style}
+        style={{ strokeLinejoin: 'miter', ...style }}
         markerEnd={markerEnd}
       />
     );
@@ -36,24 +36,15 @@ export const OrtogonalTreeEdge: React.FC<EdgeProps> = ({
 
   // Canaleta intermedia fija a la mitad exacta de la distancia vertical
   const midY = sourceY + (targetY - sourceY) / 2;
-  const r = Math.min(8, Math.abs(targetX - sourceX) / 2, Math.abs(targetY - sourceY) / 2);
-  const dirX = targetX > sourceX ? 1 : -1;
 
-  // Trazo ortogonal canónico Manhattan: V -> Q -> H -> Q -> V
-  const path = [
-    `M ${sourceX} ${sourceY}`,
-    `V ${midY - r}`,
-    `Q ${sourceX} ${midY} ${sourceX + dirX * r} ${midY}`,
-    `H ${targetX - dirX * r}`,
-    `Q ${targetX} ${midY} ${targetX} ${midY + r}`,
-    `V ${targetY}`
-  ].join(' ');
+  // Trazo ortogonal canónico Manhattan puro a 90°: V -> H -> V (sin distorsiones bézier)
+  const path = `M ${sourceX} ${sourceY} V ${midY} H ${targetX} V ${targetY}`;
 
   return (
     <BaseEdge
       id={id}
       path={path}
-      style={style}
+      style={{ strokeLinejoin: 'miter', ...style }}
       markerEnd={markerEnd}
     />
   );
