@@ -15,6 +15,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import type { GastoRecord } from '../../types';
+import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import {
   X,
   Clock,
@@ -114,7 +115,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
       setMoneda('PEN');
       setTipoCambio(1.0);
       setCategoriaGasto('Materiales');
-      const hoy = new Date().toISOString().split('T')[0];
+      const hoy = formatFechaIsoLocal(new Date());
       setFecha(hoy);
       setHora('09:00');
       setFrecuencia('UNICA');
@@ -138,7 +139,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
   // Autoconmutar a PROGRAMADO si la fecha es futura
   const handleFechaChange = (nuevaFecha: string) => {
     setFecha(nuevaFecha);
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = formatFechaIsoLocal(new Date());
     if (nuevaFecha > hoy) {
       setModoDual('PROGRAMADO');
     }
@@ -156,13 +157,11 @@ export const ModalGasto: React.FC<ModalGastoProps> = ({
       return;
     }
 
-    const nowIso = new Date().toISOString();
-
     const payloadDatos: Partial<GastoRecord> = {
       tipo_origen: tipoOrigen === 'Tarea Proyecto' ? 'TAREA_PROYECTO' : 'ACTIVIDAD_PERSONAL',
       id_origen_vinculado: tipoOrigen === 'Tarea Proyecto' ? selectedTarea || undefined : undefined,
       categoria_gasto: categoriaGasto,
-      fecha_gasto: fecha || nowIso.split('T')[0],
+      fecha_gasto: fecha || formatFechaIsoLocal(new Date()),
       descripcion_gasto: descripcion.trim(),
       moneda_original: moneda,
       monto_original: montoNum,

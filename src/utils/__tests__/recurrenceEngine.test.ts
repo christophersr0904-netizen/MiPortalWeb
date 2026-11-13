@@ -4,8 +4,14 @@ import {
   construirRRuleRFC5545,
   construirEventoGoogleCalendarV3,
   construirUrlGoogleCalendar,
-  generarArchivoICS
+  generarArchivoICS,
+  normalizarFechaIso
 } from '../recurrenceEngine';
+import {
+  formatearFechaDdMmYyyy,
+  formatearFechaDdMm,
+  parsearFechaDdMmYyyyAIso
+} from '../timeFormatters';
 
 describe('Motor Unificado de Recurrencias y Estándar RFC-5545 [REQ-UI-38-EXEC]', () => {
   describe('evaluarOcurrenciaEnFecha', () => {
@@ -179,6 +185,40 @@ describe('Motor Unificado de Recurrencias y Estándar RFC-5545 [REQ-UI-38-EXEC]'
       expect(ics).toContain('DTEND;TZID=America/Lima:20261112T210000');
       expect(ics).toContain('RRULE:FREQ=DAILY');
       expect(ics).toContain('END:VCALENDAR');
+    });
+  });
+
+  describe('Normalización de Fechas y Formateo DD/MM/AAAA [REQ-SYNC-45-EXEC]', () => {
+    it('normaliza fechas DD/MM/AAAA a ISO YYYY-MM-DD sin transponer día y mes (evita 400 en Google Calendar)', () => {
+      // Caso crítico: 15/11/2026 antes fallaba como mes 15 -> 2026-15-11
+      expect(normalizarFechaIso('15/11/2026')).toBe('2026-11-15');
+      expect(normalizarFechaIso('05/11/2026')).toBe('2026-11-05');
+      expect(normalizarFechaIso('15-11-2026')).toBe('2026-11-15');
+      expect(normalizarFechaIso('2026-11-15')).toBe('2026-11-15');
+      expect(normalizarFechaIso('2026-11-15T14:30:00.000Z')).toBe('2026-11-15');
+      expect(normalizarFechaIso(undefined)).toBe('');
+      expect(normalizarFechaIso(null)).toBe('');
+    });
+
+    it('formatea fechas a estándar latinoamericano DD/MM/AAAA con formatearFechaDdMmYyyy', () => {
+      expect(formatearFechaDdMmYyyy('2026-11-15')).toBe('15/11/2026');
+      expect(formatearFechaDdMmYyyy('2026-11-15T09:00:00')).toBe('15/11/2026');
+      expect(formatearFechaDdMmYyyy('15/11/2026')).toBe('15/11/2026');
+      expect(formatearFechaDdMmYyyy('', '-')).toBe('-');
+      expect(formatearFechaDdMmYyyy(undefined)).toBe('-');
+      expect(formatearFechaDdMmYyyy(null)).toBe('-');
+    });
+
+    it('formatea fechas cortas DD/MM con formatearFechaDdMm', () => {
+      expect(formatearFechaDdMm('2026-11-15')).toBe('15/11');
+      expect(formatearFechaDdMm('15/11/2026')).toBe('15/11');
+      expect(formatearFechaDdMm(undefined, 'S/F')).toBe('S/F');
+    });
+
+    it('parsea strings DD/MM/AAAA hacia ISO YYYY-MM-DD con parsearFechaDdMmYyyyAIso', () => {
+      expect(parsearFechaDdMmYyyyAIso('15/11/2026')).toBe('2026-11-15');
+      expect(parsearFechaDdMmYyyyAIso('2026-11-15')).toBe('2026-11-15');
+      expect(parsearFechaDdMmYyyyAIso('')).toBe('');
     });
   });
 });

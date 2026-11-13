@@ -50,6 +50,16 @@ export function sanitizeTimestamp(tsStr?: string | null): string | null {
 }
 
 /**
+ * REQ-OPT-46-EXEC: Trunca cadenas de texto para prevenir DoS por payloads sobredimensionados
+ * en PostgREST / Supabase y agotar memoria en la serialización JSON.
+ */
+export function truncar(str?: string | null, maxLen: number = 255): string {
+  if (!str || typeof str !== 'string') return '';
+  const trimmed = str.trim();
+  return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
+}
+
+/**
  * Normaliza fase WBS al conjunto canónico de PostgreSQL:
  * ('Iniciacion', 'Planificacion', 'Ejecucion', 'Control', 'Cierre')
  */
@@ -375,7 +385,7 @@ export function sanitizarTareaPayload(
     codigo_legado: raw.codigo_legado,
     proyecto_id: resolvedProyectoUuid,
     hito_id: resolvedHitoUuid,
-    nombre_tarea_actividad: raw.nombre_tarea_actividad || 'Tarea sin nombre',
+    nombre_tarea_actividad: truncar(raw.nombre_tarea_actividad, 255) || 'Tarea sin nombre',
     estado_tarea: normalizarEstadoTarea(raw.estado_tarea),
     prioridad_eisenhower: prioridadNorm,
     nivel_energia_requerido: energiaNorm,
@@ -385,7 +395,7 @@ export function sanitizarTareaPayload(
     agendado_en_calendar: raw.agendado_calendar === 'Sí' ? 'Sí' : 'No',
     dependencia_tarea_id: resolvedDependenciaUuid,
     responsable_ejecutor: raw.responsable_ejecutor?.trim() || 'Christopher',
-    notas_impedimentos: raw.notas_impedimentos?.trim() || null,
+    notas_impedimentos: raw.notas_impedimentos ? truncar(raw.notas_impedimentos, 4000) : null,
     es_mav: Boolean(raw.es_mav),
     costo_real_pen: Math.max(0, Number(raw.costo_real_pen) || 0),
     archivado: Boolean(raw.archivado),
@@ -516,8 +526,8 @@ export function sanitizarNotaPayload(raw: NotaRecord, userId: string = DEFAULT_U
     id: isUuid(raw.id) ? raw.id : undefined,
     user_id: isUuid(raw.user_id) ? raw.user_id : userId,
     codigo_legado: raw.codigo_legado,
-    titulo: raw.titulo?.trim() || 'Sin Título',
-    contenido_markdown: raw.contenido_markdown ?? '',
+    titulo: truncar(raw.titulo, 255) || 'Sin Título',
+    contenido_markdown: truncar(raw.contenido_markdown ?? '', 65535),
     checklists_json: checklists,
     wishlist_json: wishlist,
     color_tema: raw.color_tema || 'default',
@@ -612,7 +622,7 @@ export function sanitizarActividadPayload(raw: ActividadPersonal, userId: string
     id: isUuid(raw.id) ? raw.id : undefined,
     user_id: isUuid(raw.user_id) ? raw.user_id : userId,
     codigo_legado: raw.codigo_legado,
-    nombre: raw.nombre_actividad || (raw as any).nombre || 'Actividad sin nombre',
+    nombre: truncar(raw.nombre_actividad || (raw as any).nombre, 255) || 'Actividad sin nombre',
     tipo_registro: tipoRegistroNormalizado(raw),
     categoria_vida: raw.categoria_vida,
     meta_macro_nombre: raw.meta_macro_nombre?.trim() || null,
@@ -636,7 +646,7 @@ export function sanitizarActividadPayload(raw: ActividadPersonal, userId: string
     proxima_fecha_programada: sanitizeDate((raw as any).proxima_fecha_programada),
     historial_fechas: Array.isArray(raw.historial_fechas) ? raw.historial_fechas : [],
     actividad_padre_id: isUuid(raw.actividad_padre_id) ? raw.actividad_padre_id : null,
-    notas_checklist: raw.notas_checklist || '',
+    notas_checklist: raw.notas_checklist ? truncar(raw.notas_checklist, 4000) : '',
     monto_gasto_asociado: Math.max(0, Number(raw.monto_gasto_asociado) || 0),
     version: Math.max(1, Number((raw as any).version) || 1),
     sync_status: 'synced',

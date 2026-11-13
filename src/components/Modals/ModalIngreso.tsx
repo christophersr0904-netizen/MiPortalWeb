@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { crearIngreso, actualizarIngreso, eliminarIngreso } from '../../services/ingresosService';
+import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 
 export interface ModalIngresoProps {
   isOpen: boolean;
@@ -88,7 +89,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
       setTipoCambio(1.0);
       setCategoriaIngreso('Sueldo_Nomina');
       setProyectoAsociado('PERSONAL');
-      const hoy = new Date().toISOString().split('T')[0];
+      const hoy = formatFechaIsoLocal(new Date());
       setFecha(hoy);
       setHora('09:00');
       setFrecuencia('UNICA');
@@ -101,7 +102,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
   // Autoconmutar a PROGRAMADO si la fecha es futura
   const handleFechaChange = (nuevaFecha: string) => {
     setFecha(nuevaFecha);
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = formatFechaIsoLocal(new Date());
     if (nuevaFecha > hoy) {
       setModoDual('PROGRAMADO');
     }
@@ -120,12 +121,10 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
     }
     setErrorMsg(null);
 
-    const nowIso = new Date().toISOString();
-
     const payloadDatos: Partial<IngresoRecord> = {
       tipo_origen: proyectoAsociado === 'PERSONAL' ? 'LIBRE_CORRIENTE' : 'PROYECTO',
       categoria_ingreso: categoriaIngreso,
-      fecha_ingreso: fecha || nowIso.split('T')[0],
+      fecha_ingreso: fecha || formatFechaIsoLocal(new Date()),
       descripcion_ingreso: descripcion.trim(),
       moneda_original: moneda,
       monto_original: montoNum,

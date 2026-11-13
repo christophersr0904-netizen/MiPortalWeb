@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { createPortal } from 'react-dom';
 import {
   FolderKanban,
@@ -74,6 +74,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   // Sidebar State
   const [sidebarColapsado, setSidebarColapsado] = useState(false);
   const [busquedaProyecto, setBusquedaProyecto] = useState('');
+  const deferredBusquedaProyecto = useDeferredValue(busquedaProyecto);
   const [filtroTipoProyecto, setFiltroTipoProyecto] = useState<string>('');
   const [proyectoSeleccionadoCodigo, setProyectoSeleccionadoCodigo] = useState<string | null>(null);
 
@@ -84,6 +85,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   // Fila 2 State: Filtros Multidimensionales y Ordenamiento
   const [criterioOrden, setCriterioOrden] = useState<SortFilter>('PRIORITY');
   const [busquedaTarea, setBusquedaTarea] = useState('');
+  const deferredBusquedaTarea = useDeferredValue(busquedaTarea);
   const [filtroHito, setFiltroHito] = useState('');
   const [filtroPrioridad, setFiltroPrioridad] = useState('');
   const [filtroEnergia, setFiltroEnergia] = useState('');
@@ -426,11 +428,13 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
         const kanbanMs = (t4 - t3).toFixed(2);
         const totalMs = (t4 - t0).toFixed(2);
 
-        console.log(
-          `%c[Telemetría PMO]%c Bootstrap: ${bootstrapMs}ms | Dexie I/O: ${dexieMs}ms | Kanban Render: ${kanbanMs}ms | Total: ${totalMs}ms`,
-          'color: #38bdf8; font-weight: bold; background: #0D1526; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.4);',
-          'color: #94a3b8; font-weight: normal; font-family: monospace;'
-        );
+        if (import.meta.env.DEV) {
+          console.log(
+            `%c[Telemetría PMO]%c Bootstrap: ${bootstrapMs}ms | Dexie I/O: ${dexieMs}ms | Kanban Render: ${kanbanMs}ms | Total: ${totalMs}ms`,
+            'color: #38bdf8; font-weight: bold; background: #0D1526; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.4);',
+            'color: #94a3b8; font-weight: normal; font-family: monospace;'
+          );
+        }
 
         if (typeof window !== 'undefined') {
           (window as any).__PMO_TELEMETRIA__ = {
@@ -504,12 +508,12 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     return proyectos.filter((p) => {
       const coincideTipo = coincideCategoriaIniciativa(p.tipo_iniciativa, filtroTipoProyecto);
       const coincideBusqueda =
-        !busquedaProyecto ||
-        p.nombre.toLowerCase().includes(busquedaProyecto.toLowerCase()) ||
-        p.codigo_legado.toLowerCase().includes(busquedaProyecto.toLowerCase());
+        !deferredBusquedaProyecto ||
+        p.nombre.toLowerCase().includes(deferredBusquedaProyecto.toLowerCase()) ||
+        p.codigo_legado.toLowerCase().includes(deferredBusquedaProyecto.toLowerCase());
       return coincideTipo && coincideBusqueda;
     });
-  }, [proyectos, filtroTipoProyecto, busquedaProyecto]);
+  }, [proyectos, filtroTipoProyecto, deferredBusquedaProyecto]);
 
   // Proyecto activo seleccionado
   const proyectoActivo = proyectos.find((p) => p.codigo_legado === proyectoSeleccionadoCodigo);
@@ -575,8 +579,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
       }
 
       // 3. Buscador libre
-      if (busquedaTarea.trim()) {
-        const query = busquedaTarea.toLowerCase();
+      if (deferredBusquedaTarea.trim()) {
+        const query = deferredBusquedaTarea.toLowerCase();
         const coincideNombre = t.nombre.toLowerCase().includes(query);
         const coincideCodigo = t.codigo_legado.toLowerCase().includes(query);
         const coincideResp = t.responsable ? t.responsable.toLowerCase().includes(query) : false;
@@ -641,7 +645,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     tareas,
     proyectoSeleccionadoCodigo,
     filtroTemporal,
-    busquedaTarea,
+    deferredBusquedaTarea,
     filtroHito,
     filtroPrioridad,
     filtroEnergia,

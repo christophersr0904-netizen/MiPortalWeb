@@ -155,13 +155,15 @@ export const SeccionNotasVinculadasModal: React.FC<SeccionNotasVinculadasModalPr
       )}
 
       {/* Modal de Vinculación */}
-      <ModalVincularEntidades
-        isOpen={modalVincularAbierto}
-        onClose={() => setModalVincularAbierto(false)}
-        codigoEntidad={codigoEntidad}
-        tipoEntidad={tipoEntidad}
-        tituloEntidad={tituloEntidad}
-      />
+      {modalVincularAbierto && (
+        <ModalVincularEntidades
+          isOpen={modalVincularAbierto}
+          onClose={() => setModalVincularAbierto(false)}
+          codigoEntidad={codigoEntidad}
+          tipoEntidad={tipoEntidad}
+          tituloEntidad={tituloEntidad}
+        />
+      )}
 
       {/* Editor Modal de la Nota */}
       {notaParaEditar && (

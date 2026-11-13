@@ -1410,5 +1410,39 @@ export async function generarCodigoCorrelativoSeguro(
   }
 }
 
+/**
+ * REQ-OPT-46-EXEC: Sanitizador estricto de URLs externas para enlaces <a href>.
+ * Bloquea esquemas ejecutables o peligrosos (javascript:, data:, vbscript:, file:)
+ * y garantiza protocolos web seguros (http://, https://, mailto:).
+ */
+export function sanitizarUrlExterna(url?: string | null): string | undefined {
+  if (!url || typeof url !== 'string') return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+
+  // Bloqueo explícito de esquemas ejecutables o peligrosos
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('vbscript:') ||
+    lower.startsWith('file:')
+  ) {
+    return undefined;
+  }
+
+  // Permitir protocolos seguros estándar
+  if (/^(https?:\/\/|mailto:)/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Si no tiene protocolo pero parece dominio web válido (ej. drive.google.com/...)
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(\/.*)?$/i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+
+  return undefined;
+}
+
 
 

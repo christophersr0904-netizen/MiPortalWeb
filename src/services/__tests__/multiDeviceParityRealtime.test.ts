@@ -17,7 +17,8 @@ import {
   sanitizarSubtareaInbound,
   sanitizarActividadPayload,
   sanitizarTareaPayload,
-  sanitizarNotaPayload
+  sanitizarNotaPayload,
+  truncar
 } from '../syncPayloadSanitizer';
 import { syncManager } from '../syncManager';
 import { db } from '../../db/db';
@@ -224,6 +225,31 @@ describe('REQ-SYNC-41-EXEC: Blindaje Multi-Dispositivo en Tiempo Real', () => {
           })
         );
       }
+    });
+  });
+
+  describe('5. Truncamiento Defensivo y Prevención DoS [REQ-OPT-46-EXEC]', () => {
+    it('trunca strings largos al límite especificado y limpia espacios en extremos', () => {
+      const muyLargo = 'a'.repeat(500);
+      expect(truncar(muyLargo, 255)).toHaveLength(255);
+      expect(truncar('   texto normal   ', 255)).toBe('texto normal');
+      expect(truncar('', 255)).toBe('');
+      expect(truncar(null, 255)).toBe('');
+      expect(truncar(undefined, 255)).toBe('');
+    });
+
+    it('sanitizarTareaPayload trunca nombre_tarea_actividad a 255 caracteres y notas a 4000', () => {
+      const tareaSobredimensionada: any = {
+        id: '11111111-1111-1111-1111-111111111111',
+        user_id: '00000000-0000-0000-0000-000000000001',
+        codigo_legado: 'TAR-999',
+        nombre_tarea_actividad: 'T'.repeat(800),
+        notas_impedimentos: 'N'.repeat(10000),
+        proyecto_codigo: 'PRO-001'
+      };
+      const payload = sanitizarTareaPayload(tareaSobredimensionada, new Map([['PRO-001', 'proy-uuid-1']]), new Map());
+      expect(payload.nombre_tarea_actividad).toHaveLength(255);
+      expect(payload.notas_impedimentos).toHaveLength(4000);
     });
   });
 });

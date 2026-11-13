@@ -229,13 +229,15 @@ export const BadgeNotasVinculadas: React.FC<BadgeNotasVinculadasProps> = ({
       )}
 
       {/* Modal de Vinculación */}
-      <ModalVincularEntidades
-        isOpen={modalVincularAbierto}
-        onClose={() => setModalVincularAbierto(false)}
-        codigoEntidad={codigo}
-        tipoEntidad={tipo}
-        tituloEntidad={tituloEntidad}
-      />
+      {modalVincularAbierto && (
+        <ModalVincularEntidades
+          isOpen={modalVincularAbierto}
+          onClose={() => setModalVincularAbierto(false)}
+          codigoEntidad={codigo}
+          tipoEntidad={tipo}
+          tituloEntidad={tituloEntidad}
+        />
+      )}
 
       {/* Editor Modal de Respaldo */}
       {notaParaEditar && (

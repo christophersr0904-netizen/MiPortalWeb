@@ -8,7 +8,7 @@ import {
   Target, ListTodo, Repeat, TrendingUp
 } from 'lucide-react';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
-import { formatFechaIsoLocal } from '../../utils/timeFormatters';
+import { formatFechaIsoLocal, formatearFechaDdMmYyyy, formatearFechaDdMm } from '../../utils/timeFormatters';
 import { esActividadCompletadaHoy } from '../../services/habitosService';
 
 /** Traduce el código técnico de recurrencia a etiqueta humana para tooltips. */
@@ -29,13 +29,7 @@ const formatearCicloLegible = (frecuencia?: string, regla?: string): string => {
 
 /** Formatea ISO YYYY-MM-DD a DD/MM compacto para reducir texto en tarjetas móviles. */
 const formatearFechaCortaHabito = (fechaIso?: string): string => {
-  if (!fechaIso) return 'S/F';
-  const clean = fechaIso.split(/[\sT]/)[0];
-  const partes = clean.split('-');
-  if (partes.length === 3) {
-    return `${partes[2]}/${partes[1]}`;
-  }
-  return clean;
+  return formatearFechaDdMm(fechaIso, 'S/F');
 };
 
 export const renderIconoCategoriaVida = (icono: string, className = "w-3 h-3") => {
@@ -520,7 +514,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           {esCompletada ? (
             <span
               className="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono tabular-nums"
-              title={`Próxima ejecución: ${actividad.proxima_fecha_programada || 'Mañana'}`}
+              title={`Próxima ejecución: ${actividad.proxima_fecha_programada ? formatearFechaDdMmYyyy(actividad.proxima_fecha_programada) : 'Mañana'}`}
             >
               <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} />
               <span>{actividad.proxima_fecha_programada ? formatearFechaCortaHabito(actividad.proxima_fecha_programada) : 'OK'}</span>
@@ -528,7 +522,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           ) : (
             <span
               className="inline-flex items-center gap-1 font-mono tabular-nums text-xs text-slate-400"
-              title={`Fecha programada: ${actividad.proxima_fecha_programada || actividad.fecha_programada || 'Sin fecha'}`}
+              title={`Fecha programada: ${actividad.proxima_fecha_programada ? formatearFechaDdMmYyyy(actividad.proxima_fecha_programada) : (actividad.fecha_programada ? formatearFechaDdMmYyyy(actividad.fecha_programada) : 'Sin fecha')}`}
             >
               <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
               <span>

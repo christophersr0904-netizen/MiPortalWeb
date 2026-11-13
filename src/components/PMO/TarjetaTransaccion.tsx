@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { Check, Edit3, Trash2 } from 'lucide-react';
+import { formatearFechaDdMmYyyy } from '../../utils/timeFormatters';
 
 export interface TransaccionUnificada {
   id: string;
@@ -48,7 +49,7 @@ const TarjetaTransaccionComponent: React.FC<TarjetaTransaccionProps> = ({
               {trx.codigo}
             </span>
             <span className="text-[10px] text-slate-400 font-mono tabular-nums">
-              {trx.fecha}
+              {formatearFechaDdMmYyyy(trx.fecha)}
             </span>
           </div>
 

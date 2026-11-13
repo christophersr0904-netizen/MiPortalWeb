@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom';
 import { X, Building, Calendar, DollarSign, Layers } from 'lucide-react';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { crearCuota } from '../../services/cuotasService';
+import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 
 export interface ModalNuevoPlanCuotasProps {
   isOpen: boolean;
@@ -41,7 +42,7 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
     setTotalCuotas(12);
     setMontoCuota(0);
     setMoneda('PEN');
-    setFechaVencimiento(new Date().toISOString().split('T')[0]);
+    setFechaVencimiento(formatFechaIsoLocal(new Date()));
     setErrorMsg(null);
   }, [isOpen]);
 
@@ -65,15 +66,13 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
     }
     setErrorMsg(null);
 
-    const nowIso = new Date().toISOString();
-
     await crearCuota({
       entidad_financiera: entidad.trim(),
       numero_cuota: 1,
       total_cuotas: totalCuotas,
       monto_cuota: montoCuota,
       moneda: moneda,
-      fecha_vencimiento: fechaVencimiento || nowIso.split('T')[0],
+      fecha_vencimiento: fechaVencimiento || formatFechaIsoLocal(new Date()),
       estado_cuota: 'PENDIENTE'
     });
 

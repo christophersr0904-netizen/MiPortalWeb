@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Tag, ExternalLink, CheckCircle2, Clock } from 'lucide-react';
 import type { GastoRecord } from '../../../types';
+import { sanitizarUrlExterna } from '../../../utils/entityNormalizer';
 
 export interface NodoGastoProps {
   data: {
@@ -53,9 +54,9 @@ export const NodoGasto: React.FC<NodoGastoProps> = memo(({ data }) => {
         </span>
 
         <div className="flex items-center gap-1 shrink-0">
-          {gasto.comprobante_url && (
+          {sanitizarUrlExterna(gasto.comprobante_url) && (
             <a
-              href={gasto.comprobante_url}
+              href={sanitizarUrlExterna(gasto.comprobante_url)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-indigo-400 hover:text-indigo-300 flex items-center gap-0.5"

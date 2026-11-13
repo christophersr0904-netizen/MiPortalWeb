@@ -82,3 +82,69 @@ export function formatFechaIsoLocal(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+/**
+ * Formatea una fecha ISO o cadena estándar a formato canónico 'DD/MM/AAAA' (ej: '15/11/2026').
+ * Acepta fechas ISO ('2026-11-15', '2026-11-15T08:00:00Z') o Date objects.
+ */
+export function formatearFechaDdMmYyyy(fecha?: string | Date | null, fallback = '-'): string {
+  if (!fecha) return fallback;
+  if (fecha instanceof Date) {
+    if (isNaN(fecha.getTime())) return fallback;
+    const d = String(fecha.getDate()).padStart(2, '0');
+    const m = String(fecha.getMonth() + 1).padStart(2, '0');
+    const y = fecha.getFullYear();
+    return `${d}/${m}/${y}`;
+  }
+  const clean = String(fecha).trim().split(/[\sT]/)[0];
+  if (!clean) return fallback;
+
+  // Si ya viene como DD/MM/AAAA
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(clean)) {
+    const [d, m, y] = clean.split('/');
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+  }
+
+  // Si viene como YYYY-MM-DD
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(clean)) {
+    const [y, m, d] = clean.split('-');
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+  }
+
+  // Si viene como YYYY/MM/DD
+  if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(clean)) {
+    const [y, m, d] = clean.split('/');
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+  }
+
+  return clean;
+}
+
+/**
+ * Formatea una fecha a representación corta 'DD/MM' (ej: '15/11').
+ */
+export function formatearFechaDdMm(fecha?: string | Date | null, fallback = 'S/F'): string {
+  if (!fecha) return fallback;
+  const full = formatearFechaDdMmYyyy(fecha, '');
+  if (!full) return fallback;
+  const partes = full.split('/');
+  return partes.length >= 2 ? `${partes[0]}/${partes[1]}` : full;
+}
+
+/**
+ * Convierte una fecha 'DD/MM/AAAA' a formato canónico ISO 'YYYY-MM-DD'.
+ */
+export function parsearFechaDdMmYyyyAIso(fechaDdMmYyyy?: string | null): string {
+  if (!fechaDdMmYyyy) return '';
+  const clean = String(fechaDdMmYyyy).trim().split(/[\sT]/)[0];
+  if (!clean) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
+  if (clean.includes('/')) {
+    const [d, m, y] = clean.split('/');
+    if (d && m && y && y.length === 4) {
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+  }
+  return '';
+}
+
+

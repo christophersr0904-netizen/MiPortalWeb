@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { resolverDependenciasTarea, type CanonicalTarea } from '../../utils/entityNormalizer';
+import { formatearFechaDdMmYyyy, formatearFechaDdMm, formatFechaIsoLocal } from '../../utils/timeFormatters';
 import type { SubtareaPaso } from '../../types';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
 import {
@@ -90,7 +91,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
   }
 
   // Vencimiento y formateo
-  const hoyIso = new Date().toISOString().split('T')[0];
+  const hoyIso = formatFechaIsoLocal(new Date());
   const estaVencida = Boolean(
     tar.fecha_programada &&
     tar.fecha_programada.split('T')[0] < hoyIso &&
@@ -98,13 +99,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
   );
 
   const formatFechaCorta = (fechaIso?: string) => {
-    if (!fechaIso) return 'S/F';
-    const clean = fechaIso.split('T')[0];
-    const partes = clean.split('-');
-    if (partes.length === 3) {
-      return `${partes[2]}/${partes[1]}`;
-    }
-    return clean;
+    return formatearFechaDdMm(fechaIso, 'S/F');
   };
 
   const rawDep = tar.id_dependencia || tar.raw?.id_dependencia || tar.raw?.ID_Dependencia || tar.raw?.dependencia_tarea_id;
@@ -318,7 +313,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
             }`}
             title={
               tar.fecha_programada
-                ? `${estaVencida ? 'Vencida' : 'Vencimiento'}: ${tar.fecha_programada.split('T')[0]}`
+                ? `${estaVencida ? 'Vencida' : 'Vencimiento'}: ${formatearFechaDdMmYyyy(tar.fecha_programada)}`
                 : 'Sin fecha límite'
             }
           >

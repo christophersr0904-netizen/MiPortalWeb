@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import {
@@ -42,7 +42,8 @@ import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import {
   convertirStringToHorasDecimal,
   convertirHorasDecimalAString,
-  formatearDuracionLegible
+  formatearDuracionLegible,
+  formatFechaIsoLocal
 } from '../../utils/timeFormatters';
 
 export {
@@ -152,7 +153,17 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
   // Subtareas en memoria (para modo creación o staging)
   const [subtareasLocal, setSubtareasLocal] = useState<Array<{ id: string; descripcion_paso: string; completado: boolean }>>([]);
   const [nuevoPasoTexto, setNuevoPasoTexto] = useState('');
-  const [errorMsgSubtarea, setErrorMsgSubtarea] = useState<string | null>(null);
+  const errorMsgSubtareaState = useState<string | null>(null);
+  const [errorMsgSubtarea, setErrorMsgSubtarea] = errorMsgSubtareaState;
+
+  // Filtrado reactivo de hitos según el proyecto seleccionado en el formulario
+  const hitosDelProyecto = useMemo(() => {
+    if (!hitos || !proyectoCodigo) return [];
+    const proyMatch = proyectos.find((p) => p.codigo_legado === proyectoCodigo || p.id === proyectoCodigo);
+    const pId = proyMatch?.id || proyectoCodigo;
+    const pCod = proyMatch?.codigo_legado || proyectoCodigo;
+    return hitos.filter((h) => h.proyecto_id === pId || h.proyecto_id === pCod || (h as any).proyecto_codigo === pCod);
+  }, [hitos, proyectos, proyectoCodigo]);
 
   // Sincronizar datos al abrir o cambiar tareaId
   useEffect(() => {
@@ -262,7 +273,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       setHorasReales(0);
       setHorasEstimadasStr('1:00');
       setHorasRealesStr('0:00');
-      setFechaProgramada(now.toISOString().split('T')[0]);
+      setFechaProgramada(formatFechaIsoLocal(now));
       setHoraInicio('09:00');
       setAgendadoCalendar('Sí');
       setEsMav(false);
@@ -474,14 +485,14 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             monto_pen: costoPenCalculado,
             categoria_gasto: gastoCategoria,
             descripcion_gasto: gastoConcepto.trim() || `Gasto en ${nombre.trim()}`,
-            fecha_gasto: fechaProgramada || nowIso.split('T')[0]
+            fecha_gasto: fechaProgramada || formatFechaIsoLocal(new Date())
           });
         } else {
           await crearGasto({
             tipo_origen: 'TAREA',
             id_origen_vinculado: codTarFinal,
             categoria_gasto: gastoCategoria,
-            fecha_gasto: fechaProgramada || nowIso.split('T')[0],
+            fecha_gasto: fechaProgramada || formatFechaIsoLocal(new Date()),
             descripcion_gasto: gastoConcepto.trim() || `Gasto en ${nombre.trim()}`,
             moneda_original: gastoMoneda,
             monto_original: montoGastoFinal,
@@ -600,45 +611,59 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
 
               <span className="text-slate-600 select-none shrink-0">|</span>
 
-              {/* 2. Píldora de Proyecto con Ticker Marquee en Hover */}
-              {(() => {
-                const p = proyectos.find((item) => item.codigo_legado === proyectoCodigo || item.id === proyectoCodigo);
-                const pNombre = p ? `${p.codigo_legado} · ${p.nombre_proyecto}` : (proyectoCodigo || 'Sin Proyecto');
-                return (
-                  <div
-                    className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 px-2.5 py-0.5 text-xs text-slate-300 select-none max-w-[190px] sm:max-w-[220px] overflow-hidden whitespace-nowrap group/ticker shrink-0 cursor-default"
-                    title={pNombre}
-                  >
-                    <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                    <div className="overflow-hidden relative max-w-full">
-                      <span className="inline-block transition-transform duration-300 ease-out group-hover/ticker:animate-marquee">
-                        {pNombre}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* 2. Selector de Proyecto interactivo con estilo Cobalt */}
+              <div
+                className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 px-2 py-0.5 text-xs text-sky-300 max-w-[210px] sm:max-w-[240px] shrink-0 hover:border-sky-500/40 transition-colors"
+                title="Seleccionar Proyecto"
+              >
+                <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <select
+                  value={proyectoCodigo}
+                  onChange={(e) => {
+                    setProyectoCodigo(e.target.value);
+                    setHitoCodigo('');
+                  }}
+                  className="bg-transparent text-xs text-sky-300 font-mono outline-none cursor-pointer w-full truncate border-none focus:ring-0 p-0"
+                >
+                  {proyectos.map((p) => {
+                    const cod = p.codigo_legado || p.id;
+                    return (
+                      <option key={p.id} value={cod} className="bg-slate-900 text-slate-200">
+                        {p.codigo_legado} · {p.nombre_proyecto}
+                      </option>
+                    );
+                  })}
+                  {proyectos.length === 0 && (
+                    <option value="" className="bg-slate-900 text-slate-400">Sin Proyectos</option>
+                  )}
+                </select>
+              </div>
 
               <span className="text-slate-600 select-none shrink-0">›</span>
 
-              {/* 3. Píldora de Paquete WBS con Ticker Marquee en Hover */}
-              {(() => {
-                const h = hitos.find((item) => item.codigo_legado === hitoCodigo || item.id === hitoCodigo);
-                const hNombre = h ? `${h.codigo_legado} · ${h.nombre_elemento}` : (hitoCodigo || 'Sin Paquete WBS');
-                return (
-                  <div
-                    className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 px-2.5 py-0.5 text-xs text-slate-300 select-none max-w-[160px] sm:max-w-[200px] overflow-hidden whitespace-nowrap group/ticker shrink-0 cursor-default"
-                    title={hNombre}
-                  >
-                    <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    <div className="overflow-hidden relative max-w-full">
-                      <span className="inline-block transition-transform duration-300 ease-out group-hover/ticker:animate-marquee">
-                        {hNombre}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
+              {/* 3. Selector de Paquete WBS interactivo con estilo Cobalt */}
+              <div
+                className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 px-2 py-0.5 text-xs text-purple-300 max-w-[190px] sm:max-w-[220px] shrink-0 hover:border-purple-500/40 transition-colors"
+                title="Seleccionar Paquete de Trabajo / Hito WBS"
+              >
+                <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <select
+                  value={hitoCodigo}
+                  onChange={(e) => setHitoCodigo(e.target.value)}
+                  className="bg-transparent text-xs text-purple-300 font-mono outline-none cursor-pointer w-full truncate border-none focus:ring-0 p-0"
+                >
+                  <option value="" className="bg-slate-900 text-slate-400">Sin Paquete WBS</option>
+                  {hitosDelProyecto.map((h) => {
+                    const cod = h.codigo_legado || h.id;
+                    const nombre = h.nombre_elemento || h.nombre_hito || cod;
+                    return (
+                      <option key={h.id} value={cod} className="bg-slate-900 text-slate-200">
+                        {h.codigo_legado} · {nombre}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
 
               <span className="text-slate-600 select-none shrink-0">›</span>
 

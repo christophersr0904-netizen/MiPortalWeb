@@ -1,4 +1,5 @@
 import React from 'react';
+import { sanitizarUrlExterna } from '../../utils/entityNormalizer';
 import {
   Zap,
   CheckCircle2,
@@ -200,10 +201,10 @@ export const TooltipFlotanteWBS: React.FC<TooltipFlotanteWBSProps> = ({
         )}
 
         {/* Enlace de comprobante si existe */}
-        {comprobanteUrl && (
+        {sanitizarUrlExterna(comprobanteUrl) && (
           <div className="pt-0.5">
             <a
-              href={comprobanteUrl}
+              href={sanitizarUrlExterna(comprobanteUrl)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}

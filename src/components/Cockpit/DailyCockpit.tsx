@@ -849,11 +849,12 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
     let cancelado = false;
 
+    if (!esEntornoEscritorioLocal()) {
+      setHayWidgetDeEscritorioActivo(false);
+      return;
+    }
+
     const pingLoopbackDesktop = async () => {
-      if (!esEntornoEscritorioLocal()) {
-        if (!cancelado) setHayWidgetDeEscritorioActivo(false);
-        return;
-      }
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 300);
 
@@ -882,9 +883,9 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       }
     };
 
-    // Ping inmediato al montar y recurrente cada 1200ms
+    // Ping inmediato al montar y recurrente cada 3000ms en entorno local
     pingLoopbackDesktop();
-    const timer = setInterval(pingLoopbackDesktop, 1200);
+    const timer = setInterval(pingLoopbackDesktop, 3000);
 
     return () => {
       cancelado = true;
@@ -1070,7 +1071,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       setGuardandoTareaRapida(true);
       const fechaHoy = formatFechaIsoLocal(new Date());
 
-      await crearTarea({
+      const { calendarResult } = await crearTarea({
         nombre_tarea_actividad: texto,
         proyecto_codigo: proyectoQuickAdd || 'PRO-001',
         hito_codigo: hitoQuickAdd || undefined,
@@ -1083,10 +1084,29 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
         agendado_calendar: 'Sí'
       });
 
-      mostrarToastCobalt(
-        `Tarea creada en ${proyectoQuickAdd || 'PRO-001'} con sync en segundo plano.`,
-        'success'
-      );
+      if (calendarResult?.success && calendarResult.mode === 'API_V3') {
+        mostrarToastCobalt(
+          calendarResult.message || `Tarea creada y sincronizada en Google Calendar.`,
+          'success'
+        );
+      } else if (calendarResult?.requiereAuth) {
+        mostrarToastCobalt(
+          'Tarea guardada localmente · Conecta Google Calendar para sync automático.',
+          'warning',
+          4000
+        );
+      } else if (calendarResult && !calendarResult.success && calendarResult.error) {
+        mostrarToastCobalt(
+          `Tarea guardada · ${calendarResult.error}`,
+          'warning',
+          4000
+        );
+      } else {
+        mostrarToastCobalt(
+          `Tarea creada en ${proyectoQuickAdd || 'PRO-001'} con sync en segundo plano.`,
+          'success'
+        );
+      }
 
       setInputQuickAddTarea('');
       setQuickAddTareaAbierto(false);

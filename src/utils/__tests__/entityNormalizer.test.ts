@@ -17,7 +17,8 @@ import {
   deduplicarMetasPlanes,
   deduplicarHitosPlan,
   deduplicarVinculosMeta,
-  resolverDependenciasTarea
+  resolverDependenciasTarea,
+  sanitizarUrlExterna
 } from '../entityNormalizer';
 import initialSeed from '../../db/initialSeed.json';
 
@@ -535,6 +536,33 @@ describe('REQ-1TO1-001: EntityNormalizer and Seed Integrity', () => {
         id_dependencia: 'tar-001; TAR-014, user@google.com',
       });
       expect(multiple.id_dependencia).toBe('TAR-001, TAR-014');
+    });
+  });
+
+  describe('sanitizarUrlExterna [REQ-OPT-46-EXEC]', () => {
+    it('bloquea URLs con esquemas javascript:, data:, vbscript: o file:', () => {
+      expect(sanitizarUrlExterna('javascript:alert(1)')).toBeUndefined();
+      expect(sanitizarUrlExterna('JAVASCRIPT:alert("xss")')).toBeUndefined();
+      expect(sanitizarUrlExterna('data:text/html,<script>alert(1)</script>')).toBeUndefined();
+      expect(sanitizarUrlExterna('vbscript:msgbox("xss")')).toBeUndefined();
+      expect(sanitizarUrlExterna('file:///etc/passwd')).toBeUndefined();
+    });
+
+    it('permite y conserva URLs válidas con http://, https:// y mailto:', () => {
+      expect(sanitizarUrlExterna('https://drive.google.com/drive/folders/xyz')).toBe('https://drive.google.com/drive/folders/xyz');
+      expect(sanitizarUrlExterna('http://localhost:5173')).toBe('http://localhost:5173');
+      expect(sanitizarUrlExterna('mailto:soporte@pmo.pe')).toBe('mailto:soporte@pmo.pe');
+    });
+
+    it('autocompleta con https:// si es un dominio web válido sin esquema', () => {
+      expect(sanitizarUrlExterna('drive.google.com/folder')).toBe('https://drive.google.com/folder');
+      expect(sanitizarUrlExterna('amazon.com/item')).toBe('https://amazon.com/item');
+    });
+
+    it('retorna undefined ante valores vacíos, nulos o no textuales', () => {
+      expect(sanitizarUrlExterna('')).toBeUndefined();
+      expect(sanitizarUrlExterna(null)).toBeUndefined();
+      expect(sanitizarUrlExterna(undefined)).toBeUndefined();
     });
   });
 });

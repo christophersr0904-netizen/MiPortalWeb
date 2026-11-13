@@ -10,6 +10,7 @@
 
 import React, { memo, useMemo } from 'react';
 import { Building, Wrench, Check, CreditCard } from 'lucide-react';
+import { formatearFechaDdMmYyyy } from '../../utils/timeFormatters';
 
 export interface TabControlCuotasProps {
   cuotasRaw: any[];
@@ -181,7 +182,7 @@ const TabControlCuotasComponent: React.FC<TabControlCuotasProps> = ({
                 <div className="flex justify-between items-center text-xs text-slate-400 pt-2 border-t border-slate-800">
                   <div>
                     <span>Vencimiento: </span>
-                    <span className="font-mono tabular-nums font-bold text-slate-200">{c.fecha_vencimiento}</span>
+                    <span className="font-mono tabular-nums font-bold text-slate-200">{formatearFechaDdMmYyyy(c.fecha_vencimiento)}</span>
                   </div>
                   <button
                     type="button"

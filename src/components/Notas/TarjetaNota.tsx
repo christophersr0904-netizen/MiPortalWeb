@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import type { NotaRecord, VinculoEntidad } from '../../types';
 import { actualizarNota } from '../../services/notasService';
-import { serializarNotaATextoPlano } from '../../utils/entityNormalizer';
+import { serializarNotaATextoPlano, sanitizarUrlExterna } from '../../utils/entityNormalizer';
 import { toastCobalt } from '../../utils/toastCobalt';
 import {
   Pin,
@@ -529,9 +529,9 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
 
             {/* Acciones de Wishlist */}
             <div className="flex items-center justify-between pt-1.5 border-t border-purple-900/50 gap-2">
-              {nota.wishlist_json.urlReferencia ? (
+              {sanitizarUrlExterna(nota.wishlist_json.urlReferencia) ? (
                 <a
-                  href={nota.wishlist_json.urlReferencia}
+                  href={sanitizarUrlExterna(nota.wishlist_json.urlReferencia)}
                   target="_blank"
                   rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}

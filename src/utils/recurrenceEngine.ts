@@ -55,13 +55,14 @@ export function normalizarFechaIso(raw?: string | null): string {
     return parteFecha;
   }
 
-  if (parteFecha.includes('/')) {
-    const trozos = parteFecha.split('/');
+  if (parteFecha.includes('/') || (parteFecha.includes('-') && /^\d{1,2}-\d{1,2}-\d{4}$/.test(parteFecha))) {
+    const separador = parteFecha.includes('/') ? '/' : '-';
+    const trozos = parteFecha.split(separador);
     if (trozos.length === 3) {
       if (trozos[0].length === 4) {
         return `${trozos[0]}-${trozos[1].padStart(2, '0')}-${trozos[2].padStart(2, '0')}`;
       }
-      const [m, d, y] = trozos;
+      const [d, m, y] = trozos;
       if (y && m && d) {
         return `${y.padStart(4, '0')}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
       }

@@ -44,7 +44,7 @@ import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
 import { ModalExportarPdf } from '../Modals/ModalExportarPdf';
 import { ModalNuevoHito } from '../Modals/ModalNuevoHito';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
-import { deduplicarPorCodigoCanonico } from '../../utils/entityNormalizer';
+import { deduplicarPorCodigoCanonico, sanitizarUrlExterna } from '../../utils/entityNormalizer';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import type { GastoRecord, TareaRecord, HitoWbsRecord, SubtareaPaso } from '../../types';
 
@@ -2546,9 +2546,9 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-slate-400">Expediente en Drive:</span>
-                  {proyectoActivo.alcance_detallado_url_drive ? (
+                  {sanitizarUrlExterna(proyectoActivo.alcance_detallado_url_drive) ? (
                     <a
-                      href={proyectoActivo.alcance_detallado_url_drive}
+                      href={sanitizarUrlExterna(proyectoActivo.alcance_detallado_url_drive)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-indigo-400 font-bold hover:underline inline-flex items-center gap-1"

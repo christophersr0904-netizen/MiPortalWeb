@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { ActividadPersonal, SubtareaPaso, CategoriaVida, MetaPlanRecord, TareaRecord } from '../types';
@@ -101,6 +101,7 @@ export function useHabitos() {
   const [syncState, setSyncState] = useState<SyncState>(syncManager.getStatus());
   const [filtroCategoria, setFiltroCategoria] = useState<CategoriaVida | 'TODOS'>('TODOS');
   const [filtroTexto, setFiltroTexto] = useState<string>('');
+  const deferredFiltroTexto = useDeferredValue(filtroTexto);
 
   useEffect(() => {
     return syncManager.subscribe((st) => setSyncState(st));
@@ -336,8 +337,8 @@ export function useHabitos() {
       if (filtroCategoria !== 'TODOS' && a.categoria_vida !== filtroCategoria) {
         return false;
       }
-      if (filtroTexto.trim()) {
-        const q = filtroTexto.toLowerCase().trim();
+      if (deferredFiltroTexto.trim()) {
+        const q = deferredFiltroTexto.toLowerCase().trim();
         const nom = (a.nombre_actividad || (a as any).nombre || (a as any).Nombre_Actividad || (a as any).Nombre || (a as any).titulo || '').toLowerCase();
         const macro = (a.meta_macro_nombre || '').toLowerCase();
         const cod = (a.codigo_legado || '').toLowerCase();
@@ -345,7 +346,7 @@ export function useHabitos() {
       }
       return true;
     });
-  }, [todasLasActividades, filtroCategoria, filtroTexto]);
+  }, [todasLasActividades, filtroCategoria, deferredFiltroTexto]);
 
   // Cálculo acumulativo en un solo pase O(N) de KPIs Bento
   const kpis = useMemo(() => {

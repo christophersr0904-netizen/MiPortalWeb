@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
+import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import type { TipoElementoWBS, HitoWbsRecord } from '../../types';
 
@@ -118,7 +119,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
       // Fecha límite sugerida: hoy + 14 días
       const hoy = new Date();
       hoy.setDate(hoy.getDate() + 14);
-      setFechaLimite(hoy.toISOString().split('T')[0]);
+      setFechaLimite(formatFechaIsoLocal(hoy));
 
       // Sugerir código WBS
       const totalExistentes = hitosExistentes.length;
@@ -175,7 +176,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
         nombre_elemento: nombre.trim(),
         estado: '01_Pendiente',
         peso_pct: pesoNormalizado,
-        fecha_limite: fechaLimite || new Date().toISOString().split('T')[0],
+        fecha_limite: fechaLimite || formatFechaIsoLocal(new Date()),
         presupuesto_asignado: presupuestoReal,
         duracion_estimada_dias: duracionReal,
         criterio_dod: criterioDod.trim() || undefined,
