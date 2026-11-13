@@ -974,7 +974,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     >
       <div
         id="modal-actividad-flow-card"
-        className="portal-surface elevation-3 w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/80 bg-[#0D1526] shadow-2xl relative transform-gpu transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        className="portal-surface elevation-3 w-full max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/80 bg-[#0D1526] shadow-2xl relative transform-gpu transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
       >
         {/* Drag handle móvil */}
         <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
@@ -1902,7 +1902,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     <button
                       type="button"
                       onClick={() => eliminarPaso(paso.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                      className="opacity-90 sm:opacity-0 sm:group-hover:opacity-100 min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1 text-slate-400 hover:text-rose-400 transition cursor-pointer flex items-center justify-center shrink-0"
                       title="Eliminar paso"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -1961,7 +1961,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
         </div>
 
         {/* 7. FOOTER DE ACCIONES */}
-        <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-800 bg-[#0D1526] flex items-center justify-between gap-3">
+        <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-800 bg-[#0D1526] flex items-center justify-between gap-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
           <div className="flex items-center gap-2">
             {actividadEditar && (
               <button

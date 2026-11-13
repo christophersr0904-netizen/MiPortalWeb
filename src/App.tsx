@@ -354,6 +354,19 @@ export const App: React.FC = () => {
       }
     }
 
+    // REQ-MOBILE-47-EXEC: Solicitar persistencia duradera para evitar desalojo de IndexedDB en iOS/Android
+    if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.persist === 'function') {
+      navigator.storage.persist().then((concedido) => {
+        if (import.meta.env.DEV) {
+          console.log(`[Storage] Persistencia IndexedDB concedida: ${concedido ? 'SÍ' : 'NO'}`);
+        }
+      }).catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn('[Storage] Error al solicitar persistencia de almacenamiento:', err);
+        }
+      });
+    }
+
     // Hidratar en frío si la base de datos Dexie está vacía o incompleta (I/O paralelo ultra-rápido)
     // En modo HUD / widget nativo de escritorio, priorizar snapshot del puente local antes de la semilla fría
     const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;

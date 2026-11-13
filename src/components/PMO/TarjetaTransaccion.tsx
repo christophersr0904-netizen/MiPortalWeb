@@ -86,8 +86,8 @@ const TarjetaTransaccionComponent: React.FC<TarjetaTransaccionProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Botones secundarios revelados en hover suave */}
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          {/* Botones secundarios ergonómicos táctiles (visibles en móvil, hover suave en desktop) */}
+          <div className="flex items-center gap-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
             {onEditar && (
               <button
                 type="button"
@@ -96,7 +96,7 @@ const TarjetaTransaccionComponent: React.FC<TarjetaTransaccionProps> = ({
                   onEditar(trx);
                 }}
                 title="Editar movimiento"
-                className="p-1 text-slate-400 hover:text-sky-400 rounded-lg transition-colors cursor-pointer"
+                className="min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1 text-slate-400 hover:text-sky-400 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
               >
                 <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
@@ -109,7 +109,7 @@ const TarjetaTransaccionComponent: React.FC<TarjetaTransaccionProps> = ({
                   onEliminar(trx);
                 }}
                 title="Eliminar movimiento (Deshacer disponible)"
-                className="p-1 text-slate-400 hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                className="min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1 text-slate-400 hover:text-rose-400 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
               >
                 <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>

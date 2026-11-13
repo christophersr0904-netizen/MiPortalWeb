@@ -112,13 +112,13 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
       id={`kanban-card-${tar.codigo_legado}`}
       data-id-tarea={tar.codigo_legado}
       data-task-id={tar.id}
-      draggable={true}
+      draggable={typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches}
       onDragStart={(e) => onDragStart(e, tar.id)}
       onDragEnd={onDragEnd}
       onMouseEnter={() => onMouseEnter(tar.codigo_legado)}
       onMouseLeave={onMouseLeave}
       onClick={() => onClick(tar.id, tar.estado)}
-      className={`kanban-card shrink-0 group relative bg-[#0D1526]/90 border border-slate-800/60 rounded-xl p-3 pl-3.5 shadow-sm hover:bg-[#0D1526] hover:border-sky-500/30 hover:shadow-[0_8px_25px_rgba(2,6,23,0.7),0_0_15px_rgba(56,189,248,0.08)] hover:-translate-y-0.5 active:scale-[0.985] transition-[transform,opacity,box-shadow,border-color,background-color] duration-150 ease-out transform-gpu cursor-grab active:cursor-grabbing select-none text-xs space-y-2 overflow-hidden ${
+      className={`kanban-card shrink-0 group relative bg-[#0D1526]/90 border border-slate-800/60 rounded-xl p-3 pl-3.5 shadow-sm hover:bg-[#0D1526] hover:border-sky-500/30 hover:shadow-[0_8px_25px_rgba(2,6,23,0.7),0_0_15px_rgba(56,189,248,0.08)] hover:-translate-y-0.5 active:scale-[0.985] transition-[transform,opacity,box-shadow,border-color,background-color] duration-150 ease-out transform-gpu cursor-grab active:cursor-grabbing select-none text-xs space-y-2 overflow-hidden touch-pan-y [touch-action:pan-y] ${
         isDragged
           ? 'opacity-40 scale-[1.02] rotate-1 border-dashed border-sky-400/90 ring-2 ring-sky-500/50 shadow-[0_20px_35px_-10px_rgba(2,6,23,0.9)] cursor-grabbing'
           : ''

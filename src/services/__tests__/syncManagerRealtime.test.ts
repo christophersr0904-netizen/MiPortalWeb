@@ -158,5 +158,43 @@ describe('REQ-SYS-010-REALTIME: Supabase Realtime, Filtro Anti-Eco y Debounce', 
       expect(syncManager.getStatus()).toBe('synced');
     });
   });
+
+  describe('5. Reconexión Móvil Proactiva (reconectarRealtimeSiEsNecesario)', () => {
+    it('reconecta el canal si realtimeChannel es nulo o su estado no es joined', () => {
+      const destroySpy = vi.spyOn(syncManager, 'destroyRealtimeSubscriptions');
+      const setupSpy = vi.spyOn(syncManager, 'setupRealtimeSubscriptions');
+
+      const mockChannel = {
+        on: vi.fn().mockReturnThis(),
+        subscribe: vi.fn().mockReturnThis(),
+        state: 'closed'
+      };
+      (syncManager as any).supabase = { channel: vi.fn().mockReturnValue(mockChannel) };
+      (syncManager as any).realtimeChannel = mockChannel;
+
+      syncManager.reconectarRealtimeSiEsNecesario();
+
+      expect(destroySpy).toHaveBeenCalledTimes(1);
+      expect(setupSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('no reconecta innecesariamente si el canal ya se encuentra en estado joined', () => {
+      const destroySpy = vi.spyOn(syncManager, 'destroyRealtimeSubscriptions');
+      const setupSpy = vi.spyOn(syncManager, 'setupRealtimeSubscriptions');
+
+      const mockChannel = {
+        on: vi.fn().mockReturnThis(),
+        subscribe: vi.fn().mockReturnThis(),
+        state: 'joined'
+      };
+      (syncManager as any).supabase = { channel: vi.fn().mockReturnValue(mockChannel) };
+      (syncManager as any).realtimeChannel = mockChannel;
+
+      syncManager.reconectarRealtimeSiEsNecesario();
+
+      expect(destroySpy).not.toHaveBeenCalled();
+      expect(setupSpy).not.toHaveBeenCalled();
+    });
+  });
 });
 

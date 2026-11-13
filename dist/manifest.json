@@ -26,35 +26,35 @@
       "name": "Capturar Idea (Voz)",
       "short_name": "Idea",
       "description": "Abrir captura rápida de ideas con entrada por voz",
-      "url": "/?action=nueva_idea",
+      "url": "./?action=nueva_idea",
       "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Nueva Tarea",
       "short_name": "Tarea",
       "description": "Crear nueva tarea en el tablero Kanban",
-      "url": "/?action=nueva_tarea",
+      "url": "./?action=nueva_tarea",
       "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Registrar Gasto",
       "short_name": "Gasto",
       "description": "Registrar un gasto o compromiso financiero",
-      "url": "/?action=nuevo_gasto",
+      "url": "./?action=nuevo_gasto",
       "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Nueva Nota",
       "short_name": "Nota",
       "description": "Crear una nota o checklist rápido",
-      "url": "/?action=nueva_nota",
+      "url": "./?action=nueva_nota",
       "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Avance de Hábito",
       "short_name": "Hábito",
       "description": "Registrar hábito o actividad personal",
-      "url": "/?action=nuevo_habito",
+      "url": "./?action=nuevo_habito",
       "icons": [{ "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {

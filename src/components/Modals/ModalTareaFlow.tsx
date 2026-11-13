@@ -563,7 +563,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     >
       <div
         id="modal-tarea-flow-card"
-        className="w-full max-w-2xl max-h-[90vh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/60 bg-[#0D1526] shadow-cobalt-2 relative transform-gpu transition-[transform,opacity] duration-200 ease-out"
+        className="w-full max-w-2xl max-h-[92dvh] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-2xl border border-slate-800/60 bg-[#0D1526] shadow-cobalt-2 relative transform-gpu transition-[transform,opacity] duration-200 ease-out"
       >
         {/* DRAG HANDLE MÓVIL */}
         <div className="w-12 h-1.5 bg-slate-700 rounded-full mx-auto my-2.5 block sm:hidden shrink-0" />
@@ -1284,7 +1284,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                       <button
                         type="button"
                         onClick={() => eliminarSubtarea(sub.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                        className="opacity-90 sm:opacity-0 sm:group-hover:opacity-100 min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-2 sm:p-1 text-slate-400 hover:text-rose-400 transition cursor-pointer flex items-center justify-center shrink-0"
                         title="Eliminar paso"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1332,7 +1332,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         </div>
 
         {/* 4. PIE DE DIÁLOGO / FOOTER */}
-        <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-800 bg-[#0D1526] flex items-center justify-between gap-3">
+        <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-slate-800 bg-[#0D1526] flex items-center justify-between gap-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
           {/* Izquierda: Eliminar / Archivar */}
           <div className="flex items-center gap-2">
             {tareaId && (

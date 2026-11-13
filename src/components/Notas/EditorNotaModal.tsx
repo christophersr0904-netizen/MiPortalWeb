@@ -752,7 +752,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
               </div>
 
               {/* Footer de Acciones */}
-              <div className="sticky bottom-0 shrink-0 bg-[#0D1526]/95 backdrop-blur-md p-3 border-t border-slate-800/80 flex items-center justify-end gap-2.5">
+              <div className="sticky bottom-0 shrink-0 bg-[#0D1526]/95 backdrop-blur-md p-3 border-t border-slate-800/80 flex items-center justify-end gap-2.5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
                 <button
                   type="button"
                   onClick={onClose}

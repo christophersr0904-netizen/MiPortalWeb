@@ -3,7 +3,7 @@
  * Estrategia: Network-First para navegación HTML, Cache-First para fuentes y Stale-While-Revalidate para assets validados
  */
 
-const CACHE_NAME = 'pmo-cache-1794532385278';
+const CACHE_NAME = 'pmo-cache-1794535986767';
 const STATIC_ASSETS = [
   './manifest.webmanifest',
   './favicon.svg',
@@ -99,13 +99,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Ignorar el propio script SW, llamadas a Supabase, extensiones o entorno local (Vite HMR)
+  // REQ-MOBILE-47-EXEC: Excluir tajantemente llamadas a APIs externas (Google Calendar, Supabase, cotizaciones)
+  // El Service Worker únicamente intercepta y cachea recursos del mismo origen (más Google Fonts manejado arriba)
+  const esOrigenLocal = url.origin === self.location.origin;
+  if (!esOrigenLocal) {
+    return;
+  }
+
+  // Ignorar el propio script SW o entorno local de desarrollo (Vite HMR)
   if (
     url.pathname.endsWith('/sw.js') ||
-    url.hostname.includes('supabase.co') ||
-    url.protocol.startsWith('chrome-extension') ||
-    url.hostname === 'localhost' ||
-    url.hostname === '127.0.0.1' ||
     url.pathname.startsWith('/@') ||
     url.pathname.startsWith('/src/') ||
     url.pathname.includes('node_modules')

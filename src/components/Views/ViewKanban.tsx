@@ -1178,7 +1178,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                               }
                             }}
                             title="Ver Detalle 360°"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-1.5 py-0.5 text-[10px] font-bold rounded bg-sky-600/90 hover:bg-sky-500 text-white shadow-xs border border-sky-400/40 flex items-center gap-1 active:scale-95 cursor-pointer shrink-0"
+                            className="opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150 px-1.5 py-0.5 text-[10px] font-bold rounded bg-sky-600/90 hover:bg-sky-500 text-white shadow-xs border border-sky-400/40 flex items-center gap-1 active:scale-95 cursor-pointer shrink-0"
                           >
                             <Sparkles className="w-3 h-3 text-sky-200" strokeWidth={1.75} />
                             <span>360°</span>

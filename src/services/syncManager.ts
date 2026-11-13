@@ -329,6 +329,7 @@ class SyncManager {
     window.addEventListener('online', async () => {
       console.log('[SyncManager] Conexión restablecida. Disparando sincronización bidireccional...');
       this.setSyncState('syncing');
+      this.reconectarRealtimeSiEsNecesario();
       try {
         await this.syncPendingRecords();
         await this.descargarDatosDescendientes();
@@ -357,7 +358,7 @@ class SyncManager {
       }
     }, 45000);
 
-    // Amortiguación de sincronización al recuperar visibilidad (REQ-FIX-08)
+    // Amortiguación de sincronización al recuperar visibilidad (REQ-FIX-08 y REQ-MOBILE-47-EXEC)
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
@@ -366,6 +367,8 @@ class SyncManager {
           }
           this.visibilityDebounceTimer = setTimeout(async () => {
             this.visibilityDebounceTimer = null;
+            // REQ-MOBILE-47-EXEC: Reconectar canal WebSocket si fue cerrado durante suspensión móvil
+            this.reconectarRealtimeSiEsNecesario();
             if (typeof navigator !== 'undefined' && navigator.onLine && !this.isSyncing) {
               try {
                 await this.syncPendingRecords();
@@ -510,6 +513,22 @@ class SyncManager {
         this.realtimeChannel.unsubscribe();
       } catch {}
       this.realtimeChannel = null;
+    }
+  }
+
+  /**
+   * REQ-MOBILE-47-EXEC: Reconecta proactivamente las suscripciones de Supabase Realtime
+   * si el canal se cerró silenciosamente por suspensión de pestañas en móvil, timeout o reconexión de red.
+   */
+  public reconectarRealtimeSiEsNecesario(): void {
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) return;
+    const channelState = this.realtimeChannel?.state;
+    if (!this.realtimeChannel || channelState !== 'joined') {
+      if (import.meta.env.DEV) {
+        console.log(`[SyncManager] Canal Realtime en estado "${channelState || 'null'}". Reconectando suscripciones...`);
+      }
+      this.destroyRealtimeSubscriptions();
+      this.setupRealtimeSubscriptions();
     }
   }
 
