@@ -6,7 +6,7 @@ import {
   Search,
   SearchX,
   ChevronDown,
-  Plus,
+  FolderPlus,
   Clock,
   Sparkles,
   LayoutGrid,
@@ -385,11 +385,11 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               setProyectoAEditarId(null);
               setModalProyectoAbierto(true);
             }}
-            className="h-10 px-4 bg-sky-500 hover:bg-sky-400 text-slate-950 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Crear Nuevo Proyecto"
+            className="h-10 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-2 border border-sky-300/40 shadow-[0_0_20px_rgba(56,189,248,0.28)] hover:shadow-[0_0_28px_rgba(56,189,248,0.45)] transition-all duration-200 active:scale-95 cursor-pointer select-none group"
+            title="Crear Nuevo Proyecto Estratégico"
           >
-            <Plus className="w-4 h-4" strokeWidth={1.75} />
-            <span>Nuevo Proyecto</span>
+            <FolderPlus className="w-4 h-4 text-slate-950 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
+            <span className="tracking-tight">Nuevo Proyecto</span>
           </button>
         </div>
       </div>
@@ -914,9 +914,9 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                   setProyectoAEditarId(null);
                   setModalProyectoAbierto(true);
                 }}
-                className="h-10 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer"
+                className="h-10 px-5 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 text-xs font-bold shadow-[0_0_20px_rgba(56,189,248,0.3)] hover:shadow-[0_0_28px_rgba(56,189,248,0.5)] border border-sky-300/40 transition-all duration-200 active:scale-95 flex items-center gap-2 cursor-pointer group"
               >
-                <Plus className="w-4 h-4" strokeWidth={1.75} />
+                <FolderPlus className="w-4 h-4 text-slate-950 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
                 <span>Crear Primer Proyecto</span>
               </button>
             </div>

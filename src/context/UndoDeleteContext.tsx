@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db/db';
 
 export type TipoEntidadUndo =
@@ -41,6 +41,9 @@ export interface UndoDeleteContextType {
   hiddenIdsSet: Set<string>;
   programarEliminacion: (params: ProgramarEliminacionParams) => void;
   deshacer: (key: string) => void;
+  pausar: (key: string) => void;
+  reanudar: (key: string) => void;
+  forzarCommit: (key: string) => Promise<void>;
   estaOculto: (id: string | undefined | null) => boolean;
   flushTodos: () => Promise<void>;
 }
@@ -193,6 +196,43 @@ export class UndoDeleteManager {
     return true;
   }
 
+  pausar(key: string): void {
+    const item = this.pendingMap.get(key);
+    if (!item) return;
+    clearTimeout(item.timeoutId);
+    const transcurrido = Date.now() - item.creadoEn;
+    item.tiempoRestanteMs = Math.max(500, item.tiempoRestanteMs - transcurrido);
+  }
+
+  reanudar(key: string): void {
+    const item = this.pendingMap.get(key);
+    if (!item) return;
+    clearTimeout(item.timeoutId);
+    item.creadoEn = Date.now();
+    item.timeoutId = (setTimeout(async () => {
+      this.pendingMap.delete(key);
+      this.notify();
+      try {
+        await item.commit();
+      } catch (err) {
+        console.error(`[UndoDeleteManager] Error en commit diferido tras reanudar para ${key}:`, err);
+      }
+    }, item.tiempoRestanteMs) as unknown) as number;
+  }
+
+  async forzarCommit(key: string): Promise<void> {
+    const item = this.pendingMap.get(key);
+    if (!item) return;
+    clearTimeout(item.timeoutId);
+    this.pendingMap.delete(key);
+    this.notify();
+    try {
+      await item.commit();
+    } catch (err) {
+      console.error(`[UndoDeleteManager] Error en forzarCommit para ${key}:`, err);
+    }
+  }
+
   async flushTodos(): Promise<void> {
     const pendientes = Array.from(this.pendingMap.values());
     this.pendingMap.clear();
@@ -228,15 +268,15 @@ export const UndoDeleteProvider: React.FC<{
   const manager = managerRef.current;
 
   // Reactividad sincronizada con el gestor
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     return manager.subscribe(() => {
       setTick((t) => t + 1);
     });
   }, [manager]);
 
-  const pendingList = manager.getPendingList();
-  const hiddenIdsSet = manager.getHiddenIdsSet();
+  const pendingList = useMemo(() => manager.getPendingList(), [manager, tick]);
+  const hiddenIdsSet = useMemo(() => manager.getHiddenIdsSet(), [manager, tick]);
 
   const programarEliminacion = useCallback(
     (params: ProgramarEliminacionParams) => {
@@ -252,11 +292,34 @@ export const UndoDeleteProvider: React.FC<{
     [manager]
   );
 
-  const estaOculto = useCallback(
-    (id: string | undefined | null) => {
-      return manager.estaOculto(id);
+  const pausar = useCallback(
+    (key: string) => {
+      manager.pausar(key);
     },
     [manager]
+  );
+
+  const reanudar = useCallback(
+    (key: string) => {
+      manager.reanudar(key);
+    },
+    [manager]
+  );
+
+  const forzarCommit = useCallback(
+    async (key: string) => {
+      await manager.forzarCommit(key);
+    },
+    [manager]
+  );
+
+  const estaOculto = useCallback(
+    (id: string | undefined | null) => {
+      if (!id) return false;
+      const cleanId = String(id).trim().toUpperCase();
+      return hiddenIdsSet.has(id) || hiddenIdsSet.has(cleanId) || manager.estaOculto(id);
+    },
+    [manager, hiddenIdsSet]
   );
 
   const flushTodos = useCallback(async () => {
@@ -286,6 +349,9 @@ export const UndoDeleteProvider: React.FC<{
         hiddenIdsSet,
         programarEliminacion,
         deshacer,
+        pausar,
+        reanudar,
+        forzarCommit,
         estaOculto,
         flushTodos
       }}

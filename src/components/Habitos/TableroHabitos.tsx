@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { useHabitos } from '../../hooks/useHabitos';
@@ -111,7 +112,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     cargando
   } = useHabitos();
 
-  const { programarEliminacion, estaOculto } = useUndoDelete();
+  const { programarEliminacion, estaOculto, hiddenIdsSet } = useUndoDelete();
 
   // UI Optimista de check-in (0ms de latencia)
   const [optimisticCompletados, setOptimisticCompletados] = useState<Record<string, boolean>>({});
@@ -399,7 +400,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     };
 
     for (const act of actividadesProcesadas) {
-      if (estaOculto(act.id)) continue;
+      if (estaOculto(act.id) || hiddenIdsSet.has(act.id) || (act.codigo_legado && hiddenIdsSet.has(act.codigo_legado))) continue;
 
       const rawCat = (act.categoria_vida || '').toUpperCase().trim() as CategoriaVida;
       const catFinal: CategoriaVida = CATEGORIAS_CANONICAS.includes(rawCat) ? rawCat : 'SALUD_DEPORTE';
@@ -427,7 +428,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
     }
 
     return mapa;
-  }, [actividadesProcesadas, estaOculto, optimisticCompletados, hoyStr]);
+  }, [actividadesProcesadas, hiddenIdsSet, estaOculto, optimisticCompletados, hoyStr]);
 
   const handleCrearActividad = useCallback((categoriaPrevia?: CategoriaVida) => {
     setActividadEditar(null);
@@ -1141,22 +1142,47 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                           </button>
                         </div>
                       ) : (
-                        pendientes.map((act) => (
-                          <TarjetaHabito
-                            key={act.id}
-                            actividad={act}
-                            subtareas={subtareasPorPadre.get(act.codigo_legado) || subtareasPorPadre.get(act.id) || EMPTY_ARRAY}
-                            metaVinculada={metasPorHabitoId.get(String(act.id)) || (act.codigo_legado ? metasPorHabitoId.get(String(act.codigo_legado)) : undefined) || (act as any).metaVinculada}
-                            actividadesVinculadas={actividadesPorHabitoId?.get(String(act.id)) || (act.codigo_legado ? actividadesPorHabitoId?.get(String(act.codigo_legado)) : undefined) || (act as any).actividadesVinculadas || EMPTY_ARRAY}
-                            optimisticCompletado={optimisticCompletados[act.id]}
-                            onToggleCompletar={handleToggleCompletar}
-                            onAbrirAvance={handleAbrirAvance}
-                            onToggleSubtarea={toggleSubtarea}
-                            onEditar={handleEditarActividad}
-                            onEliminar={handleSolicitarEliminarActividad}
-                            onAbrirMeta360={handleAbrirMeta360}
-                          />
-                        ))
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          {pendientes.map((act) => (
+                            <motion.div
+                              key={act.id}
+                              layout="position"
+                              initial={{ opacity: 1, scale: 1 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{
+                                opacity: 0,
+                                scale: 0.92,
+                                height: 0,
+                                marginTop: 0,
+                                marginBottom: 0,
+                                paddingTop: 0,
+                                paddingBottom: 0,
+                                transition: {
+                                  type: 'spring',
+                                  stiffness: 500,
+                                  damping: 40,
+                                  mass: 1
+                                }
+                              }}
+                              transition={{ duration: 0.15, ease: 'easeOut' }}
+                              className="overflow-hidden"
+                            >
+                              <TarjetaHabito
+                                actividad={act}
+                                subtareas={subtareasPorPadre.get(act.codigo_legado) || subtareasPorPadre.get(act.id) || EMPTY_ARRAY}
+                                metaVinculada={metasPorHabitoId.get(String(act.id)) || (act.codigo_legado ? metasPorHabitoId.get(String(act.codigo_legado)) : undefined) || (act as any).metaVinculada}
+                                actividadesVinculadas={actividadesPorHabitoId?.get(String(act.id)) || (act.codigo_legado ? actividadesPorHabitoId?.get(String(act.codigo_legado)) : undefined) || (act as any).actividadesVinculadas || EMPTY_ARRAY}
+                                optimisticCompletado={optimisticCompletados[act.id]}
+                                onToggleCompletar={handleToggleCompletar}
+                                onAbrirAvance={handleAbrirAvance}
+                                onToggleSubtarea={toggleSubtarea}
+                                onEditar={handleEditarActividad}
+                                onEliminar={handleSolicitarEliminarActividad}
+                                onAbrirMeta360={handleAbrirMeta360}
+                              />
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
                       )}
                     </div>
 
@@ -1166,22 +1192,47 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block px-1 font-mono tabular-nums">
                           {filtroTemporal === 'HOY' ? 'Completadas Hoy' : 'Completadas'} ({completadas.length})
                         </span>
-                        {completadas.map((act) => (
-                          <TarjetaHabito
-                            key={act.id}
-                            actividad={act}
-                            subtareas={subtareasPorPadre.get(act.codigo_legado) || subtareasPorPadre.get(act.id) || EMPTY_ARRAY}
-                            metaVinculada={metasPorHabitoId.get(String(act.id)) || (act.codigo_legado ? metasPorHabitoId.get(String(act.codigo_legado)) : undefined) || (act as any).metaVinculada}
-                            actividadesVinculadas={actividadesPorHabitoId?.get(String(act.id)) || (act.codigo_legado ? actividadesPorHabitoId?.get(String(act.codigo_legado)) : undefined) || (act as any).actividadesVinculadas || EMPTY_ARRAY}
-                            optimisticCompletado={optimisticCompletados[act.id]}
-                            onToggleCompletar={handleToggleCompletar}
-                            onAbrirAvance={handleAbrirAvance}
-                            onToggleSubtarea={toggleSubtarea}
-                            onEditar={handleEditarActividad}
-                            onEliminar={handleSolicitarEliminarActividad}
-                            onAbrirMeta360={handleAbrirMeta360}
-                          />
-                        ))}
+                        <AnimatePresence mode="popLayout" initial={false}>
+                          {completadas.map((act) => (
+                            <motion.div
+                              key={act.id}
+                              layout="position"
+                              initial={{ opacity: 1, scale: 1 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{
+                                opacity: 0,
+                                scale: 0.92,
+                                height: 0,
+                                marginTop: 0,
+                                marginBottom: 0,
+                                paddingTop: 0,
+                                paddingBottom: 0,
+                                transition: {
+                                  type: 'spring',
+                                  stiffness: 500,
+                                  damping: 40,
+                                  mass: 1
+                                }
+                              }}
+                              transition={{ duration: 0.15, ease: 'easeOut' }}
+                              className="overflow-hidden"
+                            >
+                              <TarjetaHabito
+                                actividad={act}
+                                subtareas={subtareasPorPadre.get(act.codigo_legado) || subtareasPorPadre.get(act.id) || EMPTY_ARRAY}
+                                metaVinculada={metasPorHabitoId.get(String(act.id)) || (act.codigo_legado ? metasPorHabitoId.get(String(act.codigo_legado)) : undefined) || (act as any).metaVinculada}
+                                actividadesVinculadas={actividadesPorHabitoId?.get(String(act.id)) || (act.codigo_legado ? actividadesPorHabitoId?.get(String(act.codigo_legado)) : undefined) || (act as any).actividadesVinculadas || EMPTY_ARRAY}
+                                optimisticCompletado={optimisticCompletados[act.id]}
+                                onToggleCompletar={handleToggleCompletar}
+                                onAbrirAvance={handleAbrirAvance}
+                                onToggleSubtarea={toggleSubtarea}
+                                onEditar={handleEditarActividad}
+                                onEliminar={handleSolicitarEliminarActividad}
+                                onAbrirMeta360={handleAbrirMeta360}
+                              />
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
                       </div>
                     )}
                   </>

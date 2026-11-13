@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import type { CanonicalTarea } from '../../utils/entityNormalizer';
 import type { SubtareaPaso } from '../../types';
 import { TarjetaTareaKanban } from './TarjetaTareaKanban';
@@ -198,54 +199,79 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
             Columna vacía
           </div>
         ) : (
-          tareasColumna.map((tar) => {
-            const subsTarea = subtareasPorTarea.get(tar.codigo_legado) || [];
-            const proyAsoc = (tar.proyecto_codigo ? proyectosMap.get(tar.proyecto_codigo) : undefined) ||
-              (tar.raw?.proyecto_id ? proyectosMap.get(tar.raw.proyecto_id) : undefined);
-            const nombreProyecto = proyAsoc?.nombre || tar.proyecto_codigo || 'General';
-            const hitoAsoc = (tar.hito_codigo ? hitosMap.get(tar.hito_codigo) : undefined) ||
-              (tar.raw?.hito_id ? hitosMap.get(tar.raw.hito_id) : undefined);
-            const nombreHito = (hitoAsoc as any)?.nombre || (hitoAsoc as any)?.nombre_hito || (hitoAsoc as any)?.nombre_elemento || tar.hito_codigo || 'Hito Principal';
+          <AnimatePresence mode="popLayout" initial={false}>
+            {tareasColumna.map((tar) => {
+              const subsTarea = subtareasPorTarea.get(tar.codigo_legado) || [];
+              const proyAsoc = (tar.proyecto_codigo ? proyectosMap.get(tar.proyecto_codigo) : undefined) ||
+                (tar.raw?.proyecto_id ? proyectosMap.get(tar.raw.proyecto_id) : undefined);
+              const nombreProyecto = proyAsoc?.nombre || tar.proyecto_codigo || 'General';
+              const hitoAsoc = (tar.hito_codigo ? hitosMap.get(tar.hito_codigo) : undefined) ||
+                (tar.raw?.hito_id ? hitosMap.get(tar.raw.hito_id) : undefined);
+              const nombreHito = (hitoAsoc as any)?.nombre || (hitoAsoc as any)?.nombre_hito || (hitoAsoc as any)?.nombre_elemento || tar.hito_codigo || 'Hito Principal';
 
-            const isHovered = hoveredTaskId === tar.codigo_legado;
-            const isPredecesora = predecesorasHover.has(tar.codigo_legado.toUpperCase());
-            const isSucesora = sucesorasHover.has(tar.codigo_legado.toUpperCase());
-            const isRelacionada = isHovered || isPredecesora || isSucesora;
-            const atenuar = hoveredTaskId !== null && !isRelacionada;
+              const isHovered = hoveredTaskId === tar.codigo_legado;
+              const isPredecesora = predecesorasHover.has(tar.codigo_legado.toUpperCase());
+              const isSucesora = sucesorasHover.has(tar.codigo_legado.toUpperCase());
+              const isRelacionada = isHovered || isPredecesora || isSucesora;
+              const atenuar = hoveredTaskId !== null && !isRelacionada;
 
-            const predOcultas = isHovered ? predecesorasOcultas : [];
-            const sucOcultas = isHovered ? sucesorasOcultas : [];
+              const predOcultas = isHovered ? predecesorasOcultas : [];
+              const sucOcultas = isHovered ? sucesorasOcultas : [];
 
-            const costoGasto = gastosPorTarea.get(tar.codigo_legado.toUpperCase()) || 0;
+              const costoGasto = gastosPorTarea.get(tar.codigo_legado.toUpperCase()) || 0;
 
-            return (
-              <TarjetaTareaKanban
-                key={tar.id}
-                tar={tar}
-                colId={col.id}
-                isDragged={draggedTaskId === tar.id}
-                isHovered={isHovered}
-                isPredecesora={isPredecesora}
-                isSucesora={isSucesora}
-                atenuar={atenuar}
-                predecesorasOcultas={predOcultas}
-                sucesorasOcultas={sucOcultas}
-                subsTarea={subsTarea}
-                nombreProyecto={nombreProyecto}
-                nombreHito={nombreHito}
-                costoGasto={costoGasto}
-                tareasLookupMap={tareasLookupMap}
-                onDragStart={onDragStartTask}
-                onDragEnd={onDragEndTask}
-                onMouseEnter={onMouseEnterTask}
-                onMouseLeave={onMouseLeaveTask}
-                onClick={onSeleccionarTarea}
-                onMoverTareaAEstado={onMoverTareaAEstado}
-                onArchivarTarea={onArchivarTarea}
-                onEliminarTarea={onEliminarTarea}
-              />
-            );
-          })
+              return (
+                <motion.div
+                  key={tar.id}
+                  layout="position"
+                  initial={{ opacity: 1, scale: 1 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{
+                    opacity: 0,
+                    scale: 0.92,
+                    height: 0,
+                    marginTop: 0,
+                    marginBottom: 0,
+                    paddingTop: 0,
+                    paddingBottom: 0,
+                    transition: {
+                      type: 'spring',
+                      stiffness: 500,
+                      damping: 40,
+                      mass: 1
+                    }
+                  }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="overflow-hidden"
+                >
+                  <TarjetaTareaKanban
+                    tar={tar}
+                    colId={col.id}
+                    isDragged={draggedTaskId === tar.id}
+                    isHovered={isHovered}
+                    isPredecesora={isPredecesora}
+                    isSucesora={isSucesora}
+                    atenuar={atenuar}
+                    predecesorasOcultas={predOcultas}
+                    sucesorasOcultas={sucOcultas}
+                    subsTarea={subsTarea}
+                    nombreProyecto={nombreProyecto}
+                    nombreHito={nombreHito}
+                    costoGasto={costoGasto}
+                    tareasLookupMap={tareasLookupMap}
+                    onDragStart={onDragStartTask}
+                    onDragEnd={onDragEndTask}
+                    onMouseEnter={onMouseEnterTask}
+                    onMouseLeave={onMouseLeaveTask}
+                    onClick={onSeleccionarTarea}
+                    onMoverTareaAEstado={onMoverTareaAEstado}
+                    onArchivarTarea={onArchivarTarea}
+                    onEliminarTarea={onEliminarTarea}
+                  />
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         )}
       </div>
     </div>

@@ -1,4 +1,7 @@
 import React, { useState, useMemo, useDeferredValue, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { eliminarGasto } from '../../services/gastosService';
+import { eliminarIngreso } from '../../services/ingresosService';
 import {
   Wallet,
   TrendingUp,
@@ -62,7 +65,7 @@ export const ViewFinanzas: React.FC = () => {
   const [ingresoAEditar, setIngresoAEditar] = useState<IngresoRecord | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const { estaOculto, programarEliminacion } = useUndoDelete();
+  const { estaOculto, programarEliminacion, hiddenIdsSet } = useUndoDelete();
 
   // Auto-dismiss del toast reactivo
   useEffect(() => {
@@ -78,11 +81,11 @@ export const ViewFinanzas: React.FC = () => {
   const rawProyectosLive = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
   const rawActividadesLive = useLiveQuery(() => db.actividades_personales.toArray(), []) ?? [];
 
-  const gastosRaw = useMemo(() => rawGastosLive.filter((g: any) => !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto)), [rawGastosLive, estaOculto]);
-  const ingresosRaw = useMemo(() => rawIngresosLive.filter((i: any) => !estaOculto(i.id) && !estaOculto(i.codigo_legado)), [rawIngresosLive, estaOculto]);
-  const cuotasRaw = useMemo(() => rawCuotasLive.filter((c: any) => !estaOculto(c.id) && !estaOculto(c.codigo_legado)), [rawCuotasLive, estaOculto]);
-  const proyectosRaw = useMemo(() => rawProyectosLive.filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado)), [rawProyectosLive, estaOculto]);
-  const actividadesRaw = useMemo(() => rawActividadesLive.filter((a: any) => !estaOculto(a.id) && !estaOculto(a.codigo_legado)), [rawActividadesLive, estaOculto]);
+  const gastosRaw = useMemo(() => rawGastosLive.filter((g: any) => !hiddenIdsSet.has(g.id) && !hiddenIdsSet.has(g.codigo_legado) && !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto)), [rawGastosLive, hiddenIdsSet, estaOculto]);
+  const ingresosRaw = useMemo(() => rawIngresosLive.filter((i: any) => !hiddenIdsSet.has(i.id) && !hiddenIdsSet.has(i.codigo_legado) && !estaOculto(i.id) && !estaOculto(i.codigo_legado)), [rawIngresosLive, hiddenIdsSet, estaOculto]);
+  const cuotasRaw = useMemo(() => rawCuotasLive.filter((c: any) => !hiddenIdsSet.has(c.id) && !hiddenIdsSet.has(c.codigo_legado) && !estaOculto(c.id) && !estaOculto(c.codigo_legado)), [rawCuotasLive, hiddenIdsSet, estaOculto]);
+  const proyectosRaw = useMemo(() => rawProyectosLive.filter((p: any) => !hiddenIdsSet.has(p.id) && !hiddenIdsSet.has(p.codigo_legado) && !estaOculto(p.id) && !estaOculto(p.codigo_legado)), [rawProyectosLive, hiddenIdsSet, estaOculto]);
+  const actividadesRaw = useMemo(() => rawActividadesLive.filter((a: any) => !hiddenIdsSet.has(a.id) && !hiddenIdsSet.has(a.codigo_legado) && !estaOculto(a.id) && !estaOculto(a.codigo_legado)), [rawActividadesLive, hiddenIdsSet, estaOculto]);
 
   // Actualización manual de TC SUNAT
   const handleRefreshTC = () => {
@@ -606,26 +609,28 @@ export const ViewFinanzas: React.FC = () => {
     }
   };
 
-  // Eliminación con búfer de deshacer de 4s
+  // Eliminación con búfer de deshacer y borrado optimista en 0ms
   const handleEliminarTrx = (trx: TransaccionUnificada) => {
     if (trx.tipo === 'GASTO') {
       programarEliminacion({
         tabla: 'gastos',
         id: trx.id,
+        idsSecundarios: trx.codigo ? [trx.codigo] : [],
         etiqueta: trx.descripcion || trx.codigo,
         tipo: 'GASTO',
         commit: async () => {
-          await db.gastos.delete(trx.id);
+          await eliminarGasto(trx.id);
         }
       });
     } else {
       programarEliminacion({
         tabla: 'ingresos',
         id: trx.id,
+        idsSecundarios: trx.codigo ? [trx.codigo] : [],
         etiqueta: trx.descripcion || trx.codigo,
         tipo: 'INGRESO',
         commit: async () => {
-          await db.ingresos.delete(trx.id);
+          await eliminarIngreso(trx.id);
         }
       });
     }
@@ -1096,15 +1101,40 @@ export const ViewFinanzas: React.FC = () => {
                 </p>
               </div>
             ) : (
-              transaccionesUnificadas.map((trx) => (
-                <TarjetaTransaccion
-                  key={`${trx.tipo}-${trx.id}`}
-                  trx={trx}
-                  onToggleConciliar={handleToggleConciliar}
-                  onEditar={handleEditarTrx}
-                  onEliminar={handleEliminarTrx}
-                />
-              ))
+              <AnimatePresence mode="popLayout" initial={false}>
+                {transaccionesUnificadas.map((trx) => (
+                  <motion.div
+                    key={`${trx.tipo}-${trx.id}`}
+                    layout="position"
+                    initial={{ opacity: 1, scale: 1 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{
+                      opacity: 0,
+                      scale: 0.92,
+                      height: 0,
+                      marginTop: 0,
+                      marginBottom: 0,
+                      paddingTop: 0,
+                      paddingBottom: 0,
+                      transition: {
+                        type: 'spring',
+                        stiffness: 500,
+                        damping: 40,
+                        mass: 1
+                      }
+                    }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="overflow-hidden"
+                  >
+                    <TarjetaTransaccion
+                      trx={trx}
+                      onToggleConciliar={handleToggleConciliar}
+                      onEditar={handleEditarTrx}
+                      onEliminar={handleEliminarTrx}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             )}
           </div>
         </div>

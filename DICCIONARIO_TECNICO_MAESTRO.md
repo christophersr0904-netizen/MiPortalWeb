@@ -52,6 +52,70 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 6.7.1 — Upgrade de Botones Globales PMO y Refinamiento IA WBS (REQ-UI-53-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewPortafolio.tsx`, `src/components/Views/ViewKanban.tsx`, `src/components/Modals/ModalNuevoProyecto.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Botón Global de PMO (`ViewPortafolio.tsx` y `ViewKanban.tsx`):**
+    - Sustitución del botón plano tradicional con `+` por el estándar aeroespacial Cobalt: fondo degradado fluido (`from-sky-600 via-sky-500 to-cyan-500`), halo luminoso `shadow-[0_0_20px_rgba(56,189,248,0.28)]`, micro-borde iluminado y micro-interacción táctil (`active:scale-95`).
+    - Reemplazo del icono genérico por `<FolderPlus />` con animación de escala reactiva al hover (`group-hover:scale-110`). Aplicado a la cabecera ejecutiva y al Empty State de Portafolio, así como al pie del Sidebar y Bottom Sheet móvil en Kanban.
+  - **Panel Glassmorphism de Clasificación Adaptativa IA (`ModalNuevoProyecto.tsx`):**
+    - Erradicación de la fuga de variables crudas: `{arquetipoProyecto}` y `{magnitudComplejidad}` ahora se resuelven reactivamente mediante `useMemo` contra `OPCIONES_ARQUETIPO` y `OPCIONES_MAGNITUD`, mostrando etiquetas humanas limpias con sus respectivos iconos y badges de escala T-Shirt.
+    - Reestructuración visual como contenedor de cristal ahumado (`backdrop-blur-xl`), halo ambiental `blur-2xl` en esquina y encabezado de alta jerarquía con `<Sparkles className="text-amber-300 animate-pulse" />` y micro-indicador esmeralda.
+  - **Botón "Generar Estructura con IA" (`ModalNuevoProyecto.tsx`):**
+    - Elevación con gradiente multicapa (`from-sky-500 via-indigo-500 to-sky-400`), resplandor Cobalt y rotación lúdica al hover (`group-hover:rotate-12`) en el icono de chispas.
+  - **Validación QA:** 31 suites Vitest ejecutadas al 100% (306/306 tests aprobados), chequeo estricto TypeScript limpio (`npx tsc --noEmit`: 0 errores) y compilación de producción generada exitosamente.
+
+### FASE 6.7 — Despliegue de Selectores Cobalt, Iconografía Contextual y Micro-interacciones (REQ-UI-52-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/UI/SelectIconicoCobalt.tsx` (Nuevo), `src/constants/uiMappers.ts` (Nuevo), `src/components/Modals/ModalNuevoProyecto.tsx`, `src/components/Modals/ModalNuevoHito.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/components/UI/SelectIconicoCobalt.tsx` (Nuevo Componente Canónico):
+    - Implementado selector desplegable interactivo fluido con tokens Cobalt Aerodynamic (`#0D1526`, `border-slate-800/90`, halo `shadow-[0_16px_36px_-6px_rgba(2,6,23,0.9)]`).
+    - Desacoplamiento estricto entre valor técnico persistido en base de datos (`valor`) y representación visual para el usuario (`etiqueta`, `subtitulo`, `icono`, `badge`).
+    - Soporte completo de accesibilidad ARIA (`role="listbox"`, `role="option"`, `aria-expanded`), detección de clic exterior y tecla `Escape`.
+  - `src/constants/uiMappers.ts` (Diccionarios de Mapeo Visual):
+    - Exportadas las configuraciones `OPCIONES_ARQUETIPO`, `OPCIONES_MAGNITUD`, `OPCIONES_ESTADO_PROYECTO`, `MAPEO_FASES_WBS` y `OPCIONES_ESTADO_PARTIDA` con iconografía Lucide React (`strokeWidth={1.75}`).
+  - `src/components/Modals/ModalNuevoProyecto.tsx`:
+    - Erradicación de los 3 `<select>` nativos crudos, sustituidos por `<SelectIconicoCobalt />` para Arquetipo, Magnitud y Estado del Proyecto.
+    - Corrección del bug de truncamiento en estado de partida (`.split(' ')` que generaba `"Migración /"` y `"Base /"`), sustituido por tarjetas seleccionables limpias con `OPCIONES_ESTADO_PARTIDA`.
+    - Modernización de la barra de navegación de pestañas: retiro de prefijos numéricos rígidos (`1. `, `2. `, etc.), adopción de íconos temáticos (`LayoutTemplate`, `Network`, `ListTodo`, `Wallet`) e indicador activo con resorte cinético (`motion.div layoutId="tab-indicator-proyecto"`).
+    - Supresión de dobles íconos y signos más redundantes (`+ +`), sustituidos por botones contextuales: `<Briefcase /> Nuevo Paquete`, `<Flag /> Nuevo Hito`, `<CheckSquare /> Añadir Tarea`, `<Receipt /> Añadir Gasto` y feedback táctil (`active:scale-95`).
+  - `src/components/Modals/ModalNuevoHito.tsx`:
+    - Sustituido el `<select>` nativo de fases asociadas por `<SelectIconicoCobalt />` dinámico con `MAPEO_FASES_WBS`.
+    - Limpieza visual en selector Bento de tipo de entregable, erradicando siglas redundantes `(WP)` y `(HIT)` a favor de `Paquete de Trabajo` e `Hito de Control`.
+    - Botón de guardado actualizado con iconografía contextual y micro-interacción táctil (`active:scale-95 hover:shadow-[0_0_25px_rgba(56,189,248,0.5)]`).
+  - Validación QA: 31 suites Vitest ejecutadas al 100% (306/306 tests aprobados), chequeo estricto TypeScript limpio (`npx tsc --noEmit`: 0 errores) y compilación de producción generada exitosamente.
+
+### FASE 6.6.1 — Aceleración de Animaciones a 60FPS: Bypass de Render Thrashing y Spring Physics (REQ-PERF-51-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/UI/ToastDeshacer.tsx`, `src/components/UI/AnimateCardExit.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Views/ViewFinanzas.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/components/UI/ToastDeshacer.tsx`:
+    - Erradicación definitiva de *render thrashing*: eliminado el llamado de `setTiempoRestante` a 60 Hz dentro de `requestAnimationFrame` que forzaba reconciliaciones completas de React.
+    - Implementado bypass directo al DOM con `circuloRef` para el anillo SVG (`strokeDashoffset`) y `barraRef` para la micro-barra inferior resplandeciente (`width`), aplicadas directamente al nodo en cada frame.
+    - Retiradas las transiciones CSS en conflicto (`transition-all duration-75`) para fluidez nativa a 60 FPS sin jitter ni latencia artificial.
+    - Throttling del estado de React a 1 Hz (`Math.ceil(tiempo / 1000)` con `segundosPreviosRef`) únicamente para actualizar la cifra numérica de segundos restantes en pantalla.
+  - Física Cinética *Spring* Agresiva (`AnimateCardExit.tsx`, `ColumnaKanban.tsx`, `TableroHabitos.tsx`, `ViewFinanzas.tsx`):
+    - Sustituida la curva de salida lenta y pesada (`duration: 0.22, ease: [0.16, 1, 0.3, 1]`) por resortes instantáneos y ágiles: `{ type: 'spring', stiffness: 500, damping: 40, mass: 1 }` y `transition: { duration: 0.15, ease: 'easeOut' }`.
+    - Eliminación perceptible de retraso visual ("floaty feeling"), colapsando tarjetas de Kanban, hábitos y finanzas en milisegundos con cero saltos bruscos de maquetación (CLS).
+  - Verificación QA: 31 suites Vitest ejecutadas al 100% (306/306 tests aprobados), chequeo estricto TypeScript limpio (`npx tsc --noEmit`: 0 errores) y compilación de producción generada exitosamente.
+
+### FASE 6.6 — Borrado Optimista Determinista (0ms), Animaciones React Bits y ToastDeshacer (REQ-UI-50-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/context/UndoDeleteContext.tsx`, `src/components/UI/ToastDeshacer.tsx` (Nuevo), `src/components/UI/AnimateCardExit.tsx` (Nuevo), `src/components/UI/UndoToastContainer.tsx`, `src/components/Views/ViewKanban.tsx`, `src/components/PMO/ColumnaKanban.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Notas/VisorNotas.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/context/UndoDeleteContext.tsx`:
+    - Ruptura del *Memoization Trap* reactivo: el proveedor ahora expone `hiddenIdsSet: Set<string>` recalculado en cada `tick` emitido por el gestor de eventos (`manager.subscribe`).
+    - Actualizado `estaOculto` para evaluar reactivamente contra `hiddenIdsSet` y el estado interno de `manager`, permitiendo que todos los `useMemo` de las vistas maestras invalidadas oculten las entidades eliminadas en **Frame 0 (0ms)** sin esperar a que el temporizador de base de datos expire.
+    - Incorporados los métodos de control bidireccional `pausar(key)`, `reanudar(key)` y `forzarCommit(key)` en `UndoDeleteManager` y el contexto.
+  - `src/components/UI/ToastDeshacer.tsx` & `UndoToastContainer.tsx`:
+    - Creación del componente `ToastDeshacer` con estética React Bits / Shadcn y tokens Cobalt Aerodynamic (`#0D1526`, `border-slate-800/80`, halo `shadow-[0_12px_40px_-5px_rgba(2,6,23,0.85)]`).
+    - Integrado un anillo circular SVG dinámico que consume su circunferencia en tiempo real, micro-barra inferior con gradiente resplandeciente (`from-sky-500 via-sky-400 to-teal-300`), contador numérico de segundos restantes y pausa automática de cuenta regresiva (`onMouseEnter` / `onMouseLeave`).
+    - Botón prominente "Deshacer" (`RotateCcw`) que cancela la eliminación y restaura inmediatamente la entidad en pantalla con cero llamadas de red ni escrituras en Dexie.
+  - Salida Animada de Tarjetas (`AnimateCardExit.tsx`, `ColumnaKanban.tsx`, `TableroHabitos.tsx`, `ViewFinanzas.tsx`):
+    - Creación de `AnimateCardExit.tsx` e integración de `<AnimatePresence mode="popLayout" initial={false}>` con `<motion.div layout="position" exit={{ opacity: 0, scale: 0.94, height: 0, ... }}>` en las columnas Kanban, columnas de hábitos y listas de transacciones financieras. Al eliminarse una tarjeta, colapsa suavemente sin saltos abruptos de maquetación (CLS).
+  - Reparación de Bypasses:
+    - En `ModalActividadFlow.tsx`, sustituido el bloqueo síncrono de red por `programarEliminacion`, cerrando el modal de inmediato (`onClose()`) en 0ms y delegando `eliminarActividadConAlcance` al commit diferido de 4s.
+    - En `ViewFinanzas.tsx`, sustituidos los métodos crudos `db.gastos.delete` y `db.ingresos.delete` por los servicios de negocio `eliminarGasto` y `eliminarIngreso`, garantizando limpieza de Google Calendar y notificación de sincronización.
+  - Validación QA: 31 suites Vitest ejecutadas al 100% (306/306 tests aprobados), compilación estricta de TypeScript limpia (`npx tsc --noEmit`: 0 errores) y bundle de producción generado exitosamente.
+
 ### FASE 6.5 — Minimalismo UI/UX, Erradicación de Ruido Visual de Sincronización y SwitchCobalt (REQ-UI-49-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/UI/SwitchCobalt.tsx` (Nuevo), `src/components/Modals/ModalTareaFlow.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalIngreso.tsx`, `src/components/Modals/ModalNuevoPlanCuotas.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/PMO/TarjetaTransaccion.tsx`, `src/components/Cockpit/DailyCockpit.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
@@ -9762,3 +9826,35 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Sintaxis Service Worker:** `node --check public/sw.js` $\rightarrow$ Exit Code 0.
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ 0 errores.
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 25/25 suites passed (251/251 tests).
+
+
+---
+
+### [REQ-UI-54-EXEC: Despliegue de HeaderProyectoActivo y Métricas EVM en Kanban]
+**Fecha:** Noviembre 2026 | **Fase:** 6.8 | **Archivos Creados/Modificados:** `src/components/PMO/HeaderProyectoActivo.tsx` (Nuevo), `src/components/PMO/__tests__/HeaderProyectoActivo.test.ts` (Nuevo), `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+1. **Píldora Inline Amontonada en Header Kanban:**
+   - Previamente, al seleccionar un proyecto en `ViewKanban.tsx`, toda la identidad y el diagnóstico de salud se renderizaban en un único elemento inline de 36px (`#label-proyecto-activo`, L1357-1409) donde se concatenaban el código, el nombre, el botón de Vista 360°, el botón de deselección y un texto plano con `CPI X.XX`.
+2. **Carencia de SPI y Métricas Gráficas de Rendimiento Físico:**
+   - El índice de cronograma ($SPI$) no se exponía en el Kanban, privando al usuario de visibilidad ejecutiva sobre retrasos frente a la línea base. Tampoco se visualizaba gráficamente el `% de avance físico ponderado` ni el conteo de tareas activas/totales.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Componente Aislado `HeaderProyectoActivo.tsx` (Cobalt Aerodynamic A.2.2):**
+   - Creación de `src/components/PMO/HeaderProyectoActivo.tsx` con arquitectura Glassmorphism (`bg-[#0D1526]/90 backdrop-blur-xl border border-slate-800/80 shadow-[0_4px_20px_-4px_rgba(2,6,23,0.8),0_0_12px_rgba(56,189,248,0.08)]`).
+   - Micro-glow superior dinámico según salud global:
+     - Saludable ($CPI \ge 1.0 \land SPI \ge 1.0$): `from-sky-500/40 via-emerald-500/30 to-transparent`.
+     - Riesgo ($0.85 \le CPI < 1.0 \lor 0.85 \le SPI < 1.0$): `from-amber-500/50 via-amber-500/20 to-transparent`.
+     - Crítico ($CPI < 0.85 \lor SPI < 0.85$): `from-rose-500/50 via-rose-500/20 to-transparent`.
+   - **Lado Izquierdo:** Botón de deselección rápido `X` (`hover:bg-rose-500/10 hover:text-rose-400 active:scale-95`), ícono `FolderKanban`, código legado `[PRO-XXX]` en píldora mono azul, nombre del proyecto truncado defensivamente, y botón de acción directa `360°` con `Sparkles`.
+   - **Lado Derecho:** 
+     - Micro-gauge de avance físico ponderado en porcentaje `font-mono tabular-nums` y barra con gradiente `from-sky-500 to-emerald-400`.
+     - Badges semafóricos independientes para CPI y SPI con micro-indicadores Lucide (`TrendingUp`/`TrendingDown` y `Clock`/`AlertTriangle`). Fallback determinista a `1.00` ante valores indefinidos o `NaN`.
+2. **Inyección en `ViewKanban.tsx`:**
+   - Erradicación de la píldora inline en L1357-1409.
+   - Montaje limpio de `<HeaderProyectoActivo />` pasando `proyecto`, `avanceReal` (memoizado de `avancesPorProyecto`), `contadoresTareas` (acceso $O(1)$ de `contadoresTareasPorProyecto`), `progresoTemporal`, `onDeseleccionar` (con reset de `proyectoSeleccionadoCodigo` y `filtroHito`), y `onVerDetalle360`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 32/32 suites passed (313/313 tests: +7 tests en `HeaderProyectoActivo.test.ts`).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,982 módulos transformados en 13.12s).

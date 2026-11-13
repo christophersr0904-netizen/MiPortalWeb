@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   FolderKanban,
   Search,
-  Plus,
+  FolderPlus,
   ChevronLeft,
   ChevronRight,
   Zap,
@@ -53,6 +53,7 @@ import { ModalDoDAdvertencia } from '../Modals/ModalDoDAdvertencia';
 import { actualizarTarea, eliminarTarea } from '../../services/tareasService';
 import { ColumnaKanban } from '../PMO/ColumnaKanban';
 import { IconoCategoriaIniciativa, coincideCategoriaIniciativa } from '../PMO/IconoCategoriaIniciativa';
+import { HeaderProyectoActivo } from '../PMO/HeaderProyectoActivo';
 import AnimatedContent from '../AnimatedContent';
 
 interface ViewKanbanProps {
@@ -213,7 +214,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     total: number;
   } | null>(null);
 
-  const { programarEliminacion, estaOculto } = useUndoDelete();
+  const { programarEliminacion, estaOculto, hiddenIdsSet } = useUndoDelete();
 
   // Live query unificada y atómica desde Dexie (REQ-FIX-08)
   const datosKanbanLive = useLiveQuery(async () => {
@@ -235,12 +236,12 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   const rawGastosLive = datosKanbanLive?.gastos;
 
   const rawProyectos = useMemo(
-    () => (rawProyectosLive ?? []).filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado)),
-    [rawProyectosLive, estaOculto]
+    () => (rawProyectosLive ?? []).filter((p: any) => !hiddenIdsSet.has(p.id) && !hiddenIdsSet.has(p.codigo_legado) && !estaOculto(p.id) && !estaOculto(p.codigo_legado)),
+    [rawProyectosLive, hiddenIdsSet, estaOculto]
   );
   const rawTareas = useMemo(
-    () => (rawTareasLive ?? []).filter((t: any) => !estaOculto(t.id) && !estaOculto(t.codigo_legado) && !estaOculto(t.proyecto_codigo) && !estaOculto(t.proyecto_id)),
-    [rawTareasLive, estaOculto]
+    () => (rawTareasLive ?? []).filter((t: any) => !hiddenIdsSet.has(t.id) && !hiddenIdsSet.has(t.codigo_legado) && !hiddenIdsSet.has(t.proyecto_codigo) && !hiddenIdsSet.has(t.proyecto_id) && !estaOculto(t.id) && !estaOculto(t.codigo_legado)),
+    [rawTareasLive, hiddenIdsSet, estaOculto]
   );
   const tareasLookupMap = useMemo(() => {
     const map = new Map<string, { codigo: string; nombre: string }>();
@@ -262,16 +263,16 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
     return map;
   }, [rawTareas]);
   const rawSubtareas = useMemo(
-    () => (rawSubtareasLive ?? []).filter((s: any) => !estaOculto(s.id) && !estaOculto(s.codigo_legado) && !estaOculto(s.id_padre_vinculado)),
-    [rawSubtareasLive, estaOculto]
+    () => (rawSubtareasLive ?? []).filter((s: any) => !hiddenIdsSet.has(s.id) && !hiddenIdsSet.has(s.codigo_legado) && !hiddenIdsSet.has(s.id_padre_vinculado) && !estaOculto(s.id)),
+    [rawSubtareasLive, hiddenIdsSet, estaOculto]
   );
   const rawHitos = useMemo(
-    () => (rawHitosLive ?? []).filter((h: any) => !estaOculto(h.id) && !estaOculto(h.codigo_legado) && !estaOculto(h.proyecto_id)),
-    [rawHitosLive, estaOculto]
+    () => (rawHitosLive ?? []).filter((h: any) => !hiddenIdsSet.has(h.id) && !hiddenIdsSet.has(h.codigo_legado) && !hiddenIdsSet.has(h.proyecto_id) && !estaOculto(h.id)),
+    [rawHitosLive, hiddenIdsSet, estaOculto]
   );
   const rawGastos = useMemo(
-    () => (rawGastosLive ?? []).filter((g: any) => !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto)),
-    [rawGastosLive, estaOculto]
+    () => (rawGastosLive ?? []).filter((g: any) => !hiddenIdsSet.has(g.id) && !hiddenIdsSet.has(g.codigo_legado) && !hiddenIdsSet.has(g.id_origen_vinculado) && !hiddenIdsSet.has(g.ID_Proyecto) && !estaOculto(g.id)),
+    [rawGastosLive, hiddenIdsSet, estaOculto]
   );
 
   // Limpieza automática de estados optimistas cuando Dexie persiste
@@ -1232,7 +1233,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
           )}
         </div>
 
-        {/* Footer Sidebar: Botón Canónico "Nuevo Proyecto" */}
+        {/* Footer Sidebar: Botón Canónico "Nuevo Proyecto" con Elevación Cobalt */}
         <div className="p-2.5 border-t border-slate-800/80 bg-[#070C18] shrink-0">
           <button
             type="button"
@@ -1243,11 +1244,11 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 setModalNuevoProyectoAbierto(true);
               }
             }}
-            className="w-full h-10 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            className="w-full h-10 px-3 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 border border-sky-300/30 shadow-[0_0_18px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-all duration-200 active:scale-95 cursor-pointer select-none group"
             title="Crear nuevo proyecto"
           >
-            <Plus className="w-4 h-4 shrink-0" strokeWidth={2} />
-            {!sidebarColapsado && <span className="whitespace-nowrap">Nuevo Proyecto</span>}
+            <FolderPlus className="w-4 h-4 shrink-0 text-slate-950 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
+            {!sidebarColapsado && <span className="whitespace-nowrap tracking-tight">Nuevo Proyecto</span>}
           </button>
         </div>
       </aside>
@@ -1355,58 +1356,21 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
               {/* Píldora de Estado: Proyecto Seleccionado o Vista Global */}
               {proyectoActivo ? (
-                (() => {
-                  const healthStatus = (proyectoActivo.health_status || (proyectoActivo as any).estado_salud || 'Saludable').toLowerCase();
-                  const esCritico = healthStatus.includes('crit') || healthStatus.includes('rojo') || (proyectoActivo.cpi !== undefined && proyectoActivo.cpi < 0.85);
-                  const esRiesgo = healthStatus.includes('riesgo') || healthStatus.includes('amarillo') || healthStatus.includes('warn') || (proyectoActivo.cpi !== undefined && proyectoActivo.cpi < 1.0);
-                  const estiloSalud = esCritico
-                    ? 'bg-rose-950/30 border-rose-500/30 text-rose-300'
-                    : esRiesgo
-                      ? 'bg-amber-950/30 border-amber-500/30 text-amber-300'
-                      : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300';
-
-                  return (
-                    <div
-                      id="label-proyecto-activo"
-                      className={`h-9 text-[11px] font-medium px-2.5 rounded-lg border inline-flex items-center gap-1.5 shrink-0 transition-colors ${estiloSalud}`}
-                    >
-                      <FolderKanban className="w-3.5 h-3.5 shrink-0 opacity-90" strokeWidth={1.75} />
-                      <span className="font-mono font-bold tracking-tight">[{proyectoActivo.codigo_legado}]</span>
-                      <span className="truncate max-w-[140px] md:max-w-[220px]" title={proyectoActivo.nombre}>
-                        {proyectoActivo.nombre}
-                      </span>
-                      {proyectoActivo.cpi !== undefined && (
-                        <span className="font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded bg-black/30 border border-white/10" title="CPI">
-                          CPI {proyectoActivo.cpi.toFixed(2)}
-                        </span>
-                      )}
-                      {(onVerDetalle360 || onSeleccionarProyecto) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (onVerDetalle360) onVerDetalle360(proyectoActivo.id);
-                            else if (onSeleccionarProyecto) onSeleccionarProyecto(proyectoActivo.id);
-                          }}
-                          className="hover:bg-white/10 rounded-md p-0.5 transition cursor-pointer text-current opacity-80 hover:opacity-100 ml-0.5"
-                          title="Abrir Vista 360°"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setProyectoSeleccionadoCodigo('');
-                          setFiltroHito('');
-                        }}
-                        className="hover:bg-white/10 rounded-md p-0.5 transition cursor-pointer text-current opacity-70 hover:opacity-100 hover:text-rose-400"
-                        title="Deseleccionar proyecto (volver a Vista Global)"
-                      >
-                        <X className="w-3.5 h-3.5" strokeWidth={1.75} />
-                      </button>
-                    </div>
-                  );
-                })()
+                <HeaderProyectoActivo
+                  proyecto={proyectoActivo}
+                  avanceReal={avancesPorProyecto.get(proyectoActivo.codigo_legado || proyectoActivo.id)?.avanceReal ?? proyectoActivo.avance_pct ?? 0}
+                  contadoresTareas={
+                    contadoresTareasPorProyecto.get(proyectoActivo.codigo_legado?.trim().toUpperCase()) ||
+                    contadoresTareasPorProyecto.get(proyectoActivo.id?.trim().toUpperCase()) ||
+                    { total: 0, activas: 0, completadas: 0 }
+                  }
+                  progresoTemporal={progresoTemporalProyecto}
+                  onDeseleccionar={() => {
+                    setProyectoSeleccionadoCodigo('');
+                    setFiltroHito('');
+                  }}
+                  onVerDetalle360={onVerDetalle360 || onSeleccionarProyecto}
+                />
               ) : (
                 <div
                   id="label-proyecto-activo"
@@ -2088,9 +2052,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     if (onNuevoProyecto) onNuevoProyecto();
                     else setModalNuevoProyectoAbierto(true);
                   }}
-                  className="min-h-[44px] px-3 rounded-xl text-xs font-bold text-sky-300 bg-sky-500/15 border border-sky-500/30 flex items-center gap-1 cursor-pointer active:scale-95"
+                  className="min-h-[44px] px-3.5 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-sky-500 to-cyan-400 border border-sky-300/40 shadow-sm shadow-sky-950/40 flex items-center gap-1.5 cursor-pointer active:scale-95 group transition-all"
                 >
-                  <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  <FolderPlus className="w-3.5 h-3.5 text-slate-950 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
                   <span>Nuevo</span>
                 </button>
                 <button

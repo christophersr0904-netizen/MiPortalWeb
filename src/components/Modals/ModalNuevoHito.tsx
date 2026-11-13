@@ -10,12 +10,11 @@
  * ============================================================================
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import {
   X,
-  Plus,
   Layers,
   Flag,
   Briefcase,
@@ -31,6 +30,8 @@ import { db } from '../../db/db';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import type { TipoElementoWBS, HitoWbsRecord } from '../../types';
+import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import { construirOpcionesFasesWbs } from '../../constants/uiMappers';
 
 export interface ModalNuevoHitoProps {
   isOpen?: boolean;
@@ -93,14 +94,20 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
   const [guardando, setGuardando] = useState(false);
   const [errorValidacion, setErrorValidacion] = useState<string | null>(null);
 
-  // Lista unificada de fases disponibles
-  const listaFases = Array.from(
-    new Set([
-      ...(faseSugerida ? [faseSugerida] : []),
-      ...fasesDisponibles,
-      ...FASES_DEFAULT
-    ])
-  ).filter(Boolean);
+  // Lista unificada de fases disponibles y mapeador visual Cobalt
+  const listaFases = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...(faseSugerida ? [faseSugerida] : []),
+          ...fasesDisponibles,
+          ...FASES_DEFAULT
+        ])
+      ).filter(Boolean),
+    [faseSugerida, fasesDisponibles]
+  );
+
+  const opcionesFases = useMemo(() => construirOpcionesFasesWbs(listaFases), [listaFases]);
 
   // Sincronizar defaults al abrir
   useEffect(() => {
@@ -276,7 +283,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
               <button
                 type="button"
                 onClick={() => setTipoElemento('PAQUETE_TRABAJO')}
-                className={`p-3 rounded-xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                className={`p-3 rounded-xl border text-left transition-all duration-200 active:scale-[0.98] flex items-start gap-3 cursor-pointer ${
                   tipoElemento === 'PAQUETE_TRABAJO'
                     ? 'bg-sky-500/10 border-sky-500/50 shadow-[0_0_15px_rgba(56,189,248,0.15)] ring-1 ring-sky-500/40'
                     : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400'
@@ -297,7 +304,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
                       tipoElemento === 'PAQUETE_TRABAJO' ? 'text-sky-300' : 'text-slate-300'
                     }`}
                   >
-                    Paquete de Trabajo (WP)
+                    Paquete de Trabajo
                   </div>
                   <div className="text-[11px] text-slate-400 leading-tight mt-0.5">
                     Entregable con desglose de tareas, presupuesto y asignación.
@@ -312,7 +319,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
                   setPresupuesto(0);
                   setDuracionDias(0);
                 }}
-                className={`p-3 rounded-xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                className={`p-3 rounded-xl border text-left transition-all duration-200 active:scale-[0.98] flex items-start gap-3 cursor-pointer ${
                   tipoElemento === 'HITO_MARCADOR'
                     ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/40'
                     : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400'
@@ -333,7 +340,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
                       tipoElemento === 'HITO_MARCADOR' ? 'text-amber-300' : 'text-slate-300'
                     }`}
                   >
-                    Hito Marcador (HIT)
+                    Hito de Control
                   </div>
                   <div className="text-[11px] text-slate-400 leading-tight mt-0.5">
                     Checkpoint clave de control / DoD sin coste directo (duración 0).
@@ -344,22 +351,14 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
           </div>
 
           {/* Tarjeta Bento 2: Jerarquía y Ubicación */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2 space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-300">
-                Fase Padre Asociada
-              </label>
-              <select
-                value={faseAsociada}
-                onChange={(e) => setFaseAsociada(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500 transition"
-              >
-                {listaFases.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+            <div className="sm:col-span-2">
+              <SelectIconicoCobalt
+                label="Fase Padre Asociada"
+                valor={faseAsociada}
+                onChange={(val) => setFaseAsociada(val)}
+                opciones={opcionesFases}
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -371,7 +370,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
                 value={wbsCode}
                 onChange={(e) => setWbsCode(e.target.value)}
                 placeholder="1.1"
-                className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-sky-500 transition"
+                className="w-full min-h-[42px] bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono focus:outline-none focus:border-sky-500 transition"
               />
             </div>
           </div>
@@ -521,10 +520,20 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
             <button
               type="submit"
               disabled={guardando}
-              className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.4)] transition cursor-pointer disabled:opacity-50 active:scale-95"
+              className="px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.4)] transition-all duration-200 cursor-pointer disabled:opacity-50 active:scale-95 hover:shadow-[0_0_25px_rgba(56,189,248,0.5)]"
             >
-              <Plus className="w-4 h-4" strokeWidth={2.5} />
-              <span>{guardando ? 'Guardando...' : 'Crear Hito WBS'}</span>
+              {tipoElemento === 'PAQUETE_TRABAJO' ? (
+                <Briefcase className="w-4 h-4 text-slate-950" strokeWidth={2} />
+              ) : (
+                <Flag className="w-4 h-4 text-slate-950" strokeWidth={2} />
+              )}
+              <span>
+                {guardando
+                  ? 'Guardando...'
+                  : tipoElemento === 'PAQUETE_TRABAJO'
+                    ? 'Crear Paquete WBS'
+                    : 'Crear Hito Marcador'}
+              </span>
             </button>
           </div>
         </form>

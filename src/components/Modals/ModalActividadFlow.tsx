@@ -38,6 +38,7 @@ import {
 import { ModalAlcanceRecurrencia } from './ModalAlcanceRecurrencia';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
+import { useUndoDelete } from '../../hooks/useUndoDelete';
 import {
   CATEGORIAS_VIDA_MAP,
   type ActividadPersonal,
@@ -201,6 +202,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   soloLectura = false
 }) => {
   useBodyScrollLock(isOpen);
+  const { programarEliminacion } = useUndoDelete();
 
   // Unificación defensiva del objeto de actividad objetivo
   const actividadEditar = actividadEditarProp || actividadProp || null;
@@ -952,14 +954,26 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     await commitGuardado(payloadPendiente, alcance);
   };
 
-  // Eliminar actividad
-  const handleEliminar = async () => {
+  // Eliminar actividad con borrado optimista en 0ms y cola de deshacer
+  const handleEliminar = () => {
     if (!actividadEditar) return;
-    await eliminarActividadConAlcance(
-      actividadEditar.id,
-      alcanceEdicion || 'ALL',
-      actividadEditar.fecha_programada
-    );
+    const actId = actividadEditar.id;
+    const codLegado = actividadEditar.codigo_legado;
+    const alcance = alcanceEdicion || 'ALL';
+    const fechaProg = actividadEditar.fecha_programada;
+    const etiqueta = titulo.trim() || nombreDisplay.trim() || 'Actividad';
+
+    programarEliminacion({
+      tabla: 'actividades_personales',
+      id: actId,
+      idsSecundarios: codLegado ? [codLegado] : [],
+      etiqueta,
+      tipo: 'ACTIVIDAD',
+      commit: async () => {
+        await eliminarActividadConAlcance(actId, alcance, fechaProg);
+      }
+    });
+
     onClose();
   };
 

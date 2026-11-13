@@ -1,14 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import {
   Sparkles,
   X,
-  Plus,
   Trash2,
   CheckCircle2,
-  Flag
+  Flag,
+  Briefcase,
+  CheckSquare,
+  Receipt,
+  LayoutTemplate,
+  Network,
+  ListTodo,
+  Wallet
 } from 'lucide-react';
+import { motion } from 'motion/react';
+import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import {
+  OPCIONES_ARQUETIPO,
+  OPCIONES_MAGNITUD,
+  OPCIONES_ESTADO_PROYECTO,
+  OPCIONES_ESTADO_PARTIDA
+} from '../../constants/uiMappers';
 import { db } from '../../db/db';
 import type { ProyectoRecord, HitoWbsRecord, TareaRecord, GastoRecord } from '../../types';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
@@ -87,6 +101,17 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
   const [gastosWiz, setGastosWiz] = useState<GastoWizItem[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Resolutores limpios de información IA basados en uiMappers
+  const arquetipoInfo = useMemo(
+    () => OPCIONES_ARQUETIPO.find((o) => o.valor === arquetipoProyecto),
+    [arquetipoProyecto]
+  );
+
+  const magnitudInfo = useMemo(
+    () => OPCIONES_MAGNITUD.find((o) => o.valor === magnitudComplejidad),
+    [magnitudComplejidad]
+  );
 
   // Inicializar o cargar datos del proyecto reactivamente
   useEffect(() => {
@@ -518,10 +543,10 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
               type="button"
               id="btn-ia-generar-propuesta"
               onClick={generarPropuestaEstructura}
-              className="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs shadow-md shadow-sky-950/40 flex items-center gap-1.5 transition active:scale-95 border border-sky-400/40 cursor-pointer"
-              title="Generar propuesta WBS automática"
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 via-indigo-500 to-sky-400 hover:from-sky-400 hover:to-indigo-400 text-white font-bold text-xs shadow-md shadow-sky-950/60 flex items-center gap-2 border border-sky-300/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_20px_rgba(56,189,248,0.35)] cursor-pointer group"
+              title="Generar propuesta WBS automática con IA"
             >
-              <Sparkles className="w-4 h-4 text-white shrink-0" />
+              <Sparkles className="w-4 h-4 text-amber-300 shrink-0 group-hover:rotate-12 transition-transform duration-200" strokeWidth={1.75} />
               <span>Generar Estructura con IA</span>
             </button>
             <button
@@ -535,61 +560,50 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
           </div>
         </div>
 
-        {/* NAVEGACIÓN POR PESTAÑAS STICKY */}
+        {/* NAVEGACIÓN POR PESTAÑAS STICKY CON MICRO-INTERACCIONES */}
         <div className="sticky top-0 z-20 px-6 py-2 bg-[#090E1A] border-b border-slate-800 flex items-center gap-2 shrink-0 overflow-x-auto text-xs font-bold custom-scrollbar">
-          <button
-            type="button"
-            onClick={() => setTabActiva('datos')}
-            className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 font-bold shrink-0 cursor-pointer ${
-              tabActiva === 'datos'
-                ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-sm shadow-sky-950/50'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
-            }`}
-          >
-            <span>1. Datos Generales</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTabActiva('hitos')}
-            className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 font-bold shrink-0 cursor-pointer ${
-              tabActiva === 'hitos'
-                ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-sm shadow-sky-950/50'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
-            }`}
-          >
-            <span>2. Hitos</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono tabular-nums bg-slate-800 text-slate-300">
-              {hitosWiz.length}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTabActiva('tareas')}
-            className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 font-bold shrink-0 cursor-pointer ${
-              tabActiva === 'tareas'
-                ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-sm shadow-sky-950/50'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
-            }`}
-          >
-            <span>3. Tareas</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono tabular-nums bg-slate-800 text-slate-300">
-              {tareasWiz.length}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTabActiva('gastos')}
-            className={`px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 font-bold shrink-0 cursor-pointer ${
-              tabActiva === 'gastos'
-                ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-sm shadow-sky-950/50'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
-            }`}
-          >
-            <span>4. Gastos</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono tabular-nums bg-slate-800 text-slate-300">
-              {gastosWiz.length}
-            </span>
-          </button>
+          {[
+            { id: 'datos', label: 'General', icono: LayoutTemplate },
+            { id: 'hitos', label: 'Estructura WBS', icono: Network, count: hitosWiz.length },
+            { id: 'tareas', label: 'Tareas', icono: ListTodo, count: tareasWiz.length },
+            { id: 'gastos', label: 'Presupuesto', icono: Wallet, count: gastosWiz.length }
+          ].map((tab) => {
+            const IconoTab = tab.icono;
+            const esActivo = tabActiva === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setTabActiva(tab.id as any)}
+                className={`relative px-3.5 py-2 rounded-xl transition-all duration-150 flex items-center gap-2 font-bold shrink-0 cursor-pointer active:scale-95 ${
+                  esActivo
+                    ? 'text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                }`}
+              >
+                {esActivo && (
+                  <motion.div
+                    layoutId="tab-indicator-proyecto"
+                    className="absolute inset-0 bg-sky-500 rounded-xl shadow-sm shadow-sky-950/50"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-1.5">
+                  <IconoTab className={`w-3.5 h-3.5 ${esActivo ? 'text-white' : 'text-slate-400'}`} strokeWidth={1.75} />
+                  <span>{tab.label}</span>
+                  {typeof tab.count === 'number' && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono tabular-nums ${
+                        esActivo ? 'bg-sky-950/60 text-white border border-sky-300/30' : 'bg-slate-800 text-slate-300'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* CUERPO PRINCIPAL CON SCROLL INDEPENDIENTE */}
@@ -612,24 +626,52 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 </div>
               </div>
 
-              {/* BANNER DE CLASIFICACIÓN ADAPTATIVA IA */}
-              <div id="wiz-ia-clasificacion-banner" className="p-3.5 bg-[#0D1526] border border-slate-800/80 rounded-2xl shadow-xs space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+              {/* BANNER GLASSMORPHISM DE CLASIFICACIÓN ADAPTATIVA IA */}
+              <div
+                id="wiz-ia-clasificacion-banner"
+                className="relative overflow-hidden p-4 bg-gradient-to-br from-[#0D1526]/95 via-[#0c1427]/90 to-[#101c36]/95 border border-sky-500/30 rounded-2xl shadow-[0_8px_32px_rgba(2,6,23,0.8),0_0_20px_rgba(56,189,248,0.1)] backdrop-blur-xl space-y-2.5"
+              >
+                {/* Destello ambiental en esquina */}
+                <div className="absolute -top-10 -right-10 w-28 h-28 bg-sky-400/10 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="flex flex-wrap items-center justify-between gap-2.5 relative z-10">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span className="font-extrabold text-xs text-slate-200">Clasificación Adaptativa IA:</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span id="wiz-badge-arquetipo-sugerido" className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-sky-500/10 text-sky-300 border border-sky-500/30">
-                      {arquetipoProyecto}
+                    <div className="w-6 h-6 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" strokeWidth={1.75} />
+                    </div>
+                    <span className="font-extrabold text-xs text-slate-100 tracking-tight">
+                      Clasificación Adaptativa IA
                     </span>
-                    <span id="wiz-badge-magnitud-sugerida" className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-500/10 text-teal-300 border border-teal-500/30">
-                      {magnitudComplejidad}
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Píldora Arquetipo con Ícono Mapeado */}
+                    <span
+                      id="wiz-badge-arquetipo-sugerido"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30 shadow-xs"
+                    >
+                      {arquetipoInfo?.icono && (
+                        <arquetipoInfo.icono className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                      )}
+                      <span>{arquetipoInfo?.etiqueta || arquetipoProyecto}</span>
+                    </span>
+
+                    {/* Píldora Magnitud con Badge T-Shirt Mapeado */}
+                    <span
+                      id="wiz-badge-magnitud-sugerida"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-teal-500/15 text-teal-300 border border-teal-500/30 shadow-xs"
+                    >
+                      <span className="font-mono font-bold text-[10px] px-1.5 py-0.2 rounded bg-teal-950/70 border border-teal-400/40 text-teal-300">
+                        {magnitudInfo?.badge || 'M'}
+                      </span>
+                      <span>{magnitudInfo?.etiqueta || magnitudComplejidad}</span>
                     </span>
                   </div>
                 </div>
-                <p id="wiz-texto-justificacion-clasificacion" className="text-[11px] leading-relaxed text-slate-400 italic">
-                  Clasificación adaptativa determinada según el alcance y especificaciones del proyecto.
+
+                <p id="wiz-texto-justificacion-clasificacion" className="text-[11px] leading-relaxed text-slate-400 relative z-10">
+                  Estructura inferida automáticamente según el alcance, complejidad estimada y recursos definidos.
                 </p>
               </div>
 
@@ -737,25 +779,28 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                         1. Estado Actual de Partida
                       </label>
                       <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                        {[
-                          'Cero Absoluto (Greenfield)',
-                          'Base / Prototipo Existente',
-                          'Migración / Refactorización',
-                          'Escalado / Lanzamiento'
-                        ].map((opt) => (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => setEstadoPartida(opt)}
-                            className={`p-2 rounded-xl border text-left transition font-semibold cursor-pointer truncate ${
-                              estadoPartida === opt
-                                ? 'border-sky-500 bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/30'
-                                : 'border-slate-800 bg-[#040711] text-slate-300 hover:border-slate-700'
-                            }`}
-                          >
-                            {opt.split(' ')[0]} {opt.split(' ')[1] || ''}
-                          </button>
-                        ))}
+                        {OPCIONES_ESTADO_PARTIDA.map((opt) => {
+                          const IconoOpt = opt.icono;
+                          const esActivo = estadoPartida === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setEstadoPartida(opt.id)}
+                              className={`p-2 rounded-xl border text-left transition-all duration-150 font-semibold cursor-pointer flex items-center gap-2 active:scale-95 ${
+                                esActivo
+                                  ? 'border-sky-500 bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/30 shadow-[0_0_12px_rgba(56,189,248,0.15)]'
+                                  : 'border-slate-800 bg-[#040711] text-slate-300 hover:border-slate-700 hover:bg-[#070c18]'
+                              }`}
+                            >
+                              <IconoOpt className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                              <div className="flex flex-col min-w-0">
+                                <span className="truncate leading-tight text-xs">{opt.titulo}</span>
+                                <span className="text-[10px] text-slate-400 truncate font-normal">{opt.subtitulo}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -883,55 +928,26 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
 
                 {/* Magnitud / T-Shirt & Arquetipo & Estado */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-300 block mb-1.5">
-                      Magnitud (T-Shirt)
-                    </label>
-                    <select
-                      value={magnitudComplejidad}
-                      onChange={(e) => setMagnitudComplejidad(e.target.value)}
-                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 font-bold text-slate-100 text-xs outline-none focus:border-sky-500"
-                    >
-                      <option value="Light">Light (S - Corta duración / Ligero)</option>
-                      <option value="Medium">Medium (M - Estándar / 30-90 días)</option>
-                      <option value="Heavy">Heavy (L - Alta criticidad / &gt;90 días)</option>
-                    </select>
-                  </div>
+                  <SelectIconicoCobalt
+                    label="Magnitud (T-Shirt)"
+                    valor={magnitudComplejidad}
+                    onChange={(val) => setMagnitudComplejidad(val)}
+                    opciones={OPCIONES_MAGNITUD}
+                  />
 
-                  <div>
-                    <label className="font-semibold text-slate-300 block mb-1.5">
-                      Arquetipo de Proyecto
-                    </label>
-                    <select
-                      value={arquetipoProyecto}
-                      onChange={(e) => setArquetipoProyecto(e.target.value)}
-                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 font-bold text-slate-100 text-xs outline-none focus:border-sky-500"
-                    >
-                      <option value="1_Infraestructura">1_Infraestructura (Obras, HW)</option>
-                      <option value="2_Venture">2_Venture (Software, Startups)</option>
-                      <option value="3_Activo">3_Activo (Inversiones, Bienes)</option>
-                      <option value="4_Carrera">4_Carrera (Certificaciones)</option>
-                      <option value="5_Evento">5_Evento (Campañas, Eventos)</option>
-                    </select>
-                  </div>
+                  <SelectIconicoCobalt
+                    label="Arquetipo de Proyecto"
+                    valor={arquetipoProyecto}
+                    onChange={(val) => setArquetipoProyecto(val)}
+                    opciones={OPCIONES_ARQUETIPO}
+                  />
 
-                  <div>
-                    <label className="font-semibold text-slate-300 block mb-1.5">
-                      Estado del Proyecto
-                    </label>
-                    <select
-                      value={estadoProyecto}
-                      onChange={(e) => setEstadoProyecto(e.target.value)}
-                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 font-bold text-slate-100 text-xs outline-none focus:border-sky-500"
-                    >
-                      <option value="01_Backlog">01_Backlog</option>
-                      <option value="02_Planificado">02_Planificado</option>
-                      <option value="03_En_Ejecucion">03_En_Ejecución</option>
-                      <option value="04_En_Pausa">04_En_Pausa</option>
-                      <option value="05_Cancelado">05_Cancelado</option>
-                      <option value="06_Cerrado">06_Cerrado</option>
-                    </select>
-                  </div>
+                  <SelectIconicoCobalt
+                    label="Estado del Proyecto"
+                    valor={estadoProyecto}
+                    onChange={(val) => setEstadoProyecto(val)}
+                    opciones={OPCIONES_ESTADO_PROYECTO}
+                  />
                 </div>
 
                 {/* Moneda y Presupuesto */}
@@ -1064,18 +1080,18 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   <button
                     type="button"
                     onClick={() => agregarHito('PAQUETE_TRABAJO')}
-                    className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white rounded-lg font-bold text-xs shadow-md shadow-sky-950/40 transition flex items-center gap-1.5 cursor-pointer"
+                    className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 hover:border-sky-400 rounded-xl font-bold text-xs shadow-sm shadow-sky-950/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_15px_rgba(56,189,248,0.2)] flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>+ Paquete de Trabajo (WP)</span>
+                    <Briefcase className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                    <span>Nuevo Paquete</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => agregarHito('HITO_MARCADOR')}
-                    className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold text-xs shadow-md shadow-cyan-950/40 transition flex items-center gap-1.5 cursor-pointer"
+                    className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 hover:border-amber-400 rounded-xl font-bold text-xs shadow-sm shadow-amber-950/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.2)] flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Flag className="w-3.5 h-3.5" />
-                    <span>+ Hito Marcador (HIT)</span>
+                    <Flag className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} />
+                    <span>Nuevo Hito</span>
                   </button>
                 </div>
               </div>
@@ -1149,10 +1165,10 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 <button
                   type="button"
                   onClick={agregarTarea}
-                  className="px-3 py-1.5 bg-sky-500 hover:bg-sky-400 text-white rounded-lg font-bold text-xs shadow-md shadow-sky-950/40 transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 hover:border-sky-400 rounded-xl font-bold text-xs shadow-sm shadow-sky-950/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_15px_rgba(56,189,248,0.2)] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Añadir Tarea</span>
+                  <CheckSquare className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
+                  <span>Añadir Tarea</span>
                 </button>
               </div>
 
@@ -1225,10 +1241,10 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 <button
                   type="button"
                   onClick={agregarGasto}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs shadow-md shadow-emerald-950/40 transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 hover:border-emerald-400 rounded-xl font-bold text-xs shadow-sm shadow-emerald-950/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Añadir Partida de Gasto</span>
+                  <Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} />
+                  <span>Añadir Gasto</span>
                 </button>
               </div>
 
@@ -1315,9 +1331,9 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             type="button"
             onClick={() => guardarProyecto()}
             disabled={guardando}
-            className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold shadow-md shadow-sky-950/50 flex items-center gap-2 transition cursor-pointer disabled:opacity-50"
+            className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold shadow-md shadow-sky-950/50 flex items-center gap-2 transition-all duration-200 active:scale-95 hover:shadow-[0_0_20px_rgba(56,189,248,0.4)] cursor-pointer disabled:opacity-50"
           >
-            <CheckCircle2 className="w-4 h-4" />
+            <CheckCircle2 className="w-4 h-4 text-slate-950" strokeWidth={2} />
             <span>{guardando ? 'Guardando...' : proyectoAEditarId ? 'Guardar Cambios' : 'Guardar Proyecto'}</span>
           </button>
         </div>

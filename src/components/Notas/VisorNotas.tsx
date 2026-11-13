@@ -166,9 +166,9 @@ export const VisorNotas: React.FC = () => {
   const rawList = useLiveQuery(() => db.notas.toArray(), []) ?? [];
   const notasRaw = useMemo(() => {
     return rawList
-      .filter((n) => !estaOculto(n.id) && !estaOculto(n.codigo_legado))
+      .filter((n) => !hiddenIdsSet.has(n.id) && !hiddenIdsSet.has(n.codigo_legado) && !estaOculto(n.id) && !estaOculto(n.codigo_legado))
       .map((n) => normalizeNota(n));
-  }, [rawList, estaOculto]);
+  }, [rawList, hiddenIdsSet, estaOculto]);
 
   // Callbacks memoizados para erradicar re-evaluación en cascada de tarjetas
   const handleEditar = useCallback((n: NotaRecord) => {
