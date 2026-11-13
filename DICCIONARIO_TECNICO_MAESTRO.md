@@ -52,6 +52,13 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 6.4 — Inyección de Google Client ID y Aceleración GIS (REQ-OAUTH-48-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `.env`, `index.html`, `app.html`, `dist/index.html`, `dist/app.html`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `.env`: Configurado el Client ID real de Google Identity Services (`VITE_GOOGLE_CLIENT_ID=583437513933-5vj9gb8fo1thmlmnevl0mm88iqjp170c.apps.googleusercontent.com`), desbloqueando la autorización OAuth2 directa para sincronización de eventos de tareas, hábitos y finanzas con Google Calendar API v3.
+  - `index.html` & `app.html`: Inyectada en el `<head>` la etiqueta `<script src="https://accounts.google.com/gsi/client" async defer></script>`, asegurando la precarga de la biblioteca oficial GIS para eliminar cualquier latencia en el pop-up de consentimiento al pulsar "Conectar GCalendar".
+  - Empaquetado: Reconstruido el bundle de producción con Vite (`npm run build`), sincronizando `dist/index.html` y `dist/app.html` con cero errores.
+
 ### FASE 6.3 — Resiliencia Mobile-First, Reconexión Realtime, UX Táctil y PWA (REQ-MOBILE-47-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/services/syncManager.ts`, `src/App.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/PMO/TarjetaTransaccion.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Notas/EditorNotaModal.tsx`, `src/components/Views/ViewKanban.tsx`, `public/sw.js`, `public/manifest.json`, `public/manifest.webmanifest`, `src/services/__tests__/syncManagerRealtime.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**

@@ -3,7 +3,7 @@
  * Estrategia: Network-First para navegación HTML, Cache-First para fuentes y Stale-While-Revalidate para assets validados
  */
 
-const CACHE_NAME = 'pmo-cache-1794535986767';
+const CACHE_NAME = 'pmo-cache-1794541106852';
 const STATIC_ASSETS = [
   './manifest.webmanifest',
   './favicon.svg',
