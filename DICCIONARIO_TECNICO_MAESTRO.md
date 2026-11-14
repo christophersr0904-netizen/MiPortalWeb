@@ -52,6 +52,28 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 7.6.1 — Fondo Sólido y Máxima Opacidad en Panel Desplegable Cobalt (REQ-BUGFIX-70-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/UI/SelectIconicoCobalt.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/components/UI/SelectIconicoCobalt.tsx`:
+    - Extirpada la semi-transparencia `/98` y el efecto `backdrop-blur-xl` del contenedor del menú desplegable flotante (`role="listbox"`).
+    - Inyectado fondo 100% sólido y opaco `bg-[#0D1526]` con borde reforzado `border border-slate-700` y sombra multicapa `shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)]`.
+    - Estandarizado el hover de las opciones (`role="option"`) a `hover:bg-slate-800` (100% sólido) y contenedor de ícono a `bg-slate-800` para garantizar legibilidad absoluta y contraste sobre cualquier superficie o modal.
+  - **Validación QA:** Chequeo estricto TypeScript limpio (`npx tsc --noEmit`: 0 errores) y compilación de producción generada exitosamente.
+
+### FASE 7.6 — Despliegue de Chasis Bento y Cápsula Sólida en Hábitos (REQ-UI-69-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Habitos/TableroHabitos.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Cápsula Sólida de Filtro por Meta (`TableroHabitos.tsx`):**
+    - Encapsulado el selector `<SelectIconicoCobalt />` y su botón condicional `360°` dentro de un chasis sólido `bg-[#080D1A] border border-slate-700/80 p-1 rounded-xl shadow-inner relative z-40`, eliminando el efecto de fondo transparente y fusión con el canvas.
+    - Uniformada la altura del disparador a `min-h-[34px]` y del botón 360° a `h-8`, logrando simetría estricta con los popovers adyacentes (`h-9`).
+  - **Chasis Bento Grid de 3 Tarjetas Maestras (`ModalActividadFlow.tsx`):**
+    - Erradicado el antiguo layout asimétrico de 2 tarjetas y etiquetas verbosas redundantes.
+    - **Bento 1 (Hero Full Width):** *Prioridad & Enfoque Operativo* en riel táctil horizontal con micro-indicadores luminosos pulsantes (`animate-pulse`) y variantes cromáticas dedicadas (P1 Urgente rose, P2 Media amber, P3 Baja emerald).
+    - **Bento 2 (Columna Izquierda):** *Tiempo & Ciclo Recurrente* con selectores sintetizados de Fecha, Hora, Frecuencia, Duración desacoplada con botones rápidos (15m, 30m, 1h, 2h) y **tokens circulares táctiles de días de la semana (L, M, M, J, V, S, D)** en `w-8 h-8 rounded-full` con gradiente `from-sky-400 to-sky-600`, resplandor neón `shadow-[0_0_12px_rgba(56,189,248,0.5)]` y compresión física al tacto (`active:scale-90`).
+    - **Bento 3 (Columna Derecha):** *Meta & Métricas* con selector de meta vinculada / nueva meta rápida y grilla cuantitativa 2x2 (Unidad, Objetivo, Acumulado, Mínimo Racha) con reseteo de spinners numéricos `[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none`.
+  - **Validación QA:** TypeScript compilado al 100% sin errores (`npx tsc --noEmit`), suite Vitest superada con 33/33 suites y 318/318 pruebas en verde, y bundle de producción generado exitosamente en 10.76s vía `npm run build`.
+
 ### FASE 6.7.1 — Upgrade de Botones Globales PMO y Refinamiento IA WBS (REQ-UI-53-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewPortafolio.tsx`, `src/components/Views/ViewKanban.tsx`, `src/components/Modals/ModalNuevoProyecto.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
@@ -10177,3 +10199,65 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados exitosamente en 16.13s).
+
+---
+
+### [REQ-UI-67-EXEC: Despliegue de Segmented Control y Físicas Kinéticas en Rutinas y Hábitos]
+**Fecha:** Noviembre 2026 | **Fase:** 7.5 (Upgrade UI Hábitos & Rutinas) | **Archivos Modificados:** `src/components/Views/ViewHabitos.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Arquitectura
+- **Deuda Visual en Controles y Filtros:**
+  - `ViewHabitos.tsx` mantenía botones de subpestañas planos con un indicador estático rígido inferior (`span h-0.5`).
+  - Los botones de nuevo hábito en móvil y escritorio carecían del estándar aeroespacial Cobalt Aerodynamic.
+  - `TableroHabitos.tsx` utilizaba 4 botones desconectados para filtrar por compromiso y una etiqueta `<select id="filtro-meta-select">` nativa del navegador para filtrar por meta estratégica, rompiendo la estética Glassmorphism.
+- **Deuda Háptica en Tarjetas:**
+  - `TarjetaHabito.tsx` presentaba un checkbox diminuto de 20x20px con borde gris plano sin feedback de gema ni resplandor esmeralda.
+  - La píldora de rachas permanecía en gris pizarra opaco cuando la racha era menor a 7 días, pareciendo inactiva.
+  - Las listas de tarjetas carecían de físicas cinéticas de layout (`layout`), provocando saltos bruscos al filtrar o reordenar.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Cabecera Maestra y Subpestañas (`ViewHabitos.tsx`):**
+   - Implementado Segmented Control Flotante Glassmorphism (`bg-[#040711]/80 backdrop-blur-md rounded-2xl border border-slate-800/80 p-1 shadow-inner`) con kinetic spring en el indicador activo `<motion.div layoutId="subtab-habitos-indicator" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />`.
+   - Botón Primario elevado con gradiente aeroespacial (`from-sky-600 via-sky-500 to-cyan-500`), halo luminoso `shadow-[0_0_20px_rgba(56,189,248,0.28)]`, microborde iluminado `border border-sky-400/40`, microinteracción `active:scale-95` y animación de rotación al hover en el icono `<Plus />`.
+2. **Toolbar de Filtros y Erradicación del `<select>` Nativo (`TableroHabitos.tsx`):**
+   - Reemplazadas las píldoras de compromiso por el Segmented Control flotante animado con `motion.div layoutId="filtro-compromiso-indicator"`.
+   - Erradicado el `<select id="filtro-meta-select">` nativo, sustituyéndolo por `<SelectIconicoCobalt />` alimentado reactivamente con la constante memoizada `opcionesFiltroMeta` (`OpcionSelectCobalt[]`).
+   - Buscador rápido elevado con cápsula ahumada y halo de neón al foco (`focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/40 focus:shadow-[0_0_15px_rgba(56,189,248,0.25)]`).
+3. **Elevación Háptica de Tarjetas y Físicas Kinéticas (`TarjetaHabito.tsx` y `TableroHabitos.tsx`):**
+   - Chasis Bento multicapa con microelevación en hover (`bg-[#0D1526]/90 border-slate-800/70 hover:border-sky-500/40 hover:-translate-y-1 hover:shadow-cobalt-1`).
+   - Botón Check Diario transformado en una Gema Esmeralda viva de 24x24px (`w-6 h-6 rounded-lg`, `bg-gradient-to-br from-emerald-400 to-emerald-600 border-emerald-300 shadow-[0_0_14px_rgba(16,185,129,0.55)] active:scale-90`).
+   - Píldora Neón Fuego viva para toda racha activa ($> 0$), con `animate-pulse` para rachas destacadas ($\ge 7$).
+   - Barra de progreso cuantitativo elevada con gradiente resplandeciente (`from-sky-500 to-cyan-400 shadow-[0_0_8px_rgba(56,189,248,0.4)]` / `from-emerald-400 to-teal-400`).
+   - Físicas `layout` activadas en el `<motion.div>` de cada tarjeta en `TableroHabitos.tsx` con resorte cinético `transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.8 }}`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados exitosamente en 20.96s).
+
+---
+
+### [REQ-BUGFIX-68-EXEC: Reparación de Capas Z-Index en Filtros Desplegables Cobalt]
+**Fecha:** Noviembre 2026 | **Fase:** 7.5 (Bugfix Stacking Context) | **Archivos Modificados:** `src/components/UI/SelectIconicoCobalt.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Views/ViewFinanzas.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Colisión de Contextos de Apilamiento (Stacking Contexts):**
+  - El menú desplegable de `SelectIconicoCobalt` y los popovers de ordenamiento/temporal en `TableroHabitos.tsx` se renderizaban detrás de las columnas del Kanban.
+  - Las columnas de hábitos poseen cabeceras fijas con `sticky top-0 z-10`. Dado que la barra de herramientas de filtros carecía de `relative z-40` o `z-50`, los elementos con posición sticky declarados posteriormente en el DOM se apilaban por encima del menú desplegable, amputando visualmente la lista de opciones.
+  - En `SelectIconicoCobalt.tsx`, el contenedor general mantenía `z-10` estático al abrirse, lo que permitía colisiones con controles vecinos que crearan nuevos contextos de apilamiento.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Elevación de la Barra de Herramientas (`TableroHabitos.tsx`):**
+   - Inyección de `relative z-50` en el contenedor principal de la barra de filtros (`portal-surface bg-[#0D1526]/90 backdrop-blur-md ...`).
+   - Inyección de `relative z-40` en el sub-contenedor de `SelectIconicoCobalt` y `z-30` en los botones contenedores de los Popovers de Ordenamiento y Temporal.
+   - Elevación del z-index de las listas flotantes de los popovers a `z-[100]`.
+2. **Jerarquía Dominante en `SelectIconicoCobalt.tsx`:**
+   - Contenedor raíz adaptativo: `relative flex flex-col gap-1.5 ${estaAbierto ? 'z-[100]' : 'z-10'}`, ascendiendo dinámicamente al abrirse.
+   - Lista flotante de opciones (`role="listbox"`) blindada con `z-[100]`.
+3. **Consistencia en Navegación Flotante (`ViewFinanzas.tsx`):**
+   - Elevación de la barra de navegación principal sticky a `sticky top-[57px] z-30` para garantizar flotación inalterable sobre movimientos y tarjetas de transacciones.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados exitosamente en 13.26s).

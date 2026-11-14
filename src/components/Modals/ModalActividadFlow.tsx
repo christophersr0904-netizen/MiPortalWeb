@@ -1155,15 +1155,76 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
             </div>
           )}
 
-          {/* BENTO GRID DE 2 TARJETAS */}
-          <div className="bg-[#040711] border border-slate-800/80 rounded-xl p-3 sm:p-3.5">
+          {/* BENTO GRID DE 3 TARJETAS MAESTRAS COBALT */}
+          <div className="bg-[#040711] border border-slate-800/80 rounded-xl p-3 sm:p-3.5 space-y-3">
+            {/* TARJETA BENTO 1: IDENTIDAD & PRIORIDAD EISENHOWER (HERO STRIP COMPLETO) */}
+            <div className="bg-[#0D1526] border border-slate-800/80 rounded-xl p-3 shadow-2xs space-y-2.5">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" strokeWidth={1.75} />
+                  <span>Prioridad Operativa</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">Matriz Eisenhower</span>
+              </div>
+
+              {/* Riel Táctil Neón de Prioridad */}
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    {
+                      id: '01_P1_Alta',
+                      label: 'P1 Urgente',
+                      sublabel: 'Crítico',
+                      dot: 'bg-rose-400',
+                      glow: 'shadow-[0_0_10px_rgba(244,63,94,0.3)] border-rose-500/70 bg-rose-950/30 text-rose-200'
+                    },
+                    {
+                      id: '02_P2_Media',
+                      label: 'P2 Media',
+                      sublabel: 'Sostenido',
+                      dot: 'bg-amber-400',
+                      glow: 'shadow-[0_0_10px_rgba(245,158,11,0.3)] border-amber-500/70 bg-amber-950/30 text-amber-200'
+                    },
+                    {
+                      id: '03_P3_Baja',
+                      label: 'P3 Baja',
+                      sublabel: 'Flexible',
+                      dot: 'bg-emerald-400',
+                      glow: 'shadow-[0_0_10px_rgba(16,185,129,0.3)] border-emerald-500/70 bg-emerald-950/30 text-emerald-200'
+                    }
+                  ] as const
+                ).map((p) => {
+                  const activo = prioridad === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPrioridad(p.id)}
+                      className={`py-2 px-2.5 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer flex flex-col items-center justify-center gap-1 border active:scale-95 ${
+                        activo
+                          ? p.glow
+                          : 'bg-[#040711] border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${p.dot} ${activo ? 'animate-pulse' : ''}`} />
+                        <span className="font-bold">{p.label}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">{p.sublabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* FILA INFERIOR: 2 COLUMNAS SIMÉTRICAS (TIEMPO VS MÉTRICAS) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* TARJETA BENTO 1: TIEMPO & PROGRAMACIÓN */}
+              {/* TARJETA BENTO 2: TIEMPO & CICLO RECURRENTE */}
               <div className="bg-[#0D1526] border border-slate-800/80 rounded-xl p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
-                    <span>Tiempo & Programación</span>
+                    <span>Tiempo & Ciclo</span>
                   </span>
                 </div>
 
@@ -1171,7 +1232,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                   {/* Fecha y Hora */}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Fecha Programada</label>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Fecha</label>
                       <input
                         type="date"
                         value={fecha}
@@ -1180,7 +1241,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Hora Inicio</label>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">Hora</label>
                       <input
                         type="time"
                         value={hora}
@@ -1190,10 +1251,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   </div>
 
-                  {/* Frecuencia de Repetición (Google Style) */}
+                  {/* Frecuencia de Repetición */}
                   <div>
                     <SelectIconicoCobalt
-                      label="Frecuencia / Repetición"
+                      label="Frecuencia"
                       valor={tipoRecurrencia}
                       onChange={(nuevaRecurrencia) => {
                         const val = nuevaRecurrencia as TipoRecurrenciaOpcion;
@@ -1212,25 +1273,32 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     />
                   </div>
 
-                  {/* Grilla circular táctica de días (L M M J V S D) cuando aplica */}
+                  {/* Grilla circular táctica de días (L M M J V S D) con Glow Neón */}
                   {(tipoRecurrencia === 'SEMANAL' || tipoRecurrencia === 'PERSONALIZADO') && (
-                    <div className="pt-1">
-                      <label className="text-[10px] text-slate-400 block mb-1">Repetir el</label>
+                    <div className="pt-1 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-semibold text-slate-400">Días Activos</label>
+                        <span className="text-[10px] font-mono text-sky-400">
+                          {diasSemana.length} seleccionados
+                        </span>
+                      </div>
                       <div className="flex items-center justify-between gap-1">
                         {[
-                          { id: 'LU', label: 'L' },
-                          { id: 'MA', label: 'M' },
-                          { id: 'MI', label: 'M' },
-                          { id: 'JU', label: 'J' },
-                          { id: 'VI', label: 'V' },
-                          { id: 'SA', label: 'S' },
-                          { id: 'DO', label: 'D' }
-                        ].map(({ id, label }) => {
+                          { id: 'LU', label: 'L', name: 'Lunes' },
+                          { id: 'MA', label: 'M', name: 'Martes' },
+                          { id: 'MI', label: 'M', name: 'Miércoles' },
+                          { id: 'JU', label: 'J', name: 'Jueves' },
+                          { id: 'VI', label: 'V', name: 'Viernes' },
+                          { id: 'SA', label: 'S', name: 'Sábado' },
+                          { id: 'DO', label: 'D', name: 'Domingo' }
+                        ].map(({ id, label, name }) => {
                           const activo = diasSemana.includes(id);
+                          const esFinde = id === 'SA' || id === 'DO';
                           return (
                             <button
                               key={id}
                               type="button"
+                              aria-pressed={activo}
                               onClick={() => {
                                 if (activo) {
                                   if (diasSemana.length > 1) {
@@ -1240,11 +1308,14 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                                   setDiasSemana([...diasSemana, id]);
                                 }
                               }}
-                              className={`w-7 h-7 rounded-full text-xs font-mono font-bold transition flex items-center justify-center cursor-pointer ${activo
-                                  ? 'bg-sky-500 text-slate-950 font-black shadow-[0_0_8px_rgba(14,165,233,0.4)]'
-                                  : 'bg-[#040711] text-slate-400 border border-slate-800 hover:border-slate-700 hover:text-slate-200'
-                                }`}
-                              title={id}
+                              className={`w-8 h-8 rounded-full text-xs font-mono font-black transition-all duration-150 flex items-center justify-center cursor-pointer select-none active:scale-90 ${
+                                activo
+                                  ? 'bg-gradient-to-b from-sky-400 to-sky-600 text-slate-950 border border-sky-300 shadow-[0_0_12px_rgba(56,189,248,0.5),inset_0_1px_1px_rgba(255,255,255,0.4)]'
+                                  : esFinde
+                                    ? 'bg-[#040711] text-amber-400/70 border border-amber-900/30 hover:border-amber-500/40 hover:text-amber-300 hover:bg-slate-900/60'
+                                    : 'bg-[#040711] text-slate-400 border border-slate-800/90 hover:border-sky-500/40 hover:text-sky-300 hover:bg-slate-900/60'
+                              }`}
+                              title={`${name} (${id})`}
                             >
                               {label}
                             </button>
@@ -1254,11 +1325,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   )}
 
-                  {/* Configuración avanzada de Personalizado (Intervalo) */}
+                  {/* Configuración avanzada de Intervalo */}
                   {tipoRecurrencia === 'PERSONALIZADO' && (
                     <div className="pt-2 space-y-2 border-t border-slate-800/60">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 shrink-0">Repetir cada</span>
+                        <span className="text-[10px] text-slate-400 shrink-0">Intervalo:</span>
                         <input
                           type="number"
                           min="1"
@@ -1280,10 +1351,10 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   )}
 
-                  {/* Fecha de término opcional para toda serie recurrente */}
+                  {/* Vencimiento opcional de la serie */}
                   {tipoRecurrencia !== 'NINGUNA' && (
                     <div className="pt-1.5 space-y-1 border-t border-slate-800/60">
-                      <label className="text-[10px] text-slate-400 block">Finaliza serie</label>
+                      <label className="text-[10px] text-slate-400 block">Vencimiento</label>
                       <div className="flex items-center gap-3">
                         <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
                           <input
@@ -1296,7 +1367,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                             }}
                             className="text-sky-500 focus:ring-sky-500"
                           />
-                          <span>Nunca</span>
+                          <span>Sin límite</span>
                         </label>
                         <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
                           <input
@@ -1306,7 +1377,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                             onChange={() => setTieneFechaFin(true)}
                             className="text-sky-500 focus:ring-sky-500"
                           />
-                          <span>El</span>
+                          <span>Hasta</span>
                         </label>
                         {tieneFechaFin && (
                           <input
@@ -1320,12 +1391,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   )}
 
-                  {/* Estimación de Duración Desacoplada (Formato H:MM / Xh Ymin) */}
+                  {/* Duración Estimada */}
                   <div className="pt-2 space-y-1.5 border-t border-slate-800/60">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] text-slate-400 flex items-center gap-1">
                         <Clock className="w-3 h-3 text-sky-400" />
-                        <span>Duración Estimada</span>
+                        <span>Duración</span>
                       </label>
                       <button
                         type="button"
@@ -1333,13 +1404,14 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           setDuracionHoras(0);
                           setDuracionStr('0:00');
                         }}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${duracionHoras === 0
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer ${
+                          duracionHoras === 0
                             ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
                             : 'bg-[#040711] text-slate-400 border border-slate-800 hover:text-slate-200'
-                          }`}
+                        }`}
                       >
                         <Zap className="w-3 h-3 text-amber-400" />
-                        <span>Micro-Acción (0min)</span>
+                        <span>Micro (0m)</span>
                       </button>
                     </div>
 
@@ -1355,7 +1427,6 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                         }}
                         placeholder="H:MM"
                         className="w-20 bg-[#040711] px-2.5 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-center text-slate-200 outline-none focus:border-sky-500/50"
-                        title="Duración en formato H:MM o minutos (ej. 1:30, 45m)"
                       />
                       <span className="text-[11px] font-mono tabular-nums text-sky-400 font-semibold">
                         ({formatearDuracionLegible(duracionHoras)})
@@ -1365,9 +1436,9 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     {/* Botones rápidos de duración */}
                     <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                       {[
-                        { label: '15min', horas: 0.25 },
-                        { label: '30min', horas: 0.5 },
-                        { label: '45min', horas: 0.75 },
+                        { label: '15m', horas: 0.25 },
+                        { label: '30m', horas: 0.5 },
+                        { label: '45m', horas: 0.75 },
                         { label: '1h', horas: 1.0 },
                         { label: '2h', horas: 2.0 }
                       ].map((p) => {
@@ -1380,10 +1451,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                               setDuracionHoras(p.horas);
                               setDuracionStr(convertirHorasDecimalAString(p.horas));
                             }}
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-mono tabular-nums font-bold transition cursor-pointer ${activo
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-mono tabular-nums font-bold transition active:scale-95 cursor-pointer ${
+                              activo
                                 ? 'bg-sky-600 text-white shadow-xs'
                                 : 'bg-[#040711] text-slate-400 border border-slate-800 hover:text-slate-200'
-                              }`}
+                            }`}
                           >
                             {p.label}
                           </button>
@@ -1392,7 +1464,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     </div>
                   </div>
 
-                  {/* Sincronización Google Calendar (Switch Minimalista Cobalt) */}
+                  {/* Sincronización Google Calendar */}
                   <div className="pt-2 flex items-center justify-between border-t border-slate-800/60">
                     <SwitchCobalt
                       id="switch-actividad-calendar"
@@ -1460,56 +1532,26 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                 </div>
               </div>
 
-              {/* TARJETA BENTO 2: OPERATIVO & METAS ESTRATÉGICAS */}
+              {/* TARJETA BENTO 3: MÉTRICAS & META ESTRATÉGICA */}
               <div className="bg-[#0D1526] border border-slate-800/80 rounded-xl p-3 flex flex-col justify-between shadow-2xs space-y-2.5">
                 <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                    <Target className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Operativo & Metas Estratégicas</span>
+                    <Target className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+                    <span>Meta & Métricas</span>
                   </span>
                 </div>
 
                 <div className="space-y-2 text-xs">
-                  {/* Micro-riel Prioridad Eisenhower */}
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Prioridad Operativa</label>
-                    <div className="grid grid-cols-3 gap-1 p-0.5 bg-[#040711] rounded-lg border border-slate-800">
-                      {(
-                        [
-                          { id: '01_P1_Alta', label: 'P1 Urgente', dot: 'bg-rose-400' },
-                          { id: '02_P2_Media', label: 'P2 Media', dot: 'bg-amber-400' },
-                          { id: '03_P3_Baja', label: 'P3 Baja', dot: 'bg-emerald-400' }
-                        ] as const
-                      ).map((p) => {
-                        const activo = prioridad === p.id;
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => setPrioridad(p.id)}
-                            className={`py-1 rounded-md text-[10px] font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 ${activo
-                                ? 'bg-slate-800 text-white shadow-xs border border-slate-700/60'
-                                : 'text-slate-400 hover:text-slate-200'
-                              }`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />
-                            <span>{p.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Selector y Vinculación a Metas & Planes */}
+                  {/* Selector y Vinculación a Metas */}
                   <div>
                     <div className="flex items-center justify-between mb-0.5">
-                      <label className="text-[10px] text-slate-400">Meta o Plan Estratégico</label>
+                      <label className="text-[10px] text-slate-400">Meta Vinculada</label>
                       <button
                         type="button"
                         onClick={() => setModoMetaManual(!modoMetaManual)}
-                        className="text-[10px] text-sky-400 hover:text-sky-300 transition cursor-pointer"
+                        className="text-[10px] text-sky-400 hover:text-sky-300 transition cursor-pointer font-medium"
                       >
-                        {modoMetaManual ? 'Seleccionar existente' : '+ Nueva meta rápida'}
+                        {modoMetaManual ? 'Seleccionar lista' : '+ Nueva rápida'}
                       </button>
                     </div>
 
@@ -1521,12 +1563,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           setNombreNuevaMeta(e.target.value);
                           setMetaMacro(e.target.value);
                         }}
-                        placeholder="Nombre del nuevo objetivo estratégico..."
+                        placeholder="Nombre del objetivo..."
                         className="w-full bg-[#040711] px-2.5 py-1 rounded-lg border border-slate-800 text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50"
                       />
                     ) : (
                       <SelectIconicoCobalt
-                        label="Meta Vinculada"
+                        label=""
                         valor={metaSeleccionadaId}
                         onChange={(nuevaMetaId) => handleCambiarMetaSeleccionada(nuevaMetaId)}
                         opciones={opcionesMetasCobalt}
@@ -1535,21 +1577,22 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                     )}
                   </div>
 
-                  {/* Métricas Cuantitativas: Unidad, Objetivo, Acumulado y Rescate */}
-                  <div className="pt-1 border-t border-slate-800/60 space-y-2">
+                  {/* Métricas Cuantitativas: Grilla 2x2 */}
+                  <div className="pt-1.5 border-t border-slate-800/60 space-y-2">
+                    <span className="text-[10px] font-semibold text-slate-400 block">Avance Cuantitativo</span>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Unidad de Medida</label>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Unidad</label>
                         <input
                           type="text"
-                          placeholder="km, págs, vasos..."
+                          placeholder="km, págs..."
                           value={unidadMedida}
                           onChange={(e) => setUnidadMedida(e.target.value)}
-                          className="w-full bg-[#040711] px-2 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
+                          className="w-full bg-[#040711] px-2 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600 font-mono"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Meta Objetivo</label>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Objetivo</label>
                         <input
                           type="number"
                           step="any"
@@ -1563,7 +1606,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Valor Acumulado</label>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Acumulado</label>
                         <input
                           type="number"
                           step="any"
@@ -1574,11 +1617,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Rescate Racha Mínimo</label>
+                        <label className="text-[10px] text-slate-400 block mb-0.5">Mínimo Racha</label>
                         <input
                           type="number"
                           step="any"
-                          placeholder="Mínimo diario"
+                          placeholder="1"
                           value={rescateMinimo}
                           onChange={(e) => setRescateMinimo(e.target.value)}
                           className="w-full bg-[#040711] px-2 py-1.5 rounded-lg border border-slate-800 text-xs font-mono tabular-nums font-bold text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"

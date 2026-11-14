@@ -722,7 +722,7 @@ export const ViewFinanzas: React.FC = () => {
       </header>
 
       {/* 2. BARRA DE NAVEGACIÓN PRINCIPAL (REORDENADA: TRANSACCIONES -> CUOTAS -> PRESUPUESTO -> GENERAL) */}
-      <div className="px-2.5 sm:px-4 md:px-6 pt-2 pb-2 sm:pt-3 sm:pb-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-800/80 bg-[#0D1526]/80 backdrop-blur-md sticky top-[57px] z-10 shrink-0">
+      <div className="px-2.5 sm:px-4 md:px-6 pt-2 pb-2 sm:pt-3 sm:pb-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-800/80 bg-[#0D1526]/80 backdrop-blur-md sticky top-[57px] z-30 shrink-0">
         {/* Segmented Control Flotante */}
         <div
           role="tablist"

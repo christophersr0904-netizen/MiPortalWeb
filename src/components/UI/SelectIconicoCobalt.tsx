@@ -76,7 +76,7 @@ export function SelectIconicoCobalt<T extends string = string>({
   }, [estaAbierto]);
 
   return (
-    <div className={`relative flex flex-col gap-1.5 ${className}`} ref={contenedorRef}>
+    <div className={`relative flex flex-col gap-1.5 ${estaAbierto ? 'z-[100]' : 'z-10'} ${className}`} ref={contenedorRef}>
       {label && (
         <div className="flex items-center justify-between">
           <label className="text-xs font-semibold text-slate-300">
@@ -142,11 +142,11 @@ export function SelectIconicoCobalt<T extends string = string>({
         </div>
       </button>
 
-      {/* Menú Desplegable Flotante */}
+      {/* Menú Desplegable Flotante (Fondo 100% Sólido) */}
       {estaAbierto && (
         <div
           role="listbox"
-          className="absolute top-[calc(100%+6px)] left-0 right-0 z-50 p-1.5 rounded-2xl bg-[#0D1526]/98 backdrop-blur-xl border border-slate-800/90 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.9),0_0_20px_rgba(56,189,248,0.12)] max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150"
+          className="absolute top-[calc(100%+6px)] left-0 right-0 z-[100] p-1.5 rounded-2xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150"
         >
           {opciones.map((op) => {
             const esActivo = op.valor === valor;
@@ -164,7 +164,7 @@ export function SelectIconicoCobalt<T extends string = string>({
                 className={`p-2.5 rounded-xl flex items-center justify-between gap-2.5 cursor-pointer transition-all duration-150 ${
                   esActivo
                     ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30 font-semibold shadow-xs'
-                    : 'hover:bg-slate-800/60 text-slate-300 hover:text-slate-100 border border-transparent'
+                    : 'hover:bg-slate-800 text-slate-300 hover:text-slate-100 border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -173,7 +173,7 @@ export function SelectIconicoCobalt<T extends string = string>({
                       className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
                         esActivo
                           ? 'bg-sky-500/25 text-sky-300'
-                          : 'bg-slate-800/70 text-slate-400'
+                          : 'bg-slate-800 text-slate-400'
                       }`}
                     >
                       <Icono className="w-4 h-4" strokeWidth={1.75} />

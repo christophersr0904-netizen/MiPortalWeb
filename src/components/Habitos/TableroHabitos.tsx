@@ -36,6 +36,7 @@ import {
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { ModalAlcanceRecurrencia } from '../Modals/ModalAlcanceRecurrencia';
 import { ModalRegistroAvanceHabito } from '../Modals/ModalRegistroAvanceHabito';
+import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
 import { recalcularProgresoMetaLocal } from '../../services/metasService';
 import { esActividadCompletadaHoy } from '../../services/habitosService';
 import {
@@ -198,6 +199,23 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
       (a.nombre_meta || '').localeCompare(b.nombre_meta || '')
     );
   }, [metasPlanes]);
+
+  // Opciones Cobalt desacopladas para SelectIconicoCobalt de Metas
+  const opcionesFiltroMeta: OpcionSelectCobalt[] = useMemo(() => {
+    const base: OpcionSelectCobalt[] = [
+      { valor: 'TODAS', etiqueta: 'Todas las Metas', subtitulo: 'Vista completa de hábitos', icono: Target },
+      { valor: '__SIN_META__', etiqueta: 'Rutina Base', subtitulo: 'Actividades sin meta vinculada', icono: Repeat }
+    ];
+    const dinamicas: OpcionSelectCobalt[] = metasPlanesOrdenadas.map((m) => ({
+      valor: m.id,
+      etiqueta: m.nombre_meta || 'Meta sin nombre',
+      subtitulo: m.codigo_legado ? `Código ${m.codigo_legado}` : 'Meta activa',
+      badge: m.codigo_legado,
+      colorBadge: 'bg-sky-500/10 text-sky-300 border-sky-500/30 font-mono font-bold',
+      icono: Target
+    }));
+    return [...base, ...dinamicas];
+  }, [metasPlanesOrdenadas]);
 
   // Contextual KPIs y Contadores para el Tablero según filtroMetaId (REQ-HABITS-FILTER-BY-META-16)
   const kpisTablero = useMemo(() => {
@@ -716,127 +734,89 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
       </div>
 
       {/* ================================================================= */}
-      {/* PÍLDORAS BENTO DE FILTRO Y BÚSQUEDA RÁPIDA (h-9 DARK COBALT)      */}
+      {/* PÍLDORAS BENTO DE FILTRO Y BÚSQUEDA RÁPIDA (GLASSMORPHISM COBALT) */}
       {/* ================================================================= */}
-      <div className="portal-surface bg-[#0D1526] p-1.5 sm:p-2 my-1.5 rounded-xl border border-slate-800/40 flex flex-col lg:flex-row lg:items-center justify-between gap-2 shrink-0 shadow-xs">
-        <div className="inline-flex items-center gap-1.5 text-xs select-none overflow-x-auto [&::-webkit-scrollbar]:hidden overscroll-contain w-full lg:w-auto shrink-0 pb-0.5 lg:pb-0">
-          <button
-            type="button"
-            onClick={() => setFiltroCompromiso('TODOS')}
-            className={`h-9 px-3 rounded-lg border font-mono text-xs transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
-              filtroCompromiso === 'TODOS'
-                ? 'bg-sky-950/30 text-sky-300 border-sky-500/40 font-semibold'
-                : 'bg-[#040711]/60 border-slate-800/60 text-slate-400 hover:text-sky-300'
-            }`}
-          >
-            <span>Todos</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono tabular-nums ${
-              filtroCompromiso === 'TODOS' ? 'bg-sky-900/50 text-sky-200 border border-sky-700/40' : 'bg-slate-800/80 text-slate-400'
-            }`}>{kpisTablero.total}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setFiltroCompromiso('HABITUAL')}
-            className={`h-9 px-3 rounded-lg border font-mono text-xs transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
-              filtroCompromiso === 'HABITUAL'
-                ? 'bg-sky-950/30 text-sky-300 border-sky-500/40 font-semibold'
-                : 'bg-[#040711]/60 border-slate-800/60 text-slate-400 hover:text-sky-300'
-            }`}
-          >
-            <Repeat className={`w-3.5 h-3.5 ${filtroCompromiso === 'HABITUAL' ? 'text-sky-400' : 'text-slate-400'}`} strokeWidth={1.75} />
-            <span>Hábitos</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono tabular-nums ${
-              filtroCompromiso === 'HABITUAL' ? 'bg-sky-900/50 text-sky-200 border border-sky-700/40' : 'bg-slate-800/80 text-slate-400'
-            }`}>{kpisTablero.countHabitual}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setFiltroCompromiso('UNICO')}
-            className={`h-9 px-3 rounded-lg border font-mono text-xs transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
-              filtroCompromiso === 'UNICO'
-                ? 'bg-sky-950/30 text-sky-300 border-sky-500/40 font-semibold'
-                : 'bg-[#040711]/60 border-slate-800/60 text-slate-400 hover:text-sky-300'
-            }`}
-          >
-            <Target className={`w-3.5 h-3.5 ${filtroCompromiso === 'UNICO' ? 'text-sky-400' : 'text-slate-400'}`} strokeWidth={1.75} />
-            <span>Puntuales</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono tabular-nums ${
-              filtroCompromiso === 'UNICO' ? 'bg-sky-900/50 text-sky-200 border border-sky-700/40' : 'bg-slate-800/80 text-slate-400'
-            }`}>{kpisTablero.countUnico}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setFiltroCompromiso('RACHA')}
-            className={`h-9 px-3 rounded-lg border font-mono text-xs transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
-              filtroCompromiso === 'RACHA'
-                ? 'bg-sky-950/30 text-sky-300 border-sky-500/40 font-semibold'
-                : 'bg-[#040711]/60 border-slate-800/60 text-slate-400 hover:text-sky-300'
-            }`}
-          >
-            <Flame className={`w-3.5 h-3.5 ${filtroCompromiso === 'RACHA' ? 'text-amber-400' : 'text-slate-400'}`} strokeWidth={1.75} />
-            <span>Con Racha</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono tabular-nums ${
-              filtroCompromiso === 'RACHA' ? 'bg-sky-900/50 text-sky-200 border border-sky-700/40' : 'bg-slate-800/80 text-slate-400'
-            }`}>{kpisTablero.countRacha}</span>
-          </button>
+      <div className="portal-surface bg-[#0D1526]/90 backdrop-blur-md p-1.5 sm:p-2 my-1.5 rounded-2xl border border-slate-800/80 flex flex-col lg:flex-row lg:items-center justify-between gap-2 shrink-0 shadow-sm relative z-50">
+        {/* Segmented Control Flotante para Tipo de Compromiso */}
+        <div className="bg-[#040711]/80 backdrop-blur-md p-1 rounded-xl border border-slate-800/80 inline-flex items-center gap-1 text-xs select-none overflow-x-auto [&::-webkit-scrollbar]:hidden overscroll-contain w-full lg:w-auto shrink-0 shadow-inner">
+          {[
+            { id: 'TODOS' as const, etiqueta: 'Todos', badge: kpisTablero.total, icono: Layers },
+            { id: 'HABITUAL' as const, etiqueta: 'Hábitos', badge: kpisTablero.countHabitual, icono: Repeat },
+            { id: 'UNICO' as const, etiqueta: 'Puntuales', badge: kpisTablero.countUnico, icono: Target },
+            { id: 'RACHA' as const, etiqueta: 'Con Racha', badge: kpisTablero.countRacha, icono: Flame }
+          ].map((item) => {
+            const activo = filtroCompromiso === item.id;
+            const Icono = item.icono;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setFiltroCompromiso(item.id)}
+                className={`relative h-8 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
+                  activo
+                    ? 'text-sky-300 font-bold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+                }`}
+              >
+                {activo && (
+                  <motion.div
+                    layoutId="filtro-compromiso-indicator"
+                    className="absolute inset-0 rounded-lg bg-sky-500/15 border border-sky-500/40 shadow-[0_0_12px_rgba(56,189,248,0.2)]"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-1.5">
+                  <Icono className={`w-3.5 h-3.5 ${item.id === 'RACHA' && activo ? 'text-amber-400 fill-amber-400' : ''}`} strokeWidth={1.75} />
+                  <span>{item.etiqueta}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono tabular-nums font-bold border ${
+                      activo
+                        ? 'bg-sky-500/20 text-sky-200 border-sky-500/30'
+                        : 'bg-slate-800/80 text-slate-400 border-slate-700/60'
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap w-full lg:w-auto shrink-0">
-          {/* Selector de Filtro por Meta (REQ-HABITS-FILTER-BY-META-16) */}
-          <div className="h-9 bg-[#040711]/60 border border-slate-800/60 rounded-lg px-2.5 flex items-center gap-1.5 shadow-xs shrink-0">
-            <Target className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
-            <select
-              id="filtro-meta-select"
-              value={filtroMetaId}
-              onChange={(e) => setFiltroMetaId(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 font-medium focus:outline-none cursor-pointer max-w-[140px] sm:max-w-[200px] truncate"
-            >
-              <option value="TODAS" className="bg-[#0D1526] text-slate-200">Todas las Metas</option>
-              <option value="__SIN_META__" className="bg-[#0D1526] text-slate-200">Rutina Base (Sin meta)</option>
-              {metasPlanesOrdenadas.length > 0 && (
-                <optgroup label="Metas y Planes Activos" className="bg-[#0D1526] text-sky-400 font-bold">
-                  {metasPlanesOrdenadas.map((m) => (
-                    <option key={m.id} value={m.id} className="bg-[#0D1526] text-slate-200 font-normal">
-                      {m.codigo_legado} · {m.nombre_meta}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
+        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap w-full lg:w-auto shrink-0 relative z-40">
+          {/* Cápsula Sólida de Filtro por Meta (Alto Contraste y Opcional 360°) */}
+          <div className="w-full sm:w-60 shrink-0 flex items-center gap-1.5 p-1 rounded-xl bg-[#080D1A] border border-slate-700/80 shadow-inner relative z-40">
+            <div className="flex-1 min-w-0">
+              <SelectIconicoCobalt
+                id="filtro-meta-select"
+                valor={filtroMetaId}
+                onChange={(val) => setFiltroMetaId(val)}
+                opciones={opcionesFiltroMeta}
+                placeholder="Filtrar por meta..."
+                className="[&_button]:bg-[#0D1526] [&_button]:border-slate-700/60 [&_button]:min-h-[34px] [&_button]:py-1.5 [&_button]:rounded-lg"
+              />
+            </div>
             {filtroMetaId !== 'TODAS' && filtroMetaId !== '__SIN_META__' && (
               <button
                 type="button"
                 onClick={() => setMeta360Id(filtroMetaId)}
-                className="px-1.5 py-0.5 rounded bg-sky-950/60 hover:bg-sky-500 text-sky-300 hover:text-slate-950 border border-sky-800/60 text-[10px] font-bold flex items-center gap-0.5 transition cursor-pointer shrink-0 font-mono"
+                className="h-8 px-2 rounded-lg bg-sky-500/15 hover:bg-sky-500 text-sky-300 hover:text-slate-950 border border-sky-500/30 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0 font-mono active:scale-95 shadow-[0_0_10px_rgba(56,189,248,0.2)]"
                 title="Abrir Vista Detallada 360°"
               >
                 <span>360°</span>
               </button>
             )}
-            {filtroMetaId !== 'TODAS' && (
-              <button
-                type="button"
-                onClick={() => setFiltroMetaId('TODAS')}
-                className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer"
-                title="Restablecer"
-              >
-                <X className="w-3 h-3" strokeWidth={1.75} />
-              </button>
-            )}
           </div>
 
           {/* Popover de Ordenamiento */}
-          <div className="relative shrink-0">
+          <div className="relative shrink-0 z-30">
             <button
               type="button"
               onClick={() => {
                 setShowTemporalPopover(false);
                 setShowSortPopover((prev) => !prev);
               }}
-              className="h-9 px-2.5 rounded-lg border border-slate-800/60 bg-[#040711]/60 text-slate-300 hover:text-sky-300 flex items-center gap-1.5 text-xs font-medium transition cursor-pointer font-mono"
+              className="h-9 px-2.5 rounded-xl border border-slate-800/80 bg-[#040711]/80 backdrop-blur-md text-slate-300 hover:text-sky-300 hover:border-sky-500/40 flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer font-mono shadow-xs"
               title="Opciones de Ordenamiento"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
@@ -855,7 +835,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                   className="fixed inset-0 z-40"
                   onClick={() => setShowSortPopover(false)}
                 />
-                <div className="absolute right-0 top-full mt-1.5 z-50 flex flex-col gap-1 p-1.5 min-w-[150px] bg-[#080D1A] border border-slate-800/80 rounded-xl shadow-xl backdrop-blur-md">
+                <div className="absolute right-0 top-full mt-1.5 z-[100] flex flex-col gap-1 p-1.5 min-w-[150px] bg-[#080D1A] border border-slate-800/80 rounded-xl shadow-xl backdrop-blur-md">
                   {[
                     { key: 'TIME', label: 'Por Hora' },
                     { key: 'GOAL', label: 'Por Metas' },
@@ -888,14 +868,14 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
             )}
           </div>
 
-          {/* Buscador Rápido */}
+          {/* Buscador Rápido con Halo Neón Cobalt */}
           <div className="relative shrink-0 flex-1 sm:flex-initial">
             <input
               type="text"
               value={filtroTexto}
               onChange={(e) => setFiltroTexto(e.target.value)}
-              placeholder="Buscar..."
-              className="text-xs h-9 bg-[#040711]/60 border border-slate-800/60 rounded-lg pl-8 pr-7 py-1 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/40 w-full sm:w-44 transition-all"
+              placeholder="Buscar hábito..."
+              className="text-xs h-9 bg-[#040711]/80 backdrop-blur-md border border-slate-800/80 rounded-xl pl-8 pr-7 py-1 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/40 focus:shadow-[0_0_15px_rgba(56,189,248,0.25)] w-full sm:w-44 transition-all"
             />
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
               <Search className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.75} />
@@ -904,7 +884,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
               <button
                 type="button"
                 onClick={() => setFiltroTexto('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer p-0.5"
                 title="Limpiar búsqueda"
               >
                 <X className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -913,7 +893,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
           </div>
 
           {/* Filtro Temporal Táctil (Click + Clic fuera + Escape) */}
-          <div className="relative inline-flex items-center shrink-0">
+          <div className="relative inline-flex items-center shrink-0 z-30">
             <button
               type="button"
               onClick={() => {
@@ -934,7 +914,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                   className="fixed inset-0 z-40"
                   onClick={() => setShowTemporalPopover(false)}
                 />
-                <div className="absolute right-0 top-full mt-1.5 z-50 flex flex-col gap-1 p-1.5 min-w-[135px] bg-[#080D1A] border border-slate-800/80 rounded-xl shadow-2xl backdrop-blur-md">
+                <div className="absolute right-0 top-full mt-1.5 z-[100] flex flex-col gap-1 p-1.5 min-w-[135px] bg-[#080D1A] border border-slate-800/80 rounded-xl shadow-2xl backdrop-blur-md">
                   {OPCIONES_FILTRO_TEMPORAL.map(({ key, label, Icon }) => {
                     const activo = filtroTemporal === key;
                     return (
@@ -1146,9 +1126,9 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                           {pendientes.map((act) => (
                             <motion.div
                               key={act.id}
-                              layout="position"
-                              initial={{ opacity: 1, scale: 1 }}
-                              animate={{ opacity: 1, scale: 1 }}
+                              layout
+                              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
                               exit={{
                                 opacity: 0,
                                 scale: 0.92,
@@ -1164,7 +1144,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                                   mass: 1
                                 }
                               }}
-                              transition={{ duration: 0.15, ease: 'easeOut' }}
+                              transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.8 }}
                               className="overflow-hidden"
                             >
                               <TarjetaHabito
@@ -1196,9 +1176,9 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                           {completadas.map((act) => (
                             <motion.div
                               key={act.id}
-                              layout="position"
-                              initial={{ opacity: 1, scale: 1 }}
-                              animate={{ opacity: 1, scale: 1 }}
+                              layout
+                              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
                               exit={{
                                 opacity: 0,
                                 scale: 0.92,
@@ -1214,7 +1194,7 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                                   mass: 1
                                 }
                               }}
-                              transition={{ duration: 0.15, ease: 'easeOut' }}
+                              transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.8 }}
                               className="overflow-hidden"
                             >
                               <TarjetaHabito

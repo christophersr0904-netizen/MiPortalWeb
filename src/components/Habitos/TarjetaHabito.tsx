@@ -217,15 +217,15 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
   return (
     <div
       style={{ contain: 'layout paint' }}
-      className={`group shrink-0 h-auto portal-surface p-3 pl-3.5 space-y-2 transition-all duration-150 ease-out border rounded-xl relative will-change-[transform,opacity] shadow-sm ${
+      className={`group shrink-0 h-auto portal-surface p-3 pl-3.5 space-y-2 transition-all duration-200 ease-out border rounded-2xl relative will-change-[transform,opacity] ${
         esCompletada
           ? 'opacity-70 border-slate-800/40 bg-[#070B14]/90'
-          : 'bg-[#0D1526]/90 border-slate-800/60 hover:border-sky-500/30 hover:-translate-y-0.5'
+          : 'bg-[#0D1526]/90 border-slate-800/70 hover:border-sky-500/40 hover:-translate-y-1 hover:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(30,58,138,0.18)] shadow-sm'
       }`}
     >
-      {/* Micro-franja lateral de acento semántico por categoría */}
+      {/* Micro-franja lateral de acento semántico por categoría con halo sutil */}
       <div
-        className={`!mt-0 absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${catConfig.colorBarra} opacity-85 pointer-events-none`}
+        className={`!mt-0 absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${catConfig.colorBarra} opacity-85 pointer-events-none`}
         title={`Categoría: ${catConfig.nombre}`}
       />
 
@@ -235,7 +235,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           {/* Badge de código canónico */}
           {codigoHabito ? (
             <span
-              className="font-mono tabular-nums text-[10px] font-medium text-sky-400 bg-sky-950/60 border border-sky-800/40 px-1.5 py-0.5 rounded select-none shrink-0"
+              className="font-mono tabular-nums text-[10px] font-bold text-sky-300 bg-sky-950/60 border border-sky-800/50 px-1.5 py-0.5 rounded-md select-none shrink-0"
               title={`Código: ${codigoHabito}`}
             >
               {codigoHabito}
@@ -244,7 +244,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
 
           {/* Icono de categoría sutil con tooltip */}
           <span
-            className={`inline-flex items-center justify-center w-5 h-5 rounded border ${catConfig.badgeClase} shrink-0`}
+            className={`inline-flex items-center justify-center w-5 h-5 rounded-md border ${catConfig.badgeClase} shrink-0`}
             title={`Categoría: ${catConfig.nombre}`}
           >
             {renderIconoCategoriaVida(catConfig.icono, 'w-3 h-3')}
@@ -253,7 +253,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           {/* Cápsula compacta de mora */}
           {diasMora > 0 && !esCompletada && (
             <span
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-mono tabular-nums font-semibold shrink-0"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-mono tabular-nums font-bold shrink-0"
               title={`Retraso acumulado: ${diasMora} día(s)`}
             >
               <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" strokeWidth={1.75} />
@@ -263,7 +263,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
 
           {(esHabitual || tieneRecurrencia) && ((actividad.frecuencia_ciclo && actividad.frecuencia_ciclo !== 'DIARIA' && actividad.frecuencia_ciclo !== 'NINGUNA') || Boolean(actividad.regla_repeticion && actividad.regla_repeticion.trim())) && (
             <span
-              className="inline-flex items-center justify-center w-5 h-5 rounded bg-slate-800/70 text-slate-400 border border-slate-700/50 shrink-0"
+              className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-slate-800/70 text-slate-400 border border-slate-700/50 shrink-0"
               title={`Ciclo: ${formatearCicloLegible(actividad.frecuencia_ciclo, actividad.regla_repeticion)}`}
             >
               <Repeat className="w-3 h-3" strokeWidth={1.75} />
@@ -271,19 +271,15 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           )}
         </div>
 
-        {/* Racha con Icono Flame + Botones de acción rápida */}
+        {/* Píldora Neón Fuego Viva para Rachas */}
         <div className="flex items-center gap-1 shrink-0 ml-auto">
           {racha > 0 && (
             <span
-              className={`inline-flex items-center gap-1 text-xs font-mono tabular-nums border px-2 py-0.5 rounded-full shrink-0 ${
-                racha >= 7
-                  ? 'text-amber-300 bg-amber-950/40 border-amber-800/40 shadow-sm'
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
-              }`}
+              className="inline-flex items-center gap-1 text-xs font-mono tabular-nums font-bold px-2 py-0.5 rounded-full shrink-0 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
               title={`Racha consecutiva: ${racha} días`}
             >
               <Flame
-                className={`w-3.5 h-3.5 ${racha >= 7 ? 'text-amber-400 fill-amber-400' : 'text-amber-400/80'}`}
+                className={`w-3.5 h-3.5 text-amber-400 fill-amber-400 ${racha >= 7 ? 'animate-pulse' : ''}`}
                 strokeWidth={1.75}
               />
               <span>{racha}d</span>
@@ -325,7 +321,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
         </div>
       </div>
 
-      {/* NIVEL 2: Checkbox Compacto 20x20px con guard anti doble clic + Título Completo */}
+      {/* NIVEL 2: Checkbox Ergonómico Gema Esmeralda 24x24px + Título */}
       <div className="flex items-start gap-2.5">
         <button
           type="button"
@@ -333,20 +329,20 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           disabled={toggleInFlight}
           aria-busy={toggleInFlight}
           aria-label={esCompletada ? 'Marcar como pendiente' : 'Completar avance diario'}
-          className={`group/chk w-5 h-5 min-w-0 min-h-0 shrink-0 rounded-md flex items-center justify-center mt-0.5 border transition-colors ${
+          className={`group/chk w-6 h-6 min-w-0 min-h-0 shrink-0 rounded-lg flex items-center justify-center mt-0.5 border transition-all duration-200 active:scale-90 ${
             toggleInFlight ? 'opacity-60 cursor-wait' : 'cursor-pointer'
           } ${
             esCompletada
-              ? 'bg-emerald-500 border-emerald-500 text-slate-950'
-              : 'border-slate-600/80 bg-slate-900/60 text-transparent hover:border-sky-400/70 hover:bg-slate-800/80'
+              ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 border-emerald-300 text-slate-950 shadow-[0_0_14px_rgba(16,185,129,0.55)]'
+              : 'border-slate-700/80 bg-slate-900/60 text-transparent hover:border-sky-400/80 hover:bg-sky-500/10 hover:shadow-[0_0_12px_rgba(56,189,248,0.25)]'
           }`}
-          title={esCompletada ? 'Marcar como pendiente' : 'Marcar como completado'}
+          title={esCompletada ? 'Completado hoy (clic para desmarcar)' : 'Marcar como completado hoy'}
         >
           <Check
-            className={`w-3.5 h-3.5 transition-all duration-150 ${
+            className={`w-4 h-4 transition-all duration-150 ${
               esCompletada
                 ? 'scale-100 opacity-100 text-slate-950'
-                : 'scale-90 opacity-0 group-hover/chk:opacity-45 text-slate-400'
+                : 'scale-90 opacity-0 group-hover/chk:opacity-50 text-slate-400'
             }`}
             strokeWidth={2.75}
           />
@@ -354,7 +350,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
 
         <h4
           onClick={handleSolicitarEditar}
-          className={`text-xs sm:text-[13px] font-medium leading-snug break-words flex-1 select-none transition-colors mb-0 ${
+          className={`text-xs sm:text-[13px] font-semibold leading-snug break-words flex-1 select-none transition-colors mb-0 ${
             esCompletada ? 'line-through text-slate-500' : 'text-slate-100'
           } ${onEditar ? 'cursor-pointer hover:text-sky-300' : ''}`}
           title={onEditar ? `${tituloHabito} (Click para editar)` : tituloHabito}
@@ -422,7 +418,9 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
                 <div className="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
-                      pctAvance >= 100 ? 'bg-emerald-500' : 'bg-sky-500'
+                      pctAvance >= 100
+                        ? 'bg-gradient-to-r from-emerald-400 to-teal-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]'
+                        : 'bg-gradient-to-r from-sky-500 to-cyan-400 shadow-[0_0_8px_rgba(56,189,248,0.4)]'
                     }`}
                     style={{ width: `${pctAvance}%` }}
                   />

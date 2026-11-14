@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import { TableroHabitos } from '../Habitos/TableroHabitos';
 import { DashboardHabitos } from '../Habitos/Dashboard/DashboardHabitos';
 import { ViewMetasPlanes } from '../Habitos/Metas/ViewMetasPlanes';
@@ -38,94 +39,73 @@ export const ViewHabitos: React.FC = () => {
             </div>
           </div>
 
-          {/* Botón Primario en Móvil (40px ergonómico) */}
+          {/* Botón Primario en Móvil (40px ergonómico con gradiente aeroespacial) */}
           <button
             type="button"
             id="btn-nuevo-habito-header-movil"
             onClick={() => setModalActividadAbierto(true)}
-            className="sm:hidden h-10 px-3.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            className="sm:hidden h-10 px-3.5 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(56,189,248,0.28)] border border-sky-400/40 active:scale-95 cursor-pointer shrink-0"
             title="Registrar nuevo hábito"
           >
-            <Plus className="w-4 h-4" strokeWidth={1.75} />
+            <Plus className="w-4 h-4" strokeWidth={2} />
             <span>Hábito</span>
           </button>
         </div>
 
         {/* Controles de Navegación y Acción Primaria Desktop */}
         <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
-          {/* SELECTOR ESTRATÉGICO DE SUBPESTAÑAS: [ Tablero | Metas y Planes | Dashboard ] */}
+          {/* SELECTOR ESTRATÉGICO DE SUBPESTAÑAS: Segmented Control Flotante Glassmorphism */}
           <div
             role="tablist"
             aria-label="Navegación estratégica del módulo de Hábitos y Vida"
-            className="inline-flex p-0.5 bg-[#0B132B] rounded-xl border border-slate-800/80 gap-0.5 sm:gap-1 text-xs w-full sm:w-auto justify-between sm:justify-start"
+            className="inline-flex p-1 bg-[#040711]/80 backdrop-blur-md rounded-2xl border border-slate-800/80 gap-1 text-xs w-full sm:w-auto justify-between sm:justify-start shadow-inner shrink-0"
           >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tabActiva === 'tablero'}
-              id="subtab-habitos-tablero"
-              onClick={() => setTabActiva('tablero')}
-              className={`relative flex-1 sm:flex-initial h-9 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
-                tabActiva === 'tablero'
-                  ? 'text-sky-300 bg-sky-950/30'
-                  : 'text-slate-400 hover:text-sky-300'
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
-              <span>Tablero</span>
-              {tabActiva === 'tablero' && (
-                <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-sky-400" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tabActiva === 'metas'}
-              id="subtab-habitos-metas"
-              onClick={() => setTabActiva('metas')}
-              className={`relative flex-1 sm:flex-initial h-9 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
-                tabActiva === 'metas'
-                  ? 'text-sky-300 bg-sky-950/30'
-                  : 'text-slate-400 hover:text-sky-300'
-              }`}
-            >
-              <Target className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
-              <span>Metas</span>
-              {tabActiva === 'metas' && (
-                <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-sky-400" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tabActiva === 'dashboard'}
-              id="subtab-habitos-dashboard"
-              onClick={() => setTabActiva('dashboard')}
-              className={`relative flex-1 sm:flex-initial h-9 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
-                tabActiva === 'dashboard'
-                  ? 'text-sky-300 bg-sky-950/30'
-                  : 'text-slate-400 hover:text-sky-300'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
-              <span>Dashboard</span>
-              {tabActiva === 'dashboard' && (
-                <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-sky-400" />
-              )}
-            </button>
+            {[
+              { id: 'tablero' as const, etiqueta: 'Tablero', icono: LayoutGrid },
+              { id: 'metas' as const, etiqueta: 'Metas', icono: Target },
+              { id: 'dashboard' as const, etiqueta: 'Dashboard', icono: Activity }
+            ].map((tab) => {
+              const estaActiva = tabActiva === tab.id;
+              const Icono = tab.icono;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={estaActiva}
+                  id={`subtab-habitos-${tab.id}`}
+                  onClick={() => setTabActiva(tab.id)}
+                  className={`relative flex-1 sm:flex-initial h-9 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer select-none shrink-0 ${
+                    estaActiva
+                      ? 'text-sky-300 font-bold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+                  }`}
+                >
+                  {estaActiva && (
+                    <motion.div
+                      layoutId="subtab-habitos-indicator"
+                      className="absolute inset-0 rounded-xl bg-sky-500/15 border border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.22)]"
+                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    <Icono className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+                    <span>{tab.etiqueta}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Botón Primario Desktop: Registrar Nuevo Hábito */}
+          {/* Botón Primario Desktop: Registrar Nuevo Hábito con Tokens Aeroespaciales */}
           <button
             type="button"
             id="btn-nuevo-habito-header"
             onClick={() => setModalActividadAbierto(true)}
-            className="hidden sm:flex h-10 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            className="hidden sm:flex h-10 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs items-center gap-2 transition-all shadow-[0_0_20px_rgba(56,189,248,0.28)] border border-sky-400/40 active:scale-95 cursor-pointer shrink-0 group"
             title="Registrar nuevo hábito o compromiso personal"
           >
-            <Plus className="w-4 h-4" strokeWidth={1.75} />
+            <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-200" strokeWidth={2} />
             <span>Nuevo Hábito / Actividad</span>
           </button>
         </div>
