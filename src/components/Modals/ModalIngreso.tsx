@@ -129,8 +129,6 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   const montoNum = parseFloat(montoOriginal) || 0;
   const montoPEN = Number((montoNum * tipoCambio).toFixed(2));
 
@@ -196,6 +194,8 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
     });
     onClose();
   };
+
+  if (!isOpen) return null;
 
   return createPortal(
     <div

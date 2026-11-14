@@ -10124,3 +10124,56 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados exitosamente en 14.72s).
+
+---
+
+### [REQ-BUGFIX-65-EXEC: Reparación de Reglas de Hooks en Modales de Finanzas]
+**Fecha:** Noviembre 2026 | **Fase:** 7.4 (Bugfix) | **Archivos Modificados:** `src/components/Modals/ModalIngreso.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Violación de Reglas de Hooks en `ModalIngreso.tsx`:**
+  - La cláusula de escape temprano `if (!isOpen) return null;` se encontraba posicionada prematuramente en la línea 132.
+  - Como consecuencia directa, el `useEffect` de captura de atajos de teclado (`handleKeyDown` para Escape y Ctrl+Enter) declarado en la línea 170 quedaba condicionado: cuando `isOpen === false` el componente retornaba antes de registrar el hook, mientras que al abrirse (`isOpen === true`) se ejecutaba el hook adicional, disparando el error reactivo `Rendered more hooks than during the previous render`.
+- **Auditoría de Edición en `ModalGasto.tsx`:**
+  - Se confirmó que en `ModalGasto.tsx` la cláusula `if (!isOpen) return null;` se encuentra ubicada limpiamente de forma incondicional al final de la lógica del componente (L332), inmediatamente antes de `return createPortal(...)`, abarcando todos los hooks reactivos y aquellos dependientes de `gastoEditar`.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Reubicación de Escape Temprano en `ModalIngreso.tsx`:**
+   - Se removió la línea `if (!isOpen) return null;` de la sección superior y se reubicó inmediatamente antes de `return createPortal(...)` (L198).
+   - Todos los hooks (`useBodyScrollLock`, `useUndoDelete`, `useState`, `useLiveQuery`, `useMemo` y ambos `useEffect`) ahora se invocan de forma incondicional e idéntica en cada ciclo de render.
+2. **Auditoría Global en Modales:**
+   - Se verificó mediante escaneo estricto que todos los modales del sistema PMO respeten el orden incondicional de hooks.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados exitosamente en 16.55s).
+
+---
+
+### [REQ-UI-66-EXEC: Despliegue de Segmented Control y Orden en ViewFinanzas]
+**Fecha:** Noviembre 2026 | **Fase:** 7.4 (Upgrade UI & Reordenamiento) | **Archivos Modificados:** `src/components/Views/ViewFinanzas.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Arquitectura
+- **Deuda Ergonómica y de Jerarquía de Acceso:**
+  - `ViewFinanzas.tsx` iniciaba históricamente en la pestaña de vista general analítica (`'general'`), forzando al usuario a realizar un clic adicional para acceder a la gestión operativa principal del día a día (registro y control de transacciones).
+  - La navegación de pestañas utilizaba botones planos con bordes toscos y estados activos ruidosos sin retroalimentación cinética fluida.
+  - La barra secundaria de filtros por segmento (`TODOS`, `PROYECTOS`, `PERSONAL`) carecía de cohesión visual con el ecosistema Glassmorphism Cobalt Aerodynamic.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Reordenamiento de Jerarquía Canónica (1° Transacciones, 2° Cuotas, 3° Presupuesto, 4° Vista General):**
+   - Actualización del tipado estricto `type TabFinanzas = 'transacciones' | 'cuotas' | 'presupuesto' | 'general';`.
+   - Inicialización del estado de renderizado en `useState<TabFinanzas>('transacciones')`.
+   - Reordenamiento físico del árbol JSX de renderizado condicional, posicionando secuencialmente `{tabActiva === 'transacciones' && ...}`, `{tabActiva === 'cuotas' && ...}`, `{tabActiva === 'presupuesto' && ...}` y `{tabActiva === 'general' && ...}`.
+2. **Segmented Control Flotante con Glassmorphism y Kinetic Spring Animation:**
+   - Creación del array memoizado `PESTANAS_FINANZAS` con iconografía Lucide (`Layers`, `CreditCard`, `PieChart`, `TrendingUp`) con `strokeWidth={1.75}`, y badges numéricos reactivos (`movimientosFiltrados.length`, cuotas pendientes).
+   - Contenedor flotante `sticky top-[57px] z-10 backdrop-blur-md bg-[#0D1526]/80 border-b border-slate-800/80`.
+   - Pestañas contenidas en cápsula `bg-[#040711]/80 backdrop-blur-md p-1 rounded-2xl border border-slate-800/80 shadow-inner`.
+   - Indicador activo flotante con resorte cinético Framer Motion (`motion.div layoutId="tab-finanzas-indicator"`) con física ágil (`stiffness: 500, damping: 35`), cápsula `bg-sky-500/15 border border-sky-500/40` y halo resplandeciente `shadow-[0_0_15px_rgba(56,189,248,0.22)]`.
+3. **Elevación de Segmented Control Secundario:**
+   - La botonera de segmentación (`TODOS`, `PROYECTOS`, `PERSONAL`) se refactorizó como cápsula Glassmorphism `bg-[#040711]/80 border border-slate-800/80` con estado activo `bg-sky-500/15 text-sky-300 font-bold border border-sky-500/30` y micro-transiciones táctiles.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados exitosamente en 16.13s).

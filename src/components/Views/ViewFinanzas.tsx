@@ -32,14 +32,14 @@ import { TabPresupuestos } from '../Finanzas/TabPresupuestos';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import type { GastoRecord, IngresoRecord } from '../../types';
 
-type TabFinanzas = 'general' | 'transacciones' | 'cuotas' | 'presupuesto';
+type TabFinanzas = 'transacciones' | 'cuotas' | 'presupuesto' | 'general';
 type SegmentoFinanzas = 'TODOS' | 'PROYECTOS' | 'PERSONAL';
 type PeriodoFinanzas = 'MES_ACTUAL' | 'MES_ANTERIOR' | 'ULTIMOS_3_MESES' | 'ANIO_ACTUAL' | 'TODOS';
 type TipoFlujo = 'TODOS' | 'INGRESO' | 'GASTO';
 type EstadoFlujo = 'TODOS' | 'REAL' | 'PROGRAMADO';
 
 export const ViewFinanzas: React.FC = () => {
-  const [tabActiva, setTabActiva] = useState<TabFinanzas>('general');
+  const [tabActiva, setTabActiva] = useState<TabFinanzas>('transacciones');
   const [segmento, setSegmento] = useState<SegmentoFinanzas>('TODOS');
   const [periodo, setPeriodo] = useState<PeriodoFinanzas>('MES_ACTUAL');
   const [tipoCambioSunat, setTipoCambioSunat] = useState<number>(3.75);
@@ -641,6 +641,40 @@ export const ViewFinanzas: React.FC = () => {
     setToastMsg('Sincronización y saneamiento de planes de crédito completada con éxito.');
   };
 
+  // Matriz canónica de configuración de pestañas reordenada
+  const PESTANAS_FINANZAS = useMemo<Array<{
+    id: TabFinanzas;
+    etiqueta: string;
+    icono: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+    badge?: number;
+    colorBadge?: string;
+  }>>(() => [
+    {
+      id: 'transacciones',
+      etiqueta: 'Transacciones',
+      icono: Layers,
+      badge: gastosFiltrados.length + ingresosFiltrados.length,
+      colorBadge: 'bg-emerald-950/80 text-emerald-300 border-emerald-500/30'
+    },
+    {
+      id: 'cuotas',
+      etiqueta: 'Cuotas / Deudas',
+      icono: CreditCard,
+      badge: cuotasRaw.length,
+      colorBadge: 'bg-violet-950/80 text-violet-300 border-violet-500/30'
+    },
+    {
+      id: 'presupuesto',
+      etiqueta: 'Presupuestos',
+      icono: PieChart
+    },
+    {
+      id: 'general',
+      etiqueta: 'Vista General',
+      icono: TrendingUp
+    }
+  ], [gastosFiltrados.length, ingresosFiltrados.length, cuotasRaw.length]);
+
   return (
     <div
       id="vista-financiero-wrapper"
@@ -687,123 +721,84 @@ export const ViewFinanzas: React.FC = () => {
         </div>
       </header>
 
-      {/* 2. BARRA DE NAVEGACIÓN PRINCIPAL (4 PESTAÑAS ESTRUCTURALES) */}
-      <div className="px-2.5 sm:px-4 md:px-6 pt-2 pb-2 sm:pt-3 sm:pb-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-3 border-b border-slate-800/80 bg-[#0D1526]/60 shrink-0">
-        {/* Tabs Pills */}
-        <div className="flex items-center gap-1 bg-[#0B132B] p-0.5 rounded-xl border border-slate-800/80 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0">
-          {/* Pestaña 1: Vista General & KPIs */}
-          <button
-            type="button"
-            id="tab-btn-fin-general"
-            onClick={() => setTabActiva('general')}
-            className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
-              tabActiva === 'general'
-                ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
-                : 'text-slate-400 hover:text-sky-300 border border-transparent'
-            }`}
-          >
-            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={1.75} />
-            <span>Vista General</span>
-          </button>
+      {/* 2. BARRA DE NAVEGACIÓN PRINCIPAL (REORDENADA: TRANSACCIONES -> CUOTAS -> PRESUPUESTO -> GENERAL) */}
+      <div className="px-2.5 sm:px-4 md:px-6 pt-2 pb-2 sm:pt-3 sm:pb-2.5 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-800/80 bg-[#0D1526]/80 backdrop-blur-md sticky top-[57px] z-10 shrink-0">
+        {/* Segmented Control Flotante */}
+        <div
+          role="tablist"
+          aria-label="Pestañas de Gestión Financiera"
+          className="bg-[#040711]/80 backdrop-blur-md p-1 rounded-2xl border border-slate-800/80 inline-flex items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0 shadow-inner"
+        >
+          {PESTANAS_FINANZAS.map((tab) => {
+            const estaActiva = tabActiva === tab.id;
+            const IconoTab = tab.icono;
 
-          {/* Pestaña 2: Transacciones */}
-          <button
-            type="button"
-            id="tab-btn-fin-transacciones"
-            onClick={() => setTabActiva('transacciones')}
-            className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
-              tabActiva === 'transacciones'
-                ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
-                : 'text-slate-400 hover:text-sky-300 border border-transparent'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={1.75} />
-            <span>Transacciones</span>
-            <span
-              id="tab-count-transacciones"
-              className="text-[10px] px-1.5 py-0.2 bg-emerald-950 text-emerald-300 rounded-full font-mono tabular-nums font-bold"
-            >
-              {gastosFiltrados.length + ingresosFiltrados.length}
-            </span>
-          </button>
-
-          {/* Pestaña 3: Control de Cuotas */}
-          <button
-            type="button"
-            id="tab-btn-fin-cuotas"
-            onClick={() => setTabActiva('cuotas')}
-            className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
-              tabActiva === 'cuotas'
-                ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
-                : 'text-slate-400 hover:text-sky-300 border border-transparent'
-            }`}
-          >
-            <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={1.75} />
-            <span>Cuotas / Deudas</span>
-            <span
-              id="tab-count-cuotas"
-              className="text-[10px] px-1.5 py-0.2 bg-violet-950 text-violet-300 rounded-full font-mono tabular-nums font-bold"
-            >
-              {cuotasRaw.length}
-            </span>
-          </button>
-
-          {/* Pestaña 4: Presupuestos */}
-          <button
-            type="button"
-            id="tab-btn-fin-presupuesto"
-            onClick={() => setTabActiva('presupuesto')}
-            className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
-              tabActiva === 'presupuesto'
-                ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
-                : 'text-slate-400 hover:text-sky-300 border border-transparent'
-            }`}
-          >
-            <PieChart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" strokeWidth={1.75} />
-            <span>Presupuestos</span>
-          </button>
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                id={`tab-btn-fin-${tab.id}`}
+                role="tab"
+                aria-selected={estaActiva}
+                onClick={() => setTabActiva(tab.id)}
+                className={`relative h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer select-none shrink-0 ${
+                  estaActiva
+                    ? 'text-sky-300 font-bold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+                }`}
+              >
+                {estaActiva && (
+                  <motion.div
+                    layoutId="tab-finanzas-indicator"
+                    className="absolute inset-0 rounded-xl bg-sky-500/15 border border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.22)]"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span className="relative z-10 flex items-center gap-2">
+                  <IconoTab className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                  <span>{tab.etiqueta}</span>
+                  {tab.badge !== undefined && (
+                    <span
+                      id={`tab-count-${tab.id}`}
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono tabular-nums font-bold border ${tab.colorBadge}`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Segmentación y Periodo */}
-        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto [&::-webkit-scrollbar]:hidden py-0.5">
-          {/* Barra de Segmentación Maestra: [ Todos | Proyectos | Personal ] */}
-          <div className="inline-flex p-0.5 bg-[#0B132B] rounded-xl border border-slate-800/80 gap-1 text-xs shrink-0">
-            <button
-              type="button"
-              id="btn-seg-fin-todos"
-              onClick={() => setSegmento('TODOS')}
-              className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
-                segmento === 'TODOS'
-                  ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
-                  : 'text-slate-400 hover:text-sky-300 border border-transparent'
-              }`}
-            >
-              <span>Todos</span>
-            </button>
-            <button
-              type="button"
-              id="btn-seg-fin-proyectos"
-              onClick={() => setSegmento('PROYECTOS')}
-              className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
-                segmento === 'PROYECTOS'
-                  ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
-                  : 'text-slate-400 hover:text-sky-300 border border-transparent'
-              }`}
-            >
-              <span>Proyectos</span>
-            </button>
-            <button
-              type="button"
-              id="btn-seg-fin-personal"
-              onClick={() => setSegmento('PERSONAL')}
-              className={`h-9 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
-                segmento === 'PERSONAL'
-                  ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
-                  : 'text-slate-400 hover:text-emerald-400 border border-transparent'
-              }`}
-            >
-              <span>Personal</span>
-            </button>
+        {/* Controles de Segmentación y Periodo */}
+        <div className="flex items-center gap-2 flex-nowrap overflow-x-auto [&::-webkit-scrollbar]:hidden py-0.5">
+          {/* Segmentación: [ Todos | Proyectos | Personal ] */}
+          <div className="inline-flex p-1 bg-[#040711]/80 backdrop-blur-md rounded-xl border border-slate-800/80 gap-1 text-xs shrink-0 shadow-inner">
+            {(['TODOS', 'PROYECTOS', 'PERSONAL'] as SegmentoFinanzas[]).map((seg) => {
+              const activo = segmento === seg;
+              const etiquetas: Record<SegmentoFinanzas, string> = {
+                TODOS: 'Todos',
+                PROYECTOS: 'Proyectos',
+                PERSONAL: 'Personal'
+              };
+
+              return (
+                <button
+                  key={seg}
+                  type="button"
+                  id={`btn-seg-fin-${seg.toLowerCase()}`}
+                  onClick={() => setSegmento(seg)}
+                  className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-all flex items-center cursor-pointer ${
+                    activo
+                      ? 'bg-sky-950/60 text-sky-300 border border-sky-500/50 shadow-[0_0_10px_rgba(56,189,248,0.15)] font-bold'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <span>{etiquetas[seg]}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Selector de Periodo Global */}
@@ -812,7 +807,7 @@ export const ViewFinanzas: React.FC = () => {
               id="filtro-mes-finanzas"
               value={periodo}
               onChange={(e) => setPeriodo(e.target.value as PeriodoFinanzas)}
-              className="h-9 pl-3 pr-8 text-xs bg-[#0D1526] border border-slate-800/80 rounded-xl outline-none focus:border-sky-500/50 text-slate-200 font-semibold cursor-pointer transition-colors"
+              className="h-9 pl-3 pr-8 text-xs bg-[#0D1526] border border-slate-800/80 hover:border-slate-700 focus:border-sky-500/80 rounded-xl outline-none text-slate-200 font-semibold cursor-pointer transition-colors font-mono tabular-nums"
             >
               <option value="MES_ACTUAL">Mes Actual</option>
               <option value="MES_ANTERIOR">Mes Anterior</option>
@@ -879,42 +874,7 @@ export const ViewFinanzas: React.FC = () => {
       </div>
 
       {/* ================================================================= */}
-      {/* PESTAÑA 1: VISTA GENERAL & KPIS (DASHBOARD FINANCIERO MEMOIZADO)  */}
-      {/* ================================================================= */}
-      {tabActiva === 'general' && (
-        <DashboardFinanciero
-          saldoEnManoReal={saldoEnManoReal}
-          realIngresos={realIngresos}
-          realGastos={realGastos}
-          saldoProyectadoFinMes={saldoProyectadoFinMes}
-          totalCompromisosPendientes={totalCompromisosPendientes}
-          cuotasPendientesCount={cuotasPendientesMes.length}
-          montoCuotasPendientes={montoCuotasPendientes}
-          otrosGastosPendientes={otrosGastosPendientes}
-          posicionBimonetaria={posicionBimonetaria}
-          tipoCambioSunat={tipoCambioSunat}
-          diasCobertura={diasCobertura}
-          semaforoStatus={semaforoStatus}
-          gastosHormiga={gastosHormiga}
-          pctGastosHormiga={pctGastosHormiga}
-          capacidadAhorro={capacidadAhorro}
-          ratioAhorroPct={ratioAhorroPct}
-          ratioEndeudamientoCuotas={ratioEndeudamientoCuotas}
-          radarCategorias={radarCategorias}
-          proximosVencimientos={proximosVencimientos}
-          optimisticConciliados={optimisticConciliados}
-          onIrAPresupuesto={() => setTabActiva('presupuesto')}
-          onIrATransaccionesProgramadas={() => {
-            setTabActiva('transacciones');
-            setEstadoFlujo('PROGRAMADO');
-          }}
-          onToggleConciliarCuota={handleToggleConciliarCuota}
-          onToggleConciliarGasto={handleToggleConciliarGasto}
-        />
-      )}
-
-      {/* ================================================================= */}
-      {/* PESTAÑA 2: TRANSACCIONES (COEXISTENCIA REAL VS PROGRAMADO)         */}
+      {/* PESTAÑA 1: TRANSACCIONES (COEXISTENCIA REAL VS PROGRAMADO)         */}
       {/* ================================================================= */}
       {tabActiva === 'transacciones' && (
         <div id="vista-fin-tab-transacciones" className="tab-fin-view p-2.5 sm:p-4 md:p-6 space-y-3 sm:space-y-4 flex-1">
@@ -1141,7 +1101,7 @@ export const ViewFinanzas: React.FC = () => {
       )}
 
       {/* ================================================================= */}
-      {/* PESTAÑA 3: CONTROL DE CUOTAS / CRÉDITOS (ENFOQUE REAL BANCARIO)   */}
+      {/* PESTAÑA 2: CONTROL DE CUOTAS / CRÉDITOS (ENFOQUE REAL BANCARIO)   */}
       {/* ================================================================= */}
       {tabActiva === 'cuotas' && (
         <TabControlCuotas
@@ -1155,7 +1115,7 @@ export const ViewFinanzas: React.FC = () => {
       )}
 
       {/* ================================================================= */}
-      {/* PESTAÑA 4: PRESUPUESTOS (TECHOS POR CATEGORÍA & PROYECTOS)        */}
+      {/* PESTAÑA 3: PRESUPUESTOS (TECHOS POR CATEGORÍA & PROYECTOS)        */}
       {/* ================================================================= */}
       {tabActiva === 'presupuesto' && (
         <TabPresupuestos
@@ -1163,6 +1123,41 @@ export const ViewFinanzas: React.FC = () => {
           proyectosRaw={proyectosRaw}
           gastosRaw={gastosRaw}
           onConfigurarTechos={() => setModalTechosAbierto(true)}
+        />
+      )}
+
+      {/* ================================================================= */}
+      {/* PESTAÑA 4: VISTA GENERAL & KPIS (DASHBOARD FINANCIERO MEMOIZADO)  */}
+      {/* ================================================================= */}
+      {tabActiva === 'general' && (
+        <DashboardFinanciero
+          saldoEnManoReal={saldoEnManoReal}
+          realIngresos={realIngresos}
+          realGastos={realGastos}
+          saldoProyectadoFinMes={saldoProyectadoFinMes}
+          totalCompromisosPendientes={totalCompromisosPendientes}
+          cuotasPendientesCount={cuotasPendientesMes.length}
+          montoCuotasPendientes={montoCuotasPendientes}
+          otrosGastosPendientes={otrosGastosPendientes}
+          posicionBimonetaria={posicionBimonetaria}
+          tipoCambioSunat={tipoCambioSunat}
+          diasCobertura={diasCobertura}
+          semaforoStatus={semaforoStatus}
+          gastosHormiga={gastosHormiga}
+          pctGastosHormiga={pctGastosHormiga}
+          capacidadAhorro={capacidadAhorro}
+          ratioAhorroPct={ratioAhorroPct}
+          ratioEndeudamientoCuotas={ratioEndeudamientoCuotas}
+          radarCategorias={radarCategorias}
+          proximosVencimientos={proximosVencimientos}
+          optimisticConciliados={optimisticConciliados}
+          onIrAPresupuesto={() => setTabActiva('presupuesto')}
+          onIrATransaccionesProgramadas={() => {
+            setTabActiva('transacciones');
+            setEstadoFlujo('PROGRAMADO');
+          }}
+          onToggleConciliarCuota={handleToggleConciliarCuota}
+          onToggleConciliarGasto={handleToggleConciliarGasto}
         />
       )}
 
