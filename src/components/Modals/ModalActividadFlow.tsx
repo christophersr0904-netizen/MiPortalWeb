@@ -10,11 +10,16 @@
  * ============================================================================
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
+import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import {
+  OPCIONES_RECURRENCIA_ACTIVIDAD_COBALT,
+  OPCIONES_CATEGORIA_GASTO_COBALT
+} from '../../constants/uiMappers';
 import {
   editarActividadConAlcance,
   eliminarActividadConAlcance
@@ -257,6 +262,18 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
   // Metas & Planes existentes en Dexie
   const metasDisponibles = useLiveQuery(() => db.metas_planes.toArray(), []) || [];
+
+  const opcionesMetasCobalt = useMemo(() => [
+    { valor: '', etiqueta: 'Sin vinculación a metas', subtitulo: 'Hábito independiente', icono: Target },
+    ...metasDisponibles.map((m) => ({
+      valor: m.id,
+      etiqueta: m.nombre_meta,
+      subtitulo: m.codigo_legado || 'Meta estratégica',
+      badge: m.codigo_legado,
+      colorBadge: 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40 font-mono font-bold',
+      icono: Target
+    }))
+  ], [metasDisponibles]);
 
   // Pasos / Subtareas Procedurales
   const [nuevoPasoTexto, setNuevoPasoTexto] = useState('');
@@ -1175,36 +1192,24 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
                   {/* Frecuencia de Repetición (Google Style) */}
                   <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Frecuencia / Repetición</label>
-                    <div className="relative">
-                      <select
-                        value={tipoRecurrencia}
-                        onChange={(e) => {
-                          const val = e.target.value as TipoRecurrenciaOpcion;
-                          setTipoRecurrencia(val);
-                          if (val === 'DIARIA') {
-                            setDiasSemana(['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO']);
-                          } else if (val === 'DIARIA_LABORAL') {
-                            setDiasSemana(['LU', 'MA', 'MI', 'JU', 'VI']);
-                          } else if (val === 'FIN_SEMANA') {
-                            setDiasSemana(['SA', 'DO']);
-                          } else if (val === 'SEMANAL') {
-                            if (diasSemana.length === 0) setDiasSemana(['LU']);
-                          }
-                        }}
-                        className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs font-medium text-slate-200 outline-none focus:border-sky-500/50 appearance-none cursor-pointer pr-7"
-                      >
-                        <option value="NINGUNA" className="bg-[#0D1526] text-slate-200">No se repite</option>
-                        <option value="DIARIA" className="bg-[#0D1526] text-slate-200">Todos los días</option>
-                        <option value="DIARIA_LABORAL" className="bg-[#0D1526] text-slate-200">De lunes a viernes</option>
-                        <option value="FIN_SEMANA" className="bg-[#0D1526] text-slate-200">Fines de semana</option>
-                        <option value="SEMANAL" className="bg-[#0D1526] text-slate-200">Cada semana</option>
-                        <option value="QUINCENAL" className="bg-[#0D1526] text-slate-200">Cada 15 días</option>
-                        <option value="MENSUAL" className="bg-[#0D1526] text-slate-200">Cada mes</option>
-                        <option value="PERSONALIZADO" className="bg-[#0D1526] text-slate-200">Personalizado...</option>
-                      </select>
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
-                    </div>
+                    <SelectIconicoCobalt
+                      label="Frecuencia / Repetición"
+                      valor={tipoRecurrencia}
+                      onChange={(nuevaRecurrencia) => {
+                        const val = nuevaRecurrencia as TipoRecurrenciaOpcion;
+                        setTipoRecurrencia(val);
+                        if (val === 'DIARIA') {
+                          setDiasSemana(['LU', 'MA', 'MI', 'JU', 'VI', 'SA', 'DO']);
+                        } else if (val === 'DIARIA_LABORAL') {
+                          setDiasSemana(['LU', 'MA', 'MI', 'JU', 'VI']);
+                        } else if (val === 'FIN_SEMANA') {
+                          setDiasSemana(['SA', 'DO']);
+                        } else if (val === 'SEMANAL') {
+                          if (diasSemana.length === 0) setDiasSemana(['LU']);
+                        }
+                      }}
+                      opciones={OPCIONES_RECURRENCIA_ACTIVIDAD_COBALT}
+                    />
                   </div>
 
                   {/* Grilla circular táctica de días (L M M J V S D) cuando aplica */}
@@ -1260,12 +1265,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           max="99"
                           value={intervaloRepeticion}
                           onChange={(e) => setIntervaloRepeticion(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                          className="w-14 bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-center text-slate-200 outline-none focus:border-sky-500/50"
+                          className="w-14 bg-[#040711] px-2 py-1.5 rounded-lg border border-slate-800 text-xs font-mono tabular-nums font-bold text-center text-slate-200 outline-none focus:border-sky-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                         <select
                           value={unidadIntervalo}
                           onChange={(e) => setUnidadIntervalo(e.target.value as 'dias' | 'semanas' | 'meses')}
-                          className="bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 cursor-pointer"
+                          className="bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 cursor-pointer font-medium"
                         >
                           <option value="dias" className="bg-[#0D1526]">día(s)</option>
                           <option value="semanas" className="bg-[#0D1526]">semana(s)</option>
@@ -1520,18 +1525,13 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                         className="w-full bg-[#040711] px-2.5 py-1 rounded-lg border border-slate-800 text-xs text-slate-200 placeholder:text-slate-500 outline-none focus:border-sky-500/50"
                       />
                     ) : (
-                      <select
-                        value={metaSeleccionadaId}
-                        onChange={(e) => handleCambiarMetaSeleccionada(e.target.value)}
-                        className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 cursor-pointer"
-                      >
-                        <option value="">Sin vinculación a metas</option>
-                        {metasDisponibles.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.codigo_legado ? `${m.codigo_legado} · ${m.nombre_meta}` : m.nombre_meta}
-                          </option>
-                        ))}
-                      </select>
+                      <SelectIconicoCobalt
+                        label="Meta Vinculada"
+                        valor={metaSeleccionadaId}
+                        onChange={(nuevaMetaId) => handleCambiarMetaSeleccionada(nuevaMetaId)}
+                        opciones={opcionesMetasCobalt}
+                        placeholder="Sin vinculación a metas"
+                      />
                     )}
                   </div>
 
@@ -1545,7 +1545,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           placeholder="km, págs, vasos..."
                           value={unidadMedida}
                           onChange={(e) => setUnidadMedida(e.target.value)}
-                          className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
+                          className="w-full bg-[#040711] px-2 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
                         />
                       </div>
                       <div>
@@ -1556,7 +1556,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           placeholder="100"
                           value={metaTotal}
                           onChange={(e) => setMetaTotal(e.target.value)}
-                          className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
+                          className="w-full bg-[#040711] px-2 py-1.5 rounded-lg border border-slate-800 text-xs font-mono tabular-nums font-bold text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                     </div>
@@ -1570,7 +1570,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           placeholder="0"
                           value={valorAcumulado}
                           onChange={(e) => setValorAcumulado(e.target.value)}
-                          className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
+                          className="w-full bg-[#040711] px-2 py-1.5 rounded-lg border border-slate-800 text-xs font-mono tabular-nums font-bold text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
@@ -1581,7 +1581,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           placeholder="Mínimo diario"
                           value={rescateMinimo}
                           onChange={(e) => setRescateMinimo(e.target.value)}
-                          className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600"
+                          className="w-full bg-[#040711] px-2 py-1.5 rounded-lg border border-slate-800 text-xs font-mono tabular-nums font-bold text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                     </div>
@@ -1698,21 +1698,14 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-1">Categoría Contable</label>
-                        <select
-                          value={gastoCategoria}
-                          onChange={(e) => setGastoCategoria(e.target.value)}
-                          className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 cursor-pointer"
-                        >
-                          <option value="Personal_Salud">Salud & Bienestar</option>
-                          <option value="Educacion_Libros">Educación & Libros</option>
-                          <option value="Equipamiento_Herramientas">Equipamiento & Herramientas</option>
-                          <option value="Suscripciones_Software">Suscripciones & Apps</option>
-                          <option value="Alimentacion_Nutricion">Nutrición & Suplementos</option>
-                          <option value="Otros">Otros</option>
-                        </select>
+                        <SelectIconicoCobalt
+                          label="Categoría Contable"
+                          valor={gastoCategoria}
+                          onChange={(nuevaCat) => setGastoCategoria(nuevaCat)}
+                          opciones={OPCIONES_CATEGORIA_GASTO_COBALT}
+                        />
                       </div>
                       <div>
                         <label className="text-[10px] text-slate-400 block mb-1">Concepto / Glosa Detallada</label>
@@ -1721,7 +1714,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           value={gastoConcepto}
                           onChange={(e) => setGastoConcepto(e.target.value)}
                           placeholder="Ej. Membresía gimnasio, suplementos, zapatillas..."
-                          className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-500"
+                          className="w-full bg-[#040711] px-2.5 py-2.5 rounded-xl border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-500 font-medium"
                         />
                       </div>
                     </div>
@@ -1905,10 +1898,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               <button
                 type="button"
                 onClick={agregarPaso}
-                className="p-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 transition cursor-pointer"
+                className="h-8 px-3 rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-white font-bold text-xs shadow-md shadow-sky-950/50 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
                 title="Agregar paso"
               >
-                <Plus className="w-4 h-4" strokeWidth={1.75} />
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="hidden sm:inline">Añadir</span>
               </button>
             </div>
           </div>
@@ -1969,7 +1963,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               type="button"
               id="btn-submit-flow-actividad"
               onClick={() => handleGuardar()}
-              className="h-9 px-4 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-sm transition cursor-pointer"
+              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 transition-all duration-150 flex items-center justify-center cursor-pointer"
             >
               {actividadEditar ? 'Actualizar Actividad' : 'Guardar Actividad'}
             </button>

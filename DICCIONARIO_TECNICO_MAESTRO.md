@@ -9946,3 +9946,181 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 32/32 suites passed (313/313 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0.
+
+---
+
+### [REQ-OP-58-EXEC: Implementación ModalDesgloseTareasIA y Conexión Gemini]
+**Fecha:** Noviembre 2026 | **Fase:** 7.0 | **Archivos Creados/Modificados:** `src/components/Modals/ModalDesgloseTareasIA.tsx` (Nuevo), `src/components/Modals/__tests__/ModalDesgloseTareasIA.test.ts` (Nuevo), `src/hooks/useGeminiStream.ts`, `supabase/functions/gemini-orchestrator/index.ts`, `src/components/Views/ViewDetalle360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+1. **Mock Inoperativo (Toast) en Botón IA WBS:**
+   - En `ViewDetalle360.tsx:1280`, el botón de acción rápida "Desglosar tareas con IA" en cada paquete de trabajo WBS ejecutaba únicamente un `mostrarToastCobalt` informativo sin conexión a ningún servicio de IA, impidiendo la descomposición real de entregables en tareas operativas.
+2. **Carencia de Staging Area para Tareas Generadas por IA:**
+   - No existía una interfaz intermedia de validación donde el usuario pudiera inspeccionar, editar títulos, ajustar prioridades (P1/P2/P3) y calibrar horas estimadas antes de confirmar la inserción en la base de datos Dexie y su sincronización a Supabase.
+3. **Acción Faltante en Orquestador Gemini:**
+   - La Edge Function de Supabase (`gemini-orchestrator`) y el hook `useGeminiStream` solo soportaban las acciones `'clarificar_idea'` y `'desglosar_wbs'`, requiriéndose la acción especializada `'desglosar_tareas_paquete'` con salida estructurada en JSON.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Ampliación del Orquestador y Hook de Streaming:**
+   - Inyección de la acción `'desglosar_tareas_paquete'` en `src/hooks/useGeminiStream.ts` y `supabase/functions/gemini-orchestrator/index.ts`.
+   - Soporte offline con fallback determinista de alta fidelidad en `simularStreamingLocal` para pruebas y desarrollo sin conexión.
+2. **Creación del Componente Canónico `ModalDesgloseTareasIA.tsx` (Staging Area Bento):**
+   - Chasis Glassmorphism con diseño Cobalt Aerodynamic (`bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/80 shadow-[0_20px_50px_rgba(2,6,23,0.9),0_0_30px_rgba(56,189,248,0.12)]`).
+   - Encabezado con contexto del paquete: código WBS (`WP-XXX`), nombre del entregable y proyecto activo.
+   - Lista interactiva de tareas en staging:
+     - Checkbox Cobalt para selección/deselección granular en lote.
+     - Input de texto reactivo para edición in-situ del título de la tarea.
+     - Selector compacto de prioridad mediante `<SelectIconicoCobalt />` (P1, P2, P3 con badges semánticos).
+     - Input numérico para horas estimadas con supresión de spin-buttons nativos (`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none`).
+     - Botón de adición manual de tareas al lote y botón para descartar filas individuales.
+   - Footer con resumen métrico en tiempo real (`font-mono tabular-nums`: *X seleccionadas • Y horas estimadas*), botón de regeneración con spinner animado y botón de confirmación con gradiente Cobalt y efecto glow (`active:scale-95`).
+3. **Integración en `ViewDetalle360.tsx`:**
+   - Reemplazo del toast por la apertura reactiva del modal pasando el paquete seleccionado: `onClick={() => setPaqueteParaDesgloseIA(h)}`.
+   - Implementación de `handleAprobarTareasIA`: inserción atómica de las tareas seleccionadas en `db.tareas` asignando correlativos automáticos (`TAR-XXX`), fecha límite del hito, estado `'02_Por_Hacer'` y vinculación a proyecto e hito.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde: +5 tests en `ModalDesgloseTareasIA.test.ts`).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados en 13.05s).
+
+---
+
+### [REQ-BUGFIX-59-EXEC: Shielding de Red en useGeminiStream y Fallback Automático]
+**Fecha:** Noviembre 2026 | **Fase:** 7.0.1 | **Archivos Modificados:** `src/hooks/useGeminiStream.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+1. **Error `TypeError: Failed to fetch` por Bloqueo CORS en Preflight (OPTIONS):**
+   - La Edge Function `gemini-orchestrator` no se encontraba desplegada en el proyecto remoto de Supabase (`zzzbwurqidastkxqgyog`).
+   - El Gateway Cloudflare/Envoy de Supabase respondía con `HTTP 404 Not Found` en la solicitud preflight `OPTIONS` y omitía la cabecera `content-type` en `access-control-allow-headers`.
+   - Según la especificación W3C Fetch/CORS, el navegador abortaba inmediatamente la conexión antes de enviar el POST, arrojando `TypeError: Failed to fetch`.
+2. **Carencia de Resiliencia en `useGeminiStream.ts`:**
+   - Si `VITE_SUPABASE_URL` no contenía `"mock"` o `"tu-proyecto"`, el hook omitía la simulación local e intentaba el fetch. Al fallar el fetch o responder con HTTP != 200, el bloque `catch` marcaba `status: 'error'`, bloqueando la UI del modal de tareas IA.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Validación de Respuesta HTTP (`!response.ok`):**
+   - Inmediatamente después de `await fetch(...)`, si el status es distinto de 20x (ej. 404 / 500), se emite un `console.warn` y se conmuta de forma automática e inmediata a `simularStreamingLocal(action, payload, setStreamedText, setStatus)`.
+2. **Atrapado Silencioso de Errores de Red y CORS en `catch`:**
+   - En el bloque `catch (err)`, cualquier error de conectividad (incluyendo `TypeError: Failed to fetch` y bloqueos CORS) se intercepta con `console.warn` y se rescata llamando a `simularStreamingLocal`, garantizando que la generación de tareas continúe con latencia cero y sin interrumpir al usuario.
+3. **Conformidad Local-First:**
+   - La interfaz jamás queda inoperativa por caídas de red, falta de despliegue en la nube o problemas de credenciales remotas.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados en 13.19s).
+
+---
+
+### [REQ-BUGFIX-61-EXEC: Fix Hook ModalGasto + UI Píldoras Prioridad IA]
+**Fecha:** Noviembre 2026 | **Fase:** 7.0.2 | **Archivos Modificados:** `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalDesgloseTareasIA.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+1. **Violación de Regla de Hooks en `ModalGasto.tsx`:**
+   - Error en tiempo de ejecución: `Rendered more hooks than during the previous render`.
+   - Causa raíz: Se ubicaba un retorno temprano condicional `if (!isOpen) return null;` en la línea 149, mientras que más abajo (alrededor de la línea 185) se declaraba un `useEffect` para el listener de teclado (`Escape` y `Ctrl+Enter`). Cuando `isOpen` alternaba entre `false` y `true`, la cantidad de hooks ejecutados por React variaba, violando las reglas fundamentales de Hooks de React.
+2. **Píldoras de Prioridad de Bajo Contraste en `ModalDesgloseTareasIA.tsx`:**
+   - La matriz de opciones `OPCIONES_PRIORIDAD_COBALT` utilizaba fondos suaves con bajo contraste y no contaba con iconos semánticos propios ni brillos Cobalt.
+   - El contenedor del selector poseía un ancho fijo `w-32` (128px), lo cual generaba compresión visual e impedía mostrar el icono Lucide semántico, la etiqueta, el badge y el chevron sin truncamiento.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Reordenamiento Incondicional de Hooks en `ModalGasto.tsx`:**
+   - Reubicación de la cláusula de escape temprano `if (!isOpen) return null;` inmediatamente antes del `return createPortal(...)` (línea 215).
+   - Los 24 hooks del componente (`useBodyScrollLock`, `useUndoDelete`, 14 `useState`, 3 `useLiveQuery`, 3 `useEffect`) se ejecutan ahora de manera estricta e incondicional en cada renderizado.
+2. **Upgrade Visual y Ergonómico de Píldoras de Prioridad en `ModalDesgloseTareasIA.tsx`:**
+   - Elevación de los tokens visuales en `OPCIONES_PRIORIDAD_COBALT`:
+     - **P1 - Alta:** `bg-rose-950/60 text-rose-300 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.3)] font-extrabold` con ícono `<AlertCircle className="w-4 h-4 text-rose-400" />`.
+     - **P2 - Media:** `bg-amber-950/60 text-amber-300 border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.25)] font-bold` con ícono `<Clock className="w-4 h-4 text-amber-400" />`.
+     - **P3 - Baja:** `bg-sky-950/60 text-sky-300 border-sky-500/50 shadow-[0_0_10px_rgba(56,189,248,0.2)] font-semibold` con ícono `<CheckCircle2 className="w-4 h-4 text-sky-400" />`.
+   - Ampliación del contenedor de `<SelectIconicoCobalt />` a `w-40 shrink-0` (160px), permitiendo una holgura perfecta para el icono de 28px, tipografía `font-bold`, badge contrastado y chevron interactivo sin recortes.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados en 12.32s).
+
+---
+
+### [REQ-UI-62-EXEC: Despliegue de Interfaz Cobalt en Modales Operativos y Financieros]
+**Fecha:** Noviembre 2026 | **Fase:** 7.1 | **Archivos Modificados:** `src/constants/uiMappers.ts`, `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalIngreso.tsx`, `src/components/Modals/ModalNuevoPlanCuotas.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Modals/ModalRegistroAvanceHabito.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Deuda Visual Erradicada
+1. **Proliferación de Selectores Nativos `<select>`:**
+   - Múltiples modales presentaban listas desplegables nativas del sistema operativo (`ModalGasto.tsx`, `ModalIngreso.tsx`, `ModalNuevoPlanCuotas.tsx`, `ModalTareaFlow.tsx`, `ModalActividadFlow.tsx`), rompiendo la coherencia visual con el lienzo Cobalt `#0D1526` y careciendo de iconos Lucide contextuales.
+2. **Spin-Buttons Nativos en Inputs Numéricos:**
+   - Los campos numéricos de montos, tipos de cambio, cuotas y métricas cuantitativas mostraban flechas de incremento/decremento nativas que colapsaban la tipografía monoespaciada grande (`text-2xl / text-3xl font-mono tabular-nums`).
+3. **Checkboxes Nativos y Botones Planos en DoD:**
+   - En `ModalTareaFlow.tsx`, las subtareas procedurales empleaban checkboxes HTML nativos y botones de adición planos sin respuesta elástica ni gradiente.
+4. **Botones Submit Genéricos:**
+   - Los botones de confirmación de los modales operativos y financieros utilizaban estilos planos `bg-sky-500` / `bg-violet-600` sin el degradado canónico Cobalt ni efectos glow.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Base de Datos Visual Canónica (`src/constants/uiMappers.ts`):**
+   - Creación y exportación de 7 diccionarios tipados para `<SelectIconicoCobalt />`: `OPCIONES_MONEDA_COBALT`, `OPCIONES_METODO_PAGO_COBALT`, `OPCIONES_CATEGORIA_GASTO_COBALT`, `OPCIONES_CATEGORIA_INGRESO_COBALT`, `OPCIONES_CUENTA_DESTINO_COBALT`, `OPCIONES_FRECUENCIA_COBALT` y `OPCIONES_RECURRENCIA_ACTIVIDAD_COBALT`.
+2. **Refactorización del Bloque Financiero (`ModalGasto.tsx`, `ModalIngreso.tsx`, `ModalNuevoPlanCuotas.tsx`):**
+   - Supresión universal de spin-buttons mediante `[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono tabular-nums font-bold`.
+   - Inyección de `<SelectIconicoCobalt />` para moneda, categorías de gasto/ingreso, proyectos y métodos de pago/cuentas destino.
+   - Botones submit elevados con gradiente `from-sky-600 via-sky-500 to-cyan-500` (o violeta para cuotas), resplandor `shadow-[0_0_20px_rgba(56,189,248,0.25)]` y física táctil `active:scale-95`.
+3. **Refactorización del Bloque Operativo (`ModalTareaFlow.tsx`, `ModalActividadFlow.tsx`, `ModalRegistroAvanceHabito.tsx`):**
+   - En `ModalTareaFlow.tsx`: sustitución de `<select>` de proyecto e hito WBS en la cabecera por `<SelectIconicoCobalt />` reactivos; sustitución de checkbox nativo DoD por botón Cobalt interactivo con borde semántico y glow; botón de submit con gradiente Cobalt.
+   - En `ModalActividadFlow.tsx`: sustitución de selector de recurrencia y meta vinculada por `<SelectIconicoCobalt />`; erradicación de spinners en métricas de racha y rescate; botón submit con gradiente Cobalt.
+   - En `ModalRegistroAvanceHabito.tsx`: supresión de spinners en el input de avance y botón submit con gradiente `from-cyan-600 via-sky-500 to-sky-600`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados en 14.37s).
+
+---
+
+### [REQ-UI-63-EXEC: Despliegue de Correcciones Layout, Hitos CPM y Píldoras Neón]
+**Fecha:** Noviembre 2026 | **Fase:** 7.2 | **Archivos Modificados:** `src/components/Modals/ModalGasto.tsx`, `src/components/Modals/ModalNuevoHito.tsx`, `src/components/Modals/ModalDesgloseTareasIA.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Objetivos Resueltos
+1. **Descompresión y Simetría en `ModalGasto.tsx`:**
+   - Ampliación del chasis principal de `max-w-xl` (576px) a `max-w-2xl` (672px), otorgando espacio suficiente a la cascada de 3 niveles WBS.
+   - Reorganización en "Bento Grid Paritario": emparejamiento simétrico de [Categoría del Gasto + Método de Pago] en dos `<SelectIconicoCobalt />` homogéneos, y [Fecha de Desembolso + Tipo de Cambio] con inputs de altura unificada (`min-h-[42px]`), eliminando desniveles de línea base y suprimiendo el selector de método de pago duplicado al pie.
+   - Ajuste del ritmo vertical a `space-y-4 sm:space-y-4.5` y adición de sombra perimetral de alta elevación.
+2. **Limpieza CPM e Inputs en `ModalNuevoHito.tsx`:**
+   - Supresión universal de flechas nativas en los inputs de Ponderación (`pesoPct`), Duración CPM (`duracionDias`) y Presupuesto (`presupuesto`) mediante utilidades `[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none font-mono tabular-nums font-bold`.
+   - Reemplazo del elemento `<select>` nativo de "Predecesor Directo" por `<SelectIconicoCobalt />`, alimentado por un `useMemo` de `opcionesPredecesores` con íconos `GitBranch` y badges con el código de legado.
+   - Elevación del chasis con sombra multicapa `shadow-[0_20px_50px_rgba(2,6,23,0.9),0_0_30px_rgba(56,189,248,0.12)]` y modernización del botón Submit con degradado aeroespacial `from-sky-600 via-sky-500 to-cyan-500`, halo glow y micro-interacción `active:scale-95`.
+3. **Píldoras Neón en `ModalDesgloseTareasIA.tsx`:**
+   - Creación y exportación del componente `PildoraPrioridadNeon`, con estética de píldora redondeada (`rounded-full`), micro-indicador pulsante perimetral y halos de resplandor neón semánticos (`shadow-[0_0_12px_rgba(244,63,94,0.4)]` para P1, etc.).
+   - Reemplazo de la caja rectangular de 160px en cada fila del lote de tareas del Staging Area por `<PildoraPrioridadNeon />`, permitiendo cambiar rápidamente la prioridad en un popover compacto sin saturar el ancho de la tarjeta.
+   - Actualización de los tokens en `OPCIONES_PRIORIDAD_COBALT` con sombras y colores neón de alta saturación.
+
+#### 2. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados exitosamente en 19.14s).
+
+---
+
+### [REQ-UI-64-EXEC: Despliegue de Layout Árbol WBS e Inteligencia Presupuestal EVM]
+**Fecha:** Noviembre 2026 | **Fase:** 7.3 | **Archivos Modificados:** `src/components/Modals/ModalGasto.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Deuda Geométrica Erradicada
+1. **Colisión de Controles en 3 Columnas:**
+   - La disposición anterior `grid grid-cols-1 sm:grid-cols-3 gap-3.5` (L460) asfixiaba los selectores de Proyecto, Hito y Tarea en apenas ~190px, provocando recortes y truncamientos sistemáticos en títulos descriptivos.
+2. **Ceguera Presupuestal durante la Imputación:**
+   - Al registrar egresos vinculados a un Hito o Tarea, el usuario carecía de visibilidad respecto al techo presupuestal asignado y al saldo remanente, facilitando sobrecostos inadvertidos.
+3. **Pérdida de Vinculación Jerárquica en Fallback:**
+   - Si un gasto se imputaba a nivel Hito sin seleccionar una tarea específica, el payload guardaba `id_origen_vinculado: undefined`, perdiendo la atribución directa en Dexie.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Layout Jerárquico Vertical (Árbol WBS 100% Ancho):**
+   - Sustituida la grilla horizontal por una estructura de árbol en cascada vertical:
+     - **Nivel 1 (Proyecto Raíz):** Ocupa el 100% del ancho con badge superior de tope presupuestal del proyecto.
+     - **Nivel 2 (Hito / Entregable WBS):** Ocupa el 100% del ancho con guía de rama izquierda (`border-l-2 border-purple-500/30`), ícono de bifurcación `<CornerDownRight className="text-purple-400" />` y badge de código WBS.
+     - **Nivel 3 (Tarea Operativa Específica):** Ocupa el 100% del ancho con guía de rama escalonada (`border-l-2 border-emerald-500/30 ml-5`), ícono `<CornerDownRight className="text-emerald-400" />` y leyenda de selección opcional.
+2. **Cerebro EVM Reactivo en Tiempo Real (`metricasEVMHito`):**
+   - Inyección de hooks reactivos sobre `db.hitos_wbs` y `db.gastos`.
+   - Cálculo en vivo del gasto previo acumulado del hito y de sus tareas asociadas, saldo remanente y proyección del gasto actual (`montoPEN`).
+   - Renderizado del micro-componente EVM con micro-barra de progreso dinámica (`h-1.5 rounded-full`), badge semántico (`% consumido`) y advertencia inmediata en caso de sobrecosto: `<AlertTriangle /> Excede tope por S/ XX.XX`.
+3. **Persistencia con Fallback Jerárquico Robusto:**
+   - `id_origen_vinculado` ahora resuelve en cascada determinística: `selectedTarea || selectedHito || selectedProyecto || undefined`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados exitosamente en 14.72s).

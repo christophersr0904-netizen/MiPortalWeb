@@ -172,9 +172,9 @@ export const ModalRegistroAvanceHabito: React.FC<ModalRegistroAvanceHabitoProps>
                   setErrorLocal(null);
                 }}
                 placeholder={`0.00 ${unidadMedida}`}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-white font-mono tabular-nums text-sm focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 transition-all placeholder:text-slate-600"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#040711] border border-slate-700/80 text-white font-mono tabular-nums font-bold text-base focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 transition-all placeholder:text-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
-              <span className="absolute right-3 top-2.5 text-xs font-mono text-slate-500 select-none">
+              <span className="absolute right-3 top-3 text-xs font-mono font-bold text-slate-400 select-none">
                 {unidadMedida}
               </span>
             </div>
@@ -223,9 +223,9 @@ export const ModalRegistroAvanceHabito: React.FC<ModalRegistroAvanceHabitoProps>
             <button
               type="submit"
               disabled={guardando}
-              className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-md shadow-cyan-900/40 transition-all duration-150 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              className="h-10 px-5 rounded-xl bg-gradient-to-r from-cyan-600 via-sky-500 to-sky-600 hover:from-cyan-500 hover:to-sky-500 text-white font-bold text-xs shadow-[0_0_20px_rgba(6,182,212,0.25)] hover:shadow-[0_0_25px_rgba(6,182,212,0.4)] transition-all duration-150 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
             >
-              <PlusCircle className="w-3.5 h-3.5" />
+              <PlusCircle className="w-4 h-4" />
               <span>{guardando ? 'Guardando...' : 'Registrar Avance'}</span>
             </button>
           </div>

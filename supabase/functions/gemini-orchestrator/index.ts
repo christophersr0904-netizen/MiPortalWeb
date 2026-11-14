@@ -23,7 +23,7 @@ const corsHeaders = {
 };
 
 interface RequestPayload {
-  action: 'clarificar_idea' | 'desglosar_wbs';
+  action: 'clarificar_idea' | 'desglosar_wbs' | 'desglosar_tareas_paquete';
   payload: Record<string, any>;
 }
 
@@ -61,6 +61,26 @@ Tu respuesta debe estructurarse en Markdown limpio y tabular con:
    - Criterios de Aceptación (DoD) tangibles y fechas límite relativas.
 3. **Tareas Operativas (WBS Nivel 3):**
    - Desglose de 2 a 3 tareas clave por cada paquete de trabajo, con horas estimadas y prioridad (P1-Alta, P2-Media, P3-Baja).
+`,
+  desglosar_tareas_paquete: (p: Record<string, any>) => `
+Actúa como Master PMO y Arquitecto Senior de Ejecución.
+Desglosa el siguiente Paquete de Trabajo (Entregable WBS) en 3 a 5 tareas operativas de alta precisión:
+- Proyecto: "${p.nombreProyecto || ''}"
+- Paquete de Trabajo: "${p.nombrePaquete || ''}"
+- Criterio de Aceptación (DoD): "${p.criterioDoD || ''}"
+- Fase Asociada: "${p.fase || ''}"
+
+Tu respuesta debe contener OBLIGATORIAMENTE un bloque de código JSON válido con el siguiente formato exacto:
+\`\`\`json
+[
+  {
+    "nombre": "Acción concreta en infinitivo",
+    "prioridad": "01_P1_Alta" | "02_P2_Media" | "03_P3_Baja",
+    "horasEstimadas": 4,
+    "criterioDoD": "Criterio de validación específico"
+  }
+]
+\`\`\`
 `
 };
 

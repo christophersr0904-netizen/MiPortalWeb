@@ -21,8 +21,11 @@ import {
   Coffee,
   ChevronDown,
   Link2,
-  Search
+  Search,
+  Check
 } from 'lucide-react';
+import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import { OPCIONES_CATEGORIA_GASTO_COBALT } from '../../constants/uiMappers';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { TareaRecord, SubtareaPaso } from '../../types';
@@ -164,6 +167,29 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     const pCod = proyMatch?.codigo_legado || proyectoCodigo;
     return hitos.filter((h) => h.proyecto_id === pId || h.proyecto_id === pCod || (h as any).proyecto_codigo === pCod);
   }, [hitos, proyectos, proyectoCodigo]);
+
+  const opcionesProyectosCobalt = useMemo(() => [
+    ...proyectos.map((p) => ({
+      valor: p.codigo_legado || p.id,
+      etiqueta: p.nombre_proyecto,
+      subtitulo: p.codigo_legado,
+      badge: p.codigo_legado,
+      colorBadge: 'bg-sky-950/60 text-sky-300 border-sky-500/40 font-mono font-bold',
+      icono: FolderKanban
+    }))
+  ], [proyectos]);
+
+  const opcionesHitosCobalt = useMemo(() => [
+    { valor: '', etiqueta: 'Sin Paquete WBS', subtitulo: 'Tarea suelta', icono: Milestone },
+    ...hitosDelProyecto.map((h) => ({
+      valor: h.codigo_legado || h.id,
+      etiqueta: h.nombre_elemento || h.nombre_hito || h.codigo_legado,
+      subtitulo: h.codigo_legado,
+      badge: h.codigo_legado,
+      colorBadge: 'bg-purple-950/60 text-purple-300 border-purple-500/40 font-mono font-bold',
+      icono: Milestone
+    }))
+  ], [hitosDelProyecto]);
 
   // Sincronizar datos al abrir o cambiar tareaId
   useEffect(() => {
@@ -612,57 +638,28 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
               <span className="text-slate-600 select-none shrink-0">|</span>
 
               {/* 2. Selector de Proyecto interactivo con estilo Cobalt */}
-              <div
-                className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 px-2 py-0.5 text-xs text-sky-300 max-w-[210px] sm:max-w-[240px] shrink-0 hover:border-sky-500/40 transition-colors"
-                title="Seleccionar Proyecto"
-              >
-                <FolderKanban className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <select
-                  value={proyectoCodigo}
-                  onChange={(e) => {
-                    setProyectoCodigo(e.target.value);
+              <div className="w-44 sm:w-52 shrink-0" title="Seleccionar Proyecto">
+                <SelectIconicoCobalt
+                  valor={proyectoCodigo}
+                  onChange={(cod) => {
+                    setProyectoCodigo(cod);
                     setHitoCodigo('');
                   }}
-                  className="bg-transparent text-xs text-sky-300 font-mono outline-none cursor-pointer w-full truncate border-none focus:ring-0 p-0"
-                >
-                  {proyectos.map((p) => {
-                    const cod = p.codigo_legado || p.id;
-                    return (
-                      <option key={p.id} value={cod} className="bg-slate-900 text-slate-200">
-                        {p.codigo_legado} · {p.nombre_proyecto}
-                      </option>
-                    );
-                  })}
-                  {proyectos.length === 0 && (
-                    <option value="" className="bg-slate-900 text-slate-400">Sin Proyectos</option>
-                  )}
-                </select>
+                  opciones={opcionesProyectosCobalt}
+                  placeholder="Seleccionar Proyecto..."
+                />
               </div>
 
               <span className="text-slate-600 select-none shrink-0">›</span>
 
               {/* 3. Selector de Paquete WBS interactivo con estilo Cobalt */}
-              <div
-                className="flex items-center gap-1.5 rounded-lg bg-slate-900/60 border border-slate-800/80 px-2 py-0.5 text-xs text-purple-300 max-w-[190px] sm:max-w-[220px] shrink-0 hover:border-purple-500/40 transition-colors"
-                title="Seleccionar Paquete de Trabajo / Hito WBS"
-              >
-                <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                <select
-                  value={hitoCodigo}
-                  onChange={(e) => setHitoCodigo(e.target.value)}
-                  className="bg-transparent text-xs text-purple-300 font-mono outline-none cursor-pointer w-full truncate border-none focus:ring-0 p-0"
-                >
-                  <option value="" className="bg-slate-900 text-slate-400">Sin Paquete WBS</option>
-                  {hitosDelProyecto.map((h) => {
-                    const cod = h.codigo_legado || h.id;
-                    const nombre = h.nombre_elemento || h.nombre_hito || cod;
-                    return (
-                      <option key={h.id} value={cod} className="bg-slate-900 text-slate-200">
-                        {h.codigo_legado} · {nombre}
-                      </option>
-                    );
-                  })}
-                </select>
+              <div className="w-44 sm:w-52 shrink-0" title="Seleccionar Paquete de Trabajo / Hito WBS">
+                <SelectIconicoCobalt
+                  valor={hitoCodigo}
+                  onChange={(cod) => setHitoCodigo(cod)}
+                  opciones={opcionesHitosCobalt}
+                  placeholder="Sin Paquete WBS"
+                />
               </div>
 
               <span className="text-slate-600 select-none shrink-0">›</span>
@@ -1053,21 +1050,14 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                         </div>
 
                         {/* Selector de Categoría y Glosa */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                           <div>
-                            <label className="text-[10px] text-slate-400 block mb-1">Categoría Contable</label>
-                            <select
-                              value={gastoCategoria}
-                              onChange={(e) => setGastoCategoria(e.target.value)}
-                              className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 cursor-pointer"
-                            >
-                              <option value="Operativo_Proyecto">Operativo del Proyecto</option>
-                              <option value="Equipamiento_Herramientas">Equipamiento & Herramientas</option>
-                              <option value="Servicios_Honorarios">Servicios & Honorarios</option>
-                              <option value="Suscripciones_Software">Suscripciones & Software</option>
-                              <option value="Materiales_Insumos">Materiales & Insumos</option>
-                              <option value="Otros">Otros</option>
-                            </select>
+                            <SelectIconicoCobalt
+                              label="Categoría Contable"
+                              valor={gastoCategoria}
+                              onChange={(nuevaCat) => setGastoCategoria(nuevaCat)}
+                              opciones={OPCIONES_CATEGORIA_GASTO_COBALT}
+                            />
                           </div>
                           <div>
                             <label className="text-[10px] text-slate-400 block mb-1">Concepto / Glosa Detallada</label>
@@ -1076,7 +1066,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                               value={gastoConcepto}
                               onChange={(e) => setGastoConcepto(e.target.value)}
                               placeholder="Ej. Servidor cloud, licencia, insumos..."
-                              className="w-full bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-500"
+                              className="w-full bg-[#040711] px-2.5 py-2.5 rounded-xl border border-slate-800 text-xs text-slate-200 outline-none focus:border-sky-500/50 placeholder:text-slate-500 font-medium"
                             />
                           </div>
                         </div>
@@ -1249,16 +1239,22 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         {estaBloqueado ? (
-                          <div className="p-0.5 text-slate-500 shrink-0" title="Completa primero el paso anterior">
-                            <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <div className="w-5 h-5 rounded-md flex items-center justify-center border border-slate-800 bg-slate-900/40 text-slate-500 shrink-0 select-none" title="Completa primero el paso anterior">
+                            <Lock className="w-3 h-3 text-slate-500" />
                           </div>
                         ) : (
-                          <input
-                            type="checkbox"
-                            checked={sub.completado}
-                            onChange={() => toggleSubtareaCompletado(sub, idx)}
-                            className="rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500/20 cursor-pointer"
-                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleSubtareaCompletado(sub, idx)}
+                            className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all cursor-pointer shrink-0 active:scale-95 ${
+                              sub.completado
+                                ? 'bg-sky-500 border-sky-400 text-slate-950 shadow-[0_0_10px_rgba(56,189,248,0.3)]'
+                                : 'border-slate-700 hover:border-slate-500 bg-slate-900/60'
+                            }`}
+                            title={sub.completado ? 'Marcar incompleto' : 'Marcar completado'}
+                          >
+                            {sub.completado && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </button>
                         )}
                         <span className="text-[10px] font-mono font-bold text-slate-400 shrink-0">#{idx + 1}</span>
                         <span
@@ -1306,10 +1302,11 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
               <button
                 type="button"
                 onClick={agregarSubtarea}
-                className="p-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-white transition cursor-pointer shadow-md shadow-sky-950/40"
-                title="Agregar paso"
+                className="h-8 px-3 rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-white font-bold text-xs shadow-md shadow-sky-950/50 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                title="Agregar paso procedural"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="hidden sm:inline">Añadir</span>
               </button>
             </div>
           </div>
@@ -1365,7 +1362,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             <button
               type="button"
               onClick={handleGuardar}
-              className="px-4 py-1.5 rounded-lg text-xs font-bold bg-sky-500 hover:bg-sky-400 text-white shadow-md shadow-sky-950/50 transition cursor-pointer"
+              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 transition-all duration-150 flex items-center justify-center cursor-pointer"
             >
               {tareaId ? 'Guardar Cambios' : 'Crear Tarea'}
             </button>

@@ -9,7 +9,7 @@
  * ============================================================================
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -19,12 +19,20 @@ import {
   X,
   Clock,
   Save,
-  Trash2
+  Trash2,
+  FolderKanban
 } from 'lucide-react';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { crearIngreso, actualizarIngreso, eliminarIngreso } from '../../services/ingresosService';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
+import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import {
+  OPCIONES_MONEDA_COBALT,
+  OPCIONES_CATEGORIA_INGRESO_COBALT,
+  OPCIONES_CUENTA_DESTINO_COBALT,
+  OPCIONES_FRECUENCIA_COBALT
+} from '../../constants/uiMappers';
 
 export interface ModalIngresoProps {
   isOpen: boolean;
@@ -61,6 +69,18 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
 
   // Proyectos disponibles en Dexie
   const listaProyectos = useLiveQuery(() => db.proyectos.toArray()) || [];
+
+  const opcionesProyectos = useMemo(() => [
+    { valor: 'PERSONAL', etiqueta: 'Ingreso Personal / Libre', subtitulo: 'Sin vinculación a proyecto', badge: 'LIBRE', colorBadge: 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40 font-mono font-bold' },
+    ...listaProyectos.map((p) => ({
+      valor: p.codigo_legado || p.id,
+      etiqueta: p.nombre_proyecto,
+      subtitulo: p.codigo_legado,
+      badge: p.codigo_legado,
+      colorBadge: 'bg-sky-950/60 text-sky-300 border-sky-500/40 font-mono font-bold',
+      icono: FolderKanban
+    }))
+  ], [listaProyectos]);
 
   // Actualizar tipo de cambio según moneda
   useEffect(() => {
@@ -287,24 +307,21 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
         <form onSubmit={handleGuardar} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 sm:py-4 min-h-0 space-y-3.5 custom-scrollbar text-xs">
             {/* Monto Hero en Tope (Mobile-First) */}
-            <div className="p-3 rounded-2xl bg-slate-900/70 border border-slate-800/80">
-              <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="p-3.5 rounded-2xl bg-[#040711]/90 border border-slate-800/80 shadow-inner">
+              <div className="flex items-center justify-between gap-2 mb-2">
                 <label
                   htmlFor="input-monto-ingreso"
                   className="font-semibold text-[11px] uppercase tracking-wider text-slate-400"
                 >
-                  Monto del Ingreso ({moneda})
+                  Monto del Ingreso
                 </label>
-                <select
-                  aria-label="Moneda del ingreso"
-                  value={moneda}
-                  onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD' | 'EUR')}
-                  className="bg-slate-950/80 border border-slate-700/70 text-slate-200 rounded-lg px-2 py-1 text-xs font-mono font-bold outline-none focus:border-sky-500 cursor-pointer"
-                >
-                  <option value="PEN">PEN (S/)</option>
-                  <option value="USD">USD ($)</option>
-                  <option value="EUR">EUR (€)</option>
-                </select>
+                <div className="w-36 shrink-0">
+                  <SelectIconicoCobalt<'PEN' | 'USD' | 'EUR'>
+                    valor={moneda}
+                    onChange={(nuevaMoneda) => setMoneda(nuevaMoneda)}
+                    opciones={OPCIONES_MONEDA_COBALT}
+                  />
+                </div>
               </div>
               <input
                 id="input-monto-ingreso"
@@ -316,10 +333,10 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                 value={montoOriginal}
                 onChange={(e) => setMontoOriginal(e.target.value)}
                 placeholder="0.00"
-                className="w-full bg-slate-950/60 border border-slate-800/80 focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 text-2xl font-mono tabular-nums font-bold text-center py-2 text-slate-100 placeholder-slate-600 outline-none"
+                className="w-full bg-[#0D1526] border border-slate-800/80 focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 text-3xl font-mono tabular-nums font-bold text-center py-2.5 text-slate-100 placeholder-slate-600 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
               />
               {moneda !== 'PEN' && (
-                <div className="mt-1.5 text-center text-[11px] font-mono tabular-nums font-bold text-emerald-400">
+                <div className="mt-2 text-center text-xs font-mono tabular-nums font-bold text-emerald-400">
                   ≈ S/ {montoPEN}
                 </div>
               )}
@@ -343,39 +360,20 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
             {/* Origen y Proyecto */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold mb-1 text-slate-300">
-                  Origen / Fuente
-                </label>
-                <select
-                  value={categoriaIngreso}
-                  onChange={(e) => setCategoriaIngreso(e.target.value)}
-                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 outline-none font-medium rounded-xl p-2 focus:border-sky-500"
-                >
-                  <option value="Sueldo_Nomina">Sueldo / Nómina</option>
-                  <option value="Honorarios_Freelance">Honorarios / Freelance</option>
-                  <option value="Negocio_Emprendimiento">Negocio / Emprendimiento</option>
-                  <option value="Inversiones_Rendimientos">Inversiones / Rendimientos</option>
-                  <option value="Obsequio_Monetario">Obsequio / Donación</option>
-                  <option value="Ventas_Activos">Venta de Activos</option>
-                  <option value="Otros">Otros</option>
-                </select>
+                <SelectIconicoCobalt
+                  label="Origen / Fuente"
+                  valor={categoriaIngreso}
+                  onChange={(nuevaCat) => setCategoriaIngreso(nuevaCat)}
+                  opciones={OPCIONES_CATEGORIA_INGRESO_COBALT}
+                />
               </div>
               <div>
-                <label className="block font-semibold mb-1 text-slate-300">
-                  Proyecto Asociado
-                </label>
-                <select
-                  value={proyectoAsociado}
-                  onChange={(e) => setProyectoAsociado(e.target.value)}
-                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 outline-none font-medium rounded-xl p-2 focus:border-sky-500"
-                >
-                  <option value="PERSONAL">-- Ingreso Personal / Libre --</option>
-                  {listaProyectos.map((p) => (
-                    <option key={p.id} value={p.codigo_legado}>
-                      {p.codigo_legado} - {p.nombre_proyecto}
-                    </option>
-                  ))}
-                </select>
+                <SelectIconicoCobalt
+                  label="Proyecto Asociado"
+                  valor={proyectoAsociado}
+                  onChange={(nuevoProy) => setProyectoAsociado(nuevoProy)}
+                  opciones={opcionesProyectos}
+                />
               </div>
             </div>
 
@@ -406,7 +404,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                     step="0.001"
                     value={tipoCambio}
                     readOnly
-                    className="w-full bg-slate-950/60 border border-slate-800 text-slate-400 rounded-xl p-2 font-mono select-none outline-none"
+                    className="w-full bg-[#040711] border border-slate-800 text-slate-400 rounded-xl p-2 font-mono tabular-nums font-bold select-none outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                   {moneda !== 'PEN' && (
                     <span className="text-[11px] font-mono font-bold text-emerald-400 shrink-0">
@@ -441,19 +439,12 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold mb-1 text-slate-300">
-                      Recurrencia / Frecuencia
-                    </label>
-                    <select
-                      value={frecuencia}
-                      onChange={(e) => setFrecuencia(e.target.value as any)}
-                      className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 text-xs outline-none font-medium rounded-lg p-2 focus:border-sky-500"
-                    >
-                      <option value="UNICA">Única / Puntual</option>
-                      <option value="SEMANAL">Semanal</option>
-                      <option value="QUINCENAL">Quincenal</option>
-                      <option value="MENSUAL">Mensual</option>
-                    </select>
+                    <SelectIconicoCobalt
+                      label="Recurrencia / Frecuencia"
+                      valor={frecuencia}
+                      onChange={(nuevaFrec) => setFrecuencia(nuevaFrec as any)}
+                      opciones={OPCIONES_FRECUENCIA_COBALT}
+                    />
                   </div>
                 </div>
 
@@ -472,21 +463,12 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
 
             {/* Cuenta Destino */}
             <div>
-              <label className="block font-semibold mb-1 text-slate-300">
-                {modoDual === 'REAL' ? 'Cuenta Destino (Depositado)' : 'Cuenta Destino Prevista'}
-              </label>
-              <select
-                value={cuentaDestino}
-                onChange={(e) => setCuentaDestino(e.target.value)}
-                className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 font-medium outline-none rounded-xl p-2 focus:border-sky-500"
-              >
-                <option value="BCP">BCP</option>
-                <option value="IBK">IBK (Interbank)</option>
-                <option value="BBVA">BBVA</option>
-                <option value="SCTBK">Scotiabank</option>
-                <option value="Efectivo">Efectivo</option>
-                <option value="Otros">Otros</option>
-              </select>
+              <SelectIconicoCobalt
+                label={modoDual === 'REAL' ? 'Cuenta Destino (Depositado)' : 'Cuenta Destino Prevista'}
+                valor={cuentaDestino}
+                onChange={(nuevaCuenta) => setCuentaDestino(nuevaCuenta)}
+                opciones={OPCIONES_CUENTA_DESTINO_COBALT}
+              />
             </div>
           </div>
 
@@ -514,7 +496,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
               </button>
               <button
                 type="submit"
-                className="h-11 px-4 text-white rounded-xl font-bold text-xs shadow-md shadow-sky-950/50 transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 bg-sky-500 hover:bg-sky-400"
+                className="h-11 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>

@@ -16,6 +16,8 @@ import { crearCuota } from '../../services/cuotasService';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
 import { sincronizarCreacionCalendar } from '../../services/calendarSyncService';
+import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import { OPCIONES_MONEDA_COBALT } from '../../constants/uiMappers';
 
 export interface ModalNuevoPlanCuotasProps {
   isOpen: boolean;
@@ -172,7 +174,7 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
                 required
                 value={totalCuotas || ''}
                 onChange={(e) => setTotalCuotas(parseInt(e.target.value) || 1)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 outline-none focus:ring-1 focus:ring-violet-500 font-mono tabular-nums font-bold"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 outline-none focus:ring-1 focus:ring-violet-500 font-mono tabular-nums font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
 
@@ -189,22 +191,19 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
                 value={montoCuota || ''}
                 onChange={(e) => setMontoCuota(parseFloat(e.target.value) || 0)}
                 placeholder="0.00"
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 outline-none focus:ring-1 focus:ring-violet-500 font-mono tabular-nums font-bold"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 outline-none focus:ring-1 focus:ring-violet-500 font-mono tabular-nums font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 items-end">
             <div>
-              <label className="block text-slate-400 font-semibold mb-1">Moneda</label>
-              <select
-                value={moneda}
-                onChange={(e) => setMoneda(e.target.value as 'PEN' | 'USD')}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 outline-none focus:ring-1 focus:ring-violet-500 font-mono tabular-nums"
-              >
-                <option value="PEN">Soles (PEN)</option>
-                <option value="USD">Dólares (USD)</option>
-              </select>
+              <SelectIconicoCobalt<'PEN' | 'USD'>
+                label="Moneda"
+                valor={moneda}
+                onChange={(nuevaMoneda) => setMoneda(nuevaMoneda)}
+                opciones={OPCIONES_MONEDA_COBALT.filter((m) => m.valor !== 'EUR') as any}
+              />
             </div>
 
             <div>
@@ -216,7 +215,7 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
                 type="date"
                 value={fechaVencimiento}
                 onChange={(e) => setFechaVencimiento(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 outline-none focus:ring-1 focus:ring-violet-500 font-mono tabular-nums"
+                className="w-full px-3 py-2 min-h-[42px] rounded-xl bg-slate-900 border border-slate-800 text-slate-100 outline-none focus:ring-1 focus:ring-violet-500 font-mono tabular-nums"
               />
             </div>
           </div>
@@ -236,13 +235,13 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 transition cursor-pointer text-xs"
+              className="px-3.5 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 transition cursor-pointer text-xs font-semibold"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-4 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold transition shadow-xs cursor-pointer active:scale-95 text-xs"
+              className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-violet-600 via-violet-500 to-indigo-500 shadow-[0_0_20px_rgba(139,92,246,0.25)] hover:shadow-[0_0_25px_rgba(139,92,246,0.4)] active:scale-95 transition-all duration-150 flex items-center justify-center cursor-pointer"
             >
               Registrar Plan
             </button>

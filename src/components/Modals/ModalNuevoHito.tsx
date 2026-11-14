@@ -30,7 +30,7 @@ import { db } from '../../db/db';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import type { TipoElementoWBS, HitoWbsRecord } from '../../types';
-import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
 import { construirOpcionesFasesWbs } from '../../constants/uiMappers';
 
 export interface ModalNuevoHitoProps {
@@ -108,6 +108,29 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
   );
 
   const opcionesFases = useMemo(() => construirOpcionesFasesWbs(listaFases), [listaFases]);
+
+  // Opciones memoizadas para Predecesores CPM con íconos Cobalt
+  const opcionesPredecesores = useMemo<OpcionSelectCobalt[]>(() => {
+    const lista: OpcionSelectCobalt[] = [
+      {
+        valor: '',
+        etiqueta: 'Sin predecesor (Inicio paralelo)',
+        subtitulo: 'Sin dependencia en la red CPM',
+        icono: GitBranch
+      }
+    ];
+    hitosExistentes.forEach((h) => {
+      const cod = h.codigo_legado || h.id;
+      lista.push({
+        valor: cod,
+        etiqueta: `${cod} - ${h.nombre_elemento || (h as any).nombre_hito || 'Hito'}`,
+        badge: cod,
+        colorBadge: 'bg-indigo-950/80 text-indigo-300 border-indigo-700/60 font-mono',
+        icono: GitBranch
+      });
+    });
+    return lista;
+  }, [hitosExistentes]);
 
   // Sincronizar defaults al abrir
   useEffect(() => {
@@ -230,7 +253,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
       className="fixed inset-0 z-[10000] flex items-center justify-center p-3 md:p-6 bg-slate-950/80 backdrop-blur-sm transition-opacity duration-200"
     >
       <div
-        className="relative w-full max-w-2xl max-h-[92vh] flex flex-col rounded-3xl bg-[#0D1526] border border-slate-800/80 shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(30,58,138,0.18)] overflow-hidden"
+        className="relative w-full max-w-2xl max-h-[92vh] flex flex-col rounded-3xl bg-[#0D1526] border border-slate-800/80 shadow-[0_20px_50px_rgba(2,6,23,0.9),0_0_30px_rgba(56,189,248,0.12)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Cabecera Bento */}
@@ -425,7 +448,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
                     max={100}
                     value={pesoPct}
                     onChange={(e) => setPesoPct(Math.max(1, Math.min(100, Number(e.target.value) || 0)))}
-                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 pr-7 text-xs text-slate-100 font-mono tabular-nums focus:outline-none focus:border-sky-500 transition"
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 pr-7 text-xs text-slate-100 font-mono tabular-nums font-bold focus:outline-none focus:border-sky-500 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                   <span className="absolute right-2.5 top-2 text-xs text-slate-500 font-mono">%</span>
                 </div>
@@ -445,7 +468,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
                     disabled={tipoElemento === 'HITO_MARCADOR'}
                     value={duracionDias}
                     onChange={(e) => setDuracionDias(Math.max(0, Number(e.target.value) || 0))}
-                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 pr-10 text-xs text-slate-100 font-mono tabular-nums disabled:opacity-50 disabled:bg-slate-950 focus:outline-none focus:border-sky-500 transition"
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 pr-10 text-xs text-slate-100 font-mono tabular-nums font-bold disabled:opacity-50 disabled:bg-slate-950 focus:outline-none focus:border-sky-500 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                   <span className="absolute right-2.5 top-2 text-xs text-slate-500 font-mono">días</span>
                 </div>
@@ -466,7 +489,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
                     value={presupuesto}
                     onChange={(e) => setPresupuesto(Math.max(0, Number(e.target.value) || 0))}
                     placeholder="0.00"
-                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 pr-9 text-xs text-slate-100 font-mono tabular-nums disabled:opacity-50 disabled:bg-slate-950 focus:outline-none focus:border-sky-500 transition"
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 pr-9 text-xs text-slate-100 font-mono tabular-nums font-bold disabled:opacity-50 disabled:bg-slate-950 focus:outline-none focus:border-sky-500 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                   <span className="absolute right-2.5 top-2 text-xs text-slate-500 font-mono">PEN</span>
                 </div>
@@ -487,24 +510,16 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
               </div>
             </div>
 
-            {/* Selector de Predecesor CPM */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
-              <label className="block text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                <GitBranch className="w-3 h-3 text-sky-400" strokeWidth={1.75} />
-                <span>Predecesor Directo (Cálculo de Red de Dependencias CPM)</span>
-              </label>
-              <select
-                value={dependenciaHitoId}
-                onChange={(e) => setDependenciaHitoId(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500 transition"
-              >
-                <option value="">Sin predecesor (Inicio paralelo o independiente)</option>
-                {hitosExistentes.map((h) => (
-                  <option key={h.id} value={h.codigo_legado || h.id}>
-                    {h.codigo_legado || h.id} - {h.nombre_elemento || (h as any).nombre_hito}
-                  </option>
-                ))}
-              </select>
+            {/* Selector de Predecesor CPM con SelectIconicoCobalt */}
+            <div className="pt-2 border-t border-slate-800/80">
+              <SelectIconicoCobalt
+                label="Predecesor Directo (Cálculo de Red de Dependencias CPM)"
+                sublabel="Ruta Crítica CPM"
+                valor={dependenciaHitoId}
+                onChange={(val) => setDependenciaHitoId(val)}
+                opciones={opcionesPredecesores}
+                placeholder="Seleccionar predecesor..."
+              />
             </div>
           </div>
 
@@ -520,7 +535,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
             <button
               type="submit"
               disabled={guardando}
-              className="px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-black flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.4)] transition-all duration-200 cursor-pointer disabled:opacity-50 active:scale-95 hover:shadow-[0_0_25px_rgba(56,189,248,0.5)]"
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 text-slate-950 text-xs font-black flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.4)] hover:shadow-[0_0_28px_rgba(56,189,248,0.6)] transition-all duration-200 cursor-pointer disabled:opacity-50 active:scale-95"
             >
               {tipoElemento === 'PAQUETE_TRABAJO' ? (
                 <Briefcase className="w-4 h-4 text-slate-950" strokeWidth={2} />

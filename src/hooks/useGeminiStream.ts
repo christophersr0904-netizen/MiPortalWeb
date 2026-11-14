@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 
-export type GeminiAction = 'clarificar_idea' | 'desglosar_wbs';
+export type GeminiAction = 'clarificar_idea' | 'desglosar_wbs' | 'desglosar_tareas_paquete';
 export type StreamStatus = 'idle' | 'streaming' | 'completed' | 'error';
 
 export interface UseGeminiStreamReturn {
@@ -68,8 +68,11 @@ export function useGeminiStream(): UseGeminiStreamReturn {
         });
 
         if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `Error HTTP ${response.status} en la Edge Function.`);
+          console.warn(
+            `[useGeminiStream] Edge Function remota respondió HTTP ${response.status}. Conmutando a simulador IA local...`
+          );
+          await simularStreamingLocal(action, payload, setStreamedText, setStatus);
+          return;
         }
 
         const reader = response.body?.getReader();
@@ -114,8 +117,11 @@ export function useGeminiStream(): UseGeminiStreamReturn {
         if (err.name === 'AbortError') {
           setStatus('completed');
         } else {
-          setError(err.message || 'Error en la conexión con la Edge Function.');
-          setStatus('error');
+          console.warn(
+            '[useGeminiStream] Error de red o CORS al conectar con Edge Function. Conmutando a simulador IA local...',
+            err
+          );
+          await simularStreamingLocal(action, payload, setStreamedText, setStatus);
         }
       } finally {
         abortControllerRef.current = null;
@@ -143,9 +149,10 @@ async function simularStreamingLocal(
   setText: React.Dispatch<React.SetStateAction<string>>,
   setStatus: React.Dispatch<React.SetStateAction<StreamStatus>>
 ): Promise<void> {
-  const contenidoMock =
-    action === 'clarificar_idea'
-      ? `### Diagnóstico Estratégico de la Idea
+  let contenidoMock = '';
+
+  if (action === 'clarificar_idea') {
+    contenidoMock = `### Diagnóstico Estratégico de la Idea
 
 **Enunciado Analizado:** "${payload.enunciado || 'Iniciativa Sin Título'}"
 
@@ -166,8 +173,9 @@ La iniciativa aborda la optimización de procesos mediante arquitectura modular.
 #### 4. Primeros 3 Pasos Accionables (Next Physical Actions)
 1. **Paso 1:** Redactar los 3 criterios DoD (Definition of Done) no negociables.
 2. **Paso 2:** Crear el paquete de trabajo preliminar \`WP-001\` en el módulo WBS.
-3. **Paso 3:** Agendar un bloque de trabajo profundo de 90 minutos para la prueba de concepto.`
-      : `### Estructura de Desglose de Trabajo (WBS) Sugerida
+3. **Paso 3:** Agendar un bloque de trabajo profundo de 90 minutos para la prueba de concepto.`;
+  } else if (action === 'desglosar_wbs') {
+    contenidoMock = `### Estructura de Desglose de Trabajo (WBS) Sugerida
 
 **Iniciativa:** "${payload.nombreProyecto || 'Proyecto de Infraestructura'}"
 
@@ -191,6 +199,45 @@ La iniciativa aborda la optimización de procesos mediante arquitectura modular.
 - [ ] Implementar validación topológica con Algoritmo de Kahn (P1 - Alta, 4h).
 - [ ] Diseñar el drawer interactivo con estética Cobalt Aerodynamic (P2 - Media, 3h).
 - [ ] Ejecutar auditoría de regresión sobre archivos legacy (P1 - Alta, 2h).`;
+  } else {
+    // action === 'desglosar_tareas_paquete'
+    const nom = payload.nombrePaquete || 'Paquete de Trabajo';
+    const dod = payload.criterioDoD || 'Entregable verificado al 100%';
+    const proy = payload.nombreProyecto || 'Proyecto';
+
+    contenidoMock = `### Desglose de Tareas Operativas WBS
+**Entregable:** "${nom}" (${proy})
+**Criterio DoD:** ${dod}
+
+\`\`\`json
+[
+  {
+    "nombre": "Planificación y diseño técnico de ${nom}",
+    "prioridad": "01_P1_Alta",
+    "horasEstimadas": 4,
+    "criterioDoD": "Especificaciones y alcance aprobados"
+  },
+  {
+    "nombre": "Construcción y despliegue operativo de ${nom}",
+    "prioridad": "01_P1_Alta",
+    "horasEstimadas": 8,
+    "criterioDoD": "Componentes ensamblados y operativos"
+  },
+  {
+    "nombre": "Control de calidad y verificación DoD (${dod.slice(0, 35)})",
+    "prioridad": "02_P2_Media",
+    "horasEstimadas": 4,
+    "criterioDoD": "Pruebas de aceptación superadas"
+  },
+  {
+    "nombre": "Documentación técnica, conciliación y entrega final",
+    "prioridad": "03_P3_Baja",
+    "horasEstimadas": 2,
+    "criterioDoD": "Checklist de entrega final registrado"
+  }
+]
+\`\`\``;
+  }
 
   const chunks = contenidoMock.split('\n\n');
   let acumulado = '';

@@ -50,6 +50,7 @@ import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
 import { ModalExportarPdf } from '../Modals/ModalExportarPdf';
 import { ModalNuevoHito } from '../Modals/ModalNuevoHito';
+import { ModalDesgloseTareasIA, type TareaPropuestaIA } from '../Modals/ModalDesgloseTareasIA';
 import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import { deduplicarPorCodigoCanonico, sanitizarUrlExterna } from '../../utils/entityNormalizer';
@@ -156,6 +157,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
   const [modalPdfAbierto, setModalPdfAbierto] = useState(false);
   const [modalNuevoHitoAbierto, setModalNuevoHitoAbierto] = useState(false);
   const [faseSeleccionadaParaHito, setFaseSeleccionadaParaHito] = useState<string | undefined>(undefined);
+  const [paqueteParaDesgloseIA, setPaqueteParaDesgloseIA] = useState<any | null>(null);
   const [elementoResaltadoId, setElementoResaltadoId] = useState<string | null>(null);
   const [tareaAEditarId, setTareaAEditarId] = useState<string | null>(null);
   const [hitoPreseleccionadoGasto, setHitoPreseleccionadoGasto] = useState<string | undefined>(undefined);
@@ -586,6 +588,50 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
   const abrirModalCrearHitoFase = (nombreFase?: string) => {
     setFaseSeleccionadaParaHito(nombreFase && nombreFase !== 'Fase General' ? nombreFase : undefined);
     setModalNuevoHitoAbierto(true);
+  };
+
+  // Inserción de lote de tareas validadas en el Staging Area IA
+  const handleAprobarTareasIA = async (tareasParaInsertar: TareaPropuestaIA[]) => {
+    if (!paqueteParaDesgloseIA || !proyectoActivo || tareasParaInsertar.length === 0) return;
+
+    const proyCod = proyectoActivo.codigo_legado || proyectoActivo.id || 'PRO-001';
+    const hitoCod = paqueteParaDesgloseIA.codigo_legado || paqueteParaDesgloseIA.id;
+    const nowIso = new Date().toISOString();
+
+    let countTotalTareas = await db.tareas.count();
+
+    for (let i = 0; i < tareasParaInsertar.length; i++) {
+      const item = tareasParaInsertar[i];
+      countTotalTareas++;
+      const codCorrelativo = `TAR-${String(countTotalTareas).padStart(3, '0')}`;
+      const nuevaTarea: TareaRecord = {
+        id: crypto.randomUUID ? crypto.randomUUID() : `tar_${Date.now()}_${i}`,
+        user_id: '00000000-0000-0000-0000-000000000001',
+        codigo_legado: codCorrelativo,
+        proyecto_codigo: proyCod,
+        hito_codigo: hitoCod,
+        nombre_tarea_actividad: item.nombre.trim(),
+        estado_tarea: '02_Por_Hacer',
+        prioridad_eisenhower: item.prioridad,
+        horas_estimadas: item.horasEstimadas,
+        horas_reales: 0,
+        fecha_programada: paqueteParaDesgloseIA.fecha_limite || nowIso.split('T')[0],
+        updated_at: nowIso,
+        sync_status: 'pending'
+      };
+      await db.tareas.add(nuevaTarea);
+    }
+
+    const nomPaq =
+      paqueteParaDesgloseIA.nombre_elemento ||
+      paqueteParaDesgloseIA.Nombre_Elemento ||
+      'el paquete de trabajo';
+
+    mostrarToastCobalt(
+      `Se insertaron ${tareasParaInsertar.length} tareas en ${nomPaq}`,
+      'success'
+    );
+    setPaqueteParaDesgloseIA(null);
   };
 
   // Navegación interactiva desde nodos del Grafo WBS hacia la estructura WBS con scroll y halo
@@ -1277,13 +1323,11 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
 
                                       <button
                                         type="button"
-                                        onClick={() =>
-                                          mostrarToastCobalt(`Asistente WBS IA: Desglosando tareas para ${nomElem}...`, 'info')
-                                        }
-                                        className="h-8 px-2.5 rounded-lg bg-sky-950/40 hover:bg-sky-900/60 text-sky-300 border border-sky-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                                        onClick={() => setPaqueteParaDesgloseIA(h)}
+                                        className="h-8 px-2.5 rounded-lg bg-sky-950/40 hover:bg-sky-900/60 text-sky-300 border border-sky-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer active:scale-95 shadow-[0_0_10px_rgba(56,189,248,0.15)]"
                                         title="Desglosar tareas con IA"
                                       >
-                                        <Bot className="w-3 h-3" strokeWidth={1.75} />
+                                        <Bot className="w-3 h-3 text-sky-400" strokeWidth={1.75} />
                                         <span>IA</span>
                                       </button>
 
@@ -2631,6 +2675,15 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
           }}
         />
       )}
+
+      {/* Modal Canónico Bento Staging Area para Desglose de Tareas con IA */}
+      <ModalDesgloseTareasIA
+        isOpen={paqueteParaDesgloseIA !== null}
+        onClose={() => setPaqueteParaDesgloseIA(null)}
+        paquetePadre={paqueteParaDesgloseIA}
+        proyecto={proyectoActivo}
+        onAprobarTareas={handleAprobarTareasIA}
+      />
     </div>
   );
 };

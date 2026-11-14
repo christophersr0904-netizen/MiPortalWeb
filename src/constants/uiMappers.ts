@@ -27,7 +27,26 @@ import {
   Sparkles,
   Cpu,
   RefreshCw,
-  Flame
+  Flame,
+  CreditCard,
+  Banknote,
+  QrCode,
+  Repeat,
+  Wallet,
+  ShoppingBag,
+  Briefcase,
+  Laptop,
+  Megaphone,
+  Truck,
+  Home,
+  Utensils,
+  MoreHorizontal,
+  BadgeDollarSign,
+  LineChart,
+  Gift,
+  Coins,
+  Clock,
+  RotateCw
 } from 'lucide-react';
 import type { OpcionSelectCobalt } from '../components/UI/SelectIconicoCobalt';
 
@@ -171,5 +190,90 @@ export const OPCIONES_ESTADO_PARTIDA = [
     subtitulo: 'Lanzamiento & expansión',
     icono: Flame
   }
+];
+
+/**
+ * Mapeo de Monedas Oficiales
+ */
+export const OPCIONES_MONEDA_COBALT: OpcionSelectCobalt<'PEN' | 'USD' | 'EUR'>[] = [
+  { valor: 'PEN', etiqueta: 'PEN (S/)', badge: 'S/', colorBadge: 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40 font-mono font-bold', icono: Coins },
+  { valor: 'USD', etiqueta: 'USD ($)', badge: '$', colorBadge: 'bg-sky-950/60 text-sky-300 border-sky-500/40 font-mono font-bold', icono: Coins },
+  { valor: 'EUR', etiqueta: 'EUR (€)', badge: '€', colorBadge: 'bg-purple-950/60 text-purple-300 border-purple-500/40 font-mono font-bold', icono: Coins }
+];
+
+/**
+ * Mapeo de Métodos de Pago
+ */
+export const OPCIONES_METODO_PAGO_COBALT: OpcionSelectCobalt[] = [
+  { valor: 'Transferencia Bancaria', etiqueta: 'Transferencia Bancaria', subtitulo: 'Banca por internet o app', icono: Building2 },
+  { valor: 'Tarjeta de Crédito', etiqueta: 'Tarjeta de Crédito', subtitulo: 'Visa, Mastercard, Amex', icono: CreditCard },
+  { valor: 'Billetera Digital (Yape/Plin)', etiqueta: 'Yape / Plin', subtitulo: 'Pago móvil inmediato', icono: QrCode },
+  { valor: 'Efectivo', etiqueta: 'Efectivo', subtitulo: 'Pago físico directo', icono: Banknote },
+  { valor: 'Débito Automático', etiqueta: 'Débito Automático', subtitulo: 'Cargo recurrente en cuenta', icono: Repeat }
+];
+
+/**
+ * Mapeo de Categorías de Gasto
+ */
+export const OPCIONES_CATEGORIA_GASTO_COBALT: OpcionSelectCobalt[] = [
+  { valor: 'Materiales', etiqueta: 'Materiales & Suministros', subtitulo: 'Insumos de trabajo', icono: ShoppingBag },
+  { valor: 'Servicios Profesionales', etiqueta: 'Servicios Profesionales', subtitulo: 'Honorarios y asesorías', icono: Briefcase },
+  { valor: 'Licencias / Software', etiqueta: 'Licencias & SaaS', subtitulo: 'Suscripciones digitales', icono: Laptop },
+  { valor: 'Marketing / Publicidad', etiqueta: 'Marketing & Ads', subtitulo: 'Campañas y difusión', icono: Megaphone },
+  { valor: 'Logística / Transporte', etiqueta: 'Logística & Transporte', subtitulo: 'Movilidad y envíos', icono: Truck },
+  { valor: 'Equipos / Hardware', etiqueta: 'Equipos & Hardware', subtitulo: 'Tecnología y dispositivos', icono: Cpu },
+  { valor: 'Cuota_Credito', etiqueta: 'Cuota de Crédito', subtitulo: 'Préstamos y tarjetas', icono: CreditCard },
+  { valor: 'Alquiler / Servicios', etiqueta: 'Alquiler & Servicios', subtitulo: 'Oficina, luz, internet', icono: Home },
+  { valor: 'Alimentación', etiqueta: 'Alimentación & Café', subtitulo: 'Reuniones y consumo', icono: Utensils },
+  { valor: 'Otros', etiqueta: 'Otros Egresos', subtitulo: 'Gastos misceláneos', icono: MoreHorizontal }
+];
+
+/**
+ * Mapeo de Categorías / Fuentes de Ingreso
+ */
+export const OPCIONES_CATEGORIA_INGRESO_COBALT: OpcionSelectCobalt[] = [
+  { valor: 'Sueldo_Nomina', etiqueta: 'Sueldo / Nómina', subtitulo: 'Ingreso laboral principal', icono: BadgeDollarSign },
+  { valor: 'Honorarios_Freelance', etiqueta: 'Honorarios Freelance', subtitulo: 'Consultoría y proyectos', icono: Briefcase },
+  { valor: 'Negocio_Emprendimiento', etiqueta: 'Negocio Propio', subtitulo: 'Ventas operativas', icono: TrendingUp },
+  { valor: 'Inversiones_Rendimientos', etiqueta: 'Rendimientos / Dividendos', subtitulo: 'Inversiones financieras', icono: LineChart },
+  { valor: 'Ventas_Activos', etiqueta: 'Venta de Activos', subtitulo: 'Equipos o bienes', icono: ShoppingBag },
+  { valor: 'Obsequio_Monetario', etiqueta: 'Obsequio / Donación', subtitulo: 'Transferencias extraordinarias', icono: Gift },
+  { valor: 'Otros', etiqueta: 'Otros Ingresos', subtitulo: 'Fuentes diversas', icono: MoreHorizontal }
+];
+
+/**
+ * Mapeo de Cuentas Destino Bancarias
+ */
+export const OPCIONES_CUENTA_DESTINO_COBALT: OpcionSelectCobalt[] = [
+  { valor: 'BCP', etiqueta: 'BCP', badge: 'BCP', colorBadge: 'bg-blue-950/60 text-blue-300 border-blue-500/40 font-bold', icono: Building2 },
+  { valor: 'IBK', etiqueta: 'Interbank', badge: 'IBK', colorBadge: 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40 font-bold', icono: Building2 },
+  { valor: 'BBVA', etiqueta: 'BBVA', badge: 'BBVA', colorBadge: 'bg-sky-950/60 text-sky-300 border-sky-500/40 font-bold', icono: Building2 },
+  { valor: 'SCTBK', etiqueta: 'Scotiabank', badge: 'SCT', colorBadge: 'bg-rose-950/60 text-rose-300 border-rose-500/40 font-bold', icono: Building2 },
+  { valor: 'Efectivo', etiqueta: 'Efectivo en Mano', badge: 'CASH', colorBadge: 'bg-amber-950/60 text-amber-300 border-amber-500/40 font-bold', icono: Banknote },
+  { valor: 'Otros', etiqueta: 'Otra Cuenta', icono: Wallet }
+];
+
+/**
+ * Mapeo de Frecuencia / Recurrencia Financiera
+ */
+export const OPCIONES_FRECUENCIA_COBALT: OpcionSelectCobalt[] = [
+  { valor: 'UNICA', etiqueta: 'Única / Puntual', subtitulo: 'Cobro o pago único', icono: Calendar },
+  { valor: 'SEMANAL', etiqueta: 'Semanal', subtitulo: 'Cada 7 días', icono: CalendarDays },
+  { valor: 'QUINCENAL', etiqueta: 'Quincenal', subtitulo: 'Cada 15 días', icono: Clock },
+  { valor: 'MENSUAL', etiqueta: 'Mensual', subtitulo: 'Día fijo cada mes', icono: RotateCw }
+];
+
+/**
+ * Mapeo de Recurrencia para Hábitos y Actividades
+ */
+export const OPCIONES_RECURRENCIA_ACTIVIDAD_COBALT: OpcionSelectCobalt[] = [
+  { valor: 'NINGUNA', etiqueta: 'No se repite', subtitulo: 'Actividad puntual', icono: Calendar },
+  { valor: 'DIARIA', etiqueta: 'Todos los días', subtitulo: 'Racha diaria constante', icono: RotateCw },
+  { valor: 'DIARIA_LABORAL', etiqueta: 'Lunes a Viernes', subtitulo: 'Jornada laboral estándar', icono: Briefcase },
+  { valor: 'FIN_SEMANA', etiqueta: 'Fines de semana', subtitulo: 'Sábados y Domingos', icono: Sparkles },
+  { valor: 'SEMANAL', etiqueta: 'Semanal', subtitulo: 'Días seleccionados', icono: CalendarDays },
+  { valor: 'QUINCENAL', etiqueta: 'Cada 15 días', subtitulo: 'Bimensual', icono: Clock },
+  { valor: 'MENSUAL', etiqueta: 'Mensual', subtitulo: 'Una vez al mes', icono: RotateCw },
+  { valor: 'PERSONALIZADO', etiqueta: 'Personalizado...', subtitulo: 'Intervalo configurable', icono: Repeat }
 ];
 
