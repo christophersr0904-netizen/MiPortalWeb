@@ -10401,3 +10401,29 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (321/321 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 10.81s).
+
+
+---
+
+### [REQ-BUGFIX-71-EXEC: Fix Auto-Record Security Policy y Blind Tap Fallback]
+**Fecha:** Noviembre 2026 | **Fase:** 8.3 (Seguridad de Medios & Toque Ciego) | **Archivos Modificados:** `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Violación de User Activation Token:** El uso de `setTimeout` en la cadena de auto-grabado (`pmo:abrir-captura-idea` y lectura de query params `?action=record`) rompía la pila sincrónica de activación del usuario (*Transient User Activation*), provocando que los navegadores modernos y WebViews móviles bloquearan el micrófono con `NotAllowedError` o lo rechazaran de manera silenciosa.
+- **Inexistencia de Fallback Háptico:** Cuando la política de medios bloqueaba el inicio automático, el popover quedaba abierto sin feedback claro ni un mecanismo guiado para otorgar el gesto táctil requerido por el navegador.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Sincronización Reactiva de Auto-Record (`WidgetIdeasBubble.tsx`):**
+   - Eliminados todos los `setTimeout` en los despachadores de apertura externa y parámetros URL.
+   - Implementado estado atómico `pendingAutoRecord` (`boolean`). Al recibirse `autoRecord: true` o `action === 'record'`, se invoca `abrirPopover()` y se conmuta `setPendingAutoRecord(true)`.
+   - Creado `useEffect` reactivo que escucha `popoverAbierto && pendingAutoRecord`, llamando inmediatamente a `handleVoiceStart()` y reseteando `pendingAutoRecord` sin retardo de timers.
+2. **Fallback de Toque Ciego (Blind Tap Overlay):**
+   - Incorporado estado `requiereToqueManual` (`boolean`) activado ante errores de permisos (`not-allowed`, `NotAllowedError`) o ante rechazo silencioso detectado mediante `isAutoRecordAttemptRef`.
+   - Renderizado condicional de un overlay Cobalt Aerodynamic inmersivo a pantalla completa (`#040711/85`, `backdrop-blur-md`, z-index `10000`) con halo neón pulsante, icono Lucide `Mic` y mensaje de alta legibilidad: *"Toca cualquier parte de la pantalla para hablar"*.
+   - El toque en cualquier punto de la pantalla dispara `handleBlindTap()` como un gesto táctil explícito de usuario, otorgando el User Activation Token y activando el micrófono limpiamente mientras oculta el overlay.
+   - Blindaje de accesibilidad: soporte para `Enter`/`Space`, botón de cancelación secundario y cierre inmediato con tecla `Escape`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (321/321 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 11.59s).

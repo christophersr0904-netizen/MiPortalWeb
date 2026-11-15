@@ -18,7 +18,8 @@ import {
   FileText,
   ArrowRight,
   GripVertical,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Mic
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -174,6 +175,11 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Estados para Auto-Record sin setTimeout y Fallback de Toque Ciego (REQ-BUGFIX-71-EXEC)
+  const [pendingAutoRecord, setPendingAutoRecord] = useState(false);
+  const [requiereToqueManual, setRequiereToqueManual] = useState(false);
+  const isAutoRecordAttemptRef = useRef(false);
+
   // Referencias para evitar stale closures en callbacks asíncronos (VAD / Auto-stop) (REQ-AUDIO-01-EXEC)
   const enunciadoRef = useRef<string>(enunciado);
   useEffect(() => {
@@ -209,7 +215,17 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       fueGrabadoConVozRef.current = true;
     },
     onError: (errorMsg) => {
-      mostrarToastCobalt(errorMsg, 'warning');
+      // Si la API falla por políticas del navegador (permisos, falta de User Activation)
+      if (
+        errorMsg.toLowerCase().includes('permiso') ||
+        errorMsg.toLowerCase().includes('denegado') ||
+        errorMsg.toLowerCase().includes('not-allowed') ||
+        errorMsg.toLowerCase().includes('no se pudo activar')
+      ) {
+        setRequiereToqueManual(true);
+      } else {
+        mostrarToastCobalt(errorMsg, 'warning');
+      }
       setVoiceResetSignal((n) => n + 1);
     },
     onSilenceTimeout: () => {
@@ -235,6 +251,9 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     fueGrabadoConVozRef.current = false;
     baseTextoVozRef.current = '';
     setVoiceResetSignal((n) => n + 1);
+    setPendingAutoRecord(false);
+    setRequiereToqueManual(false);
+    isAutoRecordAttemptRef.current = false;
     if (isListening) {
       stopListening();
     }
@@ -243,6 +262,8 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   // Cierre y apertura controlados con reset
   const cerrarPopover = useCallback(() => {
     resetFormulario();
+    setPendingAutoRecord(false);
+    setRequiereToqueManual(false);
     setPopoverAbierto(false);
   }, [resetFormulario]);
 
@@ -313,7 +334,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       return;
     }
 
-    baseTextoVozRef.current = enunciado.trim();
+    baseTextoVozRef.current = (enunciadoRef.current || enunciado).trim();
     setFueGrabadoConVoz(true);
     startListening();
   }, [isSupported, enunciado, startListening]);
@@ -322,7 +343,53 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     stopListening();
   }, [stopListening]);
 
-  // Receptor externo para apertura por App Shortcuts / Deep-Link (?action=record o ?action=nueva_idea) (REQ-OPS-28 / REQ-PWA-01-EXEC)
+  // Fallback de Toque Ciego (Blind Tap) con activación de usuario válida (REQ-BUGFIX-71-EXEC)
+  const handleBlindTap = useCallback(() => {
+    setRequiereToqueManual(false);
+    isAutoRecordAttemptRef.current = false;
+    handleVoiceStart();
+  }, [handleVoiceStart]);
+
+  // Desactivar Blind Tap automáticamente en cuanto la escucha de voz se establezca
+  useEffect(() => {
+    if (isListening) {
+      isAutoRecordAttemptRef.current = false;
+      setRequiereToqueManual(false);
+    }
+  }, [isListening]);
+
+  // Cerrar overlay de Toque Ciego con la tecla Escape
+  useEffect(() => {
+    if (!requiereToqueManual) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setRequiereToqueManual(false);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [requiereToqueManual]);
+
+  // Disparo reactivo de Auto-Record sin setTimeout para preservar el User Activation Token (REQ-BUGFIX-71-EXEC)
+  useEffect(() => {
+    if (popoverAbierto && pendingAutoRecord) {
+      setPendingAutoRecord(false);
+      isAutoRecordAttemptRef.current = true;
+      handleVoiceStart();
+
+      // Guardián contra rechazo silencioso de micrófono por falta de interacción del usuario
+      const silentTimer = setTimeout(() => {
+        if (isAutoRecordAttemptRef.current && !isListening) {
+          setRequiereToqueManual(true);
+          isAutoRecordAttemptRef.current = false;
+        }
+      }, 500);
+
+      return () => clearTimeout(silentTimer);
+    }
+  }, [popoverAbierto, pendingAutoRecord, handleVoiceStart, isListening]);
+
+  // Receptor externo para apertura por App Shortcuts / Deep-Link (?action=record o ?action=nueva_idea) (REQ-OPS-28 / REQ-PWA-01-EXEC / REQ-BUGFIX-71-EXEC)
   const hasTriggeredAutoRecordRef = useRef(false);
 
   useEffect(() => {
@@ -332,15 +399,13 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       abrirPopover();
       if (shouldAutoRecord && !hasTriggeredAutoRecordRef.current) {
         hasTriggeredAutoRecordRef.current = true;
-        setTimeout(() => {
-          handleVoiceStart();
-        }, 150);
+        setPendingAutoRecord(true);
       }
     };
 
     window.addEventListener('pmo:abrir-captura-idea', handleAbrirCapturaExterna as EventListener);
 
-    // Fallback directo por lectura de URL si el evento se disparó previo al registro del listener
+    // Fallback directo por lectura de URL si el evento se disparó previo al registro del listener (sin setTimeout)
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -349,9 +414,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       if ((action === 'record' || action === 'voice_idea') && !hasTriggeredAutoRecordRef.current) {
         hasTriggeredAutoRecordRef.current = true;
         abrirPopover();
-        setTimeout(() => {
-          handleVoiceStart();
-        }, 200);
+        setPendingAutoRecord(true);
       } else if (action === 'nueva_idea') {
         abrirPopover();
       }
@@ -360,7 +423,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     return () => {
       window.removeEventListener('pmo:abrir-captura-idea', handleAbrirCapturaExterna as EventListener);
     };
-  }, [abrirPopover, handleVoiceStart]);
+  }, [abrirPopover]);
 
   // Ventana Flotante Canvas/PiP (Draggable & Resizable)
   const [ventanaAbierta, setVentanaAbierta] = useState(false);
@@ -1044,6 +1107,64 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
 
   return (
     <>
+      {/* OVERLAY DE TOQUE CIEGO (BLIND TAP) PARA POLÍTICAS DE MEDIOS DEL NAVEGADOR (REQ-BUGFIX-71-EXEC) */}
+      <AnimatePresence>
+        {requiereToqueManual && (
+          <motion.div
+            id="overlay-blind-tap"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={handleBlindTap}
+            className="fixed inset-0 z-[10000] w-full h-full bg-[#040711]/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center cursor-pointer select-none pointer-events-auto"
+            role="button"
+            tabIndex={0}
+            aria-label="Toca cualquier parte de la pantalla para hablar"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                handleBlindTap();
+              }
+            }}
+          >
+            <div className="relative flex flex-col items-center gap-5 max-w-sm w-full p-6 sm:p-8 rounded-3xl bg-[#0D1526]/95 border border-sky-500/40 shadow-[0_10px_35px_-5px_rgba(2,6,23,0.9),0_0_30px_rgba(56,189,248,0.25)] animate-pulse">
+              {/* Halo resplandeciente con Micrófono */}
+              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-sky-600/30 to-cyan-500/20 border border-sky-400/60 flex items-center justify-center text-sky-300 shadow-[0_0_30px_rgba(56,189,248,0.4)]">
+                <Mic className="w-10 h-10 text-sky-400" strokeWidth={1.75} />
+              </div>
+
+              {/* Textos descriptivos */}
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-base sm:text-lg font-bold text-slate-100 tracking-wide">
+                  Toca cualquier parte de la pantalla para hablar
+                </span>
+                <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
+                  El navegador requiere una interacción táctil para habilitar el micrófono
+                </p>
+              </div>
+
+              {/* Píldora técnica indicadora */}
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-950/60 border border-sky-800/60 text-[11px] font-mono text-sky-300">
+                <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
+                <span>Toque Ciego • Blind Tap</span>
+              </div>
+
+              {/* Botón secundario para cancelar */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRequiereToqueManual(false);
+                }}
+                className="mt-1 text-xs font-mono text-slate-400 hover:text-slate-200 underline decoration-slate-600 underline-offset-4 cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 1. MICRO-BOTÓN FLOTANTE EJECUTIVO CON ARRASTRE CONTROLADO (REQ-UI-31-FIX) */}
       <div
         id="widget-ideas-bubble-container"
