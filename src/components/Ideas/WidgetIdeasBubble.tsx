@@ -174,7 +174,26 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Hook de Reconocimiento de Voz Nativo (REQ-IDEAS-VOICE-RECOGNITION-19)
+  // Referencias para evitar stale closures en callbacks asíncronos (VAD / Auto-stop) (REQ-AUDIO-01-EXEC)
+  const enunciadoRef = useRef<string>(enunciado);
+  useEffect(() => {
+    enunciadoRef.current = enunciado;
+  }, [enunciado]);
+
+  const adjuntoRef = useRef<AdjuntoCapturaRapida | null>(adjunto);
+  useEffect(() => {
+    adjuntoRef.current = adjunto;
+  }, [adjunto]);
+
+  const fueGrabadoConVozRef = useRef<boolean>(fueGrabadoConVoz);
+  useEffect(() => {
+    fueGrabadoConVozRef.current = fueGrabadoConVoz;
+  }, [fueGrabadoConVoz]);
+
+  const guardandoRef = useRef<boolean>(false);
+  const handleGuardarIdeaRef = useRef<() => Promise<void> | void>(() => {});
+
+  // Hook de Reconocimiento de Voz Nativo con Auto-Stop por Detección de Silencio (REQ-IDEAS-VOICE-RECOGNITION-19 / REQ-AUDIO-01-EXEC)
   const {
     isListening,
     isSupported,
@@ -185,20 +204,35 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       const base = baseTextoVozRef.current;
       const resultado = base ? `${base} ${texto}` : texto;
       setEnunciado(resultado);
+      enunciadoRef.current = resultado;
       setFueGrabadoConVoz(true);
+      fueGrabadoConVozRef.current = true;
     },
     onError: (errorMsg) => {
       mostrarToastCobalt(errorMsg, 'warning');
       setVoiceResetSignal((n) => n + 1);
-    }
+    },
+    onSilenceTimeout: () => {
+      // Si el usuario deja de hablar por 2.5s y hay texto o adjunto, auto-guardar en Inbox
+      const textoActual = (enunciadoRef.current || '').trim();
+      if (textoActual || adjuntoRef.current) {
+        handleGuardarIdeaRef.current();
+      } else {
+        stopListening();
+      }
+    },
+    silenceTimeoutMs: 2500
   });
 
   // Reset integral de formulario de captura rápida (REQ-IDEAS-UX-REFINEMENT-22 / REQ-UI-31-FIX)
   const resetFormulario = useCallback(() => {
     setEnunciado('');
+    enunciadoRef.current = '';
     setAdjunto(null);
+    adjuntoRef.current = null;
     setProcesandoAdjunto(false);
     setFueGrabadoConVoz(false);
+    fueGrabadoConVozRef.current = false;
     baseTextoVozRef.current = '';
     setVoiceResetSignal((n) => n + 1);
     if (isListening) {
@@ -272,17 +306,6 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     return () => cancelAnimationFrame(frameId);
   }, [popoverAbierto]);
 
-  // Receptor externo para apertura por App Shortcuts / Deep-Link (?action=nueva_idea) (REQ-OPS-28)
-  useEffect(() => {
-    const handleAbrirCapturaExterna = () => {
-      abrirPopover();
-    };
-    window.addEventListener('pmo:abrir-captura-idea', handleAbrirCapturaExterna);
-    return () => {
-      window.removeEventListener('pmo:abrir-captura-idea', handleAbrirCapturaExterna);
-    };
-  }, [abrirPopover]);
-
   const handleVoiceStart = useCallback(() => {
     if (!isSupported) {
       mostrarToastCobalt('Tu navegador no soporta reconocimiento de voz nativo. Usa Chrome o Edge.', 'info');
@@ -298,6 +321,46 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const handleVoiceStop = useCallback(() => {
     stopListening();
   }, [stopListening]);
+
+  // Receptor externo para apertura por App Shortcuts / Deep-Link (?action=record o ?action=nueva_idea) (REQ-OPS-28 / REQ-PWA-01-EXEC)
+  const hasTriggeredAutoRecordRef = useRef(false);
+
+  useEffect(() => {
+    const handleAbrirCapturaExterna = (e: Event) => {
+      const customEvent = e as CustomEvent<{ autoRecord?: boolean }>;
+      const shouldAutoRecord = customEvent?.detail?.autoRecord ?? false;
+      abrirPopover();
+      if (shouldAutoRecord && !hasTriggeredAutoRecordRef.current) {
+        hasTriggeredAutoRecordRef.current = true;
+        setTimeout(() => {
+          handleVoiceStart();
+        }, 150);
+      }
+    };
+
+    window.addEventListener('pmo:abrir-captura-idea', handleAbrirCapturaExterna as EventListener);
+
+    // Fallback directo por lectura de URL si el evento se disparó previo al registro del listener
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const action = searchParams.get('action') || hashParams.get('action');
+
+      if ((action === 'record' || action === 'voice_idea') && !hasTriggeredAutoRecordRef.current) {
+        hasTriggeredAutoRecordRef.current = true;
+        abrirPopover();
+        setTimeout(() => {
+          handleVoiceStart();
+        }, 200);
+      } else if (action === 'nueva_idea') {
+        abrirPopover();
+      }
+    }
+
+    return () => {
+      window.removeEventListener('pmo:abrir-captura-idea', handleAbrirCapturaExterna as EventListener);
+    };
+  }, [abrirPopover, handleVoiceStart]);
 
   // Ventana Flotante Canvas/PiP (Draggable & Resizable)
   const [ventanaAbierta, setVentanaAbierta] = useState(false);
@@ -434,10 +497,14 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     return lista.sort((a: IdeaRecord, b: IdeaRecord) => new Date(b.fecha_captura).getTime() - new Date(a.fecha_captura).getTime());
   }, [tabVentana, ideasInbox, ideasIncubacion, ideasProcesadas, busquedaDrawer]);
 
-  // Guardar captura rápida en 1 clic (texto, voz, cámara o archivo adjunto)
+  // Guardar captura rápida en 1 clic (texto, voz, cámara o archivo adjunto) (REQ-AUDIO-01-EXEC)
   const handleGuardarIdea = async () => {
-    if (!enunciado.trim() && !adjunto) return;
+    const textoLimpio = (enunciadoRef.current || enunciado).trim();
+    const adjuntoActual = adjuntoRef.current || adjunto;
+    if (!textoLimpio && !adjuntoActual) return;
+    if (guardando || guardandoRef.current) return;
 
+    guardandoRef.current = true;
     if (isListening) {
       stopListening();
     }
@@ -449,15 +516,14 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       const codigoLegado = `IDE-${String(count + 1).padStart(3, '0')}`;
 
       // Desglose: primera línea para Enunciado, resto para Detalle
-      const textoLimpio = enunciado.trim();
       const lineas = textoLimpio ? textoLimpio.split(/\r?\n/) : [];
-      const enunFinal = lineas[0] || (adjunto ? adjunto.nombre : 'Idea sin título');
+      const enunFinal = lineas[0] || (adjuntoActual ? adjuntoActual.nombre : 'Idea sin título');
       const detFinal = lineas.slice(1).join('\n').trim();
-      const tipoCaptura = adjunto
-        ? adjunto.esImagen
+      const tipoCaptura = adjuntoActual
+        ? adjuntoActual.esImagen
           ? 'FOTO'
           : 'ARCHIVO'
-        : fueGrabadoConVoz
+        : (fueGrabadoConVozRef.current || fueGrabadoConVoz)
         ? 'VOZ'
         : 'TEXTO';
 
@@ -468,7 +534,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
         enunciado_idea: enunFinal,
         detalle_contexto: detFinal,
         tipo_captura: tipoCaptura,
-        url_adjunto_drive: adjunto?.dataUri || '',
+        url_adjunto_drive: adjuntoActual?.dataUri || '',
         estado: 'CAPTURA',
         fecha_captura: nowIso,
         updated_at: nowIso,
@@ -482,9 +548,14 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     } catch (err) {
       console.error('Error al guardar idea rápida:', err);
     } finally {
+      guardandoRef.current = false;
       setGuardando(false);
     }
   };
+
+  useEffect(() => {
+    handleGuardarIdeaRef.current = handleGuardarIdea;
+  });
 
   // Convertir idea a Tarea
   const handleConvertirATarea = async (idea: IdeaRecord) => {

@@ -52,6 +52,32 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.1 — Atajos Nativos Android (App Shortcuts) y Auto-Recording por Deep Link (REQ-PWA-01-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `public/manifest.json`, `public/manifest.webmanifest`, `src/App.tsx`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **App Shortcuts PWA (`manifest.json` & `manifest.webmanifest`):**
+    - Configurados los atajos nativos de inicio rápido para Android/Chrome:
+      1. `💡 Captar Idea` (`/?action=record`): Captura rápida con activación instantánea de micrófono.
+      2. `💸 Nuevo Gasto` (`/?action=gasto`): Apertura inmediata del modal de finanzas/egresos.
+    - Iconografía apuntando a assets estáticos verificados `icon-192.png`.
+  - **Deep Link Router & Auto-Recording (`App.tsx` & `WidgetIdeasBubble.tsx`):**
+    - En `App.tsx`, implementada la detección de parámetros `?action=record` y `?action=gasto` (tanto en query search como hash params).
+    - Despacho del evento `pmo:abrir-captura-idea` con carga útil `{ detail: { autoRecord: true } }` e invocación directa de `handleVoiceStart()` en `WidgetIdeasBubble.tsx` con guarda anti-rebote (`hasTriggeredAutoRecordRef`).
+    - Desinfección inmediata de la URL con `window.history.replaceState` para evitar re-ejecuciones accidentales en recargas de página.
+  - **Validación QA:** JSON de manifest validado, TypeScript compilado al 100% (`npx tsc --noEmit`: 0 errores), 33/33 suites Vitest superadas (318/318 tests aprobados) y compilación de producción generada exitosamente.
+
+### FASE 8.0 — Desacoplamiento de Monolitos y Clean Architecture en Modales (REQ-ARCH-01-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useGastoForm.ts` (Nuevo), `src/components/Modals/ModalGasto.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/hooks/useGastoForm.ts` (Nuevo Custom Hook Cerebro):
+    - Extirpadas 270 líneas de lógica acoplada de `ModalGasto.tsx`, encapsulando los 14 `useState`, 4 consultas reactivas a Dexie (`useLiveQuery`), sincronización automática de tipo de cambio multidivisa, listeners de atajos de teclado (`Escape`, `Ctrl+Enter`) e integración con el búfer de eliminación `useUndoDelete`.
+    - Encapsulado el motor de inteligencia EVM (Earned Value Management) en `useMemo` reactivo (`presupuestoTecho`, `gastoPrevioPEN`, `gastoTotalConActualPEN`, `saldoRestantePEN`, `excedePresupuesto`, `pctConsumo`) y el mapeo de opciones jerárquicas WBS.
+  - `src/components/Modals/ModalGasto.tsx` (Componente de Presentación Puro):
+    - Reducido de 837 a 510 líneas de código limpio, delegando la totalidad del estado al hook `useGastoForm`.
+    - Cero llamadas directas a Dexie ni lógica de negocio acoplada en la capa de vista.
+    - Preservación 100% estricta del DOM, IDs canónicos (`modal-gasto-card`, `input-monto-gasto`), layout Bento Grid paritario y tokens visuales Cobalt Aerodynamic A.2.2.
+  - **Validación QA:** Chequeo estricto TypeScript limpio (`npx tsc --noEmit`: 0 errores), 33/33 suites Vitest superadas (318/318 tests aprobados) y compilación de producción generada exitosamente.
+
 ### FASE 7.6.1 — Fondo Sólido y Máxima Opacidad en Panel Desplegable Cobalt (REQ-BUGFIX-70-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/UI/SelectIconicoCobalt.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
@@ -10261,3 +10287,117 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (318/318 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,983 módulos transformados exitosamente en 13.26s).
+
+
+---
+
+### [REQ-UI-69-EXEC: Despliegue de Chasis Bento y Cápsula Sólida en Hábitos]
+**Fecha:** Noviembre 2026 | **Fase:** 7.6 (Upgrade Modal Hábitos y Fix Filtros) | **Archivos Modificados:** `src/components/Habitos/TableroHabitos.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico
+- Contraste deficiente en el filtro de metas de `TableroHabitos.tsx`, donde el contenedor presentaba transparencias que degradaban la legibilidad sobre fondos complejos.
+- Densidad cognitiva excesiva en `ModalActividadFlow.tsx` con textos explicativos largos y selectores dispersos sin agrupación Bento clara.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Cápsula Sólida en Filtros (`TableroHabitos.tsx`):** Envoltorio de alto contraste `bg-[#080D1A] border border-slate-700/80 p-1 rounded-xl shadow-inner relative z-40` forzando altura homogénea `min-h-[34px]`.
+2. **Chasis Bento de 3 Tarjetas (`ModalActividadFlow.tsx`):**
+   - Agrupación modular en 3 tarjetas elevadas (`bg-[#0B132B]/60 border-slate-800/80 rounded-2xl p-4`):
+     - Tarjeta 1: Identidad & Enunciado con iconos Lucide de alto contraste.
+     - Tarjeta 2: Programación & Días activos con botones circulares (`w-8 h-8 rounded-full font-mono font-black text-xs active:scale-90`) y halo neón.
+     - Tarjeta 3: Vínculos Estratégicos & Metas.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit` $\rightarrow$ Exit Code 0.
+- `npm test` $\rightarrow$ 33/33 suites passed.
+- `npm run build` $\rightarrow$ Exit Code 0.
+
+---
+
+### [REQ-BUGFIX-70-EXEC: Fix Transparencia en Panel Opciones Cobalt]
+**Fecha:** Noviembre 2026 | **Fase:** 7.6 (Fix Opacidad Select) | **Archivos Modificados:** `src/components/UI/SelectIconicoCobalt.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico
+- El menú desplegable de opciones en `SelectIconicoCobalt.tsx` mantenía opacidades reducidas (`/80`, `/90`) y utilidades `backdrop-blur-md` que provocaban transparencias no deseadas sobre elementos subyacentes con alto contraste.
+
+#### 2. Solución Quirúrgica Implementada
+- Extirpadas todas las opacidades del fondo: aplicado fondo 100% sólido `bg-[#0D1526]` con borde `border border-slate-700` y sombras `shadow-2xl`.
+- Eliminada la utilidad `backdrop-blur-md` para garantizar lectura nítida e instantánea sin artefactos gráficos.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit` $\rightarrow$ Exit Code 0.
+- `npm test` $\rightarrow$ 33/33 suites passed.
+- `npm run build` $\rightarrow$ Exit Code 0.
+
+---
+
+### [REQ-ARCH-01-EXEC: Desacoplamiento y Clean Architecture - Custom Hook useGastoForm]
+**Fecha:** Noviembre 2026 | **Fase:** 8.0 (Desacoplamiento ModalGasto) | **Archivos Modificados:** `src/hooks/useGastoForm.ts`, `src/components/Modals/ModalGasto.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico
+- `ModalGasto.tsx` se había convertido en un monolito de 837 líneas combinando consultas Dexie reactivas (`useLiveQuery`), lógica EVM (Earned Value Management) para hitos, atajos de teclado y renderizado de interfaz.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Creación del Custom Hook `useGastoForm.ts`:**
+   - Extraídos 14 estados locales, 4 `useLiveQuery`, cálculos de hitos y proyectos vinculados, conversiones de moneda y persistencia transaccional.
+   - Retorno tipado estricto `UseGastoFormReturn` consumible por componentes de presentación puros.
+2. **Refactorización de `ModalGasto.tsx`:**
+   - Reducción quirúrgica de 837 a 510 líneas (-39% LOC).
+   - Componente puro de presentación con 100% de paridad visual Cobalt Aerodynamic y cero regresiones.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit` $\rightarrow$ Exit Code 0.
+- `npm test` $\rightarrow$ 33/33 suites passed.
+- `npm run build` $\rightarrow$ Exit Code 0.
+
+---
+
+### [REQ-PWA-01-EXEC: Atajos Nativos Android y Trigger por URL]
+**Fecha:** Noviembre 2026 | **Fase:** 8.1 (PWA Shortcuts & Deep Links) | **Archivos Modificados:** `public/manifest.json`, `public/manifest.webmanifest`, `src/App.tsx`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico
+- Inexistencia de atajos rápidos de pantalla de inicio en Android/PWA para capturar ideas o registrar gastos en 1 toque.
+- Falta de un enrutador de deep-linking reactivo capaz de procesar `/?action=record` o `/?action=gasto` al iniciar la PWA.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Configuración de Shortcuts en Manifiestos:**
+   - Inyectado array `shortcuts` en `manifest.json` y `manifest.webmanifest` con `"💡 Captar Idea"` (`/?action=record`) y `"💸 Nuevo Gasto"` (`/?action=gasto`).
+2. **Enrutador Deep-Link en `App.tsx`:**
+   - Listener de parámetros `action` en query/hash params con despacho de eventos personalizados `pmo:abrir-captura-idea` (`{ autoRecord: true }`) y apertura de modal de gastos.
+3. **Auto-Activación de Micrófono en `WidgetIdeasBubble.tsx`:**
+   - Apertura inmediata del popover de ideas y disparo automático de `handleVoiceStart()` cuando se recibe `autoRecord: true` o `action === 'record'`.
+
+#### 3. Certificación QA
+- `npx tsc --noEmit` $\rightarrow$ Exit Code 0.
+- `npm test` $\rightarrow$ 33/33 suites passed.
+- `npm run build` $\rightarrow$ Exit Code 0.
+
+---
+
+### [REQ-AUDIO-01-EXEC: Auto-Stop por Detección de Silencio (Voice Activity Detection - VAD)]
+**Fecha:** Noviembre 2026 | **Fase:** 8.2 (Auto-Stop VAD en Captura de Ideas) | **Archivos Modificados:** `src/hooks/useSpeechRecognition.ts`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/hooks/__tests__/useSpeechRecognition.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Requerimiento
+- Al grabar notas de voz o dictar ideas rápidamente desde la burbuja flotante (`WidgetIdeasBubble.tsx`), el usuario requería pulsar manualmente el botón de parada.
+- La ausencia de un mecanismo VAD (Voice Activity Detection) por inactividad vocal causaba grabaciones innecesariamente largas o pérdida de agilidad en movilidad (manos ocupadas o pantalla de inicio).
+
+#### 2. Solución Quirúrgica Implementada
+1. **Controlador VAD en `SpeechRecognitionController` y `useSpeechRecognition.ts`:**
+   - Incorporación de `onSilenceTimeout?: () => void` y `silenceTimeoutMs?: number` (default canónico: `2500ms`) en `UseSpeechRecognitionOptions`.
+   - Implementado temporizador `silenceTimer` con ciclo de vida estricto:
+     - `resetSilenceTimer()`: se activa en `rec.onstart` (temporizador fallback si no se habla) y se reinicia en cada evento `rec.onresult` ante cualquier transcripción parcial o final.
+     - `clearSilenceTimer()`: cancelación inmediata en `rec.onerror`, `rec.onend`, `stop()` y `abort()`.
+     - Al expirar los 2500ms de silencio continuo, invoca `this.stop()` y dispara `this.onSilenceTimeout()`.
+2. **Integración Reactiva en `WidgetIdeasBubble.tsx` con Blindaje Anti-Stale Closures:**
+   - Gestión mediante referencias mutables (`enunciadoRef`, `adjuntoRef`, `fueGrabadoConVozRef`, `handleGuardarIdeaRef`, `guardandoRef`) para garantizar acceso al texto capturado más reciente en microtasks asíncronos.
+   - En `onSilenceTimeout`: si existe texto o archivo adjunto disponible, gatilla `handleGuardarIdeaRef.current()`, persistiendo automáticamente la idea en Dexie Inbox con tipo `VOZ`, emitiendo toast Cobalt de confirmación y cerrando el popover. Si el usuario no habló nada, únicamente detiene el micrófono.
+   - Prevención de doble guardado concurrente con `guardandoRef.current`.
+3. **Suite de Pruebas Unitarias (`useSpeechRecognition.test.ts`):**
+   - Agregados 3 nuevos casos de prueba con `vi.useFakeTimers()` verificando:
+     1. Disparo de `onSilenceTimeout` y llamada a `stop()` tras 2500ms sin voz desde `onstart`.
+     2. Reinicio continuo del timer ante eventos sucesivos de `onresult`.
+     3. Cancelación limpia del timer al pulsar parada manual (`stop()`).
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (321/321 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 10.81s).

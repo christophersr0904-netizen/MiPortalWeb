@@ -198,4 +198,93 @@ describe('REQ-IDEAS-VOICE-RECOGNITION-19: useSpeechRecognition & SpeechRecogniti
     mockRecognitionInstance.onend();
     expect(controller.isListening).toBe(false);
   });
+
+  describe('REQ-AUDIO-01-EXEC: Detección de Silencio y Auto-Stop (VAD)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('inicia temporizador en onstart y dispara onSilenceTimeout al transcurrir el timeout sin voz', () => {
+      const onSilenceTimeout = vi.fn();
+      const controller = new SpeechRecognitionController({
+        onTranscript: vi.fn(),
+        onSilenceTimeout,
+        silenceTimeoutMs: 2500
+      });
+
+      controller.start();
+      expect(controller.isListening).toBe(true);
+
+      // Avanzar 2400ms: aún no debe disparar
+      vi.advanceTimersByTime(2400);
+      expect(onSilenceTimeout).not.toHaveBeenCalled();
+      expect(controller.isListening).toBe(true);
+
+      // Avanzar 100ms adicionales (total 2500ms)
+      vi.advanceTimersByTime(100);
+      expect(onSilenceTimeout).toHaveBeenCalledTimes(1);
+      expect(controller.isListening).toBe(false);
+      expect(mockRecognitionInstance.stop).toHaveBeenCalled();
+    });
+
+    it('reinicia el temporizador de silencio con cada evento onresult', () => {
+      const onSilenceTimeout = vi.fn();
+      const onTranscript = vi.fn();
+      const controller = new SpeechRecognitionController({
+        onTranscript,
+        onSilenceTimeout,
+        silenceTimeoutMs: 2500
+      });
+
+      controller.start();
+
+      // Transcurren 2000ms
+      vi.advanceTimersByTime(2000);
+      expect(onSilenceTimeout).not.toHaveBeenCalled();
+
+      // El usuario sigue hablando y llega un resultado interino
+      mockRecognitionInstance.onresult({
+        results: [
+          {
+            isFinal: false,
+            0: { transcript: 'Hola mundo' }
+          }
+        ]
+      });
+
+      // Transcurren otros 2000ms (en total 4000ms desde inicio, pero solo 2000ms desde onresult)
+      vi.advanceTimersByTime(2000);
+      expect(onSilenceTimeout).not.toHaveBeenCalled();
+      expect(controller.isListening).toBe(true);
+
+      // Transcurren 500ms más (2500ms de silencio desde el último onresult)
+      vi.advanceTimersByTime(500);
+      expect(onSilenceTimeout).toHaveBeenCalledTimes(1);
+      expect(controller.isListening).toBe(false);
+    });
+
+    it('cancela el temporizador de silencio al invocar stop() manualmente', () => {
+      const onSilenceTimeout = vi.fn();
+      const controller = new SpeechRecognitionController({
+        onTranscript: vi.fn(),
+        onSilenceTimeout,
+        silenceTimeoutMs: 2500
+      });
+
+      controller.start();
+      vi.advanceTimersByTime(1500);
+
+      // Parada manual
+      controller.stop();
+      expect(controller.isListening).toBe(false);
+
+      // Avanzar más allá del timeout
+      vi.advanceTimersByTime(2000);
+      expect(onSilenceTimeout).not.toHaveBeenCalled();
+    });
+  });
 });

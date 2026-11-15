@@ -316,22 +316,34 @@ export const App: React.FC = () => {
         searchParams.get('mode') === 'hud' ||
         hashParams.get('mode') === 'hud';
 
-      const actionParam = searchParams.get('action');
+      const actionParam = searchParams.get('action') || hashParams.get('action');
       if (!isHudInit && actionParam) {
         switch (actionParam) {
+          case 'record':
+          case 'voice_idea':
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('pmo:abrir-captura-idea', { detail: { autoRecord: true } })
+              );
+            }, 100);
+            break;
+          case 'nueva_idea':
+            setTimeout(() => {
+              window.dispatchEvent(
+                new CustomEvent('pmo:abrir-captura-idea', { detail: { autoRecord: false } })
+              );
+            }, 100);
+            break;
+          case 'gasto':
+          case 'nuevo_gasto':
+            setModalGastoGlobalAbierto(true);
+            break;
           case 'nueva_tarea':
             setModalTareaProps({
               isOpen: true,
               tareaId: null,
               initialColumna: '01_Backlog'
             });
-            break;
-          case 'nuevo_gasto':
-            setModalGastoGlobalAbierto(true);
-            break;
-          case 'nueva_idea':
-          case 'voice_idea':
-            window.dispatchEvent(new CustomEvent('pmo:abrir-captura-idea'));
             break;
           case 'nueva_nota':
             handleCambiarVista('notas');
