@@ -57,7 +57,15 @@ vi.mock('../../db/db', () => ({
       })
     },
     isOpen: vi.fn().mockReturnValue(true)
-  }
+  },
+  registrarTombstone: vi.fn(async (tabla: string, id: string) => {
+    memoryTombstones.push({
+      id,
+      tabla,
+      tabla_afectada: tabla,
+      sync_status: 'pending'
+    });
+  })
 }));
 
 vi.mock('../syncManager', () => ({

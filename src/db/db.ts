@@ -14,7 +14,8 @@ import type {
   HitoPlanRecord,
   HabitoMetaVinculo,
   HabitoLogRecord,
-  TombstoneRecord
+  TombstoneRecord,
+  SyncDeletionRecord
 } from '../types';
 import { extraerCodigoCanonico, fusionarRegistrosDuplicados } from '../utils/entityNormalizer';
 import seedPmo from './seedPmo.json';
@@ -41,6 +42,7 @@ export class PMODatabase extends Dexie {
   habitos_metas_vinculos!: Table<HabitoMetaVinculo, string>;
   habito_cumplimiento_logs!: Table<HabitoLogRecord, string>;
   tombstones!: Table<TombstoneRecord, string>;
+  sync_deletions!: Table<SyncDeletionRecord, string>;
 
   constructor() {
     super('PMOPersonalModularDB');
@@ -77,6 +79,9 @@ export class PMODatabase extends Dexie {
     });
     this.version(6).stores({
       tombstones: 'id, tabla, sync_status, deleted_at'
+    });
+    this.version(7).stores({
+      sync_deletions: 'id, tabla, sync_status, deleted_at'
     });
   }
 }
@@ -580,24 +585,37 @@ if (typeof window !== 'undefined' && import.meta.env.DEV) {
 }
 
 /**
- * Registra una lápida (tombstone) en IndexedDB para entidades eliminadas localmente.
+ * Registra una lápida (tombstone / sync_deletions) en IndexedDB para entidades eliminadas localmente.
  * Permite replicar el borrado hacia Supabase y prevenir la resurrección en pulls descendentes.
  */
 export async function registrarTombstone(tabla: string, id: string): Promise<void> {
   if (!id || !tabla) return;
   try {
-    if (typeof db !== 'undefined' && db?.tombstones && typeof db.tombstones.put === 'function') {
-      await db.tombstones.put({
-        id: String(id),
-        tabla: String(tabla),
-        deleted_at: new Date().toISOString(),
-        sync_status: 'pending'
-      });
+    const nowIso = new Date().toISOString();
+    const registro = {
+      id: String(id),
+      tabla: String(tabla),
+      tabla_afectada: String(tabla),
+      deleted_at: nowIso,
+      sync_status: 'pending' as const
+    };
+    if (typeof db !== 'undefined') {
+      if (db?.tombstones && typeof db.tombstones.put === 'function') {
+        await db.tombstones.put(registro);
+      }
+      if (db?.sync_deletions && typeof db.sync_deletions.put === 'function') {
+        await db.sync_deletions.put(registro);
+      }
     }
   } catch (err) {
-    console.warn('[PMO DB] Error registrando tombstone:', err);
+    console.warn('[PMO DB] Error registrando tombstone / sync_deletions:', err);
   }
 }
+
+/**
+ * REQ-BUGFIX-74-EXEC: Alias canónico para registro explícito en sync_deletions
+ */
+export const registrarSyncDeletion = registrarTombstone;
 
 export interface ResultadoPurgaLocales {
   tareasPurgadas: number;
@@ -699,6 +717,18 @@ export async function purgarRegistrosLocalesExpirados(diasRetencion: number = 90
         resultado.tombstonesPurgados += idsTombstones.length;
       }
     }
+
+    try {
+      if (db.sync_deletions && typeof db.sync_deletions.toArray === 'function') {
+        const syncDels = (await db.sync_deletions.toArray().catch(() => [])) || [];
+        const idsSyncDels = syncDels
+          .filter((tb) => tb.sync_status === 'synced' && esExpirado(tb.deleted_at))
+          .map((tb) => tb.id);
+        if (idsSyncDels.length > 0 && typeof db.sync_deletions.bulkDelete === 'function') {
+          await db.sync_deletions.bulkDelete(idsSyncDels).catch(() => {});
+        }
+      }
+    } catch {}
 
     resultado.totalPurgados =
       resultado.tareasPurgadas +

@@ -662,25 +662,51 @@ class SyncManager {
   // ============================================================================
 
   /**
-   * 0. Sincroniza lápidas de registros eliminados hacia Supabase (Tombstones Push)
-   * Previene resurrección remota y garantiza la consistencia del borrado físico.
+   * 0. Sincroniza lápidas de registros eliminados hacia Supabase (Tombstones Push / sync_deletions)
+   * Previene resurrección remota y garantiza la consistencia del borrado físico (REQ-BUGFIX-74-EXEC).
    */
   public async sincronizarTombstones(): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
-    if (!db.tombstones) return result;
+    if (!db.tombstones && !db.sync_deletions) return result;
 
-    const pending = await this.obtenerRegistrosPendientes<TombstoneRecord>(db.tombstones);
+    const pendingMap = new Map<string, TombstoneRecord>();
+
+    if (db.tombstones && typeof db.tombstones.toArray === 'function') {
+      const pendingTomb = await this.obtenerRegistrosPendientes<TombstoneRecord>(db.tombstones);
+      pendingTomb.forEach((t) => pendingMap.set(t.id, t));
+    }
+
+    if (db.sync_deletions && typeof db.sync_deletions.toArray === 'function') {
+      const pendingDels = await this.obtenerRegistrosPendientes<TombstoneRecord>(db.sync_deletions);
+      pendingDels.forEach((t) => {
+        if (!pendingMap.has(t.id)) {
+          pendingMap.set(t.id, t);
+        }
+      });
+    }
+
+    const pending = Array.from(pendingMap.values());
     if (pending.length === 0) return result;
 
+    const limpiarColaLocal = async (id: string) => {
+      if (db.sync_deletions && typeof db.sync_deletions.delete === 'function') {
+        await db.sync_deletions.delete(id).catch(() => {});
+      }
+    };
+
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
-      await Promise.all(pending.map((t) => db.tombstones.update(t.id, { sync_status: 'synced' })));
+      await Promise.all([
+        ...pending.map((t) => (db.tombstones && typeof db.tombstones.update === 'function' ? db.tombstones.update(t.id, { sync_status: 'synced' }).catch(() => {}) : Promise.resolve())),
+        ...pending.map((t) => limpiarColaLocal(t.id))
+      ]);
       result.success = pending.length;
       return result;
     }
 
     for (const tombstone of pending) {
       if (this.debeOmitirTablaRemota(tombstone.tabla)) {
-        await db.tombstones.update(tombstone.id, { sync_status: 'synced' });
+        if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => {});
+        await limpiarColaLocal(tombstone.id);
         result.success++;
         continue;
       }
@@ -694,31 +720,34 @@ class SyncManager {
         if (error) {
           if (this.esErrorTablaInexistente(error)) {
             this.registrarTablaInexistente(tombstone.tabla);
-            await db.tombstones.update(tombstone.id, { sync_status: 'synced' });
+            if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => {});
+            await limpiarColaLocal(tombstone.id);
             result.success++;
           } else {
             console.error(
               `[SyncManager] Error al sincronizar tombstone en Supabase (${tombstone.tabla}:${tombstone.id}):`,
               error
             );
-            await db.tombstones.update(tombstone.id, { sync_status: 'error' });
+            if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'error' }).catch(() => {});
             result.failed++;
           }
         } else {
-          await db.tombstones.update(tombstone.id, { sync_status: 'synced' });
+          if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => {});
+          await limpiarColaLocal(tombstone.id);
           result.success++;
         }
       } catch (err) {
         if (this.esErrorTablaInexistente(err)) {
           this.registrarTablaInexistente(tombstone.tabla);
-          await db.tombstones.update(tombstone.id, { sync_status: 'synced' });
+          if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => {});
+          await limpiarColaLocal(tombstone.id);
           result.success++;
         } else {
           console.error(
             `[SyncManager] Excepción al sincronizar tombstone (${tombstone.tabla}:${tombstone.id}):`,
             err
           );
-          await db.tombstones.update(tombstone.id, { sync_status: 'error' });
+          if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'error' }).catch(() => {});
           result.failed++;
         }
       }
@@ -1727,9 +1756,10 @@ class SyncManager {
     await this.resolverUsuarioActivo().catch(() => {});
 
     try {
-      // 1. Verificar registros pendientes en IndexedDB a través de las 13 entidades (incluyendo tombstones)
+      // 1. Verificar registros pendientes en IndexedDB a través de las 13 entidades (incluyendo tombstones / sync_deletions)
       const pendingCounts = await Promise.all([
         this.contarPendientes(db.tombstones),
+        db.sync_deletions ? this.contarPendientes(db.sync_deletions) : Promise.resolve(0),
         this.contarPendientes(db.proyectos),
         this.contarPendientes(db.hitos_wbs),
         this.contarPendientes(db.tareas),
@@ -1873,6 +1903,12 @@ class SyncManager {
           if (t.id) tombstonesLocalesSet.add(String(t.id));
         });
       }
+      if (db.sync_deletions && typeof db.sync_deletions.toArray === 'function') {
+        const todasDeletions = (await db.sync_deletions.toArray().catch(() => [])) || [];
+        todasDeletions.forEach((t) => {
+          if (t.id) tombstonesLocalesSet.add(String(t.id));
+        });
+      }
     } catch {
       // Tolerancia defensiva ante entornos sin IndexedDB
     }
@@ -1996,31 +2032,62 @@ class SyncManager {
       }
 
       try {
-        let query: any = this.supabase.from(tabla).select('*');
-        if (typeof query?.limit === 'function') {
-          query = query.limit(1000);
-        }
+        // REQ-BUGFIX-74-EXEC: Paginación continua asíncrona (Sprint 2)
+        // Bloques continuos vía .range(offset, offset + PAGE_SIZE - 1) para superar el límite de 1000 sin ERR_CONNECTION_CLOSED
+        const PAGE_SIZE = 1000;
+        let offset = 0;
+        let hasMore = true;
+        let data: any[] = [];
+        let descargaCompleta = true;
 
-        // Límites de Ingesta (90 días) para tablas de alto volumen
         const tablasAltoVolumen = ['gastos', 'ingresos', 'habitos_registros', 'habito_cumplimiento_logs'];
-        if (tablasAltoVolumen.includes(tabla) && typeof query?.gte === 'function') {
-          const cutoffIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-          query = query.gte('created_at', cutoffIso);
+        const cutoffIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+        while (hasMore) {
+          let query: any = this.supabase.from(tabla).select('*');
+          if (tablasAltoVolumen.includes(tabla) && typeof query?.gte === 'function') {
+            query = query.gte('created_at', cutoffIso);
+          }
+
+          const to = offset + PAGE_SIZE - 1;
+          const chunkPromise = typeof query?.range === 'function'
+            ? query.range(offset, to)
+            : (typeof query?.limit === 'function' ? query.limit(PAGE_SIZE) : query);
+
+          const chunkRes = await chunkPromise;
+          const { data: chunk, error } = chunkRes || {};
+
+          if (error) {
+            descargaCompleta = false;
+            hasMore = false;
+            if (this.esErrorTablaInexistente(error)) {
+              this.registrarTablaInexistente(tabla);
+            } else {
+              console.warn(`[SyncManager] Aviso al descargar tabla remota ${tabla} (offset ${offset}):`, error.message);
+              summary.fallidos++;
+            }
+            break;
+          }
+
+          const records = Array.isArray(chunk) ? chunk : (Array.isArray(chunkRes) ? chunkRes : []);
+
+          if (!records || records.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          data.push(...records);
+
+          if (typeof query?.range !== 'function' || records.length < PAGE_SIZE) {
+            hasMore = false;
+          } else {
+            offset += PAGE_SIZE;
+          }
         }
 
-        const { data, error } = await query;
-
-        if (error) {
-          if (this.esErrorTablaInexistente(error)) {
-            this.registrarTablaInexistente(tabla);
-          } else {
-            console.warn(`[SyncManager] Aviso al descargar tabla remota ${tabla}:`, error.message);
-            summary.fallidos++;
-          }
+        if (!descargaCompleta) {
           continue;
         }
-
-        if (!data || data.length === 0) continue;
 
         // Enriquecer mapas UUID -> Código y Código -> UUID con datos remotos frescos (REQ-FIX-10 / REQ-BUGFIX-72)
         if (tabla === 'proyectos') {
@@ -2082,9 +2149,10 @@ class SyncManager {
         // Indexar registros locales actuales por código canónico (codigo_legado) y por ID para evitar duplicar semillas
         const mapaLocalPorCodigo = new Map<string, any>();
         const mapaLocalPorId = new Map<string, any>();
+        let actuales: any[] = [];
         try {
           if (typeof (refDexie as any).toArray === 'function') {
-            const actuales = await (refDexie as any).toArray();
+            actuales = (await (refDexie as any).toArray()) || [];
             if (Array.isArray(actuales)) {
               for (const loc of actuales) {
                 if (loc.id) mapaLocalPorId.set(String(loc.id), loc);
@@ -2099,6 +2167,53 @@ class SyncManager {
 
         const idsObsoletosAEliminar: string[] = [];
         const registrosParaActualizar: any[] = [];
+
+        // REQ-BUGFIX-74-EXEC: Diffing de eliminaciones remotas (Hard-Deletes en Dispositivo B - Sprint 1)
+        // Si un registro local está 'synced' pero ya no existe en el catálogo remoto de Supabase,
+        // fue eliminado en la nube (ej. desde Dispositivo A) y debe eliminarse de Dexie localmente.
+        if (descargaCompleta && Array.isArray(actuales) && actuales.length > 0) {
+          const idsRemotosDescargados = new Set<string>();
+          const codigosRemotosDescargados = new Set<string>();
+          for (const item of data) {
+            if (item?.id) {
+              idsRemotosDescargados.add(String(item.id));
+              idsRemotosDescargados.add(String(item.id).toLowerCase());
+            }
+            const cod = item?.codigo_legado || extraerCodigoCanonico(item);
+            if (cod) {
+              codigosRemotosDescargados.add(cod);
+              codigosRemotosDescargados.add(cod.toUpperCase());
+            }
+          }
+
+          for (const loc of actuales) {
+            if (!loc || !loc.id) continue;
+            const locId = String(loc.id);
+
+            // Proteger estrictamente registros locales creados o modificados que aún no se han subido
+            if (loc.sync_status !== 'synced') continue;
+
+            // Omitir si ya tiene lápida local o ya está encolado para eliminar
+            if (tombstonesLocalesSet.has(locId) || idsObsoletosAEliminar.includes(locId)) continue;
+
+            // Para tablas con límite de ventana de fecha (90 días), sólo comparar si el registro está dentro de la ventana
+            if (tablasAltoVolumen.includes(tabla)) {
+              const fRef = loc.created_at || loc.fecha_gasto || loc.fecha_ingreso || loc.updated_at;
+              if (fRef && new Date(fRef).getTime() < new Date(cutoffIso).getTime()) {
+                continue;
+              }
+            }
+
+            const locCod = extraerCodigoCanonico(loc);
+            const existeEnRemoto = idsRemotosDescargados.has(locId) ||
+                                   idsRemotosDescargados.has(locId.toLowerCase()) ||
+                                   (locCod && (codigosRemotosDescargados.has(locCod) || codigosRemotosDescargados.has(locCod.toUpperCase())));
+
+            if (!existeEnRemoto) {
+              idsObsoletosAEliminar.push(locId);
+            }
+          }
+        }
 
         for (const item of data) {
           if (!item || !item.id) continue;

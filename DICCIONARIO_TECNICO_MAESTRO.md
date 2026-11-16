@@ -10480,3 +10480,28 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (326/326 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 11.13s).
 
+---
+
+### [REQ-BUGFIX-74-EXEC: Tombstones y Paginación en SyncManager]
+**Fecha:** Noviembre 2026 | **Fase:** 8.4 (Arquitectura Sync & Cold Start Resiliente) | **Archivos Modificados:** `src/types/index.ts`, `src/db/db.ts`, `src/services/syncManager.ts`, `src/services/tareasService.ts`, `src/services/cuotasService.ts`, `src/services/gastosService.ts`, `src/services/ingresosService.ts`, `src/services/notasService.ts`, `src/context/UndoDeleteContext.tsx`, `src/services/__tests__/syncManager.test.ts`, `src/services/__tests__/tareasService.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Sincronización Incompleta de Eliminaciones Físicas (Hard-Deletes) entre Dispositivos:** Cuando un registro se eliminaba físicamente en el Dispositivo A mediante `db[tabla].delete(id)`, Supabase eliminaba la fila remota, pero el Dispositivo B no tenía mecanismo para enterarse de la supresión en descargas descendentes (*pull*), manteniendo copias huérfanas en IndexedDB sin reflejar la eliminación.
+- **Vulnerabilidad de Límite Estático vs Volumen de Datos:** El método `descargarDatosDescendientes()` utilizaba una consulta estática `.limit(1000)`. Al sobrepasar 1,000 registros remotos en una entidad densa, las peticiones se truncaban de manera incompleta o provocaban `ERR_CONNECTION_CLOSED` por saturación de ancho de banda y corte de socket en Supabase.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Sincronización Bidireccional de Eliminaciones (Tombstones & `sync_deletions`):**
+   - **Esquema Dexie V7:** Se incorporó formalmente la tabla `sync_deletions` (`id, tabla, sync_status, deleted_at`) con la interfaz `SyncDeletionRecord`.
+   - **Registro Atómico:** La función maestra `registrarTombstone(tabla, id)` (y su alias `registrarSyncDeletion`) persiste simultáneamente lápidas en `db.tombstones` y encola eliminaciones en `db.sync_deletions`. Todos los servicios de negocio (`tareasService`, `cuotasService`, `gastosService`, `ingresosService`, `notasService`, `UndoDeleteContext`) despachan sus bajas físicas a través de este pipeline.
+   - **Push de Eliminaciones:** En `sincronizarTombstones()` se leen concurrentemente `db.tombstones` y `db.sync_deletions`, se ejecuta `.delete().eq('id', id)` hacia Supabase y se limpia inmediatamente la cola local de `sync_deletions`.
+   - **Diffing Local-First para Dispositivo B:** En `descargarDatosDescendientes()`, tras una descarga 100% completa de una tabla, el motor compara los registros locales con `sync_status === 'synced'` contra los IDs y códigos canónicos remotos descargados. Si un registro estaba previamente sincronizado pero ya no existe en Supabase, se encola en `idsObsoletosAEliminar` y se purga atómicamente con `bulkDelete()`, respetando estrictamente registros locales en estado `pending`, `error` o `quarantined`.
+2. **Paginación Continua Asíncrona en Descarga (*Pull*):**
+   - Se reemplazó el `.limit(1000)` estático por un bucle continuo `while (hasMore)`.
+   - Se realizan peticiones paginadas en bloques utilizando `.range(offset, offset + PAGE_SIZE - 1)` con ventana `PAGE_SIZE = 1000`.
+   - Los bloques descargados se acumulan progresivamente en memoria (`data.push(...records)`) y el ciclo `bulkPut` / `bulkDelete` unificado se ejecuta únicamente cuando se han recolectado todos los bloques de la tabla, garantizando ingesta 100% íntegra y eliminando la caída de sockets de red.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (329/329 tests al 100% verde, +3 nuevos tests de integración).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 9.87s).
+

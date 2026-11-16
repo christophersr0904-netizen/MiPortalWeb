@@ -7,7 +7,7 @@
  * ============================================================================
  */
 
-import { db } from '../db/db';
+import { db, registrarTombstone } from '../db/db';
 import type { NotaRecord } from '../types';
 import { syncManager } from './syncManager';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
@@ -71,17 +71,7 @@ export async function actualizarNota(id: string, cambios: Partial<NotaRecord>): 
 }
 
 export async function eliminarNota(id: string): Promise<boolean> {
-  const nowIso = new Date().toISOString();
-
-  if (db.tombstones && typeof db.tombstones.put === 'function') {
-    await db.tombstones.put({
-      id,
-      tabla: 'notas',
-      fecha_eliminacion: nowIso,
-      sync_status: 'pending'
-    } as any).catch(() => {});
-  }
-
+  await registrarTombstone('notas', id);
   await db.notas.delete(id);
 
   syncManager.syncPendingRecords().catch((err) => {

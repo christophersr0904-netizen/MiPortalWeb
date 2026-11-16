@@ -120,33 +120,44 @@ export class UndoDeleteManager {
 
     const commitConTombstone = async () => {
       try {
-        if (
-          tabla !== 'cuadernos' &&
-          typeof db !== 'undefined' &&
-          db?.tombstones &&
-          typeof db.tombstones.put === 'function'
-        ) {
-          const p = db.tombstones.put({
+        if (tabla !== 'cuadernos' && typeof db !== 'undefined') {
+          const nowIso = new Date().toISOString();
+          const regPrincipal = {
             id,
             tabla,
-            deleted_at: new Date().toISOString(),
-            sync_status: 'pending'
-          });
-          if (p && typeof p.catch === 'function') {
-            p.catch((err) => {
-              console.warn('[UndoDeleteManager] Error registrando lápida:', err);
-            });
+            deleted_at: nowIso,
+            sync_status: 'pending' as const
+          };
+          if (db?.tombstones && typeof db.tombstones.put === 'function') {
+            const p = db.tombstones.put(regPrincipal);
+            if (p && typeof p.catch === 'function') {
+              p.catch((err) => {
+                console.warn('[UndoDeleteManager] Error registrando lápida:', err);
+              });
+            }
           }
+          if (db?.sync_deletions && typeof db.sync_deletions.put === 'function') {
+            const pSync = db.sync_deletions.put(regPrincipal);
+            if (pSync && typeof pSync.catch === 'function') pSync.catch(() => {});
+          }
+
           if (idsSecundarios && idsSecundarios.length > 0) {
             for (const secId of idsSecundarios) {
               if (secId) {
-                const sp = db.tombstones.put({
+                const regSec = {
                   id: secId,
                   tabla,
-                  deleted_at: new Date().toISOString(),
-                  sync_status: 'pending'
-                });
-                if (sp && typeof sp.catch === 'function') sp.catch(() => {});
+                  deleted_at: nowIso,
+                  sync_status: 'pending' as const
+                };
+                if (db?.tombstones && typeof db.tombstones.put === 'function') {
+                  const sp = db.tombstones.put(regSec);
+                  if (sp && typeof sp.catch === 'function') sp.catch(() => {});
+                }
+                if (db?.sync_deletions && typeof db.sync_deletions.put === 'function') {
+                  const spSync = db.sync_deletions.put(regSec);
+                  if (spSync && typeof spSync.catch === 'function') spSync.catch(() => {});
+                }
               }
             }
           }

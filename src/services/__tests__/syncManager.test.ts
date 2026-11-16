@@ -1353,7 +1353,7 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       expect(syncManager.getStatus()).toBe('error');
     });
 
-    it('Sprint 2: descargarDatosDescendientes aplica limit(1000) en peticiones GET', async () => {
+    it('Sprint 2: descargarDatosDescendientes soporta fallback limit/range en peticiones GET', async () => {
       const limitSpy = vi.fn().mockResolvedValue({ data: [], error: null });
       const selectSpy = vi.fn().mockReturnValue({ limit: limitSpy });
       const fromSpy = vi.fn().mockReturnValue({ select: selectSpy });
@@ -1367,6 +1367,120 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       expect(fromSpy).toHaveBeenCalledWith('proyectos');
       expect(selectSpy).toHaveBeenCalledWith('*');
       expect(limitSpy).toHaveBeenCalledWith(1000);
+    });
+  });
+
+  describe('REQ-BUGFIX-74-EXEC: Tombstones y Paginación en SyncManager', () => {
+    it('Sprint 1: sincronizarTombstones procesa sync_deletions, ejecuta .delete() en Supabase y limpia la cola local', async () => {
+      const mockDel = {
+        id: 'del-uuid-01',
+        tabla: 'tareas',
+        deleted_at: new Date().toISOString(),
+        sync_status: 'pending' as const
+      };
+
+      vi.spyOn(db.tombstones, 'toArray').mockResolvedValue([]);
+      vi.spyOn(db.tombstones, 'update').mockResolvedValue(1);
+
+      const syncDelDeleteSpy = vi.fn().mockResolvedValue(undefined);
+      (db as any).sync_deletions = {
+        toArray: vi.fn().mockResolvedValue([mockDel]),
+        delete: syncDelDeleteSpy,
+        where: vi.fn().mockReturnValue({
+          equals: vi.fn().mockReturnValue({
+            toArray: vi.fn().mockResolvedValue([mockDel])
+          })
+        })
+      };
+
+      const deleteEqSpy = vi.fn().mockResolvedValue({ error: null });
+      const deleteSpy = vi.fn().mockReturnValue({ eq: deleteEqSpy });
+      const fromSpy = vi.fn().mockReturnValue({ delete: deleteSpy });
+
+      (syncManager as any).supabase = { from: fromSpy };
+
+      const res = await syncManager.sincronizarTombstones();
+
+      expect(res.success).toBe(1);
+      expect(fromSpy).toHaveBeenCalledWith('tareas');
+      expect(deleteEqSpy).toHaveBeenCalledWith('id', 'del-uuid-01');
+      expect(syncDelDeleteSpy).toHaveBeenCalledWith('del-uuid-01');
+    });
+
+    it('Sprint 1: descargarDatosDescendientes ejecuta diffing y elimina registros locales synced ausentes en Supabase (Dispositivo B)', async () => {
+      const localTareaRemanente = {
+        id: 'tar-local-synced-01',
+        codigo_legado: 'TAR-LOC-01',
+        sync_status: 'synced',
+        updated_at: new Date().toISOString()
+      };
+
+      const bulkDeleteSpy = vi.fn().mockResolvedValue(undefined);
+      const bulkPutSpy = vi.fn().mockResolvedValue('ok');
+
+      (db.tareas as any).toArray = vi.fn().mockResolvedValue([localTareaRemanente]);
+      (db.tareas as any).bulkDelete = bulkDeleteSpy;
+      (db.tareas as any).bulkPut = bulkPutSpy;
+      (db.tareas as any).where = vi.fn().mockReturnValue({
+        anyOf: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) }),
+        equals: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) })
+      });
+
+      // La nube no tiene ninguna tarea (fue borrada en Supabase desde Dispositivo A)
+      const rangeSpy = vi.fn().mockResolvedValue({ data: [], error: null });
+      const selectSpy = vi.fn().mockReturnValue({ range: rangeSpy });
+      const fromSpy = vi.fn().mockReturnValue({ select: selectSpy });
+
+      (syncManager as any).supabase = { from: fromSpy };
+
+      await syncManager.descargarDatosDescendientes(['tareas']);
+
+      // El diffing debe haber encolado 'tar-local-synced-01' para bulkDelete
+      expect(bulkDeleteSpy).toHaveBeenCalledWith(['tar-local-synced-01']);
+    });
+
+    it('Sprint 2: descargarDatosDescendientes pagina en bucle con .range(offset, to) acumulando bloques de datos', async () => {
+      const chunk1 = Array.from({ length: 1000 }, (_, i) => ({
+        id: `proy-p1-${i}`,
+        codigo_legado: `PRO-P1-${i}`,
+        updated_at: new Date().toISOString()
+      }));
+      const chunk2 = [
+        { id: 'proy-p2-01', codigo_legado: 'PRO-P2-01', updated_at: new Date().toISOString() }
+      ];
+
+      let callCount = 0;
+      const rangeSpy = vi.fn().mockImplementation((offset: number, _to: number) => {
+        callCount++;
+        if (offset === 0) {
+          return Promise.resolve({ data: chunk1, error: null });
+        }
+        return Promise.resolve({ data: chunk2, error: null });
+      });
+
+      const selectSpy = vi.fn().mockReturnValue({ range: rangeSpy });
+      const fromSpy = vi.fn().mockReturnValue({ select: selectSpy });
+
+      (syncManager as any).supabase = { from: fromSpy };
+
+      (db.proyectos as any).toArray = vi.fn().mockResolvedValue([]);
+      (db.proyectos as any).where = vi.fn().mockReturnValue({
+        anyOf: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) }),
+        equals: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) })
+      });
+      const bulkPutSpy = vi.fn().mockResolvedValue('ok');
+      (db.proyectos as any).bulkPut = bulkPutSpy;
+
+      const res = await syncManager.descargarDatosDescendientes(['proyectos']);
+
+      // Debe haber llamado a range dos veces (offset 0 y offset 1000)
+      expect(rangeSpy).toHaveBeenCalledWith(0, 999);
+      expect(rangeSpy).toHaveBeenCalledWith(1000, 1999);
+      expect(res.descargados).toBe(1001);
+      expect(bulkPutSpy).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ id: 'proy-p1-0' }),
+        expect.objectContaining({ id: 'proy-p2-01' })
+      ]));
     });
   });
 });

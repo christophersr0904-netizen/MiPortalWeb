@@ -9,7 +9,7 @@
  * ============================================================================
  */
 
-import { db } from '../db/db';
+import { db, registrarTombstone } from '../db/db';
 import type { TareaRecord, SubtareaPaso } from '../types';
 import { syncManager } from './syncManager';
 import {
@@ -167,7 +167,6 @@ export async function eliminarTarea(
 ): Promise<{ success: boolean; calendarResult?: ResultadoCalendarSync }> {
   const tareaActual = await db.tareas.get(tareaId);
   const codLegado = codigoLegado || tareaActual?.codigo_legado;
-  const nowIso = new Date().toISOString();
 
   // Limpiar subtareas vinculadas
   if (codLegado) {
@@ -177,29 +176,13 @@ export async function eliminarTarea(
       .toArray()
       .catch(() => []);
     for (const sub of subs) {
-      if (db.tombstones && typeof db.tombstones.put === 'function') {
-        await db.tombstones.put({
-          id: sub.id,
-          tabla: 'subtareas_pasos',
-          tabla_afectada: 'subtareas_pasos',
-          fecha_eliminacion: nowIso,
-          sync_status: 'pending'
-        } as any).catch(() => {});
-      }
+      await registrarTombstone('subtareas_pasos', sub.id);
       await db.subtareas_pasos.delete(sub.id).catch(() => {});
     }
   }
 
-  // Registrar tombstone de la tarea principal
-  if (db.tombstones && typeof db.tombstones.put === 'function') {
-    await db.tombstones.put({
-      id: tareaId,
-      tabla: 'tareas',
-      tabla_afectada: 'tareas',
-      fecha_eliminacion: nowIso,
-      sync_status: 'pending'
-    } as any).catch(() => {});
-  }
+  // Registrar tombstone / sync_deletions de la tarea principal
+  await registrarTombstone('tareas', tareaId);
 
   await db.tareas.delete(tareaId);
 

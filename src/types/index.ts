@@ -579,6 +579,13 @@ export interface TombstoneRecord {
   sync_status: SyncStatus;
 }
 
+export interface SyncDeletionRecord {
+  id: string;
+  tabla: string;
+  deleted_at: string;
+  sync_status: SyncStatus;
+}
+
 export interface DesktopWidgetBridge {
   expand: () => void;
   collapse: () => void;
