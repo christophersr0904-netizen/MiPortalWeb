@@ -10454,3 +10454,29 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (326/326 tests al 100% verde, +5 nuevos tests de blindaje y cuarentena).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 11.05s).
+
+---
+
+### [REQ-BUGFIX-73-EXEC: Remover bloqueo de Auth en SyncManager (Zero-Login Sync Local-First)]
+**Fecha:** Noviembre 2026 | **Fase:** 8.4 (Arquitectura Sync & Cold Start Resiliente) | **Archivos Modificados:** `src/services/syncManager.ts`, `src/services/__tests__/syncManager.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Bloqueo Prematuro de Sincronización en Local-First Sin Login:** El guard maestro introducido en FIX-72 requería una sesión activa en `supabase.auth.getSession()` para permitir el ciclo de subida (`syncPendingRecords()`), abortando con `return;` y emitiendo una advertencia de pausa si el usuario navegaba sin haber iniciado sesión en Supabase Auth.
+- **Incompatibilidad con Arquitectura Zero-Login / Anon Key:** En el modelo Local-First de la aplicación, las lecturas y escrituras hacia las tablas públicas o con políticas anónimas de Supabase deben operar libremente mediante la clave pública (`Anon Key`) y un `DEFAULT_USER_ID`, sin supeditar el flujo de sincronización de datos a la existencia de un token JWT de sesión de usuario en el navegador.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Erradicación del Candado Auth en `syncPendingRecords` (`syncManager.ts`):**
+   - Eliminación completa de la llamada síncrona/bloqueante a `this.supabase.auth.getSession()` dentro del flujo maestro de subida.
+   - Supresión del *Early Return* `if (!session) return;`, permitiendo que el motor de sincronización proceda inmediatamente con la lectura de IndexedDB y el despacho a Supabase.
+   - Eliminación del mensaje de consola `console.warn('Sincronización pausada: Requiere autenticación')` y de la bandera `haLogueadoPausaAuth`.
+2. **Ejecución Incondicional y Cold Start Transparente (`syncManager.ts` & `App.tsx`):**
+   - El motor de sincronización (`sincronizarTodo()`, `descargarDatosDescendientes()`, `syncPendingRecords()`) se ejecuta incondicionalmente al arrancar en frío en `App.tsx`, operando contra Supabase con la `Anon Key`.
+   - Si existe una sesión de autenticación activa resuelta en segundo plano de manera no bloqueante vía `resolverUsuarioActivo()`, se asigna el UUID del usuario; de lo contrario, se mantiene el fallback canónico `DEFAULT_USER_ID`.
+3. **Actualización de Batería de Pruebas Unitarias (`syncManager.test.ts`):**
+   - Actualización del test de integración de `syncPendingRecords` para validar que aun con `getSession()` retornando `session: null`, el ciclo push no aborta ni loguea pausa de autenticación, procediendo con la sincronización normal.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (326/326 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 11.13s).
+

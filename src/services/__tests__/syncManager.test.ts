@@ -1318,27 +1318,23 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       ]);
     });
 
-    it('Sprint 2: syncPendingRecords aborta ciclo si no hay sesión activa y loguea UNA SOLA VEZ', async () => {
+    it('Sprint 2 (FIX-73): syncPendingRecords ejecuta push incondicionalmente (Bypass Auth) aun sin sesión activa', async () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const upsertSpy = vi.fn();
 
       (syncManager as any).supabase = {
         auth: {
           getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null })
         },
-        from: vi.fn().mockReturnValue({ upsert: upsertSpy })
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnThis(),
+          upsert: vi.fn().mockResolvedValue({ data: [], error: null })
+        })
       };
 
-      // Llamada 1: debe pausar y loguear
       await syncManager.syncPendingRecords();
-      expect(consoleWarnSpy).toHaveBeenCalledWith('Sincronización pausada: Requiere autenticación');
-      expect(upsertSpy).not.toHaveBeenCalled();
-
-      // Llamada 2: debe pausar sin repetir el log en consola (eliminando spam)
-      consoleWarnSpy.mockClear();
-      await syncManager.syncPendingRecords();
-      expect(consoleWarnSpy).not.toHaveBeenCalled();
-      expect(upsertSpy).not.toHaveBeenCalled();
+      // No debe abortar con mensaje de requerir autenticación
+      expect(consoleWarnSpy).not.toHaveBeenCalledWith('Sincronización pausada: Requiere autenticación');
+      expect(syncManager.getStatus()).not.toBe('error');
 
       consoleWarnSpy.mockRestore();
     });

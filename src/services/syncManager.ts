@@ -116,9 +116,6 @@ class SyncManager {
   // Impide bucles infinitos de reintento que saturen la red y congelen el event loop de React (REQ-DESKTOP-11)
   private registrosFkCuarentena = new Set<string>();
 
-  // REQ-BUGFIX-72-EXEC: Bandera para loguear UNA SOLA VEZ la pausa de sincronización por falta de sesión
-  private haLogueadoPausaAuth: boolean = false;
-
   constructor() {
     this.initSupabaseClient();
     this.setupNetworkListeners();
@@ -312,7 +309,6 @@ class SyncManager {
           this.supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user?.id && isUuid(session.user.id)) {
               this.setUserId(session.user.id);
-              this.haLogueadoPausaAuth = false;
             }
           });
         } catch {}
@@ -1726,36 +1722,8 @@ class SyncManager {
       return;
     }
 
-    // REQ-BUGFIX-72-EXEC: Blindaje Auth Maestro en función Push
-    // Si no hay sesión activa en auth.users, abortar ciclo push y loguear UNA SOLA VEZ
-    if (this.supabase && !import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
-      try {
-        if (typeof this.supabase.auth?.getSession === 'function') {
-          const { data: sessionData, error: sessionErr } = await this.supabase.auth.getSession();
-          if (sessionErr || !sessionData?.session) {
-            if (!this.haLogueadoPausaAuth) {
-              console.warn('Sincronización pausada: Requiere autenticación');
-              this.haLogueadoPausaAuth = true;
-            }
-            if (this.syncState !== 'synced') {
-              this.setSyncState('synced');
-            }
-            return;
-          }
-          this.haLogueadoPausaAuth = false;
-          if (sessionData.session.user?.id && isUuid(sessionData.session.user.id)) {
-            this.setUserId(sessionData.session.user.id);
-          }
-        }
-      } catch {
-        if (!this.haLogueadoPausaAuth) {
-          console.warn('Sincronización pausada: Requiere autenticación');
-          this.haLogueadoPausaAuth = true;
-        }
-        return;
-      }
-    }
-
+    // REQ-BUGFIX-73-EXEC: Bypass de autenticación (Zero-Login Sync Local-First).
+    // Proceder incondicionalmente a sincronizar con la API de Supabase vía Anon Key.
     await this.resolverUsuarioActivo().catch(() => {});
 
     try {
