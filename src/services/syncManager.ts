@@ -116,6 +116,9 @@ class SyncManager {
   // Impide bucles infinitos de reintento que saturen la red y congelen el event loop de React (REQ-DESKTOP-11)
   private registrosFkCuarentena = new Set<string>();
 
+  // REQ-BUGFIX-72-EXEC: Bandera para loguear UNA SOLA VEZ la pausa de sincronización por falta de sesión
+  private haLogueadoPausaAuth: boolean = false;
+
   constructor() {
     this.initSupabaseClient();
     this.setupNetworkListeners();
@@ -133,16 +136,16 @@ class SyncManager {
     }
     try {
       if (typeof this.supabase.auth?.getSession === 'function') {
-        const { data: sessionData } = await this.supabase.auth.getSession();
-        const sessionUserId = sessionData?.session?.user?.id;
+        const sessionRes = await this.supabase.auth.getSession();
+        const sessionUserId = sessionRes?.data?.session?.user?.id;
         if (sessionUserId && isUuid(sessionUserId)) {
           this.setUserId(sessionUserId);
           return sessionUserId;
         }
       }
       if (typeof this.supabase.auth?.getUser === 'function') {
-        const { data: userData } = await this.supabase.auth.getUser();
-        const authUserId = userData?.user?.id;
+        const userRes = await this.supabase.auth.getUser();
+        const authUserId = userRes?.data?.user?.id;
         if (authUserId && isUuid(authUserId)) {
           this.setUserId(authUserId);
           return authUserId;
@@ -309,6 +312,7 @@ class SyncManager {
           this.supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user?.id && isUuid(session.user.id)) {
               this.setUserId(session.user.id);
+              this.haLogueadoPausaAuth = false;
             }
           });
         } catch {}
@@ -325,14 +329,18 @@ class SyncManager {
   private setupNetworkListeners() {
     if (typeof window === 'undefined') return;
 
-    // Reconexión Bidireccional Atómica (Push + Pull)
+    // Reconexión Bidireccional Atómica: PULL primero, PUSH solo si el pull no falló (REQ-BUGFIX-72-EXEC)
     window.addEventListener('online', async () => {
       console.log('[SyncManager] Conexión restablecida. Disparando sincronización bidireccional...');
       this.setSyncState('syncing');
       this.reconectarRealtimeSiEsNecesario();
       try {
+        const pullResult = await this.descargarDatosDescendientes();
+        if (pullResult.fallidos > 0 && pullResult.descargados === 0) {
+          console.warn('[SyncManager] Pull de reconexión fallido. Omitiendo push para evitar corrupción A-B.');
+          return;
+        }
         await this.syncPendingRecords();
-        await this.descargarDatosDescendientes();
       } catch (err) {
         console.error('[SyncManager] Error en sincronización de reconexión:', err);
       }
@@ -343,22 +351,26 @@ class SyncManager {
       this.setSyncState('offline');
     });
 
-    // Sincronización periódica cada 45 segundos si hay conexión (Blindaje contra pestañas en segundo plano REQ-FIX-08)
+    // Sincronización periódica cada 45 segundos si hay conexión (Blindaje contra pestañas en segundo plano REQ-FIX-08 y REQ-BUGFIX-72)
     setInterval(async () => {
       if (typeof navigator !== 'undefined' && navigator.onLine && !this.isSyncing) {
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
           return;
         }
         try {
+          const pullResult = await this.descargarDatosDescendientes();
+          if (pullResult.fallidos > 0 && pullResult.descargados === 0) {
+            console.warn('[SyncManager] Pull periódico fallido. Omitiendo push para evitar corrupción A-B.');
+            return;
+          }
           await this.syncPendingRecords();
-          await this.descargarDatosDescendientes();
         } catch (err) {
           console.warn('[SyncManager] Error en intervalo periódico:', err);
         }
       }
     }, 45000);
 
-    // Amortiguación de sincronización al recuperar visibilidad (REQ-FIX-08 y REQ-MOBILE-47-EXEC)
+    // Amortiguación de sincronización al recuperar visibilidad (REQ-FIX-08, REQ-MOBILE-47-EXEC y REQ-BUGFIX-72)
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
@@ -371,8 +383,12 @@ class SyncManager {
             this.reconectarRealtimeSiEsNecesario();
             if (typeof navigator !== 'undefined' && navigator.onLine && !this.isSyncing) {
               try {
+                const pullResult = await this.descargarDatosDescendientes();
+                if (pullResult.fallidos > 0 && pullResult.descargados === 0) {
+                  console.warn('[SyncManager] Pull tras visibilidad fallido. Omitiendo push para evitar corrupción A-B.');
+                  return;
+                }
                 await this.syncPendingRecords();
-                await this.descargarDatosDescendientes();
               } catch (err) {
                 console.warn('[SyncManager] Error al sincronizar tras recuperar visibilidad:', err);
               }
@@ -1544,6 +1560,146 @@ class SyncManager {
     return map;
   }
 
+  /**
+   * REQ-BUGFIX-72-EXEC: Resolución O(n) in-memory de Tareas en Cuarentena o con UUIDs faltantes.
+   * Carga mapas en memoria de proyectos e hitos y actualiza Dexie en lote con bulkPut, erradicando UI freezes.
+   */
+  public async resolverTareasEnCuarentena(
+    proyectosMap?: Map<string, string>,
+    hitosMap?: Map<string, string>
+  ): Promise<number> {
+    try {
+      if (!db.tareas || typeof db.tareas.toArray !== 'function') return 0;
+
+      const pMap = proyectosMap || (await this.construirMapaProyectos());
+      const hMap = hitosMap || (await this.construirMapaHitos());
+
+      if (pMap.size === 0 && hMap.size === 0) return 0;
+
+      const todasTareas = await db.tareas.toArray().catch(() => []);
+      if (!Array.isArray(todasTareas) || todasTareas.length === 0) return 0;
+
+      const tareasResueltas: any[] = [];
+
+      for (const t of todasTareas) {
+        if (!t) continue;
+        const estaCuarentenada = t.sync_status === 'quarantined' || this.registrosFkCuarentena.has(String(t.id));
+        const faltaProyUuid = !t.proyecto_id || !isUuid(t.proyecto_id);
+        const faltaHitoUuid = !t.hito_id || !isUuid(t.hito_id);
+
+        if (!estaCuarentenada && !faltaProyUuid && !faltaHitoUuid) {
+          continue;
+        }
+
+        let mutado = false;
+        let proyId = t.proyecto_id;
+        let hitoId = t.hito_id;
+
+        if (faltaProyUuid && t.proyecto_codigo) {
+          const resP = pMap.get(t.proyecto_codigo) || pMap.get(t.proyecto_codigo.toUpperCase());
+          if (resP && isUuid(resP)) {
+            proyId = resP;
+            mutado = true;
+          }
+        }
+
+        if (faltaHitoUuid && t.hito_codigo) {
+          const resH = hMap.get(t.hito_codigo) || hMap.get(t.hito_codigo.toUpperCase());
+          if (resH && isUuid(resH)) {
+            hitoId = resH;
+            mutado = true;
+          }
+        }
+
+        // Si la tarea estaba en cuarentena o faltaban UUIDs, y ahora ambos están completos y válidos
+        if (proyId && isUuid(proyId) && hitoId && isUuid(hitoId)) {
+          const resuelto = {
+            ...t,
+            proyecto_id: proyId,
+            hito_id: hitoId,
+            sync_status: (t.sync_status === 'quarantined' ? 'pending' : t.sync_status) as any
+          };
+          this.registrosFkCuarentena.delete(String(t.id));
+          tareasResueltas.push(resuelto);
+        } else if (mutado) {
+          tareasResueltas.push({
+            ...t,
+            proyecto_id: proyId,
+            hito_id: hitoId
+          });
+        }
+      }
+
+      if (tareasResueltas.length > 0) {
+        if (typeof db.tareas.bulkPut === 'function') {
+          await db.tareas.bulkPut(tareasResueltas);
+        } else {
+          await Promise.all(tareasResueltas.map((t) => db.tareas.update(t.id, t)));
+        }
+      }
+
+      return tareasResueltas.length;
+    } catch (err) {
+      console.warn('[SyncManager] Error al resolver tareas en cuarentena en lote:', err);
+      return 0;
+    }
+  }
+
+  /**
+   * REQ-BUGFIX-72-EXEC: Resolución O(n) in-memory de Hitos WBS en Cuarentena
+   */
+  public async resolverHitosEnCuarentena(
+    proyectosMap?: Map<string, string>
+  ): Promise<number> {
+    try {
+      if (!db.hitos_wbs || typeof db.hitos_wbs.toArray !== 'function') return 0;
+      const pMap = proyectosMap || (await this.construirMapaProyectos());
+      if (pMap.size === 0) return 0;
+
+      const todosHitos = await db.hitos_wbs.toArray().catch(() => []);
+      if (!Array.isArray(todosHitos) || todosHitos.length === 0) return 0;
+
+      const hitosResueltos: any[] = [];
+
+      for (const h of todosHitos) {
+        if (!h) continue;
+        const estaCuarentenado = h.sync_status === 'quarantined' || this.registrosFkCuarentena.has(String(h.id));
+        const faltaProyUuid = !h.proyecto_id || !isUuid(h.proyecto_id);
+
+        if (!estaCuarentenado && !faltaProyUuid) continue;
+
+        let proyId = h.proyecto_id;
+        if (faltaProyUuid && h.proyecto_codigo) {
+          const resP = pMap.get(h.proyecto_codigo) || pMap.get(h.proyecto_codigo.toUpperCase());
+          if (resP && isUuid(resP)) {
+            proyId = resP;
+          }
+        }
+
+        if (proyId && isUuid(proyId)) {
+          hitosResueltos.push({
+            ...h,
+            proyecto_id: proyId,
+            sync_status: (h.sync_status === 'quarantined' ? 'pending' : h.sync_status) as any
+          });
+          this.registrosFkCuarentena.delete(String(h.id));
+        }
+      }
+
+      if (hitosResueltos.length > 0) {
+        if (typeof db.hitos_wbs.bulkPut === 'function') {
+          await db.hitos_wbs.bulkPut(hitosResueltos);
+        } else {
+          await Promise.all(hitosResueltos.map((h) => db.hitos_wbs.update(h.id, h)));
+        }
+      }
+      return hitosResueltos.length;
+    } catch (err) {
+      console.warn('[SyncManager] Error al resolver hitos en cuarentena en lote:', err);
+      return 0;
+    }
+  }
+
   // ============================================================================
   // ORQUESTADOR TOPOLÓGICO CANÓNICO (12 ENTIDADES)
   // ============================================================================
@@ -1568,6 +1724,36 @@ class SyncManager {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       this.setSyncState('offline');
       return;
+    }
+
+    // REQ-BUGFIX-72-EXEC: Blindaje Auth Maestro en función Push
+    // Si no hay sesión activa en auth.users, abortar ciclo push y loguear UNA SOLA VEZ
+    if (this.supabase && !import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      try {
+        if (typeof this.supabase.auth?.getSession === 'function') {
+          const { data: sessionData, error: sessionErr } = await this.supabase.auth.getSession();
+          if (sessionErr || !sessionData?.session) {
+            if (!this.haLogueadoPausaAuth) {
+              console.warn('Sincronización pausada: Requiere autenticación');
+              this.haLogueadoPausaAuth = true;
+            }
+            if (this.syncState !== 'synced') {
+              this.setSyncState('synced');
+            }
+            return;
+          }
+          this.haLogueadoPausaAuth = false;
+          if (sessionData.session.user?.id && isUuid(sessionData.session.user.id)) {
+            this.setUserId(sessionData.session.user.id);
+          }
+        }
+      } catch {
+        if (!this.haLogueadoPausaAuth) {
+          console.warn('Sincronización pausada: Requiere autenticación');
+          this.haLogueadoPausaAuth = true;
+        }
+        return;
+      }
     }
 
     await this.resolverUsuarioActivo().catch(() => {});
@@ -1618,6 +1804,10 @@ class SyncManager {
       // PASO 2: Hitos WBS (depende de Proyectos)
       const resHit = await this.sincronizarHitos(proyectoMap);
       const hitoMap = await this.construirMapaHitos();
+
+      // REQ-BUGFIX-72-EXEC: Resolver en lote O(n) tareas e hitos en cuarentena con los mapas actualizados
+      await this.resolverHitosEnCuarentena(proyectoMap);
+      await this.resolverTareasEnCuarentena(proyectoMap, hitoMap);
 
       // PASO 3: Tareas WBS y Actividades Personales (Hábitos)
       const [resTar, resAct] = await Promise.all([
@@ -1719,11 +1909,13 @@ class SyncManager {
       // Tolerancia defensiva ante entornos sin IndexedDB
     }
 
-    // Pre-cargar mapas UUID -> Código de Proyectos, Hitos, Tareas y Actividades existentes en Dexie (REQ-FIX-10 / REQ-FIX-17 / REQ-SYNC-41)
+    // Pre-cargar mapas UUID -> Código y Código -> UUID de Proyectos, Hitos, Tareas y Actividades (REQ-FIX-10 / REQ-BUGFIX-72)
     const proyUuidToCod = new Map<string, string>();
     const hitoUuidToCod = new Map<string, string>();
     const tareaUuidToCod = new Map<string, string>();
     const actividadUuidToCod = new Map<string, string>();
+    const proyCodToUuid = new Map<string, string>();
+    const hitoCodToUuid = new Map<string, string>();
     try {
       if (db.proyectos && typeof (db.proyectos as any).toArray === 'function') {
         const locProys = (await (db.proyectos as any).toArray().catch(() => [])) || [];
@@ -1734,8 +1926,13 @@ class SyncManager {
               if (p.id) {
                 proyUuidToCod.set(String(p.id), cod);
                 proyUuidToCod.set(String(p.id).toUpperCase(), cod);
+                proyCodToUuid.set(cod, String(p.id));
+                proyCodToUuid.set(cod.toUpperCase(), String(p.id));
               }
               proyUuidToCod.set(cod, cod);
+            }
+            if (p.id && isUuid(p.id)) {
+              proyCodToUuid.set(String(p.id), String(p.id));
             }
           });
         }
@@ -1749,8 +1946,13 @@ class SyncManager {
               if (h.id) {
                 hitoUuidToCod.set(String(h.id), cod);
                 hitoUuidToCod.set(String(h.id).toUpperCase(), cod);
+                hitoCodToUuid.set(cod, String(h.id));
+                hitoCodToUuid.set(cod.toUpperCase(), String(h.id));
               }
               hitoUuidToCod.set(cod, cod);
+            }
+            if (h.id && isUuid(h.id)) {
+              hitoCodToUuid.set(String(h.id), String(h.id));
             }
           });
         }
@@ -1827,6 +2029,9 @@ class SyncManager {
 
       try {
         let query: any = this.supabase.from(tabla).select('*');
+        if (typeof query?.limit === 'function') {
+          query = query.limit(1000);
+        }
 
         // Límites de Ingesta (90 días) para tablas de alto volumen
         const tablasAltoVolumen = ['gastos', 'ingresos', 'habitos_registros', 'habito_cumplimiento_logs'];
@@ -1849,19 +2054,31 @@ class SyncManager {
 
         if (!data || data.length === 0) continue;
 
-        // Enriquecer mapas UUID -> Código con datos remotos frescos (REQ-FIX-10 / REQ-FIX-17)
+        // Enriquecer mapas UUID -> Código y Código -> UUID con datos remotos frescos (REQ-FIX-10 / REQ-BUGFIX-72)
         if (tabla === 'proyectos') {
           for (const item of data) {
-            if (item.id && item.codigo_legado) {
-              proyUuidToCod.set(String(item.id), item.codigo_legado);
-              proyUuidToCod.set(String(item.id).toUpperCase(), item.codigo_legado);
+            const cod = item.codigo_legado || extraerCodigoCanonico(item);
+            if (item.id) {
+              if (cod) {
+                proyUuidToCod.set(String(item.id), cod);
+                proyUuidToCod.set(String(item.id).toUpperCase(), cod);
+                proyCodToUuid.set(cod, String(item.id));
+                proyCodToUuid.set(cod.toUpperCase(), String(item.id));
+              }
+              proyCodToUuid.set(String(item.id), String(item.id));
             }
           }
         } else if (tabla === 'hitos_wbs') {
           for (const item of data) {
-            if (item.id && item.codigo_legado) {
-              hitoUuidToCod.set(String(item.id), item.codigo_legado);
-              hitoUuidToCod.set(String(item.id).toUpperCase(), item.codigo_legado);
+            const cod = item.codigo_legado || extraerCodigoCanonico(item);
+            if (item.id) {
+              if (cod) {
+                hitoUuidToCod.set(String(item.id), cod);
+                hitoUuidToCod.set(String(item.id).toUpperCase(), cod);
+                hitoCodToUuid.set(cod, String(item.id));
+                hitoCodToUuid.set(cod.toUpperCase(), String(item.id));
+              }
+              hitoCodToUuid.set(String(item.id), String(item.id));
             }
           }
         } else if (tabla === 'tareas') {
@@ -1939,9 +2156,9 @@ class SyncManager {
           } else if (tabla === 'subtareas_pasos') {
             registroFinal = sanitizarSubtareaInbound(item, localPrevio, tareaUuidToCod, actividadUuidToCod);
           } else if (tabla === 'hitos_wbs') {
-            registroFinal = sanitizarHitoInbound(item, localPrevio, proyUuidToCod);
+            registroFinal = sanitizarHitoInbound(item, localPrevio, proyUuidToCod, proyCodToUuid);
           } else if (tabla === 'tareas') {
-            registroFinal = sanitizarTareaInbound(item, localPrevio, proyUuidToCod, hitoUuidToCod, tareaUuidToCod);
+            registroFinal = sanitizarTareaInbound(item, localPrevio, proyUuidToCod, hitoUuidToCod, tareaUuidToCod, proyCodToUuid, hitoCodToUuid);
           } else if (tabla === 'notas') {
             registroFinal = sanitizarNotaInbound(item, localPrevio);
           } else if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
@@ -2043,6 +2260,10 @@ class SyncManager {
       this.setSyncState('synced');
     }
 
+    // REQ-BUGFIX-72-EXEC: Resolver en lote tareas e hitos en cuarentena tras el pull usando los mapas en memoria
+    await this.resolverHitosEnCuarentena(proyCodToUuid);
+    await this.resolverTareasEnCuarentena(proyCodToUuid, hitoCodToUuid);
+
     return summary;
   }
 
@@ -2054,15 +2275,23 @@ class SyncManager {
   }
 
   /**
-   * Sincronización bidireccional completa:
-   * 1. Push local -> nube (procesarColaPendiente)
-   * 2. Pull nube -> local (descargarDatosDescendientes)
+   * Sincronización bidireccional completa (REQ-BUGFIX-72-EXEC):
+   * 1. Pull nube -> local (descargarDatosDescendientes) con abort en caso de error de red
+   * 2. Push local -> nube (procesarColaPendiente) si el pull no falló (evita corrupción A-B)
    * 3. Sincronización de fallback con el puente HTTP local 127.0.0.1:48123
    */
   public async sincronizarTodo(): Promise<void> {
     await this.resolverUsuarioActivo().catch(() => {});
-    await this.procesarColaPendiente();
+
+    // REQ-BUGFIX-72-EXEC: Ejecutar PULL primero y verificar si falló
     const pullResult = await this.descargarDatosDescendientes();
+    if (pullResult.fallidos > 0 && pullResult.descargados === 0) {
+      console.warn('[SyncManager] Pull remoto fallido por errores de red. Abortando ciclo push para prevenir corrupción de estado.');
+      this.setSyncState('error');
+      return;
+    }
+
+    await this.procesarColaPendiente();
 
     // Si Supabase es mock o no hubo datos remotos, hidratar desde el almacén local en disco
     if (pullResult.descargados === 0) {

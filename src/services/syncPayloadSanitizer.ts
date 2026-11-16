@@ -235,9 +235,10 @@ export function sanitizarHitoPayload(
 export function sanitizarHitoInbound(
   remoto: any,
   localPrevio?: any,
-  proyUuidToCod?: Map<string, string>
+  proyUuidToCod?: Map<string, string>,
+  proyCodToUuid?: Map<string, string>
 ): HitoWbsRecord {
-  const proyUuid = remoto.proyecto_id || localPrevio?.proyecto_id;
+  let proyUuid = remoto.proyecto_id || localPrevio?.proyecto_id;
   const resolvedProyCod =
     localPrevio?.proyecto_codigo ||
     (proyUuid && proyUuidToCod
@@ -245,6 +246,14 @@ export function sanitizarHitoInbound(
       : undefined) ||
     remoto.proyecto_codigo ||
     '';
+
+  // REQ-BUGFIX-72-EXEC: Resolución O(1) en memoria si falta el UUID de proyecto_id
+  if ((!proyUuid || !isUuid(proyUuid)) && resolvedProyCod && proyCodToUuid) {
+    const resUuid = proyCodToUuid.get(resolvedProyCod) || proyCodToUuid.get(resolvedProyCod.toUpperCase());
+    if (resUuid && isUuid(resUuid)) {
+      proyUuid = resUuid;
+    }
+  }
 
   const rawPeso =
     remoto.peso_pct !== undefined
@@ -416,10 +425,12 @@ export function sanitizarTareaInbound(
   localPrevio?: any,
   proyUuidToCod?: Map<string, string>,
   hitoUuidToCod?: Map<string, string>,
-  tareaUuidToCod?: Map<string, string>
+  tareaUuidToCod?: Map<string, string>,
+  proyCodToUuid?: Map<string, string>,
+  hitoCodToUuid?: Map<string, string>
 ): TareaRecord {
-  const proyUuid = remoto.proyecto_id || localPrevio?.proyecto_id;
-  const hitoUuid = remoto.hito_id || localPrevio?.hito_id;
+  let proyUuid = remoto.proyecto_id || localPrevio?.proyecto_id;
+  let hitoUuid = remoto.hito_id || localPrevio?.hito_id;
 
   const resolvedProyCod =
     localPrevio?.proyecto_codigo ||
@@ -436,6 +447,21 @@ export function sanitizarTareaInbound(
       : undefined) ||
     remoto.hito_codigo ||
     '';
+
+  // REQ-BUGFIX-72-EXEC: Resolución O(1) en memoria para proyecto_id e hito_id si faltan UUIDs
+  if ((!proyUuid || !isUuid(proyUuid)) && resolvedProyCod && proyCodToUuid) {
+    const resUuid = proyCodToUuid.get(resolvedProyCod) || proyCodToUuid.get(resolvedProyCod.toUpperCase());
+    if (resUuid && isUuid(resUuid)) {
+      proyUuid = resUuid;
+    }
+  }
+
+  if ((!hitoUuid || !isUuid(hitoUuid)) && resolvedHitoCod && hitoCodToUuid) {
+    const resUuid = hitoCodToUuid.get(resolvedHitoCod) || hitoCodToUuid.get(resolvedHitoCod.toUpperCase());
+    if (resUuid && isUuid(resUuid)) {
+      hitoUuid = resUuid;
+    }
+  }
 
   const rawDepEntrada =
     remoto.id_dependencia ||

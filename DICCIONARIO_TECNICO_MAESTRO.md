@@ -10427,3 +10427,30 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (321/321 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 11.59s).
+
+---
+
+### [REQ-BUGFIX-72-EXEC: Optimización SyncManager y Supabase Network]
+**Fecha:** Noviembre 2026 | **Fase:** 8.4 (Arquitectura Sync & Cold Start Resiliente) | **Archivos Modificados:** `src/services/supabaseClient.ts`, `src/services/syncPayloadSanitizer.ts`, `src/services/syncManager.ts`, `src/services/__tests__/syncManager.test.ts`, `src/App.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Cuello de Botella / UI Freeze en Resolución de Cuarentena:** Durante el arranque en frío (*Cold Start*) y descargas entrantes (*Pull*), la resolución de relaciones foráneas entre tareas e hitos con proyectos se realizaba mediante consultas asíncronas dispersas y escrituras individuales fila a fila (`.update()` / `.put()`) dentro de iteraciones, bloqueando el event loop de React y provocando congelamiento de interfaz.
+- **Spam en Consola por Ausencia de Sesión Auth:** El orquestador de subida (*Push*) se ejecutaba periódicamente aun sin una sesión activa de Supabase Auth (`auth.users`), desencadenando excepciones de clave foránea 23503 y spam continuo en la consola del navegador.
+- **Vulnerabilidad de Red `ERR_CONNECTION_CLOSED` y Riesgo de Desincronización A-B:** Peticiones masivas `GET` sin límites (`select('*')`) sobre tablas densas propiciaban el corte abrupto de sockets HTTP por timeouts de red. Además, ejecutar el ciclo de subida (*Push*) antes o independientemente del estado de descarga (*Pull*) generaba riesgo de sobreescritura de datos remotos más recientes provenientes de un segundo dispositivo (Dispositivo A vs B).
+
+#### 2. Solución Quirúrgica Implementada
+1. **Optimización O(n) In-Memory de Cuarentena (`syncManager.ts` & `syncPayloadSanitizer.ts`):**
+   - Construcción de diccionarios en memoria de acceso instantáneo $O(1)$ (`proyCodToUuid` y `hitoCodToUuid`) tanto en arranque como dinámicamente al recibir registros frescos de Supabase.
+   - Creación de métodos de resolución en lote: `resolverTareasEnCuarentena(proyectosMap, hitosMap)` y `resolverHitosEnCuarentena(proyectosMap)`. Todas las tareas e hitos sin UUID o en estado `quarantined` son reconciliados sincrónicamente contra los mapas en memoria y persistidos mediante una única llamada `db.tareas.bulkPut(tareasResueltas)`.
+   - Inyección de mapas directos `proyCodToUuid` y `hitoCodToUuid` en `sanitizarHitoInbound` y `sanitizarTareaInbound`, resolviendo llaves foráneas instantáneamente al procesar el stream inbound.
+2. **Blindaje de Autenticación Maestro y Supresión de Spam (`syncManager.ts` & `supabaseClient.ts`):**
+   - Creación del módulo desacoplado `src/services/supabaseClient.ts` con opciones resilientes de sesión y helper `obtenerSesionActiva()`.
+   - En la cabecera de `syncPendingRecords()` (Push), inyección de chequeo maestro de sesión (`supabase.auth.getSession()`). Si es nula o inválida, se aborta inmediatamente (`return;`) y se registra UNA SOLA VEZ: *"Sincronización pausada: Requiere autenticación"*, reactivándose automáticamente al autenticarse vía `onAuthStateChange`.
+3. **Control de Flujo A-B y Prevención de `ERR_CONNECTION_CLOSED` (`syncManager.ts` & `App.tsx`):**
+   - Inyección obligatoria de `.limit(1000)` en todas las peticiones `GET` de `descargarDatosDescendientes()` con comprobación defensiva de tipo, previniendo saturación de red y desconexiones abruptas.
+   - Inversión y blindaje estricto de la sincronización bidireccional en `sincronizarTodo()` y listeners de red: se ejecuta **PULL primero** (`descargarDatosDescendientes`). Si el pull falla (ej. por pérdida de conexión o error de red), el **PUSH se aborta**, garantizando que el estado del Dispositivo B nunca corrompa el del Dispositivo A.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (326/326 tests al 100% verde, +5 nuevos tests de blindaje y cuarentena).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 11.05s).

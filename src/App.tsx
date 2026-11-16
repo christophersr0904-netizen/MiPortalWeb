@@ -401,9 +401,9 @@ export const App: React.FC = () => {
             console.warn('[App] Error en syncManager.sincronizarTodo al arrancar modo HUD:', err);
           });
         } else if (typeof navigator !== 'undefined' && navigator.onLine) {
-          // REQ-SYNC-41-EXEC: En arranque web normal, descargar inmediatamente datos frescos de Supabase
-          syncManager.descargarDatosDescendientes().catch((err) => {
-            console.warn('[App] Error en syncManager.descargarDatosDescendientes al arrancar web:', err);
+          // REQ-SYNC-41-EXEC / REQ-BUGFIX-72-EXEC: En arranque web normal, sincronización bidireccional segura (Pull -> Push)
+          syncManager.sincronizarTodo().catch((err) => {
+            console.warn('[App] Error en syncManager.sincronizarTodo al arrancar web:', err);
           });
         }
       } catch (err) {

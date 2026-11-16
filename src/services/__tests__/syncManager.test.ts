@@ -1253,4 +1253,124 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       expect(resolverUserIdSeguro(otherUser, authUser)).toBe(otherUser);
     });
   });
+
+  describe('REQ-BUGFIX-72-EXEC: Reconstrucción del Motor Sync y Cold Start', () => {
+    it('Sprint 1: resolverTareasEnCuarentena resuelve UUIDs en lote con bulkPut y rescata registros de cuarentena', async () => {
+      const mockTareas = [
+        {
+          id: 'tar-q1',
+          codigo_legado: 'TAR-101',
+          proyecto_codigo: 'PRO-001',
+          hito_codigo: 'WP-001',
+          sync_status: 'quarantined'
+        },
+        {
+          id: 'tar-q2',
+          codigo_legado: 'TAR-102',
+          proyecto_codigo: 'PRO-001',
+          hito_codigo: 'WP-001',
+          proyecto_id: '',
+          hito_id: '',
+          sync_status: 'pending'
+        }
+      ];
+
+      vi.spyOn(db.tareas, 'toArray').mockResolvedValue(mockTareas as any);
+      const bulkPutSpy = vi.spyOn(db.tareas, 'bulkPut').mockResolvedValue(undefined as any);
+
+      const proyMap = new Map<string, string>([['PRO-001', '550e8400-e29b-41d4-a716-446655440001']]);
+      const hitoMap = new Map<string, string>([['WP-001', '660e8400-e29b-41d4-a716-446655440002']]);
+
+      const totalResueltas = await syncManager.resolverTareasEnCuarentena(proyMap, hitoMap);
+
+      expect(totalResueltas).toBe(2);
+      expect(bulkPutSpy).toHaveBeenCalledTimes(1);
+      const itemsGuardados = bulkPutSpy.mock.calls[0][0];
+      expect(itemsGuardados).toHaveLength(2);
+      expect(itemsGuardados[0].proyecto_id).toBe('550e8400-e29b-41d4-a716-446655440001');
+      expect(itemsGuardados[0].hito_id).toBe('660e8400-e29b-41d4-a716-446655440002');
+      expect(itemsGuardados[0].sync_status).toBe('pending');
+    });
+
+    it('Sprint 1: resolverHitosEnCuarentena resuelve proyecto_id faltante en lote con bulkPut', async () => {
+      const mockHitos = [
+        {
+          id: 'hit-q1',
+          codigo_legado: 'WP-101',
+          proyecto_codigo: 'PRO-001',
+          sync_status: 'quarantined'
+        }
+      ];
+
+      vi.spyOn(db.hitos_wbs, 'toArray').mockResolvedValue(mockHitos as any);
+      const bulkPutSpy = vi.spyOn(db.hitos_wbs, 'bulkPut').mockResolvedValue(undefined as any);
+
+      const proyMap = new Map<string, string>([['PRO-001', '550e8400-e29b-41d4-a716-446655440001']]);
+      const res = await syncManager.resolverHitosEnCuarentena(proyMap);
+
+      expect(res).toBe(1);
+      expect(bulkPutSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: 'hit-q1',
+          proyecto_id: '550e8400-e29b-41d4-a716-446655440001',
+          sync_status: 'pending'
+        })
+      ]);
+    });
+
+    it('Sprint 2: syncPendingRecords aborta ciclo si no hay sesión activa y loguea UNA SOLA VEZ', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const upsertSpy = vi.fn();
+
+      (syncManager as any).supabase = {
+        auth: {
+          getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null })
+        },
+        from: vi.fn().mockReturnValue({ upsert: upsertSpy })
+      };
+
+      // Llamada 1: debe pausar y loguear
+      await syncManager.syncPendingRecords();
+      expect(consoleWarnSpy).toHaveBeenCalledWith('Sincronización pausada: Requiere autenticación');
+      expect(upsertSpy).not.toHaveBeenCalled();
+
+      // Llamada 2: debe pausar sin repetir el log en consola (eliminando spam)
+      consoleWarnSpy.mockClear();
+      await syncManager.syncPendingRecords();
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+      expect(upsertSpy).not.toHaveBeenCalled();
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('Sprint 2: sincronizarTodo aborta Push si Pull falla para prevenir corrupción entre Dispositivo A y B', async () => {
+      const pullSpy = vi.spyOn(syncManager, 'descargarDatosDescendientes').mockResolvedValue({
+        descargados: 0,
+        fallidos: 1
+      });
+      const pushSpy = vi.spyOn(syncManager, 'procesarColaPendiente').mockResolvedValue(undefined);
+
+      await syncManager.sincronizarTodo();
+
+      expect(pullSpy).toHaveBeenCalled();
+      expect(pushSpy).not.toHaveBeenCalled();
+      expect(syncManager.getStatus()).toBe('error');
+    });
+
+    it('Sprint 2: descargarDatosDescendientes aplica limit(1000) en peticiones GET', async () => {
+      const limitSpy = vi.fn().mockResolvedValue({ data: [], error: null });
+      const selectSpy = vi.fn().mockReturnValue({ limit: limitSpy });
+      const fromSpy = vi.fn().mockReturnValue({ select: selectSpy });
+
+      (syncManager as any).supabase = {
+        from: fromSpy
+      };
+
+      await syncManager.descargarDatosDescendientes(['proyectos']);
+
+      expect(fromSpy).toHaveBeenCalledWith('proyectos');
+      expect(selectSpy).toHaveBeenCalledWith('*');
+      expect(limitSpy).toHaveBeenCalledWith(1000);
+    });
+  });
 });
