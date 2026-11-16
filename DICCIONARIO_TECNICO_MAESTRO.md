@@ -10505,3 +10505,32 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (329/329 tests al 100% verde, +3 nuevos tests de integración).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 9.87s).
 
+---
+
+### [REQ-ARCH-75-EXEC: LWW, Dependency Graph & App Lifecycle]
+**Fecha:** Noviembre 2026 | **Fase:** 8.4 (Arquitectura Sync & Cold Start Resiliente) | **Archivos Modificados:** `src/services/syncManager.ts`, `src/App.tsx`, `src/services/__tests__/syncManager.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Riesgo de Violaciones Referenciales FK (23503) por Desorden en Push:** La subida de entidades hacia Supabase no aplicaba un estricto orden topológico por niveles de jerarquía relacional. Si un lote de entidades raíz (ej. `proyectos`) fallaba por desconexión o saturación, los registros dependientes (`hitos`, `tareas`, `gastos`) intentaban insertarse generando excepciones 23503 y ensuciando el estado de replicación.
+- **Sobreescrituras Incorrectas por Falta de LWW Estricto y Resurrección de Fantasmas:** En descargas entrantes (*pull*), la ausencia de un chequeo estricto `remoteTime > localTime` permitía sobreescrituras con datos remotos obsoletos o idénticos. Asimismo, registros descargados de la nube podían resucitar localmente si el usuario los había eliminado y estaban encolados en `sync_deletions`.
+- **Desincronización tras Suspensión Móvil / Laptop:** Al reanudar la aplicación tras hibernación o cambio de app en dispositivos móviles (ej. Samsung S24 Ultra) o portátiles, la PWA mantenía un retraso de hasta 45 segundos o debounces prolongados antes de rehidratar los datos frescos desde la nube.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Push Jerárquico Secuencial y Guarda Anti-Cascada (`syncManager.ts`):**
+   - Se reestructuró `syncPendingRecords()` para forzar un despacho secuencial estricto (`await`) en 4 niveles de dependencia:
+     1. **Padres Raíz:** `sincronizarProyectos()`. Si falla por red (`failed > 0 && success === 0`), se aborta inmediatamente el ciclo push para salvaguardar la integridad de las tablas hijas.
+     2. **Hijos Directos:** `sincronizarHitos()`, `resolverHitosEnCuarentena()`, `resolverTareasEnCuarentena()`, `sincronizarMetasPlanes()`, `sincronizarHitosPlan()`, `sincronizarActividades()`. Si los hitos fallan por red, se aborta la subida de tareas.
+     3. **Dependientes:** `sincronizarTareas()`, `sincronizarSubtareas()`, `sincronizarVinculosMeta()`, `sincronizarGastos()`, `sincronizarIngresos()`, `sincronizarCuotas()`, `sincronizarNotas()`.
+     4. **Lápidas:** `sincronizarTombstones()` (despacha `.delete()` en Supabase y limpia `sync_deletions`).
+2. **Resolución de Conflictos LWW Estricto y Regla Anti-Resurrección (`syncManager.ts`):**
+   - **LWW Estricto:** En `descargarDatosDescendientes()`, solo se sobrescribe un registro local existente (`synced`) si `remoteTime > localTime` de manera estricta. Si `remoteTime <= localTime`, la actualización remota se descarta y el estado local se preserva inmutable.
+   - **Anti-Resurrección Absoluta:** Antes de preparar la inserción de cualquier registro remoto, se verifica su ID y código canónico contra `sync_deletions` y `tombstones`. Si está en cola de borrado, la actualización remota es ignorada (el borrado local gana siempre).
+3. **Refresco Instantáneo por Ciclo de Vida / App Resume (`App.tsx` & `syncManager.ts`):**
+   - En `setupNetworkListeners()` y en el `useEffect` raíz de `App.tsx`, se inyectaron listeners para `visibilitychange` (`if (document.visibilityState === 'visible') syncManager.sincronizarTodo()`) y `focus` (`window.addEventListener('focus', () => syncManager.sincronizarTodo())`).
+   - Al reactivar la pantalla o enfocar la app, el sistema reconecta el canal Realtime e inicia inmediatamente la sincronización bidireccional segura (Pull $\rightarrow$ Push) sin retardos ni debounces.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (333/333 tests al 100% verde, +4 nuevos tests de resiliencia distribuida).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 10.86s).
+

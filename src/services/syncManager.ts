@@ -109,7 +109,6 @@ class SyncManager {
   private recentlyPushedIds = new Map<string, number>();
   private realtimeChannel: any = null;
   private realtimeDebounceTimer: any = null;
-  private visibilityDebounceTimer: any = null;
   private tablasPendientesRealtime = new Set<string>();
 
   // Cuarentena en memoria para registros con fallos irrecuperables de Foreign Key (23503 / 409 / user_id ausente)
@@ -298,6 +297,26 @@ class SyncManager {
     return this.registrosFkCuarentena.has(id);
   }
 
+  /**
+   * REQ-ARCH-75-EXEC: Detecta fallos de conectividad, caída de sockets o timeouts de red
+   */
+  public esErrorDeRed(error: any): boolean {
+    if (!error) return false;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+    const msg = String(error.message || error || '').toLowerCase();
+    const details = String(error.details || '').toLowerCase();
+    return (
+      msg.includes('network') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('connection_closed') ||
+      msg.includes('err_connection') ||
+      msg.includes('timeout') ||
+      msg.includes('abort') ||
+      details.includes('network') ||
+      details.includes('connection')
+    );
+  }
+
   private initSupabaseClient() {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://mock.supabase.co';
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock-anon-key';
@@ -366,31 +385,24 @@ class SyncManager {
       }
     }, 45000);
 
-    // Amortiguación de sincronización al recuperar visibilidad (REQ-FIX-08, REQ-MOBILE-47-EXEC y REQ-BUGFIX-72)
+    // REQ-ARCH-75-EXEC: Refresco instantáneo por Ciclo de Vida (Page Visibility / App Resume - Sprint 3)
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-          if (this.visibilityDebounceTimer) {
-            clearTimeout(this.visibilityDebounceTimer);
-          }
-          this.visibilityDebounceTimer = setTimeout(async () => {
-            this.visibilityDebounceTimer = null;
-            // REQ-MOBILE-47-EXEC: Reconectar canal WebSocket si fue cerrado durante suspensión móvil
-            this.reconectarRealtimeSiEsNecesario();
-            if (typeof navigator !== 'undefined' && navigator.onLine && !this.isSyncing) {
-              try {
-                const pullResult = await this.descargarDatosDescendientes();
-                if (pullResult.fallidos > 0 && pullResult.descargados === 0) {
-                  console.warn('[SyncManager] Pull tras visibilidad fallido. Omitiendo push para evitar corrupción A-B.');
-                  return;
-                }
-                await this.syncPendingRecords();
-              } catch (err) {
-                console.warn('[SyncManager] Error al sincronizar tras recuperar visibilidad:', err);
-              }
-            }
-          }, 800);
+          this.reconectarRealtimeSiEsNecesario();
+          this.sincronizarTodo().catch((err) => {
+            console.warn('[SyncManager] Error al sincronizar en visibilitychange:', err);
+          });
         }
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', () => {
+        this.reconectarRealtimeSiEsNecesario();
+        this.sincronizarTodo().catch((err) => {
+          console.warn('[SyncManager] Error al sincronizar en window focus:', err);
+        });
       });
     }
   }
@@ -1786,60 +1798,55 @@ class SyncManager {
       this.isSyncing = true;
       this.setSyncState('syncing');
 
-      // PASO 0: Lápidas (Tombstones) - Borrado prioritario remoto para evitar colisiones
-      const resTomb = await this.sincronizarTombstones();
-
-      // 2. Construir mapas topológicos iniciales
+      // 1. Construir mapas topológicos iniciales
       const proyectoMap = await this.construirMapaProyectos();
 
-      // PASO 1: Proyectos (Raíz)
+      // PASO 1: Subir/Sincronizar Proyectos (Padres) - REQ-ARCH-75-EXEC
       const resProy = await this.sincronizarProyectos();
+      if (resProy.failed > 0 && resProy.success === 0) {
+        console.warn('[SyncManager] Subida de Proyectos fallida por error de red. Abortando dependientes para evitar errores FK (23503).');
+        this.setSyncState('error');
+        this.isSyncing = false;
+        return;
+      }
       if (resProy.success > 0) {
         const updatedPMap = await this.construirMapaProyectos();
         updatedPMap.forEach((v, k) => proyectoMap.set(k, v));
       }
 
-      // PASO 2: Hitos WBS (depende de Proyectos)
+      // PASO 2: Subir/Sincronizar Hitos y Metas (Hijos directos) - REQ-ARCH-75-EXEC
       const resHit = await this.sincronizarHitos(proyectoMap);
+      if (resHit.failed > 0 && resHit.success === 0) {
+        console.warn('[SyncManager] Subida de Hitos fallida por error de red. Abortando dependientes para evitar errores FK (23503).');
+        this.setSyncState('error');
+        this.isSyncing = false;
+        return;
+      }
       const hitoMap = await this.construirMapaHitos();
 
       // REQ-BUGFIX-72-EXEC: Resolver en lote O(n) tareas e hitos en cuarentena con los mapas actualizados
       await this.resolverHitosEnCuarentena(proyectoMap);
       await this.resolverTareasEnCuarentena(proyectoMap, hitoMap);
 
-      // PASO 3: Tareas WBS y Actividades Personales (Hábitos)
-      const [resTar, resAct] = await Promise.all([
-        this.sincronizarTareas(proyectoMap, hitoMap),
-        this.sincronizarActividades()
-      ]);
+      const resMet = await this.sincronizarMetasPlanes();
+      const metaMap = await this.construirMapaMetas();
+      const resHitPln = await this.sincronizarHitosPlan(metaMap);
+      const resAct = await this.sincronizarActividades();
 
+      // PASO 3: Subir/Sincronizar Tareas, Gastos, Ingresos, Notas (Dependientes) - REQ-ARCH-75-EXEC
+      const resTar = await this.sincronizarTareas(proyectoMap, hitoMap);
       const tareaMap = await this.construirMapaTareas();
       const actividadMap = await this.construirMapaActividades();
 
-      // PASO 4: Subtareas / Pasos (depende de Tareas y Actividades)
       const resSub = await this.sincronizarSubtareas(tareaMap, actividadMap);
-
-      // PASO 5: Metas y Planes
-      const resMet = await this.sincronizarMetasPlanes();
-      const metaMap = await this.construirMapaMetas();
-
-      // PASO 6: Hitos del Plan (depende de Metas)
-      const resHitPln = await this.sincronizarHitosPlan(metaMap);
-
-      // PASO 7: Vínculos Hábito-Meta (depende de Actividades y Metas)
       const resVin = await this.sincronizarVinculosMeta(actividadMap, metaMap);
-
-      // PASO 8: Gastos Financieros
       const resGas = await this.sincronizarGastos();
-
-      // PASO 9: Ingresos Financieros
       const resIng = await this.sincronizarIngresos();
-
-      // PASO 10: Cuotas Bancarias
       const resCuo = await this.sincronizarCuotas();
-
-      // PASO 11: Notas
       const resNot = await this.sincronizarNotas();
+
+      // PASO 4: Subir Lápidas (sync_deletions / Tombstones) - REQ-ARCH-75-EXEC
+      const resTomb = await this.sincronizarTombstones();
 
       const totalFallidos =
         resTomb.failed +
@@ -2218,9 +2225,21 @@ class SyncManager {
         for (const item of data) {
           if (!item || !item.id) continue;
           const idStr = String(item.id);
-          if (idsPendientesLocales.has(idStr) || tombstonesLocalesSet.has(idStr)) continue;
-
           const codRemoto = extraerCodigoCanonico(item);
+
+          // REQ-ARCH-75-EXEC Regla Anti-Resurrección (Sprint 2):
+          // Antes de insertar un registro descargado de Supabase en Dexie, cruzar su ID contra sync_deletions / tombstones.
+          // Si el ID está en la cola de borrado, IGNORAR la actualización remota (el borrado local gana).
+          if (
+            tombstonesLocalesSet.has(idStr) ||
+            tombstonesLocalesSet.has(idStr.toLowerCase()) ||
+            (codRemoto && (tombstonesLocalesSet.has(codRemoto) || tombstonesLocalesSet.has(codRemoto.toLowerCase())))
+          ) {
+            continue;
+          }
+
+          if (idsPendientesLocales.has(idStr)) continue;
+
           const existentePorCodigo = codRemoto ? mapaLocalPorCodigo.get(codRemoto) : undefined;
           const existentePorId = mapaLocalPorId.get(idStr);
           const localPrevio = existentePorCodigo || existentePorId;
@@ -2256,18 +2275,21 @@ class SyncManager {
             idsObsoletosAEliminar.push(String(existentePorCodigo.id));
           }
 
-          // REQ-SYNC-41-EXEC LWW (Last-Write-Wins): Si el registro local previo está sincronizado pero
-          // tiene timestamp o versión más reciente que el remoto recibido, descartar el dato remoto obsoleto.
+          // REQ-ARCH-75-EXEC LWW (Last-Write-Wins): Chequeo estricto de timestamps (Sprint 2)
+          // Solo sobrescribir el registro local si el updated_at remoto es estrictamente mayor que el local.
           if (localPrevio && localPrevio.sync_status === 'synced') {
-            const remoteTime = new Date(registroFinal.updated_at || 0).getTime();
+            const remoteTime = new Date(registroFinal.updated_at || item.updated_at || 0).getTime();
             const localTime = new Date(localPrevio.updated_at || 0).getTime();
-            if (!isNaN(remoteTime) && !isNaN(localTime) && localTime > remoteTime) {
-              continue;
-            }
-            if (
+
+            if (!isNaN(remoteTime) && !isNaN(localTime)) {
+              if (remoteTime <= localTime) {
+                // Remoto no es estrictamente mayor: descartar actualización remota y preservar estado local
+                continue;
+              }
+            } else if (
               typeof localPrevio.version === 'number' &&
               typeof registroFinal.version === 'number' &&
-              localPrevio.version > registroFinal.version
+              registroFinal.version <= localPrevio.version
             ) {
               continue;
             }

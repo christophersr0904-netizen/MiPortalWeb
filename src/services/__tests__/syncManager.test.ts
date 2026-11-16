@@ -1483,4 +1483,140 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       ]));
     });
   });
+
+  describe('REQ-ARCH-75-EXEC: LWW, Dependency Graph & App Lifecycle', () => {
+    it('Sprint 1: syncPendingRecords aborta subida de tablas dependientes si Proyectos (Padres) falla', async () => {
+      (syncManager as any).isSyncing = false;
+      vi.spyOn(syncManager as any, 'contarPendientes').mockResolvedValue(1);
+      vi.spyOn(syncManager as any, 'construirMapaProyectos').mockResolvedValue(new Map());
+
+      const proySpy = vi.spyOn(syncManager, 'sincronizarProyectos').mockResolvedValue({ success: 0, failed: 1 });
+      const hitSpy = vi.spyOn(syncManager, 'sincronizarHitos').mockResolvedValue({ success: 1, failed: 0 });
+      const tarSpy = vi.spyOn(syncManager, 'sincronizarTareas').mockResolvedValue({ success: 1, failed: 0 });
+
+      await syncManager.syncPendingRecords();
+
+      expect(proySpy).toHaveBeenCalled();
+      expect(hitSpy).not.toHaveBeenCalled();
+      expect(tarSpy).not.toHaveBeenCalled();
+      expect(syncManager.getStatus()).toBe('error');
+    });
+
+    it('Sprint 2: descargarDatosDescendientes aplica LWW estricto y no sobrescribe si remoto <= local', async () => {
+      const fechaLocal = '2026-11-16T10:00:00.000Z';
+      const fechaRemotaAntigua = '2026-11-16T09:00:00.000Z';
+
+      const localNota = {
+        id: 'not-lww-01',
+        codigo_legado: 'NOT-LWW-01',
+        sync_status: 'synced',
+        updated_at: fechaLocal
+      };
+
+      const remotaNota = {
+        id: 'not-lww-01',
+        codigo_legado: 'NOT-LWW-01',
+        updated_at: fechaRemotaAntigua
+      };
+
+      (db.notas as any).toArray = vi.fn().mockResolvedValue([localNota]);
+      (db.notas as any).where = vi.fn().mockReturnValue({
+        anyOf: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) }),
+        equals: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) })
+      });
+      const bulkPutSpy = vi.fn().mockResolvedValue('ok');
+      (db.notas as any).bulkPut = bulkPutSpy;
+
+      const fromSpy = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          range: vi.fn().mockResolvedValue({ data: [remotaNota], error: null })
+        })
+      });
+      (syncManager as any).supabase = { from: fromSpy };
+
+      const res = await syncManager.descargarDatosDescendientes(['notas']);
+
+      expect(bulkPutSpy).not.toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ id: 'not-lww-01', updated_at: fechaRemotaAntigua })
+      ]));
+      expect(res.descargados).toBe(0);
+    });
+
+    it('Sprint 2: Regla Anti-Resurrección: ignora registros remotos si su ID está en sync_deletions (el borrado local gana)', async () => {
+      (db as any).sync_deletions = {
+        toArray: vi.fn().mockResolvedValue([
+          { id: 'tar-fantasma-01', tabla: 'tareas', sync_status: 'pending' }
+        ])
+      };
+      (db.tombstones as any).toArray = vi.fn().mockResolvedValue([]);
+
+      const remotaFantasma = {
+        id: 'tar-fantasma-01',
+        codigo_legado: 'TAR-GHOST-01',
+        updated_at: new Date().toISOString()
+      };
+
+      (db.tareas as any).toArray = vi.fn().mockResolvedValue([]);
+      (db.tareas as any).where = vi.fn().mockReturnValue({
+        anyOf: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) }),
+        equals: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) })
+      });
+      const bulkPutSpy = vi.fn().mockResolvedValue('ok');
+      (db.tareas as any).bulkPut = bulkPutSpy;
+
+      const fromSpy = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          range: vi.fn().mockResolvedValue({ data: [remotaFantasma], error: null })
+        })
+      });
+      (syncManager as any).supabase = { from: fromSpy };
+
+      const res = await syncManager.descargarDatosDescendientes(['tareas']);
+
+      expect(bulkPutSpy).not.toHaveBeenCalled();
+      expect(res.descargados).toBe(0);
+    });
+
+    it('Sprint 3: App Resume / Visibility API dispara sincronizarTodo al volver visible', async () => {
+      const syncTodoSpy = vi.spyOn(syncManager, 'sincronizarTodo').mockResolvedValue(undefined);
+
+      const fakeListeners: Record<string, () => void> = {};
+      const fakeDoc = {
+        visibilityState: 'visible',
+        addEventListener: vi.fn((event: string, cb: any) => { fakeListeners[event] = cb; }),
+        removeEventListener: vi.fn()
+      };
+      const fakeWindow = {
+        addEventListener: vi.fn((event: string, cb: any) => { fakeListeners[event] = cb; }),
+        removeEventListener: vi.fn()
+      };
+
+      const originalDoc = (globalThis as any).document;
+      const originalWin = (globalThis as any).window;
+
+      (globalThis as any).document = fakeDoc;
+      (globalThis as any).window = fakeWindow;
+
+      try {
+        (syncManager as any).setupNetworkListeners();
+
+        // Disparar visibilitychange
+        if (fakeListeners['visibilitychange']) {
+          fakeListeners['visibilitychange']();
+        }
+
+        expect(syncTodoSpy).toHaveBeenCalled();
+
+        // Disparar focus
+        syncTodoSpy.mockClear();
+        if (fakeListeners['focus']) {
+          fakeListeners['focus']();
+        }
+        expect(syncTodoSpy).toHaveBeenCalled();
+      } finally {
+        (globalThis as any).document = originalDoc;
+        (globalThis as any).window = originalWin;
+      }
+    });
+  });
 });

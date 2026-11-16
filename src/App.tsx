@@ -450,9 +450,28 @@ export const App: React.FC = () => {
       }
     };
 
+    // REQ-ARCH-75-EXEC: Refresco por Ciclo de Vida (Page Visibility / App Resume - Sprint 3)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncManager.sincronizarTodo().catch((err) => {
+          console.warn('[App] Error al sincronizar en visibilitychange:', err);
+        });
+      }
+    };
+    const handleFocus = () => {
+      syncManager.sincronizarTodo().catch((err) => {
+        console.warn('[App] Error al sincronizar en window focus:', err);
+      });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
     window.addEventListener('pmo:abrir-entidad', handleAbrirEntidad);
+
     return () => {
       window.removeEventListener('pmo:abrir-entidad', handleAbrirEntidad);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
