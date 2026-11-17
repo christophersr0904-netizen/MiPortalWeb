@@ -1694,5 +1694,56 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       expect(modifyTareasSpy).toHaveBeenCalledWith({ sync_status: 'pending' });
       expect(syncManager.estaEnCuarentenaFk('mock-fk-id-123')).toBe(false);
     });
+
+    it('REQ-SYNC-PROD-17-FIX: purga automáticamente de Dexie registros huérfanos con violación FK (_id_fkey no user_id)', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const deleteHitoSpy = vi.spyOn(db.planes_accion_hitos, 'delete').mockResolvedValue(undefined as any);
+      const updateHitoSpy = vi.spyOn(db.planes_accion_hitos, 'update').mockResolvedValue(1);
+
+      const mockHitoHuerfano = {
+        id: 'hito-orphan-999',
+        codigo_legado: 'HIT-PLN-999',
+        meta_id: 'meta-inexistente-111',
+        titulo_hito: 'Hito Huérfano',
+        sync_status: 'pending'
+      };
+
+      vi.spyOn(db.planes_accion_hitos, 'where').mockReturnValue({
+        anyOf: () => ({
+          toArray: async () => [mockHitoHuerfano],
+          count: async () => 1
+        }),
+        equals: () => ({
+          toArray: async () => [mockHitoHuerfano],
+          count: async () => 1
+        })
+      } as any);
+
+      (syncManager as any).supabase = {
+        from: vi.fn().mockReturnValue({
+          upsert: vi.fn().mockResolvedValue({
+            error: {
+              code: '23503',
+              message: 'insert or update on table "planes_accion_hitos" violates foreign key constraint "planes_accion_hitos_meta_id_fkey"'
+            }
+          })
+        })
+      };
+
+      const metaMap = new Map<string, string>();
+      metaMap.set('meta-inexistente-111', 'meta-inexistente-111');
+
+      const res = await syncManager.sincronizarHitosPlan(metaMap);
+
+      expect(res.failed).toBe(1);
+      // Debe eliminar físicamente de Dexie
+      expect(deleteHitoSpy).toHaveBeenCalledWith('hito-orphan-999');
+      // NO debe actualizar a cuarentena
+      expect(updateHitoSpy).not.toHaveBeenCalledWith('hito-orphan-999', { sync_status: 'quarantined' });
+      // Debe emitir el log especificado
+      expect(consoleWarnSpy).toHaveBeenCalledWith('[SyncManager] Registro huérfano purgado automáticamente en tabla planes_accion_hitos');
+
+      consoleWarnSpy.mockRestore();
+    });
   });
 });
