@@ -628,49 +628,44 @@ class SyncManager {
   }
 
   /**
-   * Resolución de Conflictos LWW (Last-Write-Wins):
-   * Compara timestamps 'updated_at' entre la réplica remota en Supabase y el registro local.
-   * Si la versión remota es estrictamente más reciente, cancela el push y preserva la remota.
+   * REQ-SYNC-PROD-06-FIX: Reconcilia el Primary Key 'id' (UUID) con la fila remota en Supabase
+   * antes de ejecutar .upsert(..., { onConflict: 'codigo_legado' }).
+   * Si el registro ya existe en la nube con un UUID distinto, conserva el UUID remoto
+   * para evitar errores 409 Conflict / 23503 por intento de sobrescribir una Primary Key existente.
    */
-  private async esRemotoMasReciente(
+  private async reconciliarPayloadIdRemoto<T extends { id?: string; codigo_legado?: string }>(
     tabla: string,
-    codigoLegado?: string,
-    updatedAtLocal?: string
-  ): Promise<boolean> {
-    if (!this.supabase || !codigoLegado || !updatedAtLocal) return false;
-    if (import.meta.env.VITE_SUPABASE_URL?.includes('mock')) return false;
-    if (this.debeOmitirTablaRemota(tabla)) return false;
+    payload: T
+  ): Promise<T> {
+    if (!this.supabase || !payload?.codigo_legado) return payload;
+    if (import.meta.env.VITE_SUPABASE_URL?.includes('mock')) return payload;
+    if (this.debeOmitirTablaRemota(tabla)) return payload;
 
     try {
       const tableQuery = this.supabase.from(tabla);
-      if (typeof tableQuery.select !== 'function') return false;
+      if (typeof tableQuery.select !== 'function') return payload;
 
-      const { data: remoto, error } = await tableQuery
-        .select('updated_at')
-        .eq('codigo_legado', codigoLegado)
-        .maybeSingle();
+      const selectBuilder = tableQuery.select('id');
+      if (!selectBuilder || typeof selectBuilder.eq !== 'function') return payload;
 
+      const eqBuilder = selectBuilder.eq('codigo_legado', payload.codigo_legado);
+      if (!eqBuilder || typeof eqBuilder.maybeSingle !== 'function') return payload;
+
+      const { data: remoto, error } = await eqBuilder.maybeSingle();
       if (error) {
         if (this.esErrorTablaInexistente(error)) {
           this.registrarTablaInexistente(tabla);
         }
-        return false;
+        return payload;
       }
-      if (!remoto?.updated_at) return false;
 
-      const remoteTime = new Date(remoto.updated_at).getTime();
-      const localTime = new Date(updatedAtLocal).getTime();
-
-      if (!isNaN(remoteTime) && !isNaN(localTime) && remoteTime > localTime) {
-        console.warn(
-          `[SyncManager] LWW Alert: Remote wins for ${tabla} ${codigoLegado} (Remoto: ${remoto.updated_at} > Local: ${updatedAtLocal})`
-        );
-        return true;
+      if (remoto?.id && isUuid(remoto.id)) {
+        return { ...payload, id: remoto.id };
       }
-      return false;
     } catch {
-      return false;
+      // Tolerar mocks de pruebas unitarias que solo implementan .upsert()
     }
+    return payload;
   }
 
   // ============================================================================
@@ -791,14 +786,10 @@ class SyncManager {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente('proyectos', proy.codigo_legado, proy.updated_at)) {
-          await db.proyectos.update(proy.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarProyectoPayload(proy, this.currentUserId);
+        const rawPayload = sanitizarProyectoPayload(proy, this.currentUserId);
+        const payload = await this.reconciliarPayloadIdRemoto('proyectos', rawPayload);
         this.registrarPushedId(proy.id);
+        if (payload.id) this.registrarPushedId(payload.id);
         const { error } = await this.supabase
           .from('proyectos')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -857,14 +848,8 @@ class SyncManager {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente('hitos_wbs', hito.codigo_legado, hito.updated_at)) {
-          await db.hitos_wbs.update(hito.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarHitoPayload(hito, map, this.currentUserId);
-        if (!payload.proyecto_id) {
+        const rawPayload = sanitizarHitoPayload(hito, map, this.currentUserId);
+        if (!rawPayload.proyecto_id) {
           console.warn('[SyncManager] Hito sin proyecto_id UUID resuelto, cuarentena en Dexie:', hito.codigo_legado);
           this.registrosFkCuarentena.add(hito.id);
           await db.hitos_wbs.update(hito.id, { sync_status: 'quarantined' });
@@ -872,7 +857,9 @@ class SyncManager {
           continue;
         }
 
+        const payload = await this.reconciliarPayloadIdRemoto('hitos_wbs', rawPayload);
         this.registrarPushedId(hito.id);
+        if (payload.id) this.registrarPushedId(payload.id);
         const { error } = await this.supabase
           .from('hitos_wbs')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -936,14 +923,8 @@ class SyncManager {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente('tareas', tarea.codigo_legado, tarea.updated_at)) {
-          await db.tareas.update(tarea.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarTareaPayload(tarea, pMap, hMap, this.currentUserId, tMap);
-        if (!payload.proyecto_id || !payload.hito_id) {
+        const rawPayload = sanitizarTareaPayload(tarea, pMap, hMap, this.currentUserId, tMap);
+        if (!rawPayload.proyecto_id || !rawPayload.hito_id) {
           console.warn('[SyncManager] Tarea sin proyecto_id o hito_id UUID resuelto, cuarentena en Dexie:', tarea.codigo_legado);
           this.registrosFkCuarentena.add(tarea.id);
           await db.tareas.update(tarea.id, { sync_status: 'quarantined' });
@@ -951,7 +932,9 @@ class SyncManager {
           continue;
         }
 
+        const payload = await this.reconciliarPayloadIdRemoto('tareas', rawPayload);
         this.registrarPushedId(tarea.id);
+        if (payload.id) this.registrarPushedId(payload.id);
         const { error } = await this.supabase
           .from('tareas')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -1008,14 +991,10 @@ class SyncManager {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente('actividades_personales', act.codigo_legado, act.updated_at)) {
-          await db.actividades_personales.update(act.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarActividadPayload(act, this.currentUserId);
+        const rawPayload = sanitizarActividadPayload(act, this.currentUserId);
+        const payload = await this.reconciliarPayloadIdRemoto('actividades_personales', rawPayload);
         this.registrarPushedId(act.id);
+        if (payload.id) this.registrarPushedId(payload.id);
         const { error } = await this.supabase
           .from('actividades_personales')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -1078,14 +1057,8 @@ class SyncManager {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente('subtareas_pasos', sub.codigo_legado, sub.updated_at)) {
-          await db.subtareas_pasos.update(sub.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarSubtareaPayload(sub, tMap, aMap, this.currentUserId);
-        if (!payload.tarea_id && !payload.actividad_id) {
+        const rawPayload = sanitizarSubtareaPayload(sub, tMap, aMap, this.currentUserId);
+        if (!rawPayload.tarea_id && !rawPayload.actividad_id) {
           console.warn('[SyncManager] Subtarea sin padre UUID resuelto, cuarentena en Dexie:', sub.codigo_legado);
           this.registrosFkCuarentena.add(sub.id);
           await db.subtareas_pasos.update(sub.id, { sync_status: 'quarantined' });
@@ -1093,7 +1066,9 @@ class SyncManager {
           continue;
         }
 
+        const payload = await this.reconciliarPayloadIdRemoto('subtareas_pasos', rawPayload);
         this.registrarPushedId(sub.id);
+        if (payload.id) this.registrarPushedId(payload.id);
         const { error } = await this.supabase
           .from('subtareas_pasos')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -1157,14 +1132,10 @@ class SyncManager {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente('metas_planes', meta.codigo_legado, meta.updated_at)) {
-          await db.metas_planes.update(meta.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarMetaPlanPayload(meta, this.currentUserId);
+        const rawPayload = sanitizarMetaPlanPayload(meta, this.currentUserId);
+        const payload = await this.reconciliarPayloadIdRemoto('metas_planes', rawPayload);
         this.registrarPushedId(meta.id);
+        if (payload.id) this.registrarPushedId(payload.id);
         const { error } = await this.supabase
           .from('metas_planes')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -1232,14 +1203,8 @@ class SyncManager {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente('planes_accion_hitos', hito.codigo_legado, hito.updated_at)) {
-          await db.planes_accion_hitos.update(hito.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarHitoPlanPayload(hito, mMap, this.currentUserId);
-        if (!payload.meta_id) {
+        const rawPayload = sanitizarHitoPlanPayload(hito, mMap, this.currentUserId);
+        if (!rawPayload.meta_id) {
           console.warn('[SyncManager] Hito de plan sin meta_id UUID resuelto, cuarentena en Dexie:', hito.codigo_legado);
           this.registrosFkCuarentena.add(hito.id);
           await db.planes_accion_hitos.update(hito.id, { sync_status: 'quarantined' });
@@ -1247,7 +1212,9 @@ class SyncManager {
           continue;
         }
 
+        const payload = await this.reconciliarPayloadIdRemoto('planes_accion_hitos', rawPayload);
         this.registrarPushedId(hito.id);
+        if (payload.id) this.registrarPushedId(payload.id);
         const { error } = await this.supabase
           .from('planes_accion_hitos')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -1398,14 +1365,10 @@ class SyncManager {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente(tabla, item.codigo_legado, item.updated_at)) {
-          await refDexie.update(item.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizar(item, this.currentUserId);
+        const rawPayload = sanitizar(item, this.currentUserId);
+        const payload = await this.reconciliarPayloadIdRemoto(tabla, rawPayload);
         this.registrarPushedId(item.id);
+        if (payload.id) this.registrarPushedId(payload.id);
         const { error } = await this.supabase
           .from(tabla)
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -1491,14 +1454,10 @@ class SyncManager {
         continue;
       }
       try {
-        if (await this.esRemotoMasReciente('notas', nota.codigo_legado, nota.updated_at)) {
-          await db.notas.update(nota.id, { sync_status: 'synced' });
-          result.success++;
-          continue;
-        }
-
-        const payload = sanitizarNotaPayload(nota, this.currentUserId);
+        const rawPayload = sanitizarNotaPayload(nota, this.currentUserId);
+        const payload = await this.reconciliarPayloadIdRemoto('notas', rawPayload);
         this.registrarPushedId(nota.id);
+        if (payload.id) this.registrarPushedId(payload.id);
         const { error } = await this.supabase
           .from('notas')
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -2292,27 +2251,9 @@ class SyncManager {
             idsObsoletosAEliminar.push(String(existentePorCodigo.id));
           }
 
-          // REQ-ARCH-75-EXEC LWW (Last-Write-Wins): Chequeo estricto de timestamps (Sprint 2)
-          // Solo sobrescribir el registro local si el updated_at remoto es estrictamente mayor que el local.
-          if (localPrevio && localPrevio.sync_status === 'synced') {
-            const remoteTime = new Date(registroFinal.updated_at || item.updated_at || 0).getTime();
-            const localTime = new Date(localPrevio.updated_at || 0).getTime();
-
-            if (!isNaN(remoteTime) && !isNaN(localTime)) {
-              if (remoteTime <= localTime) {
-                // Remoto no es estrictamente mayor: descartar actualización remota y preservar estado local
-                continue;
-              }
-            } else if (
-              typeof localPrevio.version === 'number' &&
-              typeof registroFinal.version === 'number' &&
-              registroFinal.version <= localPrevio.version
-            ) {
-              continue;
-            }
-          }
-
-          // Diffing Silencioso en Memoria: Si es idéntico al local previo, no mutar Dexie
+          // REQ-SYNC-PROD-06-FIX: El estado proveniente de Supabase (Single Source of Truth)
+          // prevalece sobre registros locales ('synced' / 'error') siempre que difiera en valores (!sonRegistrosIdenticos),
+          // sin descartarse por desfase de reloj (clock skew) entre dispositivos.
           if (localPrevio && !idsObsoletosAEliminar.includes(String(localPrevio.id))) {
             if (sonRegistrosIdenticos(registroFinal, localPrevio)) {
               continue;

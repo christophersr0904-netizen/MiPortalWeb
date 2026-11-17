@@ -665,16 +665,18 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
     expect(pullSpy).toHaveBeenCalled();
   });
 
-  it('aplica resolución Last-Write-Wins (LWW): si remoto es más reciente, omite upsert y marca synced localmente', async () => {
+  it('REQ-SYNC-PROD-06-FIX: ejecuta siempre el upsert en registros pending sin auto-bloqueo LWW y reconcilia el UUID remoto existente', async () => {
     const mockProyLocal = {
       id: '550e8400-e29b-41d4-a716-446655440099',
       codigo_legado: 'PRO-LWW-01',
-      nombre_proyecto: 'Proyecto Local Desactualizado',
+      nombre_proyecto: 'Proyecto Modificado por Usuario',
       tipo_iniciativa: 'Personal',
       estado_proyecto: '01_Backlog',
       updated_at: '2026-11-03T10:00:00.000Z',
       sync_status: 'pending'
     };
+
+    const uuidRemotoExistente = '11111111-2222-4333-8444-555555555555';
 
     vi.spyOn(db.proyectos, 'where').mockReturnValue({
       anyOf: () => ({
@@ -689,12 +691,11 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
 
     const updateSpy = vi.spyOn(db.proyectos, 'update').mockResolvedValue(1);
 
-    const upsertSpy = vi.fn();
+    const upsertSpy = vi.fn().mockResolvedValue({ error: null });
     const selectSpy = vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
         maybeSingle: async () => ({
-          // Remoto tiene timestamp posterior al local
-          data: { updated_at: '2026-11-03T14:30:00.000Z' },
+          data: { id: uuidRemotoExistente, updated_at: '2026-11-03T14:30:00.000Z' },
           error: null
         })
       })
@@ -710,10 +711,19 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
     const res = await syncManager.sincronizarProyectos();
 
     expect(res.success).toBe(1);
-    expect(upsertSpy).not.toHaveBeenCalled();
-    expect(updateSpy).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440099', {
-      sync_status: 'synced'
-    });
+    expect(upsertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: uuidRemotoExistente,
+        codigo_legado: 'PRO-LWW-01'
+      }),
+      { onConflict: 'codigo_legado' }
+    );
+    expect(updateSpy).toHaveBeenCalledWith(
+      '550e8400-e29b-41d4-a716-446655440099',
+      expect.objectContaining({
+        sync_status: 'synced'
+      })
+    );
   });
 
   it('sincroniza entidades de metas, planes y finanzas en la cola de 12 entidades', async () => {
@@ -1510,21 +1520,23 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       expect(syncManager.getStatus()).toBe('error');
     });
 
-    it('Sprint 2: descargarDatosDescendientes aplica LWW estricto y no sobrescribe si remoto <= local', async () => {
-      const fechaLocal = '2026-11-16T10:00:00.000Z';
-      const fechaRemotaAntigua = '2026-11-16T09:00:00.000Z';
+    it('Sprint 2 / REQ-SYNC-PROD-06-FIX: descargarDatosDescendientes aplica el estado remoto de Supabase aunque haya desfase de reloj (remoto <= local)', async () => {
+      const fechaLocalAdelantada = '2026-11-16T10:00:00.000Z';
+      const fechaServidorRemoto = '2026-11-16T09:59:55.000Z';
 
       const localNota = {
         id: 'not-lww-01',
         codigo_legado: 'NOT-LWW-01',
+        titulo: 'Título Antiguo en Laptop',
         sync_status: 'synced',
-        updated_at: fechaLocal
+        updated_at: fechaLocalAdelantada
       };
 
       const remotaNota = {
         id: 'not-lww-01',
         codigo_legado: 'NOT-LWW-01',
-        updated_at: fechaRemotaAntigua
+        titulo: 'Título Actualizado desde PC',
+        updated_at: fechaServidorRemoto
       };
 
       (db.notas as any).toArray = vi.fn().mockResolvedValue([localNota]);
@@ -1544,10 +1556,10 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
 
       const res = await syncManager.descargarDatosDescendientes(['notas']);
 
-      expect(bulkPutSpy).not.toHaveBeenCalledWith(expect.arrayContaining([
-        expect.objectContaining({ id: 'not-lww-01', updated_at: fechaRemotaAntigua })
+      expect(bulkPutSpy).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ id: 'not-lww-01', titulo: 'Título Actualizado desde PC' })
       ]));
-      expect(res.descargados).toBe(0);
+      expect(res.descargados).toBe(1);
     });
 
     it('Sprint 2: Regla Anti-Resurrección: ignora registros remotos si su ID está en sync_deletions (el borrado local gana)', async () => {
