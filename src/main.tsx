@@ -200,7 +200,14 @@ function inicializarServiceWorker() {
 
       nuevoWorker.addEventListener('statechange', () => {
         if (nuevoWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          console.info('[PWA] Nueva versión instalada. Activando y refrescando aplicación...');
           nuevoWorker.postMessage({ type: 'SKIP_WAITING' });
+          setTimeout(() => {
+            if (!recargandoPorControlador) {
+              recargandoPorControlador = true;
+              window.location.reload();
+            }
+          }, 1200);
         }
       });
     });
@@ -208,6 +215,21 @@ function inicializarServiceWorker() {
     registration.update().catch((err) => {
       console.warn('[PWA] Error en registration.update():', err);
     });
+
+    // REQ-SYNC-PROD-05-FIX: Chequeo periódico cada 5 minutos y al recuperar visibilidad para evitar bundles obsoletos en Dispositivo B
+    setInterval(() => {
+      registration.update().catch((err) => {
+        console.warn('[PWA] Error en chequeo periódico de actualización SW:', err);
+      });
+    }, 5 * 60 * 1000);
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          registration.update().catch(() => {});
+        }
+      });
+    }
   };
 
   navigator.serviceWorker

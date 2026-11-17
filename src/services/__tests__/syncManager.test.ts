@@ -1485,20 +1485,28 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
   });
 
   describe('REQ-ARCH-75-EXEC: LWW, Dependency Graph & App Lifecycle', () => {
-    it('Sprint 1: syncPendingRecords aborta subida de tablas dependientes si Proyectos (Padres) falla', async () => {
+    it('Sprint 1 / REQ-SYNC-PROD-05-FIX: syncPendingRecords continúa hacia Hitos, Tareas, Notas y Tombstones aunque un Proyecto falle', async () => {
       (syncManager as any).isSyncing = false;
       vi.spyOn(syncManager as any, 'contarPendientes').mockResolvedValue(1);
       vi.spyOn(syncManager as any, 'construirMapaProyectos').mockResolvedValue(new Map());
+      vi.spyOn(syncManager as any, 'construirMapaHitos').mockResolvedValue(new Map());
+      vi.spyOn(syncManager as any, 'construirMapaMetas').mockResolvedValue(new Map());
+      vi.spyOn(syncManager as any, 'construirMapaTareas').mockResolvedValue(new Map());
+      vi.spyOn(syncManager as any, 'construirMapaActividades').mockResolvedValue(new Map());
 
       const proySpy = vi.spyOn(syncManager, 'sincronizarProyectos').mockResolvedValue({ success: 0, failed: 1 });
       const hitSpy = vi.spyOn(syncManager, 'sincronizarHitos').mockResolvedValue({ success: 1, failed: 0 });
       const tarSpy = vi.spyOn(syncManager, 'sincronizarTareas').mockResolvedValue({ success: 1, failed: 0 });
+      const notSpy = vi.spyOn(syncManager, 'sincronizarNotas').mockResolvedValue({ success: 1, failed: 0 });
+      const tombSpy = vi.spyOn(syncManager, 'sincronizarTombstones').mockResolvedValue({ success: 1, failed: 0 });
 
       await syncManager.syncPendingRecords();
 
       expect(proySpy).toHaveBeenCalled();
-      expect(hitSpy).not.toHaveBeenCalled();
-      expect(tarSpy).not.toHaveBeenCalled();
+      expect(hitSpy).toHaveBeenCalled();
+      expect(tarSpy).toHaveBeenCalled();
+      expect(notSpy).toHaveBeenCalled();
+      expect(tombSpy).toHaveBeenCalled();
       expect(syncManager.getStatus()).toBe('error');
     });
 

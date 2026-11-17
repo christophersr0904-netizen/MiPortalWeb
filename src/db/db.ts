@@ -88,6 +88,13 @@ export class PMODatabase extends Dexie {
     this.version(8).stores({
       configuracion_usuario: 'id, updated_at'
     });
+
+    this.on('versionchange', () => {
+      this.close();
+      if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') {
+        window.location.reload();
+      }
+    });
   }
 }
 

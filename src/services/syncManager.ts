@@ -100,6 +100,7 @@ export function esEntornoEscritorioLocal(): boolean {
 class SyncManager {
   private supabase: SupabaseClient | null = null;
   private isSyncing = false;
+  private syncRequestedWhileRunning = false;
   private syncState: SyncState = 'synced';
   private listeners: Array<(state: SyncState) => void> = [];
   private currentUserId: string = DEFAULT_USER_ID;
@@ -1760,7 +1761,10 @@ class SyncManager {
    * 11. Notas (Bóveda híbrida desacoplada)
    */
   public async syncPendingRecords(): Promise<void> {
-    if (this.isSyncing) return;
+    if (this.isSyncing) {
+      this.syncRequestedWhileRunning = true;
+      return;
+    }
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       this.setSyncState('offline');
       return;
@@ -1804,26 +1808,28 @@ class SyncManager {
       // 1. Construir mapas topológicos iniciales
       const proyectoMap = await this.construirMapaProyectos();
 
-      // PASO 1: Subir/Sincronizar Proyectos (Padres) - REQ-ARCH-75-EXEC
+      // PASO 1: Subir/Sincronizar Proyectos (Padres) - REQ-ARCH-75-EXEC / REQ-SYNC-PROD-05-FIX
       const resProy = await this.sincronizarProyectos();
-      if (resProy.failed > 0 && resProy.success === 0) {
-        console.warn('[SyncManager] Subida de Proyectos fallida por error de red. Abortando dependientes para evitar errores FK (23503).');
-        this.setSyncState('error');
-        this.isSyncing = false;
-        return;
+      if (resProy.failed > 0) {
+        console.warn('[SyncManager] Subida de Proyectos registró fallos. Continuando hacia Hitos, Tareas, Notas y Tombstones.');
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          this.setSyncState('offline');
+          return;
+        }
       }
       if (resProy.success > 0) {
         const updatedPMap = await this.construirMapaProyectos();
         updatedPMap.forEach((v, k) => proyectoMap.set(k, v));
       }
 
-      // PASO 2: Subir/Sincronizar Hitos y Metas (Hijos directos) - REQ-ARCH-75-EXEC
+      // PASO 2: Subir/Sincronizar Hitos y Metas (Hijos directos) - REQ-ARCH-75-EXEC / REQ-SYNC-PROD-05-FIX
       const resHit = await this.sincronizarHitos(proyectoMap);
-      if (resHit.failed > 0 && resHit.success === 0) {
-        console.warn('[SyncManager] Subida de Hitos fallida por error de red. Abortando dependientes para evitar errores FK (23503).');
-        this.setSyncState('error');
-        this.isSyncing = false;
-        return;
+      if (resHit.failed > 0) {
+        console.warn('[SyncManager] Subida de Hitos registró fallos. Continuando hacia Tareas, Notas, Gastos y Tombstones.');
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          this.setSyncState('offline');
+          return;
+        }
       }
       const hitoMap = await this.construirMapaHitos();
 
@@ -1878,6 +1884,12 @@ class SyncManager {
       this.setSyncState('error');
     } finally {
       this.isSyncing = false;
+      if (this.syncRequestedWhileRunning) {
+        this.syncRequestedWhileRunning = false;
+        this.syncPendingRecords().catch((err) => {
+          console.warn('[SyncManager] Error en re-disparo encolado de syncPendingRecords:', err);
+        });
+      }
     }
   }
 
@@ -2144,13 +2156,15 @@ class SyncManager {
           }
         }
 
-        // Recuperar IDs pendientes o en error en local para proteger cambios sin sincronizar
+        // Recuperar IDs pendientes en local para proteger cambios sin sincronizar (permitir que la nube reconcilie 'error')
         const idsPendientesLocales = new Set<string>();
         try {
           const w = (refDexie as any).where('sync_status');
-          const keys = typeof w.anyOf === 'function'
-            ? await w.anyOf(['pending', 'error']).primaryKeys()
-            : await w.equals('pending').primaryKeys();
+          const keys = typeof w.equals === 'function'
+            ? await w.equals('pending').primaryKeys()
+            : typeof w.anyOf === 'function'
+            ? await w.anyOf(['pending']).primaryKeys()
+            : [];
           keys.forEach((k: any) => idsPendientesLocales.add(String(k)));
         } catch {
           // Fallback defensivo
@@ -2247,7 +2261,7 @@ class SyncManager {
           const existentePorId = mapaLocalPorId.get(idStr);
           const localPrevio = existentePorCodigo || existentePorId;
 
-          if (localPrevio && (localPrevio.sync_status === 'pending' || localPrevio.sync_status === 'error')) {
+          if (localPrevio && localPrevio.sync_status === 'pending') {
             continue;
           }
 
