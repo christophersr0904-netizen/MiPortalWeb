@@ -35,6 +35,17 @@ import { generateSafeUUID } from '../../utils/uuidGenerator';
 
 const CUADERNOS_PREDETERMINADOS = ['General', 'Proyectos', 'Personal', 'Ideas'] as const;
 
+const SEED_CUADERNOS_PREDETERMINADOS: Record<string, CuadernoMeta> = CUADERNOS_PREDETERMINADOS.reduce((acc, nombre) => {
+  acc[nombre] = {
+    id: `cua_default_${nombre.toLowerCase()}`,
+    nombre,
+    descripcion: '',
+    icono: 'Folder',
+    created_at: new Date(0).toISOString()
+  };
+  return acc;
+}, {} as Record<string, CuadernoMeta>);
+
 type ModoVista = 'masonry' | 'lista';
 
 const TONOS_16 = [
@@ -88,14 +99,50 @@ export const VisorNotas: React.FC = () => {
   const [blockActivo, setBlockActivo] = useState<string | null>(null); // null = todas, '__sin_block__' = sueltas
   const [blocksLocales, setBlocksLocales] = useState<string[]>([]);
 
-  const [cuadernosMeta, setCuadernosMeta] = useState<Record<string, CuadernoMeta>>({});
+  const [cuadernosMeta, setCuadernosMeta] = useState<Record<string, CuadernoMeta>>(() => ({
+    ...SEED_CUADERNOS_PREDETERMINADOS
+  }));
+  const [cuadernosEliminados, setCuadernosEliminados] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    obtenerConfiguracion<Record<string, CuadernoMeta>>('pmo_notas_cuadernos_meta', {}).then((c) => {
-      if (c && Object.keys(c).length > 0) {
-        setCuadernosMeta(c);
+    let cancelado = false;
+    (async () => {
+      try {
+        const eliminadosGuardados = await obtenerConfiguracion<string[]>('pmo_notas_cuadernos_eliminados', []);
+        const setEliminados = new Set((eliminadosGuardados || []).map((b) => String(b).trim()).filter(Boolean));
+        if (!cancelado && setEliminados.size > 0) {
+          setCuadernosEliminados(setEliminados);
+        }
+
+        if (db.configuracion_usuario && typeof db.configuracion_usuario.get === 'function') {
+          const reg = await db.configuracion_usuario.get('pmo_notas_cuadernos_meta');
+          if (cancelado) return;
+          if (reg && reg.valor && typeof reg.valor === 'object') {
+            const filtrados: Record<string, CuadernoMeta> = {};
+            Object.entries(reg.valor as Record<string, CuadernoMeta>).forEach(([k, v]) => {
+              if (!setEliminados.has(k.trim())) {
+                filtrados[k] = v;
+              }
+            });
+            setCuadernosMeta(filtrados);
+          } else {
+            const seedInicial: Record<string, CuadernoMeta> = {};
+            Object.entries(SEED_CUADERNOS_PREDETERMINADOS).forEach(([k, v]) => {
+              if (!setEliminados.has(k.trim())) {
+                seedInicial[k] = v;
+              }
+            });
+            await guardarConfiguracion('pmo_notas_cuadernos_meta', seedInicial);
+            if (!cancelado) setCuadernosMeta(seedInicial);
+          }
+        }
+      } catch (err) {
+        console.warn('[VisorNotas] Error al hidratar cuadernosMeta desde Dexie:', err);
       }
-    });
+    })();
+    return () => {
+      cancelado = true;
+    };
   }, []);
 
   const [modalCrearCuadernoAbierto, setModalCrearCuadernoAbierto] = useState(false);
@@ -224,29 +271,30 @@ export const VisorNotas: React.FC = () => {
     setNotaParaConvertirGasto(null);
   }, [notaParaConvertirGasto]);
 
-  // Catálogo unificado de blocks únicos proyectado reactivamente desde useLiveQuery (notasRaw)
+  // Catálogo unificado de blocks únicos proyectado reactivamente desde cuadernosMeta y notasRaw
   const bloquesUnicos = useMemo(() => {
     const set = new Set<string>();
-    // Predefinidos constantes para no perder cuadernos vacíos por defecto
-    CUADERNOS_PREDETERMINADOS.forEach((b) => {
-      if (!estaOculto(b)) {
-        set.add(b);
+    // Cuadernos persistidos en metadatos de Dexie (incluye predeterminados iniciales y personalizados)
+    Object.keys(cuadernosMeta).forEach((b) => {
+      const trimmed = b.trim();
+      if (trimmed && !estaOculto(trimmed) && !cuadernosEliminados.has(trimmed)) {
+        set.add(trimmed);
       }
     });
     // Cuadernos temporales creados en la sesión activa que aún no tienen notas asignadas
     blocksLocales.forEach((b) => {
-      if (b && typeof b === 'string' && b.trim() && !estaOculto(b.trim())) {
+      if (b && typeof b === 'string' && b.trim() && !estaOculto(b.trim()) && !cuadernosEliminados.has(b.trim())) {
         set.add(b.trim());
       }
     });
     // Proyección reactiva derivada de las notas en Dexie
     notasRaw.forEach((n) => {
-      if (n.block_nombre && n.block_nombre.trim() && !estaOculto(n.block_nombre.trim())) {
+      if (n.block_nombre && n.block_nombre.trim() && !estaOculto(n.block_nombre.trim()) && !cuadernosEliminados.has(n.block_nombre.trim())) {
         set.add(n.block_nombre.trim());
       }
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [notasRaw, blocksLocales, estaOculto, hiddenIdsSet]);
+  }, [notasRaw, cuadernosMeta, blocksLocales, cuadernosEliminados, estaOculto, hiddenIdsSet]);
 
   // Asegurar que cada block único tenga representación en cuadernosMeta con fallback resiliente
   const catalogoCuadernosMeta = useMemo(() => {
@@ -308,9 +356,10 @@ export const VisorNotas: React.FC = () => {
     icono: string;
     color?: string;
   }) => {
+    const nombreLimpio = nombre.trim();
     const nuevoMeta: CuadernoMeta = {
       id: generateSafeUUID(),
-      nombre,
+      nombre: nombreLimpio,
       descripcion,
       icono,
       color,
@@ -318,20 +367,29 @@ export const VisorNotas: React.FC = () => {
     };
     const actualizadosMeta = {
       ...cuadernosMeta,
-      [nombre]: nuevoMeta
+      [nombreLimpio]: nuevoMeta
     };
     setCuadernosMeta(actualizadosMeta);
     guardarConfiguracion('pmo_notas_cuadernos_meta', actualizadosMeta).catch(() => {});
-    if (!blocksLocales.includes(nombre)) {
-      setBlocksLocales((prev) => [...prev, nombre]);
+
+    if (cuadernosEliminados.has(nombreLimpio)) {
+      const nuevosEliminados = new Set(cuadernosEliminados);
+      nuevosEliminados.delete(nombreLimpio);
+      setCuadernosEliminados(nuevosEliminados);
+      guardarConfiguracion('pmo_notas_cuadernos_eliminados', Array.from(nuevosEliminados)).catch(() => {});
     }
-    setBlockActivo(nombre);
+
+    if (!blocksLocales.includes(nombreLimpio)) {
+      setBlocksLocales((prev) => [...prev, nombreLimpio]);
+    }
+    setBlockActivo(nombreLimpio);
   };
 
   // Eliminación optimista de cuaderno con Snackbar de Deshacer (Undo) 5s y desvinculación en Dexie
   const handleEliminarCuaderno = useCallback(
     (nombreBlock: string) => {
-      if (blockActivo === nombreBlock) {
+      const targetBlock = nombreBlock.trim();
+      if (blockActivo === nombreBlock || blockActivo === targetBlock) {
         setBlockActivo(null);
       }
 
@@ -344,9 +402,39 @@ export const VisorNotas: React.FC = () => {
         commit: async () => {
           try {
             const nowIso = new Date().toISOString();
-            // Desvincular en Dexie de forma tolerante a esquemas no indexados
+
+            // 1. Bloquear resurrección inmediatamente al vencer el timer de 5s
+            setCuadernosEliminados((prev) => {
+              const next = new Set(prev);
+              next.add(targetBlock);
+              return next;
+            });
+            setBlocksLocales((prev) => prev.filter((b) => b.trim() !== targetBlock));
+
+            // 2. Persistir eliminación del metadato en Dexie de forma asíncrona directa (fuera del state updater)
+            const eliminadosPrevios = await obtenerConfiguracion<string[]>('pmo_notas_cuadernos_eliminados', []);
+            const setEliminadosPersist = new Set((eliminadosPrevios || []).map((b) => String(b).trim()).filter(Boolean));
+            setEliminadosPersist.add(targetBlock);
+            await guardarConfiguracion('pmo_notas_cuadernos_eliminados', Array.from(setEliminadosPersist));
+
+            const metaPrevio = await obtenerConfiguracion<Record<string, CuadernoMeta>>(
+              'pmo_notas_cuadernos_meta',
+              SEED_CUADERNOS_PREDETERMINADOS
+            );
+            const nuevosMeta: Record<string, CuadernoMeta> = { ...(metaPrevio || {}) };
+            delete nuevosMeta[nombreBlock];
+            delete nuevosMeta[targetBlock];
+            await guardarConfiguracion('pmo_notas_cuadernos_meta', nuevosMeta);
+            setCuadernosMeta((prev) => {
+              const next = { ...prev };
+              delete next[nombreBlock];
+              delete next[targetBlock];
+              return next;
+            });
+
+            // 3. Desvincular en Dexie usando el filtro normalizado y limpiando alias heredados
             const notasAModificar = await db.notas
-              .filter((n) => n.block_nombre === nombreBlock)
+              .filter((n) => (normalizeNota(n).block_nombre || '') === targetBlock)
               .toArray();
 
             if (notasAModificar.length > 0) {
@@ -355,9 +443,12 @@ export const VisorNotas: React.FC = () => {
                   key: n.id,
                   changes: {
                     block_nombre: '',
+                    Block_Nombre: undefined,
+                    cuaderno: undefined,
+                    categoria: undefined,
                     updated_at: nowIso,
                     sync_status: 'pending'
-                  }
+                  } as any
                 }))
               );
 
@@ -366,17 +457,6 @@ export const VisorNotas: React.FC = () => {
                 console.warn('[VisorNotas] Error al forzar sincronización tras eliminar cuaderno:', err);
               });
             }
-
-            // Limpiar de blocksLocales en memoria
-            setBlocksLocales((prev) => prev.filter((b) => b !== nombreBlock));
-
-            // Limpiar de cuadernosMeta persistido en Dexie
-            setCuadernosMeta((prev) => {
-              const nuevos = { ...prev };
-              delete nuevos[nombreBlock];
-              guardarConfiguracion('pmo_notas_cuadernos_meta', nuevos).catch(() => {});
-              return nuevos;
-            });
           } catch (err) {
             console.error('Error al ejecutar commit diferido de eliminación de cuaderno:', err);
             mostrarToastCobalt('Error al persistir eliminación del cuaderno', 'error');
