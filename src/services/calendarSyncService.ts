@@ -320,13 +320,18 @@ function guardarMapaEventosGoogleCalendar(mapa: Record<string, string>): void {
   }
 }
 
+/**
+ * Obtiene el ID del evento de Google Calendar.
+ * Prioriza estrictamente la columna canónica `id_evento_calendar` de la base de datos.
+ * El mapa local en localStorage queda deprecado únicamente como fallback de lectura retrocompatible.
+ */
 export function obtenerGoogleEventId(actividad: Partial<EntidadAgendable>): string | undefined {
-  const mapa = obtenerMapaEventosGoogleCalendar();
-  if (actividad.id && mapa[actividad.id]) return mapa[actividad.id];
-  if (actividad.codigo_legado && mapa[actividad.codigo_legado]) return mapa[actividad.codigo_legado];
   if (actividad.id_evento_calendar && String(actividad.id_evento_calendar).trim()) {
     return String(actividad.id_evento_calendar).trim();
   }
+  const mapa = obtenerMapaEventosGoogleCalendar();
+  if (actividad.id && mapa[actividad.id]) return mapa[actividad.id];
+  if (actividad.codigo_legado && mapa[actividad.codigo_legado]) return mapa[actividad.codigo_legado];
   return undefined;
 }
 

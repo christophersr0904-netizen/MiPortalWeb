@@ -26,6 +26,7 @@ import { db } from '../../db/db';
 import type { IdeaRecord } from '../../types';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
+import { generateSafeUUID } from '../../utils/uuidGenerator';
 import VoicePill from '../VoicePill';
 import SpotlightCard from '../SpotlightCard';
 
@@ -591,7 +592,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
         : 'TEXTO';
 
       await db.ideas.add({
-        id: crypto.randomUUID ? crypto.randomUUID() : `ide_${Date.now()}`,
+        id: generateSafeUUID(),
         user_id: '00000000-0000-0000-0000-000000000001',
         codigo_legado: codigoLegado,
         enunciado_idea: enunFinal,
@@ -640,7 +641,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       // Fallback: crear tarea directa en 02_Por_Hacer si no hay callback
       const count = await db.tareas.count();
       await db.tareas.add({
-        id: crypto.randomUUID ? crypto.randomUUID() : `tar_${Date.now()}`,
+        id: generateSafeUUID(),
         user_id: '00000000-0000-0000-0000-000000000001',
         codigo_legado: `TAR-${String(count + 1).padStart(3, '0')}`,
         nombre_tarea_actividad: enun,
@@ -675,7 +676,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     } else {
       const count = await db.proyectos.count();
       await db.proyectos.add({
-        id: crypto.randomUUID ? crypto.randomUUID() : `proy_${Date.now()}`,
+        id: generateSafeUUID(),
         user_id: '00000000-0000-0000-0000-000000000001',
         codigo_legado: `PRO-${String(count + 1).padStart(3, '0')}`,
         nombre_proyecto: enun,
@@ -714,7 +715,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     } else {
       const count = await db.actividades_personales.count();
       await db.actividades_personales.add({
-        id: crypto.randomUUID ? crypto.randomUUID() : `act_${Date.now()}`,
+        id: generateSafeUUID(),
         user_id: '00000000-0000-0000-0000-000000000001',
         codigo_legado: `ACT-${String(count + 1).padStart(3, '0')}`,
         nombre_actividad: enun,
@@ -752,7 +753,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
 
     const count = await db.notas.count();
     await db.notas.add({
-      id: crypto.randomUUID ? crypto.randomUUID() : `not_${Date.now()}`,
+      id: generateSafeUUID(),
       user_id: '00000000-0000-0000-0000-000000000001',
       codigo_legado: `NOT-${String(count + 1).padStart(3, '0')}`,
       titulo: enun,

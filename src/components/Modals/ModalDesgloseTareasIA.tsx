@@ -28,6 +28,7 @@ import { useGeminiStream } from '../../hooks/useGeminiStream';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import type { OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
 import type { HitoWbsRecord, ProyectoRecord } from '../../types';
+import { generateSafeUUID } from '../../utils/uuidGenerator';
 
 export interface TareaPropuestaIA {
   id: string;
@@ -189,7 +190,7 @@ export function extraerTareasDeTexto(texto: string): TareaPropuestaIA[] {
     const parsed = JSON.parse(rawJson);
     if (Array.isArray(parsed) && parsed.length > 0) {
       return parsed.map((item, idx) => ({
-        id: `ia_${Date.now()}_${idx}`,
+        id: generateSafeUUID(),
         nombre: String(item.nombre || item.titulo || item.descripcion || `Tarea ${idx + 1}`).trim(),
         prioridad: String(item.prioridad || '').includes('P1')
           ? '01_P1_Alta'
@@ -235,7 +236,7 @@ export function extraerTareasDeTexto(texto: string): TareaPropuestaIA[] {
       const esP1 = /P1|Alta|Urgente/i.test(limpia);
       const esP3 = /P3|Baja/i.test(limpia);
       tareasRegex.push({
-        id: `ia_line_${Date.now()}_${contador}`,
+        id: generateSafeUUID(),
         nombre: nombreLimpio,
         prioridad: esP1 ? '01_P1_Alta' : esP3 ? '03_P3_Baja' : '02_P2_Media',
         horasEstimadas: horas,
@@ -342,7 +343,7 @@ export const ModalDesgloseTareasIA: React.FC<ModalDesgloseTareasIAProps> = ({
   const agregarTareaManual = () => {
     const num = tareasPropuestas.length + 1;
     const nueva: TareaPropuestaIA = {
-      id: `manual_${Date.now()}_${num}`,
+      id: generateSafeUUID(),
       nombre: `Nueva tarea ${num}`,
       prioridad: '02_P2_Media',
       horasEstimadas: 4,

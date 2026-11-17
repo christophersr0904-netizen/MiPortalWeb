@@ -30,6 +30,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { TareaRecord, SubtareaPaso } from '../../types';
 import { getProp } from '../../utils/entityNormalizer';
+import { generateSafeUUID } from '../../utils/uuidGenerator';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
@@ -338,7 +339,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       const nowIso = new Date().toISOString();
 
       await db.subtareas_pasos.add({
-        id: crypto.randomUUID ? crypto.randomUUID() : `sub-${Date.now()}`,
+        id: generateSafeUUID(),
         user_id: '00000000-0000-0000-0000-000000000001',
         codigo_legado: nuevoCodigo,
         id_padre_vinculado: tareaExistente.codigo_legado,
@@ -355,7 +356,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       setSubtareasLocal((prev) => [
         ...prev,
         {
-          id: `local-${Date.now()}-${Math.random()}`,
+          id: generateSafeUUID(),
           descripcion_paso: texto,
           completado: false
         }

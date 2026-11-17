@@ -11,11 +11,12 @@ import { db, registrarTombstone } from '../db/db';
 import type { CuotaRecord } from '../types';
 import { syncManager } from './syncManager';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
+import { generateSafeUUID } from '../utils/uuidGenerator';
 
 export async function crearCuota(datos: Partial<CuotaRecord>): Promise<CuotaRecord> {
   const nowIso = new Date().toISOString();
   const codigoLegado = datos.codigo_legado || (await generarCodigoCorrelativoSeguro(db.cuotas, 'CUO', 3));
-  const idFinal = datos.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cuo_${Date.now()}`);
+  const idFinal = datos.id || generateSafeUUID();
 
   const payload: CuotaRecord = {
     id: idFinal,

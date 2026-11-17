@@ -28,6 +28,7 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
+import { generateSafeUUID } from '../../utils/uuidGenerator';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import type { TipoElementoWBS, HitoWbsRecord } from '../../types';
 import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
@@ -196,7 +197,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
       const presupuestoReal = tipoElemento === 'HITO_MARCADOR' ? 0 : Math.max(0, presupuesto);
 
       const nuevoHito: HitoWbsRecord = {
-        id: `hito-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        id: generateSafeUUID(),
         user_id: '00000000-0000-0000-0000-000000000001',
         codigo_legado: nuevoCodigo,
         proyecto_id: proyectoId,

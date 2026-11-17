@@ -11,11 +11,12 @@ import { db, registrarTombstone } from '../db/db';
 import type { GastoRecord } from '../types';
 import { syncManager } from './syncManager';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
+import { generateSafeUUID } from '../utils/uuidGenerator';
 
 export async function crearGasto(datos: Partial<GastoRecord>): Promise<GastoRecord> {
   const nowIso = new Date().toISOString();
   const codigoLegado = datos.codigo_legado || (await generarCodigoCorrelativoSeguro(db.gastos, 'GAS', 3));
-  const idFinal = datos.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `gas_${Date.now()}`);
+  const idFinal = datos.id || generateSafeUUID();
 
   const payload: GastoRecord = {
     id: idFinal,

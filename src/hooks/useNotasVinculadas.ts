@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import type { NotaRecord, VinculoEntidad } from '../types';
 import { normalizeNota } from '../utils/entityNormalizer';
+import { generateSafeUUID } from '../utils/uuidGenerator';
 
 /**
  * Hook reactivo de alto rendimiento que indexa TODAS las notas de la base de datos
@@ -132,7 +133,7 @@ export async function crearNotaConVinculo(
 ): Promise<NotaRecord> {
   const count = await db.notas.count();
   const codigoCorrelativo = `NOT-${String(count + 1).padStart(5, '0')}`;
-  const nuevoId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `not_${Date.now()}`;
+  const nuevoId = generateSafeUUID();
   const nowIso = new Date().toISOString();
 
   const nuevaNota: NotaRecord = {

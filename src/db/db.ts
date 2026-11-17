@@ -15,7 +15,8 @@ import type {
   HabitoMetaVinculo,
   HabitoLogRecord,
   TombstoneRecord,
-  SyncDeletionRecord
+  SyncDeletionRecord,
+  ConfiguracionUsuarioRecord
 } from '../types';
 import { extraerCodigoCanonico, fusionarRegistrosDuplicados } from '../utils/entityNormalizer';
 import seedPmo from './seedPmo.json';
@@ -43,6 +44,7 @@ export class PMODatabase extends Dexie {
   habito_cumplimiento_logs!: Table<HabitoLogRecord, string>;
   tombstones!: Table<TombstoneRecord, string>;
   sync_deletions!: Table<SyncDeletionRecord, string>;
+  configuracion_usuario!: Table<ConfiguracionUsuarioRecord, string>;
 
   constructor() {
     super('PMOPersonalModularDB');
@@ -82,6 +84,9 @@ export class PMODatabase extends Dexie {
     });
     this.version(7).stores({
       sync_deletions: 'id, tabla, sync_status, deleted_at'
+    });
+    this.version(8).stores({
+      configuracion_usuario: 'id, updated_at'
     });
   }
 }
@@ -749,5 +754,42 @@ export async function purgarRegistrosLocalesExpirados(diasRetencion: number = 90
 
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
   (window as any).__PURGAR_REGISTROS_EXPIRADOS__ = purgarRegistrosLocalesExpirados;
+}
+
+/**
+ * Obtiene un valor de configuración persistido en Dexie (tabla configuracion_usuario).
+ */
+export async function obtenerConfiguracion<T = any>(clave: string, fallback: T): Promise<T> {
+  try {
+    if (!db.configuracion_usuario || typeof db.configuracion_usuario.get !== 'function') {
+      return fallback;
+    }
+    const reg = await db.configuracion_usuario.get(clave);
+    if (!reg || reg.valor === undefined || reg.valor === null) {
+      return fallback;
+    }
+    return reg.valor as T;
+  } catch (err) {
+    console.warn(`[PMO DB] Error al obtener configuracion (${clave}):`, err);
+    return fallback;
+  }
+}
+
+/**
+ * Persiste un valor de configuración en Dexie (tabla configuracion_usuario).
+ */
+export async function guardarConfiguracion<T = any>(clave: string, valor: T): Promise<void> {
+  try {
+    if (!db.configuracion_usuario || typeof db.configuracion_usuario.put !== 'function') {
+      return;
+    }
+    await db.configuracion_usuario.put({
+      id: clave,
+      valor,
+      updated_at: new Date().toISOString()
+    });
+  } catch (err) {
+    console.warn(`[PMO DB] Error al guardar configuracion (${clave}):`, err);
+  }
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useDeferredValue, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db/db';
+import { db, obtenerConfiguracion, guardarConfiguracion } from '../../db/db';
 import type { NotaRecord, WishlistMeta, CuadernoMeta } from '../../types';
 import { SidebarCuadernos, CarruselCuadernosMovil, type SubFiltroRapido } from './SidebarCuadernos';
 import { ModalCrearCuaderno } from './ModalCrearCuaderno';
@@ -30,6 +30,10 @@ import {
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { crearNota, actualizarNota, eliminarNota } from '../../services/notasService';
 import { crearGasto } from '../../services/gastosService';
+import { syncManager } from '../../services/syncManager';
+import { generateSafeUUID } from '../../utils/uuidGenerator';
+
+const CUADERNOS_PREDETERMINADOS = ['General', 'Proyectos', 'Personal', 'Ideas'] as const;
 
 type ModoVista = 'masonry' | 'lista';
 
@@ -82,23 +86,17 @@ export const VisorNotas: React.FC = () => {
 
   // Blocks Dinámicos
   const [blockActivo, setBlockActivo] = useState<string | null>(null); // null = todas, '__sin_block__' = sueltas
-  const [blocksLocales, setBlocksLocales] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('pmo_notas_blocks_custom');
-      return saved ? JSON.parse(saved) : ['General', 'Proyectos', 'Personal', 'Ideas'];
-    } catch {
-      return ['General', 'Proyectos', 'Personal', 'Ideas'];
-    }
-  });
+  const [blocksLocales, setBlocksLocales] = useState<string[]>([]);
 
-  const [cuadernosMeta, setCuadernosMeta] = useState<Record<string, CuadernoMeta>>(() => {
-    try {
-      const saved = localStorage.getItem('pmo_notas_cuadernos_meta');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [cuadernosMeta, setCuadernosMeta] = useState<Record<string, CuadernoMeta>>({});
+
+  useEffect(() => {
+    obtenerConfiguracion<Record<string, CuadernoMeta>>('pmo_notas_cuadernos_meta', {}).then((c) => {
+      if (c && Object.keys(c).length > 0) {
+        setCuadernosMeta(c);
+      }
+    });
+  }, []);
 
   const [modalCrearCuadernoAbierto, setModalCrearCuadernoAbierto] = useState(false);
 
@@ -226,14 +224,22 @@ export const VisorNotas: React.FC = () => {
     setNotaParaConvertirGasto(null);
   }, [notaParaConvertirGasto]);
 
-  // Catálogo unificado de blocks únicos (respetando exclusión optimista de UndoDelete)
+  // Catálogo unificado de blocks únicos proyectado reactivamente desde useLiveQuery (notasRaw)
   const bloquesUnicos = useMemo(() => {
     const set = new Set<string>();
+    // Predefinidos constantes para no perder cuadernos vacíos por defecto
+    CUADERNOS_PREDETERMINADOS.forEach((b) => {
+      if (!estaOculto(b)) {
+        set.add(b);
+      }
+    });
+    // Cuadernos temporales creados en la sesión activa que aún no tienen notas asignadas
     blocksLocales.forEach((b) => {
       if (b && typeof b === 'string' && b.trim() && !estaOculto(b.trim())) {
         set.add(b.trim());
       }
     });
+    // Proyección reactiva derivada de las notas en Dexie
     notasRaw.forEach((n) => {
       if (n.block_nombre && n.block_nombre.trim() && !estaOculto(n.block_nombre.trim())) {
         set.add(n.block_nombre.trim());
@@ -303,7 +309,7 @@ export const VisorNotas: React.FC = () => {
     color?: string;
   }) => {
     const nuevoMeta: CuadernoMeta = {
-      id: 'cua_' + Date.now().toString(36),
+      id: generateSafeUUID(),
       nombre,
       descripcion,
       icono,
@@ -315,19 +321,9 @@ export const VisorNotas: React.FC = () => {
       [nombre]: nuevoMeta
     };
     setCuadernosMeta(actualizadosMeta);
-    try {
-      localStorage.setItem('pmo_notas_cuadernos_meta', JSON.stringify(actualizadosMeta));
-    } catch {
-      // ignore storage error
-    }
+    guardarConfiguracion('pmo_notas_cuadernos_meta', actualizadosMeta).catch(() => {});
     if (!blocksLocales.includes(nombre)) {
-      const actualizados = [...blocksLocales, nombre];
-      setBlocksLocales(actualizados);
-      try {
-        localStorage.setItem('pmo_notas_blocks_custom', JSON.stringify(actualizados));
-      } catch {
-        // ignore storage error
-      }
+      setBlocksLocales((prev) => [...prev, nombre]);
     }
     setBlockActivo(nombre);
   };
@@ -364,24 +360,21 @@ export const VisorNotas: React.FC = () => {
                   }
                 }))
               );
+
+              // REQ-SYNC-NOTAS-01-FIX: Push forzado inmediato de cambios en lote a Supabase Realtime
+              syncManager.syncPendingRecords().catch((err) => {
+                console.warn('[VisorNotas] Error al forzar sincronización tras eliminar cuaderno:', err);
+              });
             }
 
-            // Limpiar de blocksLocales
-            setBlocksLocales((prev) => {
-              const nuevos = prev.filter((b) => b !== nombreBlock);
-              try {
-                localStorage.setItem('pmo_notas_blocks_custom', JSON.stringify(nuevos));
-              } catch {}
-              return nuevos;
-            });
+            // Limpiar de blocksLocales en memoria
+            setBlocksLocales((prev) => prev.filter((b) => b !== nombreBlock));
 
-            // Limpiar de cuadernosMeta
+            // Limpiar de cuadernosMeta persistido en Dexie
             setCuadernosMeta((prev) => {
               const nuevos = { ...prev };
               delete nuevos[nombreBlock];
-              try {
-                localStorage.setItem('pmo_notas_cuadernos_meta', JSON.stringify(nuevos));
-              } catch {}
+              guardarConfiguracion('pmo_notas_cuadernos_meta', nuevos).catch(() => {});
               return nuevos;
             });
           } catch (err) {
@@ -565,7 +558,7 @@ export const VisorNotas: React.FC = () => {
     if (!quickNuevoCheckItem.trim()) return;
     setQuickChecklistItems([
       ...quickChecklistItems,
-      { id: `chk_${Date.now()}_${Math.random()}`, texto: quickNuevoCheckItem.trim(), completado: false }
+      { id: generateSafeUUID(), texto: quickNuevoCheckItem.trim(), completado: false }
     ]);
     setQuickNuevoCheckItem('');
   };

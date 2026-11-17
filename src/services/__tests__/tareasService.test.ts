@@ -47,6 +47,10 @@ vi.mock('../../db/db', () => ({
         equals: vi.fn(() => ({
           toArray: vi.fn(async () => []),
           delete: vi.fn(async () => 0)
+        })),
+        anyOf: vi.fn(() => ({
+          toArray: vi.fn(async () => []),
+          delete: vi.fn(async () => 0)
         }))
       }))
     },

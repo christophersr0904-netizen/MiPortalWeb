@@ -13,6 +13,7 @@ import { Target, Flame, Building } from 'lucide-react';
 import { getProp } from '../../utils/entityNormalizer';
 import {
   obtenerTechosConfigurados,
+  obtenerTechosConfiguradosAsync,
   EVENT_TECHOS_UPDATED,
   type TechoPresupuestoItem
 } from '../Modals/ModalTechosPresupuesto';
@@ -51,6 +52,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
   );
 
   useEffect(() => {
+    obtenerTechosConfiguradosAsync().then((t) => setTechosConfig(t));
     const handleUpdated = () => {
       setTechosConfig(obtenerTechosConfigurados());
     };

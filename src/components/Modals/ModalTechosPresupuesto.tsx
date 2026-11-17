@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import { Target, X, Plus, Trash2, RotateCcw, Save } from 'lucide-react';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
+import { obtenerConfiguracion, guardarConfiguracion } from '../../db/db';
 
 export interface TechoPresupuestoItem {
   categoria: string;
@@ -32,16 +33,27 @@ export const DEFAULT_TECHOS_PRESUPUESTO: TechoPresupuestoItem[] = [
   { categoria: 'Licencias / Software', asignado: 200 }
 ];
 
+let techosEnMemoria: TechoPresupuestoItem[] | null = null;
+
+// Cargar en segundo plano desde Dexie (con fallback a DEFAULT)
+obtenerConfiguracion<TechoPresupuestoItem[]>(STORAGE_KEY_TECHOS, DEFAULT_TECHOS_PRESUPUESTO).then((val) => {
+  if (Array.isArray(val) && val.length > 0) {
+    techosEnMemoria = val;
+  }
+});
+
 export function obtenerTechosConfigurados(): TechoPresupuestoItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_TECHOS);
-    if (!raw) return DEFAULT_TECHOS_PRESUPUESTO;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-  } catch (e) {
-    console.error('Error al leer techos de presupuesto:', e);
+  if (techosEnMemoria && techosEnMemoria.length > 0) {
+    return techosEnMemoria;
+  }
+  return DEFAULT_TECHOS_PRESUPUESTO;
+}
+
+export async function obtenerTechosConfiguradosAsync(): Promise<TechoPresupuestoItem[]> {
+  const val = await obtenerConfiguracion<TechoPresupuestoItem[]>(STORAGE_KEY_TECHOS, DEFAULT_TECHOS_PRESUPUESTO);
+  if (Array.isArray(val) && val.length > 0) {
+    techosEnMemoria = val;
+    return val;
   }
   return DEFAULT_TECHOS_PRESUPUESTO;
 }
@@ -65,7 +77,7 @@ export const ModalTechosPresupuesto: React.FC<ModalTechosPresupuestoProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setTechos(obtenerTechosConfigurados());
+      obtenerTechosConfiguradosAsync().then((c) => setTechos(c));
       setNuevaCategoria('');
       setNuevoMonto('');
     }
@@ -115,9 +127,10 @@ export const ModalTechosPresupuesto: React.FC<ModalTechosPresupuestoProps> = ({
     mostrarToastCobalt('Techos restablecidos a valores por defecto', 'info');
   };
 
-  const handleGuardar = () => {
+  const handleGuardar = async () => {
     try {
-      localStorage.setItem(STORAGE_KEY_TECHOS, JSON.stringify(techos));
+      techosEnMemoria = techos;
+      await guardarConfiguracion(STORAGE_KEY_TECHOS, techos);
       window.dispatchEvent(new CustomEvent(EVENT_TECHOS_UPDATED));
       mostrarToastCobalt('Techos presupuestales guardados correctamente', 'success');
       if (onGuardado) onGuardado();

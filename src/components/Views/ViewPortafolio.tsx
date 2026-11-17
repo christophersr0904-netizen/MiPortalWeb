@@ -28,6 +28,7 @@ import {
   type CanonicalProyecto
 } from '../../utils/entityNormalizer';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { eliminarProyecto } from '../../services/proyectosService';
 import { ModalExportarPdf } from '../Modals/ModalExportarPdf';
 import { ModalNuevoProyecto } from '../Modals/ModalNuevoProyecto';
 import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
@@ -281,64 +282,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
       etiqueta: `Proyecto: ${etiqueta}`,
       tipo: 'PROYECTO',
       commit: async () => {
-        await db.transaction('rw', [db.proyectos, db.hitos_wbs, db.tareas, db.subtareas_pasos, db.gastos], async () => {
-          // 1. Obtener hitos del proyecto
-          const hitos = await db.hitos_wbs
-            .where('proyecto_id')
-            .equals(targetId)
-            .or('proyecto_id')
-            .equals(codLegado)
-            .toArray();
-          const hitoIds = hitos.map((h) => h.id);
-          const hitoCodigos = hitos.map((h) => h.codigo_legado).filter(Boolean);
-
-          // 2. Obtener tareas del proyecto
-          const tareas = await db.tareas
-            .where('proyecto_codigo')
-            .equals(targetId)
-            .or('proyecto_codigo')
-            .equals(codLegado)
-            .toArray();
-          const tareaIds = tareas.map((t) => t.id);
-          const tareaCodigos = tareas.map((t) => t.codigo_legado).filter(Boolean);
-
-          // 3. Eliminar subtareas subordinadas vinculadas a tareas
-          const subPadres = Array.from(new Set([...tareaIds, ...tareaCodigos]));
-          if (subPadres.length > 0) {
-            await db.subtareas_pasos.where('id_padre_vinculado').anyOf(subPadres).delete();
-          }
-
-          // 4. Eliminar gastos subordinados (optimizado con consulta indexada Dexie)
-          const pId = codLegado || targetId;
-          const gastosProy = await db.gastos.where('id_proyecto').equals(pId).toArray();
-          const gastosABorrar = gastosProy.filter((g: any) => {
-            const gProy = String(g.id_proyecto || g.id_origen_vinculado || g.ID_Proyecto || g.proyecto_id || '').trim();
-            const gHito = String(g.ID_Hito || g.id_hito || '').trim();
-            const gTarea = String(g.ID_Tarea || g.id_tarea || '').trim();
-            return (
-              gProy === targetId ||
-              gProy === codLegado ||
-              (gHito && (hitoIds.includes(gHito) || hitoCodigos.includes(gHito))) ||
-              (gTarea && (tareaIds.includes(gTarea) || tareaCodigos.includes(gTarea)))
-            );
-          });
-          if (gastosABorrar.length > 0) {
-            await db.gastos.bulkDelete(gastosABorrar.map((g) => g.id));
-          }
-
-          // 5. Eliminar tareas subordinadas
-          if (tareaIds.length > 0) {
-            await db.tareas.bulkDelete(tareaIds);
-          }
-
-          // 6. Eliminar hitos subordinados
-          if (hitoIds.length > 0) {
-            await db.hitos_wbs.bulkDelete(hitoIds);
-          }
-
-          // 7. Eliminar proyecto raíz
-          await db.proyectos.delete(targetId);
-        });
+        await eliminarProyecto(targetId, codLegado);
       }
     });
     setProyectoAEliminar(null);

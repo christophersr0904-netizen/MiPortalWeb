@@ -7,6 +7,7 @@ import type { NotaRecord, ChecklistItem, WishlistMeta, VinculoEntidad } from '..
 import { crearNota, actualizarNota } from '../../services/notasService';
 import { serializarNotaATextoPlano } from '../../utils/entityNormalizer';
 import { toastCobalt } from '../../utils/toastCobalt';
+import { generateSafeUUID } from '../../utils/uuidGenerator';
 import { ModalVincularEntidades } from './ModalVincularEntidades';
 import {
   X,
@@ -173,7 +174,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
     setChecklists([
       ...checklists,
       {
-        id: `chk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        id: generateSafeUUID(),
         texto: nuevoItemTexto.trim(),
         completado: false
       }

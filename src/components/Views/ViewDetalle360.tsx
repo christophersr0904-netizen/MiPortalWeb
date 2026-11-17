@@ -54,7 +54,9 @@ import { ModalDesgloseTareasIA, type TareaPropuestaIA } from '../Modals/ModalDes
 import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import { deduplicarPorCodigoCanonico, sanitizarUrlExterna } from '../../utils/entityNormalizer';
+import { generateSafeUUID } from '../../utils/uuidGenerator';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
+import { eliminarProyecto } from '../../services/proyectosService';
 import type { GastoRecord, TareaRecord, HitoWbsRecord, SubtareaPaso } from '../../types';
 
 interface ViewDetalle360Props {
@@ -605,7 +607,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
       countTotalTareas++;
       const codCorrelativo = `TAR-${String(countTotalTareas).padStart(3, '0')}`;
       const nuevaTarea: TareaRecord = {
-        id: crypto.randomUUID ? crypto.randomUUID() : `tar_${Date.now()}_${i}`,
+        id: generateSafeUUID(),
         user_id: '00000000-0000-0000-0000-000000000001',
         codigo_legado: codCorrelativo,
         proyecto_codigo: proyCod,
@@ -691,7 +693,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
     }
 
     const nuevaDecision = {
-      id: `to-${Date.now()}`,
+      id: generateSafeUUID(),
       fecha: new Date().toLocaleDateString('es-PE'),
       titulo: toTitulo,
       tipo: toTipo,
@@ -751,7 +753,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                 etiqueta,
                 tipo: 'PROYECTO',
                 commit: async () => {
-                  await db.proyectos.delete(targetProyId);
+                  await eliminarProyecto(targetProyId, proyectoActivo.codigo_legado);
                 }
               });
               onVolverAlPortafolio();

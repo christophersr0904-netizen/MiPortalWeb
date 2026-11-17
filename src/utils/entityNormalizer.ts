@@ -10,6 +10,7 @@
 
 import type { NotaRecord, ChecklistItem, WishlistMeta, AdjuntoDrive, VinculoEntidad } from '../types';
 import { formatFechaIsoLocal } from './timeFormatters';
+import { generateSafeUUID } from './uuidGenerator';
 
 /**
  * Extractor tolerante a fallos multillave
@@ -144,7 +145,7 @@ export function normalizeProyecto(raw: any): CanonicalProyecto {
   const avance_pct = rawAvance <= 1.0 && rawAvance > 0 ? Math.round(rawAvance * 100) : Math.round(rawAvance);
 
   return {
-    id: String(getProp(raw, 'id', 'ID_Proyecto', 'codigo_legado') ?? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `p${Date.now()}`)),
+    id: String(getProp(raw, 'id', 'ID_Proyecto', 'codigo_legado') ?? generateSafeUUID()),
     codigo_legado: String(getProp(raw, 'codigo_legado', 'ID_Proyecto') ?? ''),
     nombre: String(getProp(raw, 'nombre_proyecto', 'Nombre_Proyecto', 'nombre') ?? 'Proyecto Sin Nombre'),
     tipo_iniciativa: String(getProp(raw, 'tipo_iniciativa', 'Tipo_Iniciativa') ?? 'Personal'),
@@ -207,7 +208,7 @@ export function normalizeTarea(raw: any): CanonicalTarea {
   }
 
   return {
-    id: String(getProp(raw, 'id', 'ID_Tarea', 'idTarea', 'codigo_legado') ?? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `t${Date.now()}`)),
+    id: String(getProp(raw, 'id', 'ID_Tarea', 'idTarea', 'codigo_legado') ?? generateSafeUUID()),
     codigo_legado: String(getProp(raw, 'codigo_legado', 'ID_Tarea', 'idTarea') ?? ''),
     nombre: String(getProp(raw, 'nombre_tarea_actividad', 'Nombre_Tarea_Actividad', 'nombre_tarea', 'nombre') ?? 'Tarea Sin Nombre'),
     estado,
@@ -254,7 +255,7 @@ export function normalizeHito(raw: any): CanonicalHito {
   const peso_pct = rawPeso <= 1.0 ? rawPeso : rawPeso / 100;
 
   return {
-    id: String(getProp(raw, 'id', 'ID_Hito', 'ID_Elemento_WBS', 'idHito') ?? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `h${Date.now()}`)),
+    id: String(getProp(raw, 'id', 'ID_Hito', 'ID_Elemento_WBS', 'idHito') ?? generateSafeUUID()),
     codigo_legado: String(getProp(raw, 'codigo_legado', 'ID_Hito', 'ID_Elemento_WBS', 'idHito') ?? ''),
     proyecto_id: String(getProp(raw, 'proyecto_id', 'ID_Proyecto', 'idProyecto') ?? ''),
     nombre: String(getProp(raw, 'nombre_elemento', 'Nombre_Elemento', 'Nombre_Hito', 'nombre_hito') ?? 'Hito Sin Nombre'),
@@ -300,7 +301,7 @@ export function normalizeActividad(raw: any): CanonicalActividad {
   }
 
   return {
-    id: String(getProp(raw, 'id', 'ID_Actividad', 'codigo_legado') ?? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `a${Date.now()}`)),
+    id: String(getProp(raw, 'id', 'ID_Actividad', 'codigo_legado') ?? generateSafeUUID()),
     codigo_legado: String(getProp(raw, 'codigo_legado', 'ID_Actividad') ?? ''),
     nombre: String(getProp(raw, 'nombre_actividad', 'Nombre_Actividad', 'Nombre', 'nombre') ?? 'Actividad Sin Nombre'),
     tipo_compromiso: String(getProp(raw, 'tipo_compromiso', 'Tipo_Compromiso', 'Tipo_Registro') ?? 'HABITUAL'),
@@ -824,7 +825,7 @@ export function normalizeNota(raw: any): NotaRecord {
   if (!raw || typeof raw !== 'object') {
     const now = new Date().toISOString();
     return {
-      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `not_${Date.now()}`,
+      id: generateSafeUUID(),
       user_id: '00000000-0000-0000-0000-000000000001',
       codigo_legado: 'NOT-00000',
       titulo: 'Nota sin título',
@@ -957,7 +958,7 @@ export function normalizeNota(raw: any): NotaRecord {
   }
 
   const nowIso = new Date().toISOString();
-  const id = String(getProp(raw, 'id', 'ID_Nota', 'idNota', 'codigo_legado') ?? (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `not_${Date.now()}`));
+  const id = String(getProp(raw, 'id', 'ID_Nota', 'idNota', 'codigo_legado') ?? generateSafeUUID());
   const codigo_legado = String(getProp(raw, 'codigo_legado', 'ID_Nota', 'idNota') ?? 'NOT-00000');
   const titulo = String(getProp(raw, 'titulo', 'Titulo') ?? 'Nota sin título').trim() || 'Nota sin título';
   const contenido_markdown = String(getProp(raw, 'contenido_markdown', 'Contenido_Markdown', 'contenido', 'contenidoMarkdown') ?? '');

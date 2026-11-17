@@ -17,6 +17,7 @@ import {
   type ResultadoCalendarSync
 } from './calendarSyncService';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
+import { generateSafeUUID } from '../utils/uuidGenerator';
 
 export interface OpcionesCrearTarea extends Partial<TareaRecord> {
   subtareas?: Array<{ descripcion_paso: string; completado?: boolean }>;
@@ -38,11 +39,7 @@ export async function crearTarea(
   const nowIso = new Date().toISOString();
   const codigoLegadoFinal =
     datos.codigo_legado || (await generarCodigoCorrelativoSeguro(db.tareas, 'TAR', 3));
-  const idFinal =
-    datos.id ||
-    (typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `tar_${Date.now()}`);
+  const idFinal = datos.id || generateSafeUUID();
 
   const tareaPayload: TareaRecord = {
     id: idFinal,
@@ -77,7 +74,7 @@ export async function crearTarea(
       const item = datos.subtareas[i];
       subIndex++;
       const subPayload: SubtareaPaso = {
-        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sub_${Date.now()}_${i}`,
+        id: generateSafeUUID(),
         user_id: tareaPayload.user_id,
         codigo_legado: `SUB-${String(subIndex).padStart(3, '0')}`,
         id_padre_vinculado: codigoLegadoFinal,
@@ -167,17 +164,50 @@ export async function eliminarTarea(
 ): Promise<{ success: boolean; calendarResult?: ResultadoCalendarSync }> {
   const tareaActual = await db.tareas.get(tareaId);
   const codLegado = codigoLegado || tareaActual?.codigo_legado;
+  const padresRef = Array.from(new Set([codLegado, tareaId].filter(Boolean) as string[]));
 
-  // Limpiar subtareas vinculadas
-  if (codLegado) {
-    const subs = await db.subtareas_pasos
-      .where('id_padre_vinculado')
-      .equals(codLegado)
-      .toArray()
-      .catch(() => []);
-    for (const sub of subs) {
-      await registrarTombstone('subtareas_pasos', sub.id);
-      await db.subtareas_pasos.delete(sub.id).catch(() => {});
+  // Limpiar subtareas vinculadas (soporta búsqueda por código legado y por UUID)
+  if (padresRef.length > 0 && db.subtareas_pasos && typeof db.subtareas_pasos.where === 'function') {
+    try {
+      const whereClause: any = db.subtareas_pasos.where('id_padre_vinculado');
+      const subs = await (typeof whereClause.anyOf === 'function'
+        ? whereClause.anyOf(padresRef)
+        : whereClause.equals(codLegado || tareaId)
+      )
+        .toArray()
+        .catch(() => []);
+      for (const sub of subs) {
+        await registrarTombstone('subtareas_pasos', sub.id);
+        await db.subtareas_pasos.delete(sub.id).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('[tareasService] Error al limpiar subtareas vinculadas:', err);
+    }
+  }
+
+  // Desvincular gastos vinculados a la tarea (en paridad con Postgres ON DELETE SET NULL)
+  if (padresRef.length > 0 && db.gastos && typeof db.gastos.where === 'function') {
+    try {
+      const whereClauseGasto: any = db.gastos.where('id_origen_vinculado');
+      const gastosVinculados = await (typeof whereClauseGasto.anyOf === 'function'
+        ? whereClauseGasto.anyOf(padresRef)
+        : whereClauseGasto.equals(codLegado || tareaId)
+      )
+        .toArray()
+        .catch(() => []);
+
+      for (const gasto of gastosVinculados) {
+        if (gasto.tipo_origen === 'TAREA') {
+          await db.gastos.update(gasto.id, {
+            id_origen_vinculado: undefined,
+            tipo_origen: undefined,
+            updated_at: new Date().toISOString(),
+            sync_status: 'pending'
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[tareasService] Error al desvincular gastos de tarea eliminada:', err);
     }
   }
 

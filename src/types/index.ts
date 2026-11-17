@@ -502,6 +502,7 @@ export interface GastoRecord {
   id: string;
   user_id: string;
   codigo_legado: string; // GAS-XXX
+  id_proyecto?: string;
   tipo_origen: string;
   id_origen_vinculado?: string;
   categoria_gasto: string;
@@ -584,6 +585,12 @@ export interface SyncDeletionRecord {
   tabla: string;
   deleted_at: string;
   sync_status: SyncStatus;
+}
+
+export interface ConfiguracionUsuarioRecord {
+  id: string; // Clave de configuración
+  valor: any; // Valor tipado o estructura JSON
+  updated_at: string;
 }
 
 export interface DesktopWidgetBridge {

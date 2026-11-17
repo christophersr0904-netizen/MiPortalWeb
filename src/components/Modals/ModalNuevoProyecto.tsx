@@ -26,6 +26,7 @@ import {
 import { db } from '../../db/db';
 import type { ProyectoRecord, HitoWbsRecord, TareaRecord, GastoRecord } from '../../types';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
+import { generateSafeUUID } from '../../utils/uuidGenerator';
 
 interface ModalNuevoProyectoProps {
   abierto: boolean;
@@ -194,7 +195,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
   const generarPropuestaEstructura = () => {
     const proyCode = codigoProyecto || 'PRO-999';
     const wp1: HitoWizItem = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `hit-${Date.now()}-1`,
+      id: generateSafeUUID(),
       codigo: `WP-${proyCode}-01`,
       nombre: 'Fase 1: Diagnóstico, Planificación y Diseño',
       tipo: 'PAQUETE_TRABAJO',
@@ -205,7 +206,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
       presupuesto: presupuestoTope ? Math.round(Number(presupuestoTope) * 0.3) : 500
     };
     const wp2: HitoWizItem = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `hit-${Date.now()}-2`,
+      id: generateSafeUUID(),
       codigo: `WP-${proyCode}-02`,
       nombre: 'Fase 2: Ejecución e Implementación Central',
       tipo: 'PAQUETE_TRABAJO',
@@ -216,7 +217,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
       presupuesto: presupuestoTope ? Math.round(Number(presupuestoTope) * 0.5) : 1000
     };
     const hit3: HitoWizItem = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `hit-${Date.now()}-3`,
+      id: generateSafeUUID(),
       codigo: `HIT-${proyCode}-03`,
       nombre: 'Hito de Cierre y Verificación DoD',
       tipo: 'HITO_MARCADOR',
@@ -230,7 +231,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
     setHitosWiz([wp1, wp2, hit3]);
 
     const tar1: TareaWizItem = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}-1`,
+      id: generateSafeUUID(),
       codigo: `TAR-${proyCode}-01`,
       nombre: 'Definir especificaciones técnicas y cotizar materiales/recursos',
       hitoCodigo: wp1.codigo,
@@ -238,7 +239,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
       horasEstimadas: 8
     };
     const tar2: TareaWizItem = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}-2`,
+      id: generateSafeUUID(),
       codigo: `TAR-${proyCode}-02`,
       nombre: 'Despliegue operativo y construcción del entregable tangible',
       hitoCodigo: wp2.codigo,
@@ -246,7 +247,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
       horasEstimadas: 24
     };
     const tar3: TareaWizItem = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}-3`,
+      id: generateSafeUUID(),
       codigo: `TAR-${proyCode}-03`,
       nombre: 'Revisión final de calidad, pruebas y conciliación de gastos',
       hitoCodigo: hit3.codigo,
@@ -276,7 +277,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
     const num = hitosWiz.length + 1;
     const prefix = tipo === 'PAQUETE_TRABAJO' ? 'WP' : 'HIT';
     const nuevo: HitoWizItem = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `hit-${Date.now()}-${num}`,
+      id: generateSafeUUID(),
       codigo: `${prefix}-${codigoProyecto}-${String(num).padStart(2, '0')}`,
       nombre: `Nuevo ${tipo === 'PAQUETE_TRABAJO' ? 'Paquete de Trabajo' : 'Hito Marcador'}`,
       tipo,
@@ -296,7 +297,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
   const agregarTarea = () => {
     const num = tareasWiz.length + 1;
     const nuevo: TareaWizItem = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `tar-${Date.now()}-${num}`,
+      id: generateSafeUUID(),
       codigo: `TAR-${codigoProyecto}-${String(num).padStart(2, '0')}`,
       nombre: 'Nueva Tarea Táctica',
       hitoCodigo: hitosWiz[0]?.codigo || '',
@@ -313,7 +314,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
   const agregarGasto = () => {
     const num = gastosWiz.length + 1;
     const nuevo: GastoWizItem = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `gas-${Date.now()}-${num}`,
+      id: generateSafeUUID(),
       codigo: `GAS-${codigoProyecto}-${String(num).padStart(2, '0')}`,
       concepto: 'Partida de gasto estimada',
       monto: 0,
@@ -375,7 +376,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
       }
 
       // MODO CREACIÓN NUEVO
-      const pId = crypto.randomUUID ? crypto.randomUUID() : `p-${Date.now()}`;
+      const pId = generateSafeUUID();
 
       const nuevoProyecto: ProyectoRecord = {
         id: pId,

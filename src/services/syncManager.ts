@@ -474,10 +474,13 @@ class SyncManager {
           (db as any)[targetTable].delete(delId).catch(() => {});
         }
         if (db.tombstones && typeof db.tombstones.put === 'function') {
+          const nowIso = new Date().toISOString();
           db.tombstones.put({
             id: delId,
+            tabla: targetTable,
             tabla_afectada: targetTable,
-            fecha_eliminacion: new Date().toISOString(),
+            deleted_at: nowIso,
+            fecha_eliminacion: nowIso,
             sync_status: 'synced'
           } as any).catch(() => {});
         }
