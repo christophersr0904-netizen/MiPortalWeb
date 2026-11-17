@@ -1,6 +1,7 @@
 import { db, registrarTombstone } from '../db/db';
 import type { ActividadPersonal, SubtareaPaso, FrecuenciaCiclo, TareaRecord } from '../types';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
+import { generateSafeUUID } from '../utils/uuid';
 import {
   sincronizarActividadCalendar,
   sincronizarCreacionCalendar,
@@ -682,7 +683,7 @@ export async function editarActividadConAlcance(
     const instanciaDesacoplada: ActividadPersonal = {
       ...actividadOriginal,
       ...cambios,
-      id: crypto.randomUUID(),
+      id: generateSafeUUID(),
       codigo_legado: nuevoCodigo,
       tipo_compromiso: 'PUNTUAL',
       frecuencia_ciclo: 'NINGUNA',
@@ -739,7 +740,7 @@ export async function editarActividadConAlcance(
     const nuevaSerieFutura: ActividadPersonal = {
       ...actividadOriginal,
       ...cambios,
-      id: crypto.randomUUID(),
+      id: generateSafeUUID(),
       codigo_legado: nuevoCodigo,
       fecha_programada: fechaReferencia,
       actividad_padre_id: actividadOriginal.id,

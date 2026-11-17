@@ -95,6 +95,112 @@ describe('REQ-SYS-010-REALTIME: Supabase Realtime, Filtro Anti-Eco y Debounce', 
 
       vi.useRealTimers();
     });
+
+    it('REQ-SYNC-PROD-11-FIX: inyecta inmediatamente en Dexie ante eventos INSERT/UPDATE (Zero-Delay) antes del debounce', async () => {
+      const dbPutSpy = vi.fn().mockResolvedValue('NOT-REMOTO-999');
+      (syncManager as any).supabase = { from: vi.fn() };
+
+      const { db } = await import('../../db/db');
+      const realPut = db.notas.put;
+      (db.notas as any).put = dbPutSpy;
+
+      try {
+        syncManager.handleRealtimeChange('notas', {
+          eventType: 'INSERT',
+          table: 'notas',
+          new: {
+            id: 'NOT-REMOTO-999',
+            titulo: 'Nota Inmediata WebSocket',
+            contenido_markdown: 'Cero Latencia',
+            block_nombre: 'General'
+          }
+        });
+
+        // La inyección en Dexie debe haberse ejecutado inmediatamente (0ms)
+        expect(dbPutSpy).toHaveBeenCalledTimes(1);
+        expect(dbPutSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'NOT-REMOTO-999',
+            titulo: 'Nota Inmediata WebSocket',
+            sync_status: 'synced'
+          })
+        );
+      } finally {
+        (db.notas as any).put = realPut;
+      }
+    });
+
+    it('REQ-SYNC-PROD-11-FIX: inyecta inmediatamente configuracion_usuario ante eventos UPDATE', async () => {
+      const { db } = await import('../../db/db');
+      const dbPutSpy = vi.fn().mockResolvedValue('pmo_notas_cuadernos_meta');
+      const realPut = db.configuracion_usuario.put;
+      (db.configuracion_usuario as any).put = dbPutSpy;
+
+      try {
+        syncManager.handleRealtimeChange('configuracion_usuario', {
+          eventType: 'UPDATE',
+          table: 'configuracion_usuario',
+          new: {
+            id: 'pmo_notas_cuadernos_meta',
+            valor: { 'Nuevo Cuaderno': { nombre: 'Nuevo Cuaderno', color: 'blue' } },
+            updated_at: '2026-11-17T15:00:00.000Z'
+          }
+        });
+
+        expect(dbPutSpy).toHaveBeenCalledTimes(1);
+        expect(dbPutSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'pmo_notas_cuadernos_meta',
+            codigo_legado: 'pmo_notas_cuadernos_meta',
+            valor: { 'Nuevo Cuaderno': { nombre: 'Nuevo Cuaderno', color: 'blue' } },
+            sync_status: 'synced'
+          })
+        );
+      } finally {
+        (db.configuracion_usuario as any).put = realPut;
+      }
+    });
+
+    it('REQ-SYNC-PROD-14-FIX: bypass absoluto de auth retorna síncronamente el UUID dummy sin invocar getSession', async () => {
+      const getSessionMock = vi.fn().mockResolvedValue({
+        data: { session: { user: { id: '00000000-0000-0000-0000-000000000001' } } }
+      });
+      (syncManager as any).supabase = {
+        auth: { getSession: getSessionMock }
+      };
+
+      const userId = await syncManager.resolverUsuarioActivo();
+      expect(userId).toBe('00000000-0000-0000-0000-000000000001');
+      expect((syncManager as any).currentUserUUID).toBe('00000000-0000-0000-0000-000000000001');
+      expect((syncManager as any).authResuelto).toBe(true);
+      // Cero llamadas de red a Supabase Auth
+      expect(getSessionMock).not.toHaveBeenCalled();
+    });
+
+    it('REQ-SYNC-PROD-14-FIX: sincronizarMetasPlanes ejecuta upsert incondicionalmente con UUID dummy sin omitir por auth', async () => {
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
+      const fromMock = vi.fn().mockReturnValue({
+        upsert: upsertMock
+      });
+      (syncManager as any).supabase = { from: fromMock };
+      (syncManager as any).currentUserId = '00000000-0000-0000-0000-000000000001';
+
+      const { db } = await import('../../db/db');
+      vi.spyOn(syncManager as any, 'obtenerRegistrosPendientes').mockResolvedValue([
+        { id: 'meta-uuid-1', codigo_legado: 'MET-001', titulo: 'Meta Test', sync_status: 'pending' }
+      ]);
+      vi.spyOn(db.metas_planes, 'update').mockResolvedValue(1);
+
+      const res = await syncManager.sincronizarMetasPlanes();
+      expect(res.success).toBe(1);
+      expect(upsertMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          codigo_legado: 'MET-001',
+          user_id: '00000000-0000-0000-0000-000000000001'
+        }),
+        expect.anything()
+      );
+    });
   });
 
   describe('3. Telemetría de Conexión Realtime (handleRealtimeStatusChange)', () => {
@@ -142,8 +248,8 @@ describe('REQ-SYS-010-REALTIME: Supabase Realtime, Filtro Anti-Eco y Debounce', 
       syncManager.setupRealtimeSubscriptions();
 
       expect(channelMock).toHaveBeenCalledWith('pmo-realtime-channel');
-      // REQ-SYNC-41-EXEC: Debe suscribirse a las 12 tablas operativas en Realtime
-      expect(onMock).toHaveBeenCalledTimes(12);
+      // REQ-SYNC-41-EXEC / REQ-SYNC-PROD-07-FIX: Debe suscribirse a las 13 tablas operativas en Realtime (incluyendo configuracion_usuario)
+      expect(onMock).toHaveBeenCalledTimes(13);
       expect(onMock).toHaveBeenCalledWith(
         'postgres_changes',
         expect.objectContaining({ table: 'tareas' }),
@@ -152,6 +258,11 @@ describe('REQ-SYS-010-REALTIME: Supabase Realtime, Filtro Anti-Eco y Debounce', 
       expect(onMock).toHaveBeenCalledWith(
         'postgres_changes',
         expect.objectContaining({ table: 'proyectos' }),
+        expect.any(Function)
+      );
+      expect(onMock).toHaveBeenCalledWith(
+        'postgres_changes',
+        expect.objectContaining({ table: 'configuracion_usuario' }),
         expect.any(Function)
       );
       expect(subscribeMock).toHaveBeenCalled();

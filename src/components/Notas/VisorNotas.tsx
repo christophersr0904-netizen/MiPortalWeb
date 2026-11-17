@@ -95,49 +95,61 @@ export const VisorNotas: React.FC = () => {
     );
   }, []);
 
-  // Blocks Dinámicos
+  // Blocks Dinámicos y Reactividad Absoluta desde Dexie (REQ-SYNC-PROD-07-FIX)
   const [blockActivo, setBlockActivo] = useState<string | null>(null); // null = todas, '__sin_block__' = sueltas
   const [blocksLocales, setBlocksLocales] = useState<string[]>([]);
 
-  const [cuadernosMeta, setCuadernosMeta] = useState<Record<string, CuadernoMeta>>(() => ({
-    ...SEED_CUADERNOS_PREDETERMINADOS
-  }));
-  const [cuadernosEliminados, setCuadernosEliminados] = useState<Set<string>>(() => new Set());
+  // UndoDelete Integration y Toast Reactivo (REQ-SYNC-PROD-12-FIX)
+  const { programarEliminacion, estaOculto, hiddenIdsSet } = useUndoDelete();
+
+  const registroConfig = useLiveQuery(
+    async () => (db.configuracion_usuario ? await db.configuracion_usuario.get('pmo_notas_cuadernos_meta') : undefined),
+    []
+  );
+  const registroEliminados = useLiveQuery(
+    async () => (db.configuracion_usuario ? await db.configuracion_usuario.get('pmo_notas_cuadernos_eliminados') : undefined),
+    []
+  );
+
+  const cuadernosEliminados = useMemo(() => {
+    const arr = Array.isArray(registroEliminados?.valor) ? registroEliminados.valor : [];
+    return new Set<string>(arr.map((b: any) => String(b).trim()).filter(Boolean));
+  }, [registroEliminados]);
+
+  const cuadernosMeta = useMemo<Record<string, CuadernoMeta>>(() => {
+    const base =
+      registroConfig?.valor && typeof registroConfig.valor === 'object'
+        ? (registroConfig.valor as Record<string, CuadernoMeta>)
+        : SEED_CUADERNOS_PREDETERMINADOS;
+    const filtrados: Record<string, CuadernoMeta> = {};
+    Object.entries(base).forEach(([k, v]) => {
+      const nombreTrim = k.trim();
+      if (!cuadernosEliminados.has(nombreTrim) && !hiddenIdsSet.has(nombreTrim)) {
+        filtrados[k] = v;
+      }
+    });
+    return filtrados;
+  }, [registroConfig, cuadernosEliminados, hiddenIdsSet]);
 
   useEffect(() => {
     let cancelado = false;
     (async () => {
       try {
-        const eliminadosGuardados = await obtenerConfiguracion<string[]>('pmo_notas_cuadernos_eliminados', []);
-        const setEliminados = new Set((eliminadosGuardados || []).map((b) => String(b).trim()).filter(Boolean));
-        if (!cancelado && setEliminados.size > 0) {
-          setCuadernosEliminados(setEliminados);
-        }
-
         if (db.configuracion_usuario && typeof db.configuracion_usuario.get === 'function') {
           const reg = await db.configuracion_usuario.get('pmo_notas_cuadernos_meta');
-          if (cancelado) return;
-          if (reg && reg.valor && typeof reg.valor === 'object') {
-            const filtrados: Record<string, CuadernoMeta> = {};
-            Object.entries(reg.valor as Record<string, CuadernoMeta>).forEach(([k, v]) => {
-              if (!setEliminados.has(k.trim())) {
-                filtrados[k] = v;
-              }
-            });
-            setCuadernosMeta(filtrados);
-          } else {
-            const seedInicial: Record<string, CuadernoMeta> = {};
-            Object.entries(SEED_CUADERNOS_PREDETERMINADOS).forEach(([k, v]) => {
-              if (!setEliminados.has(k.trim())) {
-                seedInicial[k] = v;
-              }
-            });
-            await guardarConfiguracion('pmo_notas_cuadernos_meta', seedInicial);
-            if (!cancelado) setCuadernosMeta(seedInicial);
-          }
+          if (cancelado || reg) return;
+          const eliminadosGuardados = await obtenerConfiguracion<string[]>('pmo_notas_cuadernos_eliminados', []);
+          const setEliminados = new Set((eliminadosGuardados || []).map((b) => String(b).trim()).filter(Boolean));
+          const seedInicial: Record<string, CuadernoMeta> = {};
+          Object.entries(SEED_CUADERNOS_PREDETERMINADOS).forEach(([k, v]) => {
+            if (!setEliminados.has(k.trim())) {
+              seedInicial[k] = v;
+            }
+          });
+          await guardarConfiguracion('pmo_notas_cuadernos_meta', seedInicial || {});
         }
       } catch (err) {
-        console.warn('[VisorNotas] Error al hidratar cuadernosMeta desde Dexie:', err);
+        console.warn('[VisorNotas] Error al inicializar semilla de cuadernosMeta en Dexie:', err);
       }
     })();
     return () => {
@@ -203,8 +215,6 @@ export const VisorNotas: React.FC = () => {
   // Concurrencia de Búsqueda React 19 (Zero Frame Drops)
   const deferredBusqueda = useDeferredValue(busqueda);
 
-  // UndoDelete Integration y Toast Reactivo
-  const { programarEliminacion, estaOculto, hiddenIdsSet } = useUndoDelete();
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // Carga reactiva de notas con normalizador tolerante a fallos y filtro de exclusión reactiva UndoDelete
@@ -345,7 +355,7 @@ export const VisorNotas: React.FC = () => {
   }, [notasRaw]);
 
   // Creación dinámica de nuevo block mediante modal declarativo
-  const handleGuardarCuaderno = ({
+  const handleGuardarCuaderno = async ({
     nombre,
     descripcion,
     icono,
@@ -366,18 +376,20 @@ export const VisorNotas: React.FC = () => {
       created_at: new Date().toISOString()
     };
     const actualizadosMeta = {
-      ...cuadernosMeta,
+      ...(cuadernosMeta || {}),
       [nombreLimpio]: nuevoMeta
     };
-    setCuadernosMeta(actualizadosMeta);
-    guardarConfiguracion('pmo_notas_cuadernos_meta', actualizadosMeta).catch(() => {});
+    await guardarConfiguracion('pmo_notas_cuadernos_meta', actualizadosMeta || {});
 
     if (cuadernosEliminados.has(nombreLimpio)) {
       const nuevosEliminados = new Set(cuadernosEliminados);
       nuevosEliminados.delete(nombreLimpio);
-      setCuadernosEliminados(nuevosEliminados);
-      guardarConfiguracion('pmo_notas_cuadernos_eliminados', Array.from(nuevosEliminados)).catch(() => {});
+      await guardarConfiguracion('pmo_notas_cuadernos_eliminados', Array.from(nuevosEliminados || []));
     }
+
+    syncManager.syncPendingRecords().catch((err) => {
+      console.warn('[VisorNotas] Error al sincronizar creación de cuaderno:', err);
+    });
 
     if (!blocksLocales.includes(nombreLimpio)) {
       setBlocksLocales((prev) => [...prev, nombreLimpio]);
@@ -385,7 +397,7 @@ export const VisorNotas: React.FC = () => {
     setBlockActivo(nombreLimpio);
   };
 
-  // Eliminación optimista de cuaderno con Snackbar de Deshacer (Undo) 5s y desvinculación en Dexie
+  // Eliminación optimista de cuaderno con Toast de Deshacer (Undo) 4000ms y persistencia diferida (REQ-SYNC-PROD-12-FIX)
   const handleEliminarCuaderno = useCallback(
     (nombreBlock: string) => {
       const targetBlock = nombreBlock.trim();
@@ -395,27 +407,23 @@ export const VisorNotas: React.FC = () => {
 
       programarEliminacion({
         tabla: 'cuadernos',
-        id: nombreBlock,
-        etiqueta: `Cuaderno: ${nombreBlock}`,
+        id: targetBlock,
+        idsSecundarios: [nombreBlock],
+        etiqueta: `Cuaderno: ${targetBlock}`,
         tipo: 'CUADERNO',
-        duracionMs: 5000,
+        duracionMs: 4000,
         commit: async () => {
           try {
             const nowIso = new Date().toISOString();
 
-            // 1. Bloquear resurrección inmediatamente al vencer el timer de 5s
-            setCuadernosEliminados((prev) => {
-              const next = new Set(prev);
-              next.add(targetBlock);
-              return next;
-            });
+            // 1. Limpiar de blocksLocales en memoria
             setBlocksLocales((prev) => prev.filter((b) => b.trim() !== targetBlock));
 
-            // 2. Persistir eliminación del metadato en Dexie de forma asíncrona directa (fuera del state updater)
+            // 2. Persistir eliminación del metadato en Dexie de forma asíncrona directa
             const eliminadosPrevios = await obtenerConfiguracion<string[]>('pmo_notas_cuadernos_eliminados', []);
             const setEliminadosPersist = new Set((eliminadosPrevios || []).map((b) => String(b).trim()).filter(Boolean));
             setEliminadosPersist.add(targetBlock);
-            await guardarConfiguracion('pmo_notas_cuadernos_eliminados', Array.from(setEliminadosPersist));
+            await guardarConfiguracion('pmo_notas_cuadernos_eliminados', Array.from(setEliminadosPersist || []));
 
             const metaPrevio = await obtenerConfiguracion<Record<string, CuadernoMeta>>(
               'pmo_notas_cuadernos_meta',
@@ -424,13 +432,7 @@ export const VisorNotas: React.FC = () => {
             const nuevosMeta: Record<string, CuadernoMeta> = { ...(metaPrevio || {}) };
             delete nuevosMeta[nombreBlock];
             delete nuevosMeta[targetBlock];
-            await guardarConfiguracion('pmo_notas_cuadernos_meta', nuevosMeta);
-            setCuadernosMeta((prev) => {
-              const next = { ...prev };
-              delete next[nombreBlock];
-              delete next[targetBlock];
-              return next;
-            });
+            await guardarConfiguracion('pmo_notas_cuadernos_meta', nuevosMeta || {});
 
             // 3. Desvincular en Dexie usando el filtro normalizado y limpiando alias heredados
             const notasAModificar = await db.notas
@@ -451,12 +453,12 @@ export const VisorNotas: React.FC = () => {
                   } as any
                 }))
               );
-
-              // REQ-SYNC-NOTAS-01-FIX: Push forzado inmediato de cambios en lote a Supabase Realtime
-              syncManager.syncPendingRecords().catch((err) => {
-                console.warn('[VisorNotas] Error al forzar sincronización tras eliminar cuaderno:', err);
-              });
             }
+
+            // 4. Push inmediato de cambios de configuración y notas hacia Supabase Realtime
+            syncManager.syncPendingRecords().catch((err) => {
+              console.warn('[VisorNotas] Error al forzar sincronización tras eliminar cuaderno:', err);
+            });
           } catch (err) {
             console.error('Error al ejecutar commit diferido de eliminación de cuaderno:', err);
             mostrarToastCobalt('Error al persistir eliminación del cuaderno', 'error');

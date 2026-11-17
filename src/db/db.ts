@@ -86,7 +86,10 @@ export class PMODatabase extends Dexie {
       sync_deletions: 'id, tabla, sync_status, deleted_at'
     });
     this.version(8).stores({
-      configuracion_usuario: 'id, updated_at'
+      configuracion_usuario: 'id, codigo_legado, updated_at, sync_status'
+    });
+    this.version(9).stores({
+      configuracion_usuario: 'id, codigo_legado, updated_at, sync_status'
     });
 
     this.on('versionchange', () => {
@@ -790,10 +793,13 @@ export async function guardarConfiguracion<T = any>(clave: string, valor: T): Pr
     if (!db.configuracion_usuario || typeof db.configuracion_usuario.put !== 'function') {
       return;
     }
+    const valorSanitizado = valor !== undefined && valor !== null ? valor : {};
     await db.configuracion_usuario.put({
       id: clave,
-      valor,
-      updated_at: new Date().toISOString()
+      codigo_legado: clave,
+      valor: valorSanitizado,
+      updated_at: new Date().toISOString(),
+      sync_status: 'pending'
     });
   } catch (err) {
     console.warn(`[PMO DB] Error al guardar configuracion (${clave}):`, err);

@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import { syncManager } from './syncManager';
 import { formatFechaIsoLocal } from '../utils/timeFormatters';
+import { generateSafeUUID } from '../utils/uuid';
 
 /**
  * ============================================================================
@@ -214,7 +215,7 @@ export async function guardarMetaPlanLocal(
   const nowIso = new Date().toISOString();
 
   // Resolver o generar ID y código legado para la meta
-  const metaId = metaData.id || crypto.randomUUID();
+  const metaId = metaData.id || generateSafeUUID();
   const codigoLegado = metaData.codigo_legado || (await generarSiguienteCodigoMeta());
 
   const metaFinal: MetaPlanRecord = {
@@ -246,7 +247,7 @@ export async function guardarMetaPlanLocal(
   const hitosFinales: HitoPlanRecord[] = [];
   for (const h of hitosData) {
     contadorHito++;
-    const hitoId = h.id || crypto.randomUUID();
+    const hitoId = h.id || generateSafeUUID();
     const codigoHito = h.codigo_legado || `HIT-PLN-${String(contadorHito).padStart(3, '0')}`;
 
     hitosFinales.push({
@@ -269,7 +270,7 @@ export async function guardarMetaPlanLocal(
 
   // Preparar vínculos
   const vinculosFinales: HabitoMetaVinculo[] = vinculosData.map((v) => ({
-    id: crypto.randomUUID(),
+    id: generateSafeUUID(),
     user_id: userId,
     habito_id: v.habito_id,
     meta_id: metaId,
@@ -371,7 +372,7 @@ export async function vincularHabitoAMetaLocal(
     .first();
 
   const vinculoFinal: HabitoMetaVinculo = {
-    id: existente?.id || crypto.randomUUID(),
+    id: existente?.id || generateSafeUUID(),
     user_id: existente?.user_id && existente.user_id !== '00000000-0000-0000-0000-000000000001' ? existente.user_id : userId,
     habito_id: habitoId,
     meta_id: metaId,
@@ -477,7 +478,7 @@ export async function crearMetaRapidaDesdeActividadLocal(params: {
   const userId = syncManager.getUserId() || '00000000-0000-0000-0000-000000000001';
   const nowIso = new Date().toISOString();
   const nuevoCodigo = await generarSiguienteCodigoMetaLocal();
-  const metaId = crypto.randomUUID();
+  const metaId = generateSafeUUID();
 
   const nuevaMeta: MetaPlanRecord = {
     id: metaId,
@@ -506,7 +507,7 @@ export async function crearMetaRapidaDesdeActividadLocal(params: {
 
   if (params.habitoId) {
     const vinculo: HabitoMetaVinculo = {
-      id: crypto.randomUUID(),
+      id: generateSafeUUID(),
       user_id: userId,
       habito_id: params.habitoId,
       meta_id: nuevaMeta.id,

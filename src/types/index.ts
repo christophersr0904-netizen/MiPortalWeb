@@ -589,8 +589,11 @@ export interface SyncDeletionRecord {
 
 export interface ConfiguracionUsuarioRecord {
   id: string; // Clave de configuración
+  codigo_legado?: string;
+  user_id?: string;
   valor: any; // Valor tipado o estructura JSON
   updated_at: string;
+  sync_status?: SyncStatus;
 }
 
 export interface DesktopWidgetBridge {

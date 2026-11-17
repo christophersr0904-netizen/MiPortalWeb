@@ -1,4 +1,5 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabase } from './supabaseClient';
 import { db, sanearDuplicadosDexie } from '../db/db';
 import { extraerCodigoCanonico, fusionarRegistrosDuplicados } from '../utils/entityNormalizer';
 import {
@@ -104,6 +105,8 @@ class SyncManager {
   private syncState: SyncState = 'synced';
   private listeners: Array<(state: SyncState) => void> = [];
   private currentUserId: string = DEFAULT_USER_ID;
+  public currentUserUUID: string | null = DEFAULT_USER_ID;
+  public authResuelto: boolean = true;
   private inicializacionPromise: Promise<void> | null = null;
 
   // Realtime & Anti-Eco (TTL 10s & Debounce 800ms)
@@ -124,34 +127,16 @@ class SyncManager {
   }
 
   /**
-   * REQ-SYNC-40-EXEC: Resuelve dinámicamente el usuario autenticado real desde Supabase Auth.
-   * Actualiza this.currentUserId con el UUID real de auth.users si existe una sesión válida.
+   * REQ-SYNC-PROD-14-FIX: Bypass Absoluto de Auth (Modo Local-First).
+   * Asigna y retorna de forma síncrona el UUID dummy '00000000-0000-0000-0000-000000000001'
+   * a this.currentUserUUID y this.currentUserId, resolviendo true inmediatamente sin bloquear con getSession().
    */
-  public async resolverUsuarioActivo(): Promise<string> {
-    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
-      return this.currentUserId;
-    }
-    try {
-      if (typeof this.supabase.auth?.getSession === 'function') {
-        const sessionRes = await this.supabase.auth.getSession();
-        const sessionUserId = sessionRes?.data?.session?.user?.id;
-        if (sessionUserId && isUuid(sessionUserId)) {
-          this.setUserId(sessionUserId);
-          return sessionUserId;
-        }
-      }
-      if (typeof this.supabase.auth?.getUser === 'function') {
-        const userRes = await this.supabase.auth.getUser();
-        const authUserId = userRes?.data?.user?.id;
-        if (authUserId && isUuid(authUserId)) {
-          this.setUserId(authUserId);
-          return authUserId;
-        }
-      }
-    } catch (err) {
-      console.warn('[SyncManager] Error al resolver usuario activo en Supabase Auth:', err);
-    }
-    return this.currentUserId;
+  public async resolverUsuarioActivo(_force: boolean = false): Promise<string> {
+    const dummyId = DEFAULT_USER_ID;
+    this.currentUserUUID = dummyId;
+    this.currentUserId = dummyId;
+    this.authResuelto = true;
+    return dummyId;
   }
 
   /**
@@ -197,6 +182,8 @@ class SyncManager {
 
   public setUserId(userId: string) {
     if (isUuid(userId)) {
+      this.currentUserUUID = userId;
+      this.authResuelto = true;
       if (this.currentUserId !== userId) {
         this.currentUserId = userId;
         this.registrosFkCuarentena.clear();
@@ -276,7 +263,20 @@ class SyncManager {
     );
   }
 
+  public limpiarTablasInexistentes(): void {
+    this.tablasInexistentesSupabase.clear();
+    if (!this.syncFinanzasRemotoHabilitado) {
+      this.tablasInexistentesSupabase.add('gastos');
+      this.tablasInexistentesSupabase.add('ingresos');
+      this.tablasInexistentesSupabase.add('cuotas');
+    }
+  }
+
   private registrarTablaInexistente(tabla: string): void {
+    if (tabla === 'configuracion_usuario' || tabla === 'proyectos' || tabla === 'hitos_wbs' || tabla === 'tareas' || tabla === 'notas') {
+      // REQ-SYNC-PROD-11-FIX: Las tablas canónicas de la suite PMO no se bloquean permanentemente en caliente
+      return;
+    }
     this.tablasInexistentesSupabase.add(tabla);
     if (tabla === 'gastos' || tabla === 'ingresos' || tabla === 'cuotas') {
       this.syncFinanzasRemotoHabilitado = false;
@@ -284,6 +284,9 @@ class SyncManager {
   }
 
   private debeOmitirTablaRemota(tabla: string): boolean {
+    if (tabla === 'configuracion_usuario') {
+      return false;
+    }
     if (tabla === 'gastos' || tabla === 'ingresos' || tabla === 'cuotas') {
       return !this.syncFinanzasRemotoHabilitado && this.tablasInexistentesSupabase.has(tabla);
     }
@@ -291,6 +294,46 @@ class SyncManager {
   }
 
   public limpiarCuarentenaFk(): void {
+    this.registrosFkCuarentena.clear();
+  }
+
+  /**
+   * REQ-SYNC-PROD-15-FIX: Auto-Recuperación de Cuarentena FK.
+   * Rescata registros bloqueados previamente por errores 23503/409 en Dexie,
+   * restaurando su sync_status a 'pending' para reintentar su sincronización en Supabase.
+   */
+  public async liberarRegistrosCuarentena(): Promise<void> {
+    const tablas = [
+      'metas_planes',
+      'proyectos',
+      'hitos_wbs',
+      'tareas',
+      'notas',
+      'gastos',
+      'ingresos',
+      'actividades_personales',
+      'subtareas',
+      'subtareas_pasos',
+      'planes_accion_hitos',
+      'habitos_metas_vinculos',
+      'configuracion_usuario'
+    ];
+    for (const t of tablas) {
+      const tableRef = (db as any)[t];
+      if (tableRef && typeof tableRef.where === 'function') {
+        try {
+          const query = tableRef.where('sync_status');
+          if (query && typeof query.equals === 'function') {
+            const eq = query.equals('quarantined');
+            if (eq && typeof eq.modify === 'function') {
+              await eq.modify({ sync_status: 'pending' });
+            }
+          }
+        } catch {
+          // Ignorar si la tabla o índice no está listo en el entorno
+        }
+      }
+    }
     this.registrosFkCuarentena.clear();
   }
 
@@ -319,11 +362,8 @@ class SyncManager {
   }
 
   private initSupabaseClient() {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://mock.supabase.co';
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock-anon-key';
-
     try {
-      this.supabase = createClient(supabaseUrl, supabaseAnonKey);
+      this.supabase = getSupabase();
       if (this.supabase?.auth && typeof this.supabase.auth.onAuthStateChange === 'function') {
         try {
           this.supabase.auth.onAuthStateChange((_event, session) => {
@@ -345,16 +385,16 @@ class SyncManager {
   private setupNetworkListeners() {
     if (typeof window === 'undefined') return;
 
-    // Reconexión Bidireccional Atómica: PULL primero, PUSH solo si el pull no falló (REQ-BUGFIX-72-EXEC)
+    // Reconexión Bidireccional Atómica: PULL primero y continuación a PUSH con aislamiento de fallos parciales (REQ-SYNC-PROD-08-FIX)
     window.addEventListener('online', async () => {
       console.log('[SyncManager] Conexión restablecida. Disparando sincronización bidireccional...');
+      this.limpiarTablasInexistentes();
       this.setSyncState('syncing');
       this.reconectarRealtimeSiEsNecesario();
       try {
         const pullResult = await this.descargarDatosDescendientes();
-        if (pullResult.fallidos > 0 && pullResult.descargados === 0) {
-          console.warn('[SyncManager] Pull de reconexión fallido. Omitiendo push para evitar corrupción A-B.');
-          return;
+        if (pullResult.fallidos > 0) {
+          console.warn(`[SyncManager] Pull de reconexión registró ${pullResult.fallidos} tabla(s) fallida(s). Continuando hacia push pendiente.`);
         }
         await this.syncPendingRecords();
       } catch (err) {
@@ -367,7 +407,7 @@ class SyncManager {
       this.setSyncState('offline');
     });
 
-    // Sincronización periódica cada 45 segundos si hay conexión (Blindaje contra pestañas en segundo plano REQ-FIX-08 y REQ-BUGFIX-72)
+    // Sincronización periódica cada 45 segundos si hay conexión (Blindaje contra pestañas en segundo plano REQ-FIX-08 y REQ-SYNC-PROD-08-FIX)
     setInterval(async () => {
       if (typeof navigator !== 'undefined' && navigator.onLine && !this.isSyncing) {
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
@@ -375,9 +415,8 @@ class SyncManager {
         }
         try {
           const pullResult = await this.descargarDatosDescendientes();
-          if (pullResult.fallidos > 0 && pullResult.descargados === 0) {
-            console.warn('[SyncManager] Pull periódico fallido. Omitiendo push para evitar corrupción A-B.');
-            return;
+          if (pullResult.fallidos > 0) {
+            console.warn(`[SyncManager] Pull periódico registró ${pullResult.fallidos} tabla(s) fallida(s). Continuando hacia push pendiente.`);
           }
           await this.syncPendingRecords();
         } catch (err) {
@@ -429,7 +468,8 @@ class SyncManager {
         'habitos_metas_vinculos',
         'gastos',
         'ingresos',
-        'cuotas'
+        'cuotas',
+        'configuracion_usuario'
       ];
       let channel: any = this.supabase.channel('pmo-realtime-channel');
 
@@ -454,7 +494,8 @@ class SyncManager {
   }
 
   /**
-   * Manejador de eventos entrantes de Realtime con Filtro Anti-Eco, Borrado Físico Propagado y Trailing-Edge Debounce (800ms)
+   * Manejador de eventos entrantes de Realtime con Filtro Anti-Eco, Inyección Inmediata Zero-Delay (REQ-SYNC-PROD-11-FIX),
+   * Borrado Físico Propagado y Trailing-Edge Debounce secundario para integridad relacional.
    */
   public handleRealtimeChange(tabla: string, payload: any) {
     const recordId = payload?.new?.id || payload?.old?.id;
@@ -467,15 +508,15 @@ class SyncManager {
     const targetTable = payload?.table || tabla;
     const eventType = payload?.eventType || payload?.event;
 
-    // REQ-SYNC-41-EXEC: Propagación inmediata de DELETE para erradicar registros fantasma en todos los nodos
+    // REQ-SYNC-41-EXEC / REQ-SYNC-PROD-11-FIX: Propagación inmediata de DELETE para erradicar registros fantasma en todos los nodos
     if (eventType === 'DELETE') {
-      const delId = payload?.old?.id;
+      const delId = payload?.old?.id || payload?.new?.id;
       if (delId) {
         if ((db as any)[targetTable] && typeof (db as any)[targetTable].delete === 'function') {
           (db as any)[targetTable].delete(delId).catch(() => {});
         }
+        const nowIso = new Date().toISOString();
         if (db.tombstones && typeof db.tombstones.put === 'function') {
-          const nowIso = new Date().toISOString();
           db.tombstones.put({
             id: delId,
             tabla: targetTable,
@@ -485,11 +526,60 @@ class SyncManager {
             sync_status: 'synced'
           } as any).catch(() => {});
         }
+        if (db.sync_deletions && typeof db.sync_deletions.put === 'function') {
+          db.sync_deletions.put({
+            id: delId,
+            tabla: targetTable,
+            deleted_at: nowIso,
+            sync_status: 'synced'
+          } as any).catch(() => {});
+        }
       }
       return;
     }
 
-    // 2. Acumular la tabla afectada para pull de INSERT / UPDATE
+    // PASO 1 - Inyección Inmediata en Dexie (Zero-Delay) ante INSERT o UPDATE
+    if (payload?.new && (eventType === 'INSERT' || eventType === 'UPDATE')) {
+      const rawNew = payload.new;
+      const refDexie = (db as any)[targetTable];
+      if (refDexie && typeof refDexie.put === 'function') {
+        try {
+          let registroSanitizado: any = {
+            ...rawNew,
+            sync_status: 'synced' as const
+          };
+
+          if (targetTable === 'notas') {
+            registroSanitizado = sanitizarNotaInbound(rawNew);
+          } else if (targetTable === 'actividades_personales') {
+            registroSanitizado = sanitizarActividadInbound(rawNew);
+          } else if (targetTable === 'subtareas_pasos') {
+            registroSanitizado = sanitizarSubtareaInbound(rawNew);
+          } else if (targetTable === 'hitos_wbs') {
+            registroSanitizado = sanitizarHitoInbound(rawNew);
+          } else if (targetTable === 'tareas') {
+            registroSanitizado = sanitizarTareaInbound(rawNew);
+          } else if (targetTable === 'configuracion_usuario') {
+            registroSanitizado = {
+              id: String(rawNew.id),
+              codigo_legado: rawNew.codigo_legado ? String(rawNew.codigo_legado) : String(rawNew.id),
+              valor: rawNew.valor !== undefined && rawNew.valor !== null ? rawNew.valor : {},
+              updated_at: rawNew.updated_at || new Date().toISOString(),
+              sync_status: 'synced' as const
+            };
+          }
+
+          // Ejecución inmediata en Dexie para despertar useLiveQuery sin latencia (0ms)
+          refDexie.put(registroSanitizado).catch((putErr: any) => {
+            console.warn(`[SyncManager] Aviso al inyectar realtime ${targetTable}:`, putErr);
+          });
+        } catch (prepErr) {
+          console.warn(`[SyncManager] Error preparando registro realtime ${targetTable}:`, prepErr);
+        }
+      }
+    }
+
+    // 2. Acumular la tabla afectada para pull de INSERT / UPDATE (Fallback secundario para integridad)
     this.tablasPendientesRealtime.add(targetTable);
 
     // 3. Trailing-Edge Debounce (800ms) para amortiguar ráfagas concurrentes (Thundering Herd)
@@ -1120,13 +1210,6 @@ class SyncManager {
       return result;
     }
 
-    // REQ-SYNC-40-EXEC: Blindaje FK 23503 en metas_planes (REFERENCES auth.users(id)).
-    // Si no hay un usuario autenticado real (o sigue DEFAULT_USER_ID), omitir push para evitar 409 Conflict.
-    if (!this.currentUserId || this.currentUserId === DEFAULT_USER_ID) {
-      console.warn('[SyncManager] Omitiendo push de metas_planes: sin sesión de auth.users activa (evitando 409/23503).');
-      return result;
-    }
-
     for (const meta of pending) {
       if (this.registrosFkCuarentena.has(meta.id)) {
         continue;
@@ -1187,12 +1270,6 @@ class SyncManager {
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
       await Promise.all(pending.map((h) => db.planes_accion_hitos.update(h.id, { sync_status: 'synced' })));
       result.success = pending.length;
-      return result;
-    }
-
-    // REQ-SYNC-40-EXEC: Blindaje FK 23503 en planes_accion_hitos (REFERENCES auth.users(id)).
-    if (!this.currentUserId || this.currentUserId === DEFAULT_USER_ID) {
-      console.warn('[SyncManager] Omitiendo push de planes_accion_hitos: sin sesión de auth.users activa (evitando 409/23503).');
       return result;
     }
 
@@ -1269,12 +1346,6 @@ class SyncManager {
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
       await Promise.all(pending.map((v) => db.habitos_metas_vinculos.update(v.id, { sync_status: 'synced' })));
       result.success = pending.length;
-      return result;
-    }
-
-    // REQ-SYNC-40-EXEC: Blindaje FK 23503 en habitos_metas_vinculos (REFERENCES auth.users(id)).
-    if (!this.currentUserId || this.currentUserId === DEFAULT_USER_ID) {
-      console.warn('[SyncManager] Omitiendo push de habitos_metas_vinculos: sin sesión de auth.users activa (evitando 409/23503).');
       return result;
     }
 
@@ -1490,6 +1561,90 @@ class SyncManager {
         }
         result.failed++;
       }
+    }
+
+    return result;
+  }
+
+  /**
+   * 13. Sincroniza configuración de usuario (cuadernos, metadatos, techos) hacia Supabase
+   */
+  public async sincronizarConfiguracion(): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    if (!db.configuracion_usuario || this.debeOmitirTablaRemota('configuracion_usuario')) {
+      return result;
+    }
+
+    const pending = await this.obtenerRegistrosPendientes<any>(db.configuracion_usuario);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(
+        pending.map((c) => db.configuracion_usuario.update(c.id, { sync_status: 'synced' }).catch(() => {}))
+      );
+      result.success = pending.length;
+      return result;
+    }
+
+    const pendientes = pending.filter((item) => !this.registrosFkCuarentena.has(item.id));
+    if (pendientes.length === 0) return result;
+
+    try {
+      const payloads = pendientes.map((p) => ({
+        id: String(p.id),
+        codigo_legado: p.codigo_legado ? String(p.codigo_legado) : String(p.id),
+        valor: p.valor !== undefined && p.valor !== null ? p.valor : {},
+        updated_at: p.updated_at || new Date().toISOString()
+      }));
+
+      pendientes.forEach((p) => this.registrarPushedId(p.id));
+
+      const { error } = await this.supabase
+        .from('configuracion_usuario')
+        .upsert(payloads, { onConflict: 'id' });
+
+      if (error) {
+        console.error('Error 400 Supabase (Config):', error.message, (error as any).details, (error as any).hint);
+        if (this.esErrorTablaInexistente(error)) {
+          this.registrarTablaInexistente('configuracion_usuario');
+          return result;
+        }
+        if (this.esErrorFkNoRecuperable(error)) {
+          for (const item of pendientes) {
+            this.registrosFkCuarentena.add(item.id);
+            await db.configuracion_usuario.update(item.id, { sync_status: 'quarantined' }).catch(() => {});
+          }
+        } else {
+          for (const item of pendientes) {
+            await db.configuracion_usuario.update(item.id, { sync_status: 'error' }).catch(() => {});
+          }
+        }
+        result.failed += pendientes.length;
+      } else {
+        for (const item of pendientes) {
+          const matchedPayload = payloads.find((x) => x.id === String(item.id));
+          await db.configuracion_usuario.update(item.id, {
+            sync_status: 'synced',
+            updated_at: matchedPayload?.updated_at || new Date().toISOString()
+          }).catch(() => {});
+        }
+        result.success += pendientes.length;
+      }
+    } catch (err: any) {
+      if (this.esErrorTablaInexistente(err)) {
+        this.registrarTablaInexistente('configuracion_usuario');
+        return result;
+      }
+      console.error('[SyncManager] Excepción al sincronizar configuracion_usuario:', err);
+      for (const item of pendientes) {
+        if (this.esErrorFkNoRecuperable(err)) {
+          this.registrosFkCuarentena.add(item.id);
+          await db.configuracion_usuario.update(item.id, { sync_status: 'quarantined' }).catch(() => {});
+        } else {
+          await db.configuracion_usuario.update(item.id, { sync_status: 'error' }).catch(() => {});
+        }
+      }
+      result.failed += pendientes.length;
     }
 
     return result;
@@ -1733,6 +1888,9 @@ class SyncManager {
     // Proceder incondicionalmente a sincronizar con la API de Supabase vía Anon Key.
     await this.resolverUsuarioActivo().catch(() => {});
 
+    // REQ-SYNC-PROD-15-FIX: Auto-Recuperación de Cuarentena FK
+    await this.liberarRegistrosCuarentena().catch(() => {});
+
     try {
       // 1. Verificar registros pendientes en IndexedDB a través de las 13 entidades (incluyendo tombstones / sync_deletions)
       const pendingCounts = await Promise.all([
@@ -1749,7 +1907,10 @@ class SyncManager {
         this.debeOmitirTablaRemota('gastos') ? Promise.resolve(0) : this.contarPendientes(db.gastos),
         this.debeOmitirTablaRemota('ingresos') ? Promise.resolve(0) : this.contarPendientes(db.ingresos),
         this.debeOmitirTablaRemota('cuotas') ? Promise.resolve(0) : this.contarPendientes(db.cuotas),
-        this.contarPendientes(db.notas)
+        this.contarPendientes(db.notas),
+        db.configuracion_usuario && !this.debeOmitirTablaRemota('configuracion_usuario')
+          ? this.contarPendientes(db.configuracion_usuario)
+          : Promise.resolve(0)
       ]);
 
       const totalPendientes = pendingCounts.reduce((acc, c) => acc + c, 0);
@@ -1812,6 +1973,7 @@ class SyncManager {
       const resIng = await this.sincronizarIngresos();
       const resCuo = await this.sincronizarCuotas();
       const resNot = await this.sincronizarNotas();
+      const resCfg = await this.sincronizarConfiguracion();
 
       // PASO 4: Subir Lápidas (sync_deletions / Tombstones) - REQ-ARCH-75-EXEC
       const resTomb = await this.sincronizarTombstones();
@@ -1829,7 +1991,8 @@ class SyncManager {
         resGas.failed +
         resIng.failed +
         resCuo.failed +
-        resNot.failed;
+        resNot.failed +
+        resCfg.failed;
 
       if (totalFallidos > 0) {
         this.setSyncState('error');
@@ -1988,7 +2151,10 @@ class SyncManager {
       { tabla: 'gastos', refDexie: db.gastos },
       { tabla: 'ingresos', refDexie: db.ingresos },
       { tabla: 'cuotas', refDexie: db.cuotas },
-      { tabla: 'notas', refDexie: db.notas }
+      { tabla: 'notas', refDexie: db.notas },
+      ...(db.configuracion_usuario
+        ? [{ tabla: 'configuracion_usuario', refDexie: db.configuracion_usuario }]
+        : [])
     ] as const;
 
     const configuracionesFiltradas = configuraciones.filter((c) => {
@@ -1999,23 +2165,15 @@ class SyncManager {
       return !this.debeOmitirTablaRemota(c.tabla);
     });
 
-    // Buffer de mutaciones en memoria para ejecución en transacción atómica unificada (REQ-FIX-10)
-    const mutacionesPorTabla: Array<{
-      tabla: string;
-      refDexie: any;
-      eliminar: string[];
-      actualizar: any[];
-    }> = [];
-
     for (const { tabla, refDexie } of configuracionesFiltradas) {
       if (!tablasFiltro?.includes(tabla) && this.debeOmitirTablaRemota(tabla)) {
         continue;
       }
 
       try {
-        // REQ-BUGFIX-74-EXEC: Paginación continua asíncrona (Sprint 2)
-        // Bloques continuos vía .range(offset, offset + PAGE_SIZE - 1) para superar el límite de 1000 sin ERR_CONNECTION_CLOSED
-        const PAGE_SIZE = 1000;
+        // REQ-SYNC-PROD-08-FIX: Paginación en bloques de 250 filas con persistencia aislada por tabla
+        // para prevenir saturación de frames HTTP/2 (ERR_CONNECTION_CLOSED) y efecto dominó entre tablas.
+        const PAGE_SIZE = 250;
         let offset = 0;
         let hasMore = true;
         let data: any[] = [];
@@ -2264,12 +2422,28 @@ class SyncManager {
         }
 
         if (idsObsoletosAEliminar.length > 0 || registrosParaActualizar.length > 0) {
-          mutacionesPorTabla.push({
-            tabla,
-            refDexie,
-            eliminar: idsObsoletosAEliminar,
-            actualizar: registrosParaActualizar
-          });
+          this.setSyncState('syncing');
+
+          const persistirTablaLocal = async () => {
+            if (idsObsoletosAEliminar.length > 0 && typeof (refDexie as any)?.bulkDelete === 'function') {
+              await (refDexie as any).bulkDelete(idsObsoletosAEliminar);
+            }
+            if (registrosParaActualizar.length > 0 && typeof (refDexie as any)?.bulkPut === 'function') {
+              await (refDexie as any).bulkPut(registrosParaActualizar);
+              summary.descargados += registrosParaActualizar.length;
+            }
+          };
+
+          try {
+            if (typeof (db as any).transaction === 'function' && refDexie && typeof (refDexie as any).bulkPut === 'function') {
+              await (db as any).transaction('rw', [refDexie], persistirTablaLocal);
+            } else {
+              await persistirTablaLocal();
+            }
+          } catch (txErr) {
+            console.warn(`[SyncManager] Fallback a escrituras directas en tabla ${tabla} tras error en transacción:`, txErr);
+            await persistirTablaLocal();
+          }
         }
       } catch (err) {
         if (this.esErrorTablaInexistente(err)) {
@@ -2278,48 +2452,12 @@ class SyncManager {
           console.warn(`[SyncManager] Error al sincronizar tabla descendente ${tabla}:`, err);
           summary.fallidos++;
         }
+        continue;
       }
     }
 
-    const totalMutaciones = mutacionesPorTabla.reduce(
-      (acc, m) => acc + m.actualizar.length + m.eliminar.length,
-      0
-    );
-
-    if (totalMutaciones > 0) {
-      this.setSyncState('syncing');
-
-      const tablasParaTransaccion = mutacionesPorTabla
-        .map((m) => m.refDexie)
-        .filter((ref) => ref && typeof ref.bulkPut === 'function');
-
-      const ejecutarEscrituras = async () => {
-        for (const m of mutacionesPorTabla) {
-          if (m.eliminar.length > 0 && typeof (m.refDexie as any).bulkDelete === 'function') {
-            await (m.refDexie as any).bulkDelete(m.eliminar);
-          }
-          if (m.actualizar.length > 0 && typeof (m.refDexie as any).bulkPut === 'function') {
-            await (m.refDexie as any).bulkPut(m.actualizar);
-            summary.descargados += m.actualizar.length;
-          }
-        }
-      };
-
-      try {
-        if (typeof (db as any).transaction === 'function' && tablasParaTransaccion.length > 0) {
-          await (db as any).transaction('rw', tablasParaTransaccion, ejecutarEscrituras);
-        } else {
-          await ejecutarEscrituras();
-        }
-      } catch (txErr) {
-        console.warn('[SyncManager] Fallback a escrituras directas tras error en transacción:', txErr);
-        await ejecutarEscrituras();
-      }
-
-      if (summary.descargados > 0) {
-        await sanearDuplicadosDexie();
-      }
-
+    if (summary.descargados > 0) {
+      await sanearDuplicadosDexie();
       this.setSyncState('synced');
     }
 
@@ -2338,20 +2476,17 @@ class SyncManager {
   }
 
   /**
-   * Sincronización bidireccional completa (REQ-BUGFIX-72-EXEC):
-   * 1. Pull nube -> local (descargarDatosDescendientes) con abort en caso de error de red
-   * 2. Push local -> nube (procesarColaPendiente) si el pull no falló (evita corrupción A-B)
+   * Sincronización bidireccional completa (REQ-SYNC-PROD-08-FIX):
+   * 1. Pull nube -> local (descargarDatosDescendientes) con aislamiento de errores por tabla
+   * 2. Push local -> nube (procesarColaPendiente) garantizado para no bloquear cambios pendientes
    * 3. Sincronización de fallback con el puente HTTP local 127.0.0.1:48123
    */
   public async sincronizarTodo(): Promise<void> {
     await this.resolverUsuarioActivo().catch(() => {});
 
-    // REQ-BUGFIX-72-EXEC: Ejecutar PULL primero y verificar si falló
     const pullResult = await this.descargarDatosDescendientes();
-    if (pullResult.fallidos > 0 && pullResult.descargados === 0) {
-      console.warn('[SyncManager] Pull remoto fallido por errores de red. Abortando ciclo push para prevenir corrupción de estado.');
-      this.setSyncState('error');
-      return;
+    if (pullResult.fallidos > 0) {
+      console.warn(`[SyncManager] Pull remoto registró ${pullResult.fallidos} tabla(s) fallida(s). Continuando hacia ciclo push.`);
     }
 
     await this.procesarColaPendiente();

@@ -1218,35 +1218,28 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       (globalThis as any).window = originalWindow;
     });
 
-    it('syncManager omite push en metas_planes y habitos_metas_vinculos si currentUserId es DEFAULT_USER_ID', async () => {
+    it('REQ-SYNC-PROD-14-FIX: syncManager ejecuta push incondicionalmente en metas_planes con DEFAULT_USER_ID (Bypass Auth)', async () => {
       syncManager.setUserId(DEFAULT_USER_ID);
-      const upsertSpy = vi.fn();
+      const upsertSpy = vi.fn().mockResolvedValue({ error: null });
       (syncManager as any).supabase = {
         from: vi.fn().mockReturnValue({ upsert: upsertSpy })
       };
 
-      vi.spyOn(db.metas_planes, 'where').mockReturnValue({
-        anyOf: () => ({
-          toArray: async () => [{ id: 'm1', sync_status: 'pending' }],
-          count: async () => 1
-        })
-      } as any);
-
-      vi.spyOn(db.habitos_metas_vinculos, 'where').mockReturnValue({
-        anyOf: () => ({
-          toArray: async () => [{ id: 'v1', sync_status: 'pending' }],
-          count: async () => 1
-        })
-      } as any);
+      vi.spyOn(syncManager as any, 'obtenerRegistrosPendientes').mockResolvedValue([
+        { id: 'm1', codigo_legado: 'MET-001', titulo: 'Meta Test', sync_status: 'pending' }
+      ]);
+      vi.spyOn(db.metas_planes, 'update').mockResolvedValue(1 as any);
 
       const resMetas = await syncManager.sincronizarMetasPlanes();
-      const resVinc = await syncManager.sincronizarVinculosMeta();
 
-      expect(resMetas.success).toBe(0);
-      expect(resMetas.failed).toBe(0);
-      expect(resVinc.success).toBe(0);
-      expect(resVinc.failed).toBe(0);
-      expect(upsertSpy).not.toHaveBeenCalled();
+      expect(resMetas.success).toBe(1);
+      expect(upsertSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          codigo_legado: 'MET-001',
+          user_id: DEFAULT_USER_ID
+        }),
+        expect.anything()
+      );
     });
 
     it('resolverUserIdSeguro sustituye DEFAULT_USER_ID por el usuario autenticado real', () => {
@@ -1349,7 +1342,7 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       consoleWarnSpy.mockRestore();
     });
 
-    it('Sprint 2: sincronizarTodo aborta Push si Pull falla para prevenir corrupción entre Dispositivo A y B', async () => {
+    it('Sprint 2 / REQ-SYNC-PROD-08-FIX: sincronizarTodo continúa hacia procesarColaPendiente aunque falle parcialmente el Pull de una tabla', async () => {
       const pullSpy = vi.spyOn(syncManager, 'descargarDatosDescendientes').mockResolvedValue({
         descargados: 0,
         fallidos: 1
@@ -1359,11 +1352,10 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       await syncManager.sincronizarTodo();
 
       expect(pullSpy).toHaveBeenCalled();
-      expect(pushSpy).not.toHaveBeenCalled();
-      expect(syncManager.getStatus()).toBe('error');
+      expect(pushSpy).toHaveBeenCalled();
     });
 
-    it('Sprint 2: descargarDatosDescendientes soporta fallback limit/range en peticiones GET', async () => {
+    it('Sprint 2: descargarDatosDescendientes soporta fallback limit/range en peticiones GET (PAGE_SIZE = 250)', async () => {
       const limitSpy = vi.fn().mockResolvedValue({ data: [], error: null });
       const selectSpy = vi.fn().mockReturnValue({ limit: limitSpy });
       const fromSpy = vi.fn().mockReturnValue({ select: selectSpy });
@@ -1376,7 +1368,7 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
 
       expect(fromSpy).toHaveBeenCalledWith('proyectos');
       expect(selectSpy).toHaveBeenCalledWith('*');
-      expect(limitSpy).toHaveBeenCalledWith(1000);
+      expect(limitSpy).toHaveBeenCalledWith(250);
     });
   });
 
@@ -1449,8 +1441,8 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       expect(bulkDeleteSpy).toHaveBeenCalledWith(['tar-local-synced-01']);
     });
 
-    it('Sprint 2: descargarDatosDescendientes pagina en bucle con .range(offset, to) acumulando bloques de datos', async () => {
-      const chunk1 = Array.from({ length: 1000 }, (_, i) => ({
+    it('Sprint 2: descargarDatosDescendientes pagina en bucle con .range(offset, to) acumulando bloques de 250 datos', async () => {
+      const chunk1 = Array.from({ length: 250 }, (_, i) => ({
         id: `proy-p1-${i}`,
         codigo_legado: `PRO-P1-${i}`,
         updated_at: new Date().toISOString()
@@ -1483,13 +1475,50 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
 
       const res = await syncManager.descargarDatosDescendientes(['proyectos']);
 
-      // Debe haber llamado a range dos veces (offset 0 y offset 1000)
-      expect(rangeSpy).toHaveBeenCalledWith(0, 999);
-      expect(rangeSpy).toHaveBeenCalledWith(1000, 1999);
-      expect(res.descargados).toBe(1001);
+      // Debe haber llamado a range dos veces (offset 0..249 y offset 250..499)
+      expect(rangeSpy).toHaveBeenCalledWith(0, 249);
+      expect(rangeSpy).toHaveBeenCalledWith(250, 499);
+      expect(res.descargados).toBe(251);
       expect(bulkPutSpy).toHaveBeenCalledWith(expect.arrayContaining([
         expect.objectContaining({ id: 'proy-p1-0' }),
         expect.objectContaining({ id: 'proy-p2-01' })
+      ]));
+    });
+
+    it('REQ-SYNC-PROD-08-FIX: un fallo de red en proyectos no aborta la descarga ni persistencia de notas y configuracion_usuario', async () => {
+      const fromSpy = vi.fn().mockImplementation((tabla: string) => ({
+        select: vi.fn().mockReturnValue({
+          range: vi.fn().mockImplementation(() => {
+            if (tabla === 'proyectos') {
+              return Promise.reject(new Error('net::ERR_CONNECTION_CLOSED'));
+            }
+            if (tabla === 'notas') {
+              return Promise.resolve({
+                data: [{ id: 'not-ok-01', codigo_legado: 'NOT-00001', titulo: 'Nota Resiliente', updated_at: new Date().toISOString() }],
+                error: null
+              });
+            }
+            return Promise.resolve({ data: [], error: null });
+          })
+        })
+      }));
+
+      (syncManager as any).supabase = { from: fromSpy };
+
+      (db.notas as any).toArray = vi.fn().mockResolvedValue([]);
+      (db.notas as any).where = vi.fn().mockReturnValue({
+        anyOf: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) }),
+        equals: vi.fn().mockReturnValue({ primaryKeys: vi.fn().mockResolvedValue([]) })
+      });
+      const notasBulkPutSpy = vi.fn().mockResolvedValue('ok');
+      (db.notas as any).bulkPut = notasBulkPutSpy;
+
+      const res = await syncManager.descargarDatosDescendientes(['proyectos', 'notas']);
+
+      expect(res.fallidos).toBe(1);
+      expect(res.descargados).toBe(1);
+      expect(notasBulkPutSpy).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ id: 'not-ok-01', titulo: 'Nota Resiliente' })
       ]));
     });
   });
@@ -1637,6 +1666,33 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
         (globalThis as any).document = originalDoc;
         (globalThis as any).window = originalWin;
       }
+    });
+
+    it('REQ-SYNC-PROD-15-FIX: liberarRegistrosCuarentena rescata registros bloqueados restableciendo sync_status a pending y limpiando el cache en memoria', async () => {
+      const modifyProyectosSpy = vi.fn().mockResolvedValue(2);
+      const modifyTareasSpy = vi.fn().mockResolvedValue(1);
+
+      vi.spyOn(db.proyectos, 'where').mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          modify: modifyProyectosSpy
+        })
+      } as any);
+
+      vi.spyOn(db.tareas, 'where').mockReturnValue({
+        equals: vi.fn().mockReturnValue({
+          modify: modifyTareasSpy
+        })
+      } as any);
+
+      // Simular registro en caché en memoria
+      (syncManager as any).registrosFkCuarentena.add('mock-fk-id-123');
+      expect(syncManager.estaEnCuarentenaFk('mock-fk-id-123')).toBe(true);
+
+      await syncManager.liberarRegistrosCuarentena();
+
+      expect(modifyProyectosSpy).toHaveBeenCalledWith({ sync_status: 'pending' });
+      expect(modifyTareasSpy).toHaveBeenCalledWith({ sync_status: 'pending' });
+      expect(syncManager.estaEnCuarentenaFk('mock-fk-id-123')).toBe(false);
     });
   });
 });
