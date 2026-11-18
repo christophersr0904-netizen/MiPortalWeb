@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar,
   Archive,
@@ -14,7 +14,8 @@ import {
   Keyboard,
   Globe,
   Briefcase,
-  Lightbulb
+  Lightbulb,
+  Settings
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -40,7 +41,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
   onCambiarVista,
   onAbrirAsistenteIA: _onAbrirAsistenteIA,
   onAbrirAtajos,
-  onAbrirExportarPdf,
+  onAbrirExportarPdf: _onAbrirExportarPdf,
   drawerArchivadosAbierto: propDrawerAbierto,
   onToggleDrawerArchivados,
   sincronizando = false
@@ -55,6 +56,32 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
   const [busquedaArchivados, setBusquedaArchivados] = useState('');
   const [recargandoAnim, setRecargandoAnim] = useState(false);
   const [syncManagerEstado, setSyncManagerEstado] = useState<SyncState>(() => syncManager.getStatus());
+
+  // Menú de Herramientas y Configuración (REQ-UI-UX-17-FEAT)
+  const [menuHerramientasAbierto, setMenuHerramientasAbierto] = useState(false);
+  const menuHerramientasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuHerramientasAbierto) return;
+    const handleClickFuera = (e: MouseEvent) => {
+      if (menuHerramientasRef.current && !menuHerramientasRef.current.contains(e.target as Node)) {
+        setMenuHerramientasAbierto(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setMenuHerramientasAbierto(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickFuera);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickFuera);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuHerramientasAbierto]);
 
   useEffect(() => {
     const unsubscribe = syncManager.subscribe((nuevoEstado) => {
@@ -409,20 +436,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             )}
           </button>
 
-          {/* 1. Botón Calendar */}
-          <a
-            href="https://calendar.google.com/calendar/r"
-            target="_blank"
-            rel="noopener noreferrer"
-            id="btn-header-calendar"
-            className="min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300 active:scale-95 transition-all cursor-pointer flex items-center justify-center select-none"
-            title="Abrir Google Calendar (Presiona C)"
-            aria-label="Abrir Google Calendar"
-          >
-            <Calendar className="w-4 h-4" strokeWidth={1.75} />
-          </a>
-
-          {/* 2. Botón de Archivados (#btn-header-archivados) */}
+          {/* 1. Botón de Archivados (#btn-header-archivados) */}
           <button
             type="button"
             id="btn-header-archivados"
@@ -445,32 +459,82 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             )}
           </button>
 
-          {/* 3. Atajos (#btn-toggle-shortcuts-modal) */}
-          <button
-            type="button"
-            id="btn-toggle-shortcuts-modal"
-            data-legacy-id="btn-shortcuts-config"
-            onClick={onAbrirAtajos}
-            className="min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300 active:scale-95 transition-all cursor-pointer flex items-center justify-center select-none"
-            title="Atajos de Teclado (Presiona ?)"
-            aria-label="Abrir guía de atajos de teclado"
-          >
-            <Keyboard className="w-4 h-4" strokeWidth={1.75} />
-          </button>
-
-          {/* 4. Exportar Ficha PDF (Opcional / Directo) */}
-          {onAbrirExportarPdf && (
+          {/* 2. Menú Desplegable de Herramientas y Configuración (REQ-UI-UX-17-FEAT) */}
+          <div ref={menuHerramientasRef} className="relative inline-flex items-center">
             <button
               type="button"
-              id="btn-header-exportar-pdf"
-              onClick={onAbrirExportarPdf}
-              className="min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300 active:scale-95 transition-all cursor-pointer flex items-center justify-center select-none"
-              title="Generar Ficha Resumen (PDF)"
-              aria-label="Generar Ficha Resumen (PDF)"
+              id="btn-header-tools-menu"
+              onClick={() => setMenuHerramientasAbierto((prev) => !prev)}
+              aria-expanded={menuHerramientasAbierto}
+              aria-label="Abrir menú de herramientas"
+              title="Herramientas y Configuración"
+              className={`min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl border active:scale-95 transition-all cursor-pointer flex items-center justify-center select-none ${
+                menuHerramientasAbierto
+                  ? 'border-sky-500/50 text-sky-300 bg-[#0D1526] shadow-[0_0_12px_rgba(56,189,248,0.2)]'
+                  : 'border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300'
+              }`}
             >
-              <FileText className="w-4 h-4" strokeWidth={1.75} />
+              <Settings className="w-4 h-4" strokeWidth={1.75} />
             </button>
-          )}
+
+            {/* Contenido del Dropdown Flotante */}
+            {menuHerramientasAbierto && (
+              <div
+                role="menu"
+                aria-orientation="vertical"
+                className="absolute right-0 top-[calc(100%+8px)] z-[100] w-60 p-1.5 rounded-2xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] flex flex-col gap-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
+              >
+                {/* Ítem 1 — Abrir Google Calendar */}
+                <a
+                  href="https://calendar.google.com/calendar/r"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  id="btn-header-calendar"
+                  role="menuitem"
+                  onClick={() => setMenuHerramientasAbierto(false)}
+                  className="p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all cursor-pointer group"
+                  title="Abrir Google Calendar en pestaña nueva"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 shrink-0 transition-colors">
+                      <Calendar className="w-4 h-4" strokeWidth={1.75} />
+                    </div>
+                    <span className="font-semibold text-slate-200 group-hover:text-sky-200 truncate">
+                      Abrir Google Calendar
+                    </span>
+                  </div>
+                  <span className="font-mono tabular-nums text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">
+                    C
+                  </span>
+                </a>
+
+                {/* Ítem 2 — Atajos de Teclado */}
+                <button
+                  type="button"
+                  id="btn-toggle-shortcuts-modal"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuHerramientasAbierto(false);
+                    if (onAbrirAtajos) onAbrirAtajos();
+                  }}
+                  className="w-full p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all cursor-pointer group text-left"
+                  title="Guía interactiva de atajos de teclado"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 shrink-0 transition-colors">
+                      <Keyboard className="w-4 h-4" strokeWidth={1.75} />
+                    </div>
+                    <span className="font-semibold text-slate-200 group-hover:text-sky-200 truncate">
+                      Atajos de Teclado
+                    </span>
+                  </div>
+                  <span className="font-mono tabular-nums text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">
+                    ?
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
