@@ -198,7 +198,7 @@ export function useGlobalShortcuts({
         stateRef.current.drawerArchivadosAbierto ||
         Boolean(stateRef.current.asistenteIaAbierto) ||
         (typeof document !== 'undefined' &&
-          document.querySelectorAll('[role="dialog"], [aria-modal="true"], [id^="modal-"], .portal-surface').length > 0);
+          document.querySelectorAll('[role="dialog"], [aria-modal="true"]').length > 0);
 
       if (hayModalAbierto) {
         const keyTest = e.key.toLowerCase();
