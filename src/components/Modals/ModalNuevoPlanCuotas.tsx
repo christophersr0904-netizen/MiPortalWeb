@@ -10,13 +10,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Building, Calendar, DollarSign, Layers } from 'lucide-react';
+import { X, Building, DollarSign, Layers } from 'lucide-react';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { crearCuota } from '../../services/cuotasService';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
 import { sincronizarCreacionCalendar } from '../../services/calendarSyncService';
 import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import { InputFechaCobalt } from '../UI/InputFechaCobalt';
 import { OPCIONES_MONEDA_COBALT } from '../../constants/uiMappers';
 
 export interface ModalNuevoPlanCuotasProps {
@@ -207,15 +208,11 @@ export const ModalNuevoPlanCuotas: React.FC<ModalNuevoPlanCuotasProps> = ({
             </div>
 
             <div>
-              <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.75} />
-                Fecha 1ra Cuota
-              </label>
-              <input
-                type="date"
+              <InputFechaCobalt
+                label="Fecha 1ra Cuota"
                 value={fechaVencimiento}
-                onChange={(e) => setFechaVencimiento(e.target.value)}
-                className="w-full px-3 py-2 min-h-[42px] rounded-xl bg-slate-900 border border-slate-800 text-slate-100 outline-none focus:ring-1 focus:ring-violet-500 font-mono tabular-nums"
+                onChange={setFechaVencimiento}
+                className="min-h-[42px] rounded-xl px-3 py-2"
               />
             </div>
           </div>

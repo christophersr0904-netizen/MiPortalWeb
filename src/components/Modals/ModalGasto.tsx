@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
 import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import { InputFechaCobalt } from '../UI/InputFechaCobalt';
+import { InputHoraCobalt } from '../UI/InputHoraCobalt';
 import {
   OPCIONES_MONEDA_COBALT,
   OPCIONES_CATEGORIA_GASTO_COBALT,
@@ -456,15 +458,12 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
             {/* Bento Grid Paritario 2: Fecha + Tipo de Cambio */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-end">
               <div>
-                <label className="block font-semibold mb-1 text-slate-300">
-                  {modoDual === 'REAL' ? 'Fecha de Pago / Desembolso' : 'Fecha Programada de Vencimiento'}
-                </label>
-                <input
-                  type="date"
+                <InputFechaCobalt
+                  label={modoDual === 'REAL' ? 'Fecha de Pago / Desembolso' : 'Fecha Programada de Vencimiento'}
                   value={fecha}
-                  onChange={(e) => handleFechaChange(e.target.value)}
+                  onChange={handleFechaChange}
                   required
-                  className="w-full min-h-[42px] bg-slate-900/60 border border-slate-800 text-slate-100 font-medium outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 py-2 font-mono tabular-nums"
+                  className="min-h-[42px] rounded-xl px-3 py-2 font-medium"
                 />
               </div>
               <div>
@@ -504,14 +503,11 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold mb-1 text-slate-300">
-                      Hora de Vencimiento
-                    </label>
-                    <input
-                      type="time"
+                    <InputHoraCobalt
+                      label="Hora de Vencimiento"
                       value={hora}
-                      onChange={(e) => setHora(e.target.value)}
-                      className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 font-mono text-xs outline-none rounded-lg p-2 focus:border-sky-500"
+                      onChange={setHora}
+                      className="p-2 rounded-lg"
                     />
                   </div>
                   <div>

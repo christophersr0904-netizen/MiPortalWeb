@@ -43,6 +43,8 @@ import {
 import { ModalAlcanceRecurrencia } from './ModalAlcanceRecurrencia';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
+import { InputFechaCobalt } from '../UI/InputFechaCobalt';
+import { InputHoraCobalt } from '../UI/InputHoraCobalt';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import {
   CATEGORIAS_VIDA_MAP,
@@ -1237,24 +1239,16 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                 <div className="space-y-2 text-xs">
                   {/* Fecha y Hora */}
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Fecha</label>
-                      <input
-                        type="date"
-                        value={fecha}
-                        onChange={(e) => setFecha(e.target.value)}
-                        className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums outline-none text-slate-200 focus:border-sky-500/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-400 block mb-0.5">Hora</label>
-                      <input
-                        type="time"
-                        value={hora}
-                        onChange={(e) => setHora(e.target.value)}
-                        className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono tabular-nums outline-none text-slate-200 focus:border-sky-500/50"
-                      />
-                    </div>
+                    <InputFechaCobalt
+                      label="Fecha"
+                      value={fecha}
+                      onChange={setFecha}
+                    />
+                    <InputHoraCobalt
+                      label="Hora"
+                      value={hora}
+                      onChange={setHora}
+                    />
                   </div>
 
                   {/* Frecuencia de Repetición */}
@@ -1386,12 +1380,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                           <span>Hasta</span>
                         </label>
                         {tieneFechaFin && (
-                          <input
-                            type="date"
-                            value={fechaFin}
-                            onChange={(e) => setFechaFin(e.target.value)}
-                            className="flex-1 bg-[#040711] px-2 py-0.5 rounded-lg border border-slate-800 text-xs font-mono tabular-nums text-slate-200 outline-none focus:border-sky-500/50"
-                          />
+                          <div className="flex-1">
+                            <InputFechaCobalt
+                              value={fechaFin}
+                              onChange={setFechaFin}
+                            />
+                          </div>
                         )}
                       </div>
                     </div>

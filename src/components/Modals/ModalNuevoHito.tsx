@@ -18,7 +18,6 @@ import {
   Layers,
   Flag,
   Briefcase,
-  Calendar,
   DollarSign,
   Clock,
   Percent,
@@ -32,6 +31,7 @@ import { generateSafeUUID } from '../../utils/uuidGenerator';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import type { TipoElementoWBS, HitoWbsRecord } from '../../types';
 import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
+import { InputFechaCobalt } from '../UI/InputFechaCobalt';
 import { construirOpcionesFasesWbs } from '../../constants/uiMappers';
 
 export interface ModalNuevoHitoProps {
@@ -497,16 +497,12 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
               </div>
 
               {/* Fecha Límite */}
-              <div className="space-y-1.5">
-                <label className="block text-[11px] font-semibold text-slate-300 flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-amber-400" strokeWidth={1.75} />
-                  <span>Fecha Límite</span>
-                </label>
-                <input
-                  type="date"
+              <div>
+                <InputFechaCobalt
+                  label="Fecha Límite"
                   value={fechaLimite}
-                  onChange={(e) => setFechaLimite(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 font-mono tabular-nums focus:outline-none focus:border-sky-500 transition"
+                  onChange={setFechaLimite}
+                  className="rounded-xl px-3 py-2 text-xs"
                 />
               </div>
             </div>

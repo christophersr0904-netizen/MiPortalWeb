@@ -25,6 +25,7 @@ import {
 } from '../../types';
 import { guardarMetaPlanLocal } from '../../services/metasService';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
+import { InputFechaCobalt } from '../UI/InputFechaCobalt';
 
 interface ModalMetaPlanFlowProps {
   isOpen: boolean;
@@ -504,22 +505,20 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
               {/* Fechas de Cronograma y Estado */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Fecha de Inicio</label>
-                  <input
-                    type="date"
+                  <InputFechaCobalt
+                    label="Fecha de Inicio"
                     value={fechaInicio}
-                    onChange={(e) => setFechaInicio(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700 text-xs text-white"
+                    onChange={setFechaInicio}
+                    className="rounded-xl px-3 py-1.5 text-xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Fecha Límite / Cierre</label>
-                  <input
-                    type="date"
+                  <InputFechaCobalt
+                    label="Fecha Límite / Cierre"
                     value={fechaFin}
-                    onChange={(e) => setFechaFin(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700 text-xs text-white"
+                    onChange={setFechaFin}
+                    className="rounded-xl px-3 py-1.5 text-xs"
                   />
                 </div>
 
@@ -563,13 +562,14 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
                     }
                   }}
                 />
-                <input
-                  type="date"
-                  value={nuevoHitoFecha}
-                  onChange={(e) => setNuevoHitoFecha(e.target.value)}
-                  className="w-full sm:w-auto px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white"
-                  title="Fecha objetivo del hito"
-                />
+                <div className="w-full sm:w-44">
+                  <InputFechaCobalt
+                    value={nuevoHitoFecha}
+                    onChange={setNuevoHitoFecha}
+                    placeholder="Fecha objetivo"
+                    className="px-2.5 py-1.5 rounded-lg text-xs"
+                  />
+                </div>
                 <input
                   type="number"
                   min={0.1}

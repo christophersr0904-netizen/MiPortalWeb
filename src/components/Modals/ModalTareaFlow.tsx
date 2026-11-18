@@ -33,6 +33,8 @@ import { getProp } from '../../utils/entityNormalizer';
 import { generateSafeUUID } from '../../utils/uuidGenerator';
 import { SeccionNotasVinculadasModal } from '../Notas/SeccionNotasVinculadasModal';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
+import { InputFechaCobalt } from '../UI/InputFechaCobalt';
+import { InputHoraCobalt } from '../UI/InputHoraCobalt';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { crearTarea, actualizarTarea, eliminarTarea } from '../../services/tareasService';
 import { crearGasto, actualizarGasto } from '../../services/gastosService';
@@ -728,24 +730,16 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
 
                     <div className="space-y-2 text-xs">
                       <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] text-slate-400 block mb-0.5">Fecha Programada</label>
-                          <input
-                            type="date"
-                            value={fechaProgramada}
-                            onChange={(e) => setFechaProgramada(e.target.value)}
-                            className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono outline-none text-slate-200 focus:border-sky-500/50"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-slate-400 block mb-0.5">Hora Inicio</label>
-                          <input
-                            type="time"
-                            value={horaInicio}
-                            onChange={(e) => setHoraInicio(e.target.value)}
-                            className="w-full bg-[#040711] px-2 py-1 rounded-lg border border-slate-800 text-xs font-mono outline-none text-slate-200 focus:border-sky-500/50"
-                          />
-                        </div>
+                        <InputFechaCobalt
+                          label="Fecha Programada"
+                          value={fechaProgramada}
+                          onChange={setFechaProgramada}
+                        />
+                        <InputHoraCobalt
+                          label="Hora Inicio"
+                          value={horaInicio}
+                          onChange={setHoraInicio}
+                        />
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import { InputFechaCobalt } from '../UI/InputFechaCobalt';
 import {
   OPCIONES_ARQUETIPO,
   OPCIONES_MAGNITUD,
@@ -997,28 +998,18 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
 
                 {/* Fechas Planificadas */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-semibold text-slate-300 block mb-1.5">
-                      Fecha Inicio Plan
-                    </label>
-                    <input
-                      type="date"
-                      value={fechaInicioPlan}
-                      onChange={(e) => setFechaInicioPlan(e.target.value)}
-                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 text-slate-100 font-mono font-medium text-xs outline-none focus:border-sky-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-semibold text-slate-300 block mb-1.5">
-                      Fecha Fin Estimada
-                    </label>
-                    <input
-                      type="date"
-                      value={fechaFinPlan}
-                      onChange={(e) => setFechaFinPlan(e.target.value)}
-                      className="w-full border border-slate-800 bg-slate-900/60 rounded-xl p-2.5 text-slate-100 font-mono font-medium text-xs outline-none focus:border-sky-500"
-                    />
-                  </div>
+                  <InputFechaCobalt
+                    label="Fecha Inicio Plan"
+                    value={fechaInicioPlan}
+                    onChange={setFechaInicioPlan}
+                    className="p-2.5 rounded-xl text-xs"
+                  />
+                  <InputFechaCobalt
+                    label="Fecha Fin Estimada"
+                    value={fechaFinPlan}
+                    onChange={setFechaFinPlan}
+                    className="p-2.5 rounded-xl text-xs"
+                  />
                 </div>
               </div>
 

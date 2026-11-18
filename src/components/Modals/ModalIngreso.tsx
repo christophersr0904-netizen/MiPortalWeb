@@ -27,6 +27,8 @@ import { crearIngreso, actualizarIngreso, eliminarIngreso } from '../../services
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
 import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
+import { InputFechaCobalt } from '../UI/InputFechaCobalt';
+import { InputHoraCobalt } from '../UI/InputHoraCobalt';
 import {
   OPCIONES_MONEDA_COBALT,
   OPCIONES_CATEGORIA_INGRESO_COBALT,
@@ -382,15 +384,12 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
             {/* Fecha y TC */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold mb-1 text-slate-300">
-                  {modoDual === 'REAL' ? 'Fecha de Cobro / Depósito' : 'Fecha Prevista de Cobro'}
-                </label>
-                <input
-                  type="date"
+                <InputFechaCobalt
+                  label={modoDual === 'REAL' ? 'Fecha de Cobro / Depósito' : 'Fecha Prevista de Cobro'}
                   value={fecha}
-                  onChange={(e) => handleFechaChange(e.target.value)}
+                  onChange={handleFechaChange}
                   required
-                  className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 font-medium outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 rounded-xl p-2"
+                  className="rounded-xl p-2 font-medium"
                 />
               </div>
               <div>
@@ -430,14 +429,11 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold mb-1 text-slate-300">
-                      Hora Prevista de Cobro
-                    </label>
-                    <input
-                      type="time"
+                    <InputHoraCobalt
+                      label="Hora Prevista de Cobro"
                       value={hora}
-                      onChange={(e) => setHora(e.target.value)}
-                      className="w-full bg-slate-900/60 border border-slate-800 text-slate-100 font-mono text-xs outline-none rounded-lg p-2 focus:border-sky-500"
+                      onChange={setHora}
+                      className="p-2 rounded-lg"
                     />
                   </div>
                   <div>
