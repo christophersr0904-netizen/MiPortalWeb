@@ -3,14 +3,13 @@ import type { ActividadPersonal, SubtareaPaso, AlcanceRecurrencia, MetaPlanRecor
 import { CATEGORIAS_VIDA_MAP } from '../../types';
 import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
 import {
-  Check, Flame, Calendar, Clock, CalendarClock, Pencil, Trash2,
+  Check, Flame, Calendar, Clock, Trash2,
   HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee, AlertTriangle,
   Target, ListTodo, Repeat, TrendingUp
 } from 'lucide-react';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
 import { formatFechaIsoLocal, formatearFechaDdMmYyyy, formatearFechaDdMm } from '../../utils/timeFormatters';
 import { esActividadCompletadaHoy } from '../../services/habitosService';
-import { abrirGoogleCalendarActividad } from '../../services/calendarSyncService';
 
 /** Traduce el código técnico de recurrencia a etiqueta humana para tooltips. */
 const formatearCicloLegible = (frecuencia?: string, regla?: string): string => {
@@ -294,18 +293,6 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
 
           {/* Acciones Secundarias ergonómicas (Visibles en móvil, hover suave desktop) */}
           <div className="flex items-center gap-0.5 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150 shrink-0">
-            {onEditar && (
-              <button
-                type="button"
-                onClick={handleSolicitarEditar}
-                aria-label="Editar hábito"
-                className="min-w-[40px] min-h-[40px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center text-slate-400 hover:text-sky-300 rounded-lg hover:bg-slate-800/60 transition-colors cursor-pointer"
-                title="Editar hábito"
-              >
-                <Pencil className="w-3.5 h-3.5 sm:w-3 sm:h-3" strokeWidth={1.75} />
-              </button>
-            )}
-
             {onEliminar && (
               <button
                 type="button"
@@ -539,21 +526,6 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
               <span>{actividad.hora_inicio}</span>
             </span>
-          )}
-
-          {(actividad.agendado_calendar === 'Sí' || (actividad as any).id_evento_calendar) && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                abrirGoogleCalendarActividad(actividad);
-              }}
-              className="inline-flex items-center justify-center p-0.5 rounded text-sky-400 hover:text-sky-300 hover:bg-sky-500/15 transition cursor-pointer"
-              title="Agendado en Google Calendar (clic para abrir)"
-              aria-label="Abrir en Google Calendar"
-            >
-              <CalendarClock className="w-3.5 h-3.5" strokeWidth={1.75} />
-            </button>
           )}
         </div>
 

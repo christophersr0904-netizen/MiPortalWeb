@@ -128,7 +128,10 @@ describe('Motor Unificado de Recurrencias y Estándar RFC-5545 [REQ-UI-38-EXEC]'
         fecha_programada: '2026-11-12',
         fecha_fin: '2026-12-31'
       });
-      expect(rrule).toBe('RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR;UNTIL=20261231T235959Z');
+      const [fy, fm, fd] = '2026-12-31'.split('-').map(Number);
+      const limiteDateLima = new Date(fy, fm - 1, fd, 23, 59, 59);
+      const expectedUntil = limiteDateLima.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+      expect(rrule).toBe(`RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR;UNTIL=${expectedUntil}`);
     });
 
     it('construye evento Google Calendar v3 con zona America/Lima, recurrence y EXDATE', () => {

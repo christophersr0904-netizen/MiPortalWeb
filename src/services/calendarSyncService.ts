@@ -27,7 +27,7 @@ export const GOOGLE_CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3/
 export const GCAL_EVENT_MAP_KEY = 'pmo_gcal_event_map';
 export const GCAL_TOKEN_STORAGE_KEY = 'pmo_gcal_access_token';
 export const GCAL_EXPIRES_STORAGE_KEY = 'pmo_gcal_expires_at';
-export const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+export const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar';
 
 export interface EntidadAgendable {
   id?: string;
@@ -105,10 +105,10 @@ function emitirCambioEstado() {
   });
 }
 
-function leerSessionStorage(key: string): string | null {
+function leerLocalStorage(key: string): string | null {
   try {
-    if (typeof sessionStorage !== 'undefined') {
-      return sessionStorage.getItem(key);
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem(key);
     }
   } catch {
     // Ignorar en entornos restringidos
@@ -116,11 +116,11 @@ function leerSessionStorage(key: string): string | null {
   return null;
 }
 
-function escribirSessionStorage(key: string, value: string | null): void {
+function escribirLocalStorage(key: string, value: string | null): void {
   try {
-    if (typeof sessionStorage !== 'undefined') {
-      if (value === null) sessionStorage.removeItem(key);
-      else sessionStorage.setItem(key, value);
+    if (typeof localStorage !== 'undefined') {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
     }
   } catch {
     // Ignorar en entornos restringidos
@@ -131,16 +131,16 @@ export function setGoogleCalendarAccessToken(token: string | null, expiresInSeco
   if (!token) {
     accessTokenMemoria = null;
     expiresAtMemoria = 0;
-    escribirSessionStorage(GCAL_TOKEN_STORAGE_KEY, null);
-    escribirSessionStorage(GCAL_EXPIRES_STORAGE_KEY, null);
+    escribirLocalStorage(GCAL_TOKEN_STORAGE_KEY, null);
+    escribirLocalStorage(GCAL_EXPIRES_STORAGE_KEY, null);
     emitirCambioEstado();
     return;
   }
   const exp = Date.now() + Math.max(60, expiresInSeconds) * 1000;
   accessTokenMemoria = token;
   expiresAtMemoria = exp;
-  escribirSessionStorage(GCAL_TOKEN_STORAGE_KEY, token);
-  escribirSessionStorage(GCAL_EXPIRES_STORAGE_KEY, String(exp));
+  escribirLocalStorage(GCAL_TOKEN_STORAGE_KEY, token);
+  escribirLocalStorage(GCAL_EXPIRES_STORAGE_KEY, String(exp));
   emitirCambioEstado();
 }
 
@@ -154,8 +154,8 @@ function obtenerTokenSincrono(): string | null {
     return accessTokenMemoria;
   }
 
-  const tokenStorage = leerSessionStorage(GCAL_TOKEN_STORAGE_KEY);
-  const expRaw = leerSessionStorage(GCAL_EXPIRES_STORAGE_KEY);
+  const tokenStorage = leerLocalStorage(GCAL_TOKEN_STORAGE_KEY);
+  const expRaw = leerLocalStorage(GCAL_EXPIRES_STORAGE_KEY);
   const expStorage = expRaw ? parseInt(expRaw, 10) : 0;
   if (tokenStorage && (!expStorage || Date.now() + margenMs < expStorage)) {
     accessTokenMemoria = tokenStorage;
@@ -186,9 +186,23 @@ export function suscribirEstadoGoogleCalendar(
 }
 
 /**
- * Obtiene un Bearer access_token vigente desde memoria/sessionStorage o desde Supabase Auth (`provider_token`).
+ * Obtiene un Bearer access_token vigente desde memoria/localStorage o desde Supabase Auth (`provider_token`).
+ * Si el token en localStorage está a menos de 5 minutos de caducar o ya caducó, invoca autorizarGoogleCalendarOAuth(true) silencioso.
  */
 export async function obtenerTokenGoogleCalendar(): Promise<string | null> {
+  const tokenStorage = leerLocalStorage(GCAL_TOKEN_STORAGE_KEY);
+  const expRaw = leerLocalStorage(GCAL_EXPIRES_STORAGE_KEY);
+  const expStorage = expRaw ? parseInt(expRaw, 10) : 0;
+  const cincoMinutosMs = 5 * 60 * 1000;
+
+  // Si existe registro previo en localStorage y está a menos de 5 min de caducar o ya caducó:
+  if (tokenStorage && (!expStorage || Date.now() + cincoMinutosMs >= expStorage)) {
+    const authSilenciosa = await autorizarGoogleCalendarOAuth(true).catch(() => ({ success: false, token: undefined }));
+    if (authSilenciosa.success && authSilenciosa.token) {
+      return authSilenciosa.token;
+    }
+  }
+
   const tokenLocal = obtenerTokenSincrono();
   if (tokenLocal) return tokenLocal;
 
@@ -217,26 +231,31 @@ async function cargarScriptGIS(): Promise<void> {
   if (win.google?.accounts?.oauth2) return;
 
   await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Timeout al cargar Google Identity Services'));
+    }, 4000);
+
     const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
     if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error('No se pudo cargar Google Identity Services')), { once: true });
+      existing.addEventListener('load', () => { clearTimeout(timer); resolve(); }, { once: true });
+      existing.addEventListener('error', () => { clearTimeout(timer); reject(new Error('No se pudo cargar Google Identity Services')); }, { once: true });
       return;
     }
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('No se pudo cargar Google Identity Services'));
+    script.onload = () => { clearTimeout(timer); resolve(); };
+    script.onerror = () => { clearTimeout(timer); reject(new Error('No se pudo cargar Google Identity Services')); };
     document.head.appendChild(script);
   });
 }
 
 /**
- * Inicia autorización OAuth2 directa con Google Identity Services (`calendar.events`).
+ * Inicia autorización OAuth2 directa con Google Identity Services (`https://www.googleapis.com/auth/calendar`).
+ * Si silencioso es true, pasa prompt: 'none' para renovación silenciosa sin modal.
  */
-export async function autorizarGoogleCalendarOAuth(): Promise<{
+export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<{
   success: boolean;
   token?: string;
   requiereConfigClientId?: boolean;
@@ -284,7 +303,7 @@ export async function autorizarGoogleCalendarOAuth(): Promise<{
           });
         }
       });
-      tokenClient.requestAccessToken({ prompt: accessTokenMemoria ? '' : 'consent' });
+      tokenClient.requestAccessToken({ prompt: silencioso ? 'none' : 'consent' });
     });
   } catch (err: any) {
     return {
@@ -420,10 +439,21 @@ function construirResultadoAuthRequerida(
 
 export async function obtenerIdCalendarioParaEntidad(entidad: any, token: string): Promise<string> {
   let nombreEsperado = 'primary';
-  const tipo = (entidad?.tipo_entidad || '').toUpperCase();
-  if (tipo === 'HABITO' || tipo === 'ACTIVIDAD') nombreEsperado = 'MiPortalWeb - Hábitos';
-  else if (tipo === 'GASTO' || tipo === 'INGRESO') nombreEsperado = 'MiPortalWeb - Finanzas';
-  else if (tipo === 'TAREA' || tipo === 'HITO') nombreEsperado = 'MiPortalWeb - Proyectos';
+  const tipoEntidad = (entidad?.tipo_entidad || '').toUpperCase();
+  const tipoCompromiso = (entidad?.tipo_compromiso || '').toUpperCase();
+
+  if (
+    tipoEntidad === 'HABITO' ||
+    tipoEntidad === 'ACTIVIDAD' ||
+    tipoCompromiso === 'HÁBITO' ||
+    tipoCompromiso === 'ACTIVIDAD PUNTUAL'
+  ) {
+    nombreEsperado = 'MiPortalWeb - Hábitos';
+  } else if (tipoEntidad === 'GASTO' || tipoEntidad === 'INGRESO') {
+    nombreEsperado = 'MiPortalWeb - Finanzas';
+  } else if (tipoEntidad === 'TAREA' || tipoEntidad === 'HITO') {
+    nombreEsperado = 'MiPortalWeb - Proyectos';
+  }
 
   if (nombreEsperado === 'primary') return 'primary';
 
@@ -447,7 +477,7 @@ export async function obtenerIdCalendarioParaEntidad(entidad: any, token: string
     const createRes = await fetch('https://www.googleapis.com/calendar/v3/calendars', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ summary: nombreEsperado })
+      body: JSON.stringify({ summary: nombreEsperado, timeZone: 'America/Lima' })
     });
     if (createRes.ok) {
       const createData = await createRes.json();

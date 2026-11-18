@@ -347,7 +347,11 @@ export function construirRRuleRFC5545(
 
   const fFin = normalizarFechaIso(resolverCampo(actividad, 'fecha_fin', 'Fecha_Fin'));
   if (fFin) {
-    partes.push(`UNTIL=${fFin.replace(/-/g, '')}T235959Z`);
+    // Calcula límite del último día a las 23:59:59 hora de Lima, y lo pasa a formato UTC (Z) sin hardcodear 235959Z
+    const [fy, fm, fd] = fFin.split('-').map(Number);
+    const limiteDateLima = new Date(fy, fm - 1, fd, 23, 59, 59);
+    const untilUTC = limiteDateLima.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    partes.push(`UNTIL=${untilUTC}`);
   }
 
   return `RRULE:${partes.join(';')}`;

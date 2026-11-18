@@ -229,8 +229,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   // Fecha, Hora, Duración y Recurrencia (Google Calendar / Tasks Style)
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('08:00');
-  const [duracionHoras, setDuracionHoras] = useState(1.0);
-  const [duracionStr, setDuracionStr] = useState('1:00');
+  const [duracionHoras, setDuracionHoras] = useState(0);
+  const [duracionStr, setDuracionStr] = useState('0:00');
   const [tipoRecurrencia, setTipoRecurrencia] = useState<TipoRecurrenciaOpcion>('DIARIA');
   const [diasSemana, setDiasSemana] = useState<string[]>(['LU', 'MA', 'MI', 'JU', 'VI']);
   const [intervaloRepeticion, setIntervaloRepeticion] = useState<number>(1);
@@ -304,7 +304,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       setCalendarSync(actividadEditar.agendado_calendar || 'Sí');
       setFecha((actividadEditar.fecha_programada || '').split(/[\sT]/)[0]);
       setHora(actividadEditar.hora_inicio || '08:00');
-      const dur = actividadEditar.duracion_horas ?? 1.0;
+      const dur = actividadEditar.duracion_horas ?? 0;
       setDuracionHoras(dur);
       setDuracionStr(convertirHorasDecimalAString(dur));
 
@@ -449,8 +449,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       const hoy = formatFechaIsoLocal();
       setFecha(hoy);
       setHora('08:00');
-      setDuracionHoras(1.0);
-      setDuracionStr('1:00');
+      setDuracionHoras(0);
+      setDuracionStr('0:00');
       setTipoRecurrencia('DIARIA');
       setDiasSemana(['LU', 'MA', 'MI', 'JU', 'VI']);
       setIntervaloRepeticion(1);
@@ -611,7 +611,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     const fechaFinInicial = (actividadEditar.fecha_fin || '').split(/[\sT]/)[0];
     const fechaFinCambio = ((payload.fecha_fin || '').split(/[\sT]/)[0]) !== fechaFinInicial;
     const horaCambio = payload.hora_inicio !== (actividadEditar.hora_inicio || '08:00');
-    const duracionCambio = (payload.duracion_horas ?? 1.0) !== (actividadEditar.duracion_horas ?? 1.0);
+    const duracionCambio = (payload.duracion_horas ?? 0) !== (actividadEditar.duracion_horas ?? 0);
     const syncCambio = payload.agendado_calendar !== (actividadEditar.agendado_calendar || 'Sí');
     const freqInicial = actividadEditar.frecuencia_ciclo || (actividadEditar.tipo_compromiso === 'PUNTUAL' ? 'NINGUNA' : 'DIARIA');
     const freqCambio = (payload.frecuencia_ciclo || 'DIARIA') !== freqInicial;
@@ -937,6 +937,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
       sync_status: 'pending'
     };
     (payload as any).prioridad = prioridad;
+    (payload as any).tipo_entidad = 'ACTIVIDAD';
 
     if (actividadEditar) {
       // 1. Detección de cambios reales (Dirty Checking)
