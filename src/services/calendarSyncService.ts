@@ -415,8 +415,52 @@ function construirResultadoAuthRequerida(
 }
 
 // ============================================================================
-// OPERACIONES REALES CONTRA GOOGLE CALENDAR REST API V3
+// OPERACIONES REALES CONTRA GOOGLE CALENDAR REST API V3 (ROUTER DINÁMICO)
 // ============================================================================
+
+export async function obtenerIdCalendarioParaEntidad(entidad: any, token: string): Promise<string> {
+  let nombreEsperado = 'primary';
+  const tipo = (entidad?.tipo_entidad || '').toUpperCase();
+  if (tipo === 'HABITO' || tipo === 'ACTIVIDAD') nombreEsperado = 'MiPortalWeb - Hábitos';
+  else if (tipo === 'GASTO' || tipo === 'INGRESO') nombreEsperado = 'MiPortalWeb - Finanzas';
+  else if (tipo === 'TAREA' || tipo === 'HITO') nombreEsperado = 'MiPortalWeb - Proyectos';
+
+  if (nombreEsperado === 'primary') return 'primary';
+
+  const cacheKey = `pmo_cal_id_${nombreEsperado}`;
+  const cachedId = typeof localStorage !== 'undefined' ? localStorage.getItem(cacheKey) : null;
+  if (cachedId) return cachedId;
+
+  try {
+    const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      const calEncontrado = listData.items?.find((c: any) => c.summary === nombreEsperado);
+      if (calEncontrado?.id) {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(cacheKey, calEncontrado.id);
+        return calEncontrado.id;
+      }
+    }
+
+    const createRes = await fetch('https://www.googleapis.com/calendar/v3/calendars', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ summary: nombreEsperado })
+    });
+    if (createRes.ok) {
+      const createData = await createRes.json();
+      if (createData?.id) {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(cacheKey, createData.id);
+        return createData.id;
+      }
+    }
+  } catch (e) {
+    console.warn('[CalendarRouter] Error al enrutar calendario, fallback a primary', e);
+  }
+  return 'primary';
+}
 
 /**
  * CREATE: Crea un evento puntual o serie recurrente (RRULE RFC-5545) en Google Calendar API v3.
@@ -451,8 +495,11 @@ export async function sincronizarCreacionCalendar(
     return construirResultadoAuthRequerida(actividad, rrule, eventoV3);
   }
 
+  const calendarId = await obtenerIdCalendarioParaEntidad(actividad, token);
+  const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+
   try {
-    const response = await fetch(GOOGLE_CALENDAR_API_BASE, {
+    const response = await fetch(eventsUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -555,8 +602,11 @@ export async function sincronizarActualizacionCalendar(
     return construirResultadoAuthRequerida(actividad, rrule, eventoV3);
   }
 
+  const calendarId = await obtenerIdCalendarioParaEntidad(actividad, token);
+  const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+
   try {
-    const response = await fetch(`${GOOGLE_CALENDAR_API_BASE}/${encodeURIComponent(eventId)}`, {
+    const response = await fetch(`${eventsUrl}/${encodeURIComponent(eventId)}`, {
       method: 'PATCH',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -656,6 +706,9 @@ export async function sincronizarEliminacionCalendar(
     };
   }
 
+  const calendarId = await obtenerIdCalendarioParaEntidad(actividad, token);
+  const eventsUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+
   // Eliminación de una única instancia ('SINGLE'): actualizar recurrence con EXDATE
   if (alcanceNorm === 'SINGLE') {
     const fechaExc = normalizarFechaIso(fechaReferencia || actividad.fecha_programada);
@@ -672,7 +725,7 @@ export async function sincronizarEliminacionCalendar(
     const rrule = construirRRuleRFC5545(actConExcepcion);
 
     try {
-      const response = await fetch(`${GOOGLE_CALENDAR_API_BASE}/${encodeURIComponent(eventId)}`, {
+      const response = await fetch(`${eventsUrl}/${encodeURIComponent(eventId)}`, {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -743,7 +796,7 @@ export async function sincronizarEliminacionCalendar(
     const rrule = construirRRuleRFC5545(actRecortada);
 
     try {
-      const response = await fetch(`${GOOGLE_CALENDAR_API_BASE}/${encodeURIComponent(eventId)}`, {
+      const response = await fetch(`${eventsUrl}/${encodeURIComponent(eventId)}`, {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -789,7 +842,7 @@ export async function sincronizarEliminacionCalendar(
 
   // Eliminación total de evento o serie ('ALL')
   try {
-    const response = await fetch(`${GOOGLE_CALENDAR_API_BASE}/${encodeURIComponent(eventId)}`, {
+    const response = await fetch(`${eventsUrl}/${encodeURIComponent(eventId)}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Bearer ${token}`

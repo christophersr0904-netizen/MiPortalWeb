@@ -359,7 +359,7 @@ function calcularFinLocalLima(fechaIso: string, horaInicio: string, duracionHora
 } {
   const [y, m, d] = fechaIso.split('-').map((n) => parseInt(n, 10));
   const [hh, mm] = horaInicio.split(':').map((n) => parseInt(n, 10));
-  const durMinutos = Math.max(15, Math.round((duracionHoras || 1) * 60));
+  const durMinutos = (duracionHoras === 0 || duracionHoras === undefined) ? 1 : Math.max(1, Math.round(duracionHoras * 60));
 
   const inicioDate = new Date(y, m - 1, d, hh, mm, 0);
   const finDate = new Date(inicioDate.getTime() + durMinutos * 60000);
@@ -407,9 +407,8 @@ export function construirEventoGoogleCalendarV3(
       )
     ) || formatFechaIsoLocal();
   const horaBase = normalizarHora24(resolverCampo(actividad, 'hora_inicio', 'Hora_Inicio'), '08:00');
-  const durHoras = Number(
-    resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas', 'horas_estimadas') ?? 1
-  ) || 1;
+  const durHorasRaw = resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas', 'horas_estimadas');
+  const durHoras = durHorasRaw !== undefined && durHorasRaw !== null ? Number(durHorasRaw) : 0;
   const { fechaFin, horaFin } = calcularFinLocalLima(fechaBase, horaBase, durHoras);
 
   const summary = String(
@@ -483,9 +482,8 @@ export function construirUrlGoogleCalendar(
       )
     ) || formatFechaIsoLocal();
   const horaBase = normalizarHora24(resolverCampo(actividad, 'hora_inicio', 'Hora_Inicio'), '08:00');
-  const durHoras = Number(
-    resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas', 'horas_estimadas') ?? 1
-  ) || 1;
+  const durHorasRaw = resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas', 'horas_estimadas');
+  const durHoras = durHorasRaw !== undefined && durHorasRaw !== null ? Number(durHorasRaw) : 0;
   const { fechaFin, horaFin } = calcularFinLocalLima(fechaBase, horaBase, durHoras);
 
   const startCompact = `${fechaBase.replace(/-/g, '')}T${horaBase.replace(':', '')}00`;
@@ -546,9 +544,8 @@ export function generarArchivoICS(
       )
     ) || formatFechaIsoLocal();
   const horaBase = normalizarHora24(resolverCampo(actividad, 'hora_inicio', 'Hora_Inicio'), '08:00');
-  const durHoras = Number(
-    resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas', 'horas_estimadas') ?? 1
-  ) || 1;
+  const durHorasRaw = resolverCampo(actividad, 'duracion_horas', 'Duracion_Horas', 'horas_estimadas');
+  const durHoras = durHorasRaw !== undefined && durHorasRaw !== null ? Number(durHorasRaw) : 0;
   const { fechaFin, horaFin } = calcularFinLocalLima(fechaBase, horaBase, durHoras);
 
   const startCompact = `${fechaBase.replace(/-/g, '')}T${horaBase.replace(':', '')}00`;

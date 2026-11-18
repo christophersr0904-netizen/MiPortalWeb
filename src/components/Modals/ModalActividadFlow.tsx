@@ -683,35 +683,40 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     }
 
     if (actividadEditar) {
-      const editRes = await editarActividadConAlcance(
+      editarActividadConAlcance(
         actividadEditar,
         payloadAguardar,
         alcance,
         actividadEditar.fecha_programada
-      );
-      if (editRes.calendarResult) {
-        if (editRes.calendarResult.success && editRes.calendarResult.mode === 'API_V3') {
-          mostrarToastCobalt(editRes.calendarResult.message || 'Actualizado en Google Calendar', 'success');
-        } else if (editRes.calendarResult.requiereAuth) {
-          mostrarToastCobalt('Cambios guardados · Conecta Google Calendar para sync automático', 'info', 3500);
-        } else if (!editRes.calendarResult.success && editRes.calendarResult.error) {
-          mostrarToastCobalt(`Guardado local · ${editRes.calendarResult.error}`, 'warning', 3500);
+      ).then((editRes) => {
+        if (editRes.calendarResult) {
+          if (editRes.calendarResult.success && editRes.calendarResult.mode === 'API_V3') {
+            mostrarToastCobalt(editRes.calendarResult.message || 'Actualizado en Google Calendar', 'success');
+          } else if (editRes.calendarResult.requiereAuth) {
+            mostrarToastCobalt('Cambios guardados · Conecta Google Calendar para sync automático', 'info', 3500);
+          } else if (!editRes.calendarResult.success && editRes.calendarResult.error) {
+            mostrarToastCobalt(`Guardado local · ${editRes.calendarResult.error}`, 'warning', 3500);
+          }
         }
-      }
+      }).catch((e) => {
+        console.warn('[ModalActividadFlow] Error en edición con alcance:', e);
+      });
     } else {
       await db.actividades_personales.put(payloadAguardar);
       if (calendarSync === 'Sí') {
-        const calRes = await sincronizarCreacionCalendar(payloadAguardar).catch((e) => {
-          console.warn('[ModalActividadFlow] Fallo en sincronización inicial Calendar:', e);
-          return null;
-        });
-        if (calRes?.success && calRes.mode === 'API_V3') {
-          mostrarToastCobalt('Sincronizado en Google Calendar', 'success');
-        } else if (calRes?.requiereAuth) {
-          mostrarToastCobalt('Actividad guardada · Conecta Google Calendar para sync automático', 'info', 3500);
-        } else if (calRes && !calRes.success && calRes.error) {
-          mostrarToastCobalt(`Guardado local · ${calRes.error}`, 'warning', 3500);
-        }
+        sincronizarCreacionCalendar(payloadAguardar)
+          .then((calRes) => {
+            if (calRes?.success && calRes.mode === 'API_V3') {
+              mostrarToastCobalt('Sincronizado en Google Calendar', 'success');
+            } else if (calRes?.requiereAuth) {
+              mostrarToastCobalt('Actividad guardada · Conecta Google Calendar para sync automático', 'info', 3500);
+            } else if (calRes && !calRes.success && calRes.error) {
+              mostrarToastCobalt(`Guardado local · ${calRes.error}`, 'warning', 3500);
+            }
+          })
+          .catch((e) => {
+            console.warn('[ModalActividadFlow] Fallo en sincronización inicial Calendar:', e);
+          });
       }
     }
 
