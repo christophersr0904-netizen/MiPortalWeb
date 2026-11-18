@@ -13,6 +13,8 @@ import {
   Minimize2,
   Search,
   CheckSquare,
+  Square,
+  ListTodo,
   FolderPlus,
   Activity,
   FileText,
@@ -23,7 +25,9 @@ import {
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
-import type { IdeaRecord } from '../../types';
+import type { IdeaRecord, NotaRecord } from '../../types';
+import { syncManager } from '../../services/syncManager';
+import { generarCodigoCorrelativoSeguro } from '../../utils/entityNormalizer';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import { generateSafeUUID } from '../../utils/uuidGenerator';
@@ -176,6 +180,24 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Estados para Nota Express (REQ-UI-UX-03-FEAT)
+  const [modoCaptura, setModoCaptura] = useState<'idea' | 'nota'>('idea');
+  const [tituloNota, setTituloNota] = useState('');
+  const [cuerpoNota, setCuerpoNota] = useState('');
+  const [mostrarChecklistNota, setMostrarChecklistNota] = useState(false);
+  const [itemsChecklistNota, setItemsChecklistNota] = useState<{ id: string; texto: string; completado: boolean }[]>([]);
+  const [nuevoItemChecklist, setNuevoItemChecklist] = useState('');
+
+  const modoCapturaRef = useRef<'idea' | 'nota'>('idea');
+  useEffect(() => {
+    modoCapturaRef.current = modoCaptura;
+  }, [modoCaptura]);
+
+  const cuerpoNotaRef = useRef<string>(cuerpoNota);
+  useEffect(() => {
+    cuerpoNotaRef.current = cuerpoNota;
+  }, [cuerpoNota]);
+
   // Estados para Auto-Record sin setTimeout y Fallback de Toque Ciego (REQ-BUGFIX-71-EXEC)
   const [pendingAutoRecord, setPendingAutoRecord] = useState(false);
   const [requiereToqueManual, setRequiereToqueManual] = useState(false);
@@ -210,8 +232,13 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     onTranscript: (texto) => {
       const base = baseTextoVozRef.current;
       const resultado = base ? `${base} ${texto}` : texto;
-      setEnunciado(resultado);
-      enunciadoRef.current = resultado;
+      if (modoCapturaRef.current === 'nota') {
+        setCuerpoNota(resultado);
+        cuerpoNotaRef.current = resultado;
+      } else {
+        setEnunciado(resultado);
+        enunciadoRef.current = resultado;
+      }
       setFueGrabadoConVoz(true);
       fueGrabadoConVozRef.current = true;
     },
@@ -230,12 +257,16 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       setVoiceResetSignal((n) => n + 1);
     },
     onSilenceTimeout: () => {
-      // Si el usuario deja de hablar por 2.5s y hay texto o adjunto, auto-guardar en Inbox
-      const textoActual = (enunciadoRef.current || '').trim();
-      if (textoActual || adjuntoRef.current) {
-        handleGuardarIdeaRef.current();
-      } else {
+      if (modoCapturaRef.current === 'nota') {
         stopListening();
+      } else {
+        // Si el usuario deja de hablar por 2.5s y hay texto o adjunto, auto-guardar en Inbox
+        const textoActual = (enunciadoRef.current || '').trim();
+        if (textoActual || adjuntoRef.current) {
+          handleGuardarIdeaRef.current();
+        } else {
+          stopListening();
+        }
       }
     },
     silenceTimeoutMs: 2500
@@ -255,6 +286,12 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     setPendingAutoRecord(false);
     setRequiereToqueManual(false);
     isAutoRecordAttemptRef.current = false;
+    setTituloNota('');
+    setCuerpoNota('');
+    cuerpoNotaRef.current = '';
+    setItemsChecklistNota([]);
+    setNuevoItemChecklist('');
+    setMostrarChecklistNota(false);
     if (isListening) {
       stopListening();
     }
@@ -335,10 +372,14 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       return;
     }
 
-    baseTextoVozRef.current = (enunciadoRef.current || enunciado).trim();
+    if (modoCapturaRef.current === 'nota') {
+      baseTextoVozRef.current = (cuerpoNotaRef.current || cuerpoNota).trim();
+    } else {
+      baseTextoVozRef.current = (enunciadoRef.current || enunciado).trim();
+    }
     setFueGrabadoConVoz(true);
     startListening();
-  }, [isSupported, enunciado, startListening]);
+  }, [isSupported, enunciado, cuerpoNota, startListening]);
 
   const handleVoiceStop = useCallback(() => {
     stopListening();
@@ -620,6 +661,95 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   useEffect(() => {
     handleGuardarIdeaRef.current = handleGuardarIdea;
   });
+
+  // Handlers para Nota Express (REQ-UI-UX-03-FEAT)
+  const handleToggleItemChecklist = (id: string) => {
+    setItemsChecklistNota((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, completado: !item.completado } : item))
+    );
+  };
+
+  const handleEliminarItemChecklist = (id: string) => {
+    setItemsChecklistNota((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleAgregarItemChecklist = () => {
+    const texto = nuevoItemChecklist.trim();
+    if (!texto) return;
+    setItemsChecklistNota((prev) => [
+      ...prev,
+      { id: generateSafeUUID(), texto, completado: false }
+    ]);
+    setNuevoItemChecklist('');
+  };
+
+  const handleGuardarNotaRapida = async () => {
+    const tieneTitulo = Boolean(tituloNota.trim());
+    const tieneCuerpo = Boolean(cuerpoNota.trim());
+    const tieneChecklist = itemsChecklistNota.length > 0;
+
+    if (!tieneTitulo && !tieneCuerpo && !tieneChecklist) {
+      mostrarToastCobalt('Ingresa un título o contenido para la nota', 'warning');
+      return;
+    }
+
+    if (guardando || guardandoRef.current) return;
+    guardandoRef.current = true;
+    if (isListening) {
+      stopListening();
+    }
+
+    setGuardando(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const id = generateSafeUUID();
+      const codigoLegado = await generarCodigoCorrelativoSeguro(db.notas, 'NOT', 5);
+
+      let contenidoFinal = cuerpoNota.trim();
+      if (tieneChecklist) {
+        const checklistMd = itemsChecklistNota
+          .map((item) => `- [${item.completado ? 'x' : ' '}] ${item.texto}`)
+          .join('\n');
+        contenidoFinal = contenidoFinal ? `${contenidoFinal}\n\n${checklistMd}` : checklistMd;
+      }
+
+      const payloadNota: NotaRecord = {
+        id,
+        user_id: '00000000-0000-0000-0000-000000000001',
+        codigo_legado: codigoLegado,
+        titulo: tituloNota.trim() || 'Nota Rápida',
+        contenido_markdown: contenidoFinal,
+        tipo_nota: tieneChecklist ? 'CHECKLIST' : 'RAPIDA',
+        block_nombre: 'Inbox',
+        color_tema: 'emerald',
+        color: 'emerald',
+        es_fijada: false,
+        checklists_json: itemsChecklistNota,
+        adjuntos_drive_json: [],
+        enlaces_entidades_json: [],
+        etiquetas: ['rápida'],
+        created_at: nowIso,
+        updated_at: nowIso,
+        version: 1,
+        sync_status: 'pending'
+      };
+
+      await db.notas.put(payloadNota);
+      syncManager.syncPendingRecords().catch((err) => {
+        console.warn('[WidgetIdeasBubble] Error en syncManager.syncPendingRecords tras guardar nota rápida:', err);
+      });
+
+      mostrarToastCobalt('Nota rápida guardada en Inbox', 'success');
+      resetFormulario();
+      setPopoverAbierto(false);
+    } catch (err) {
+      console.error('[WidgetIdeasBubble] Error al guardar nota rápida:', err);
+      mostrarToastCobalt('No se pudo guardar la nota', 'error');
+    } finally {
+      guardandoRef.current = false;
+      setGuardando(false);
+    }
+  };
 
   // Convertir idea a Tarea
   const handleConvertirATarea = async (idea: IdeaRecord) => {
@@ -1192,7 +1322,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
             >
               <SpotlightCard
                 id="popover-captura-rapida-idea"
-                spotlightColor="rgba(56, 189, 248, 0.12)"
+                spotlightColor={modoCaptura === 'nota' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(56, 189, 248, 0.12)'}
                 proximity={0}
                 flare={false}
                 style={
@@ -1201,13 +1331,42 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                     '--spotlight-card-border': 'rgba(30, 41, 59, 0.8)'
                   } as React.CSSProperties
                 }
-                className="w-80 max-w-[calc(100vw-24px)] sm:w-[360px] bg-[#0D1526]/95 border border-slate-800/80 rounded-2xl !p-3.5 shadow-2xl backdrop-blur-xl focus-within:border-sky-500/50 text-slate-100 flex flex-col gap-2.5 transition-colors duration-150"
+                className={`w-80 max-w-[calc(100vw-24px)] sm:w-[360px] bg-[#0D1526]/95 border border-slate-800/80 rounded-2xl !p-3.5 shadow-2xl backdrop-blur-xl ${
+                  modoCaptura === 'nota' ? 'focus-within:border-emerald-500/50' : 'focus-within:border-sky-500/50'
+                } text-slate-100 flex flex-col gap-2.5 transition-colors duration-150`}
               >
-                {/* Cabecera minimalista */}
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold tracking-wide text-slate-400">
-                    Captura rápida
-                  </span>
+                {/* Cabecera con Switcher de Pestañas Dual (Idea / Nota) y controles de ventana */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center p-0.5 rounded-lg bg-[#0B1220] border border-slate-800/80">
+                    <button
+                      type="button"
+                      id="btn-tab-modo-idea"
+                      onClick={() => setModoCaptura('idea')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                        modoCaptura === 'idea'
+                          ? 'bg-slate-800/80 text-sky-400 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Lightbulb className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      <span>Idea</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="btn-tab-modo-nota"
+                      onClick={() => setModoCaptura('nota')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                        modoCaptura === 'nota'
+                          ? 'bg-slate-800/80 text-emerald-400 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      <span>Nota</span>
+                    </button>
+                  </div>
+
                   <div className="flex items-center gap-0.5">
                     <button
                       type="button"
@@ -1234,178 +1393,343 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                   </div>
                 </div>
 
-                {/* Textarea minimalista sin bordes ni labels parásitos */}
-                <div className="flex flex-col">
-                  <textarea
-                    ref={textareaRef}
-                    id="input-captura-rapida-enunciado"
-                    aria-label="Enunciado de la idea rápida"
-                    autoFocus
-                    rows={4}
-                    value={enunciado}
-                    onChange={(e) => setEnunciado(e.target.value)}
-                    placeholder="Captura un pensamiento, comando o tarea rápida..."
-                    className="w-full bg-transparent border-0 p-1 text-sm leading-relaxed text-slate-100 placeholder-slate-500 focus:outline-none resize-none min-h-[88px] font-sans"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
-                        handleGuardarIdea();
-                      }
-                    }}
-                  />
-                </div>
+                {/* VISTA 1: CAPTURA DE IDEA ORIGINAL (INTACTA) */}
+                {modoCaptura === 'idea' && (
+                  <div className="flex flex-col gap-2.5">
+                    {/* Textarea minimalista sin bordes ni labels parásitos */}
+                    <div className="flex flex-col">
+                      <textarea
+                        ref={textareaRef}
+                        id="input-captura-rapida-enunciado"
+                        aria-label="Enunciado de la idea rápida"
+                        autoFocus
+                        rows={4}
+                        value={enunciado}
+                        onChange={(e) => setEnunciado(e.target.value)}
+                        placeholder="Captura un pensamiento, comando o tarea rápida..."
+                        className="w-full bg-transparent border-0 p-1 text-sm leading-relaxed text-slate-100 placeholder-slate-500 focus:outline-none resize-none min-h-[88px] font-sans"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
+                            handleGuardarIdea();
+                          }
+                        }}
+                      />
+                    </div>
 
-                {/* Inputs ocultos para adjuntos y captura visual */}
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept="image/*,.pdf,.doc,.docx,.txt"
-                  onChange={handleSeleccionarArchivo}
-                  aria-hidden="true"
-                />
-                <input
-                  ref={cameraInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handleCapturarImagen}
-                  className="hidden"
-                  aria-hidden="true"
-                />
+                    {/* Inputs ocultos para adjuntos y captura visual */}
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*,.pdf,.doc,.docx,.txt"
+                      onChange={handleSeleccionarArchivo}
+                      aria-hidden="true"
+                    />
+                    <input
+                      ref={cameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleCapturarImagen}
+                      className="hidden"
+                      aria-hidden="true"
+                    />
 
-                {/* Chip de adjunto flotante justo arriba de la botonera */}
-                {(procesandoAdjunto || adjunto) && (
-                  <div>
-                    {procesandoAdjunto ? (
-                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 inline-flex items-center gap-1.5 font-mono">
-                        Comprimiendo...
-                      </span>
-                    ) : adjunto ? (
-                      <div
-                        id="chip-adjunto-captura-rapida"
-                        className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 flex items-center gap-1.5 w-fit max-w-full"
-                        title={`${adjunto.nombre} (${adjunto.pesoKb}KB)`}
-                      >
-                        {adjunto.esImagen ? (
-                          <ImageIcon className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.5} />
-                        ) : (
-                          <FileText className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.5} />
+                    {/* Chip de adjunto flotante justo arriba de la botonera */}
+                    {(procesandoAdjunto || adjunto) && (
+                      <div>
+                        {procesandoAdjunto ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 inline-flex items-center gap-1.5 font-mono">
+                            Comprimiendo...
+                          </span>
+                        ) : adjunto ? (
+                          <div
+                            id="chip-adjunto-captura-rapida"
+                            className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 flex items-center gap-1.5 w-fit max-w-full"
+                            title={`${adjunto.nombre} (${adjunto.pesoKb}KB)`}
+                          >
+                            {adjunto.esImagen ? (
+                              <ImageIcon className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.5} />
+                            ) : (
+                              <FileText className="w-3 h-3 text-sky-400 shrink-0" strokeWidth={1.5} />
+                            )}
+                            <span className="truncate font-medium">
+                              {acortarNombreArchivo(adjunto.nombre)}
+                            </span>
+                            <span className="font-mono tabular-nums text-[10px] text-slate-400 shrink-0">
+                              ({adjunto.pesoKb}KB)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setAdjunto(null)}
+                              className="w-4 h-4 rounded text-slate-400 hover:text-rose-300 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                              title="Remover adjunto"
+                              aria-label="Remover adjunto"
+                            >
+                              <X className="w-3 h-3" strokeWidth={1.5} />
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+
+                    {/* Barra inferior técnica depurada (REQ-UI-31-HOTFIX-2) */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
+                      {/* Izquierda: 4 micro-herramientas técnicas en Dark Cobalt */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <VoicePill
+                          id="btn-quick-voice-record"
+                          reactive="simulated"
+                          showTime={false}
+                          waveform={false}
+                          slideToCancel={false}
+                          reach={0}
+                          shape="rounded"
+                          size={32}
+                          accentColor="#38bdf8"
+                          iconColor="#94a3b8"
+                          background="#0B1220"
+                          className="rounded-lg text-slate-400 hover:text-slate-100 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] [&>span:first-child]:!border-slate-800/80 hover:[&>span:first-child]:!border-sky-500/40 data-[state=listening]:shadow-[0_0_14px_rgba(56,189,248,0.28)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 focus-visible:outline-offset-1"
+                          active={isListening}
+                          resetSignal={voiceResetSignal}
+                          disabled={guardando || procesandoAdjunto}
+                          ariaLabel={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
+                          title={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
+                          onStart={handleVoiceStart}
+                          onStop={handleVoiceStop}
+                        />
+
+                        <button
+                          type="button"
+                          id="btn-quick-idea-attach"
+                          disabled={isListening || procesandoAdjunto || guardando}
+                          onClick={() => fileInputRef.current?.click()}
+                          className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
+                            isListening || procesandoAdjunto ? 'opacity-40 pointer-events-none' : ''
+                          }`}
+                          title="Adjuntar archivo o imagen"
+                          aria-label="Adjuntar archivo o imagen"
+                        >
+                          <Paperclip className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+                        </button>
+
+                        <button
+                          type="button"
+                          id="btn-quick-idea-camera"
+                          disabled={isListening || procesandoAdjunto || guardando}
+                          onClick={() => cameraInputRef.current?.click()}
+                          className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
+                            isListening || procesandoAdjunto ? 'opacity-40 pointer-events-none' : ''
+                          }`}
+                          title="Capturar imagen con cámara"
+                          aria-label="Capturar imagen con cámara"
+                        >
+                          <Camera className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+                        </button>
+
+                        {onAbrirAsistenteIA && (
+                          <button
+                            type="button"
+                            id="btn-quick-idea-ai"
+                            disabled={isListening || guardando}
+                            onClick={() => {
+                              cerrarPopover();
+                              onAbrirAsistenteIA();
+                            }}
+                            className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-sky-400 hover:text-sky-300 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
+                              isListening ? 'opacity-40 pointer-events-none' : ''
+                            }`}
+                            title="Clarificar con Asistente IA"
+                            aria-label="Clarificar con Asistente IA"
+                          >
+                            <Sparkles className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.5} />
+                          </button>
                         )}
-                        <span className="truncate font-medium">
-                          {acortarNombreArchivo(adjunto.nombre)}
-                        </span>
-                        <span className="font-mono tabular-nums text-[10px] text-slate-400 shrink-0">
-                          ({adjunto.pesoKb}KB)
+                      </div>
+
+                      {/* Derecha: Atajo visual + Botón Enviar con flecha técnica */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-mono text-slate-500 select-none">
+                          Ctrl ↵
                         </span>
                         <button
                           type="button"
-                          onClick={() => setAdjunto(null)}
-                          className="w-4 h-4 rounded text-slate-400 hover:text-rose-300 flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                          title="Remover adjunto"
-                          aria-label="Remover adjunto"
+                          id="btn-quick-idea-submit"
+                          disabled={guardando || procesandoAdjunto || (!enunciado.trim() && !adjunto)}
+                          onClick={handleGuardarIdea}
+                          className={`h-8 px-3 rounded-lg font-semibold text-xs transition-all duration-150 active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                            !guardando && !procesandoAdjunto && (enunciado.trim() || adjunto)
+                              ? 'bg-sky-500 hover:bg-sky-400 text-slate-950 cursor-pointer'
+                              : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed'
+                          }`}
                         >
-                          <X className="w-3 h-3" strokeWidth={1.5} />
+                          <span>{guardando ? 'Guardando...' : 'Guardar'}</span>
+                          <CornerDownLeft className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
                         </button>
                       </div>
-                    ) : null}
+                    </div>
                   </div>
                 )}
 
-                {/* Barra inferior técnica depurada (REQ-UI-31-HOTFIX-2) */}
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
-                  {/* Izquierda: 4 micro-herramientas técnicas en Dark Cobalt */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <VoicePill
-                      id="btn-quick-voice-record"
-                      reactive="simulated"
-                      showTime={false}
-                      waveform={false}
-                      slideToCancel={false}
-                      reach={0}
-                      shape="rounded"
-                      size={32}
-                      accentColor="#38bdf8"
-                      iconColor="#94a3b8"
-                      background="#0B1220"
-                      className="rounded-lg text-slate-400 hover:text-slate-100 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] [&>span:first-child]:!border-slate-800/80 hover:[&>span:first-child]:!border-sky-500/40 data-[state=listening]:shadow-[0_0_14px_rgba(56,189,248,0.28)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 focus-visible:outline-offset-1"
-                      active={isListening}
-                      resetSignal={voiceResetSignal}
-                      disabled={guardando || procesandoAdjunto}
-                      ariaLabel={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
-                      title={isListening ? 'Detener grabación de voz' : 'Grabar Nota de Voz'}
-                      onStart={handleVoiceStart}
-                      onStop={handleVoiceStop}
+                {/* VISTA 2: CAPTURA DE NOTA EXPRESS CON CHECKLIST (REQ-UI-UX-03-FEAT) */}
+                {modoCaptura === 'nota' && (
+                  <div className="flex flex-col gap-2">
+                    {/* Título de la nota */}
+                    <input
+                      type="text"
+                      id="input-captura-rapida-nota-titulo"
+                      value={tituloNota}
+                      onChange={(e) => setTituloNota(e.target.value)}
+                      placeholder="Título de la nota..."
+                      className="w-full bg-transparent border-0 px-1 py-0.5 text-sm font-semibold text-slate-100 placeholder-slate-500 focus:outline-none font-sans"
                     />
 
-                    <button
-                      type="button"
-                      id="btn-quick-idea-attach"
-                      disabled={isListening || procesandoAdjunto || guardando}
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
-                        isListening || procesandoAdjunto ? 'opacity-40 pointer-events-none' : ''
-                      }`}
-                      title="Adjuntar archivo o imagen"
-                      aria-label="Adjuntar archivo o imagen"
-                    >
-                      <Paperclip className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-                    </button>
+                    {/* Cuerpo de la nota */}
+                    <textarea
+                      id="input-captura-rapida-nota-cuerpo"
+                      rows={mostrarChecklistNota ? 2 : 4}
+                      value={cuerpoNota}
+                      onChange={(e) => setCuerpoNota(e.target.value)}
+                      placeholder="Escribe el contenido de la nota..."
+                      className="w-full bg-transparent border-0 px-1 text-xs leading-relaxed text-slate-200 placeholder-slate-500 focus:outline-none resize-none min-h-[56px] font-sans"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
+                          handleGuardarNotaRapida();
+                        }
+                      }}
+                    />
 
-                    <button
-                      type="button"
-                      id="btn-quick-idea-camera"
-                      disabled={isListening || procesandoAdjunto || guardando}
-                      onClick={() => cameraInputRef.current?.click()}
-                      className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
-                        isListening || procesandoAdjunto ? 'opacity-40 pointer-events-none' : ''
-                      }`}
-                      title="Capturar imagen con cámara"
-                      aria-label="Capturar imagen con cámara"
-                    >
-                      <Camera className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-                    </button>
+                    {/* Sección Checklist Interactivo */}
+                    {mostrarChecklistNota && (
+                      <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-800/40">
+                        {itemsChecklistNota.length > 0 && (
+                          <div className="max-h-28 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                            {itemsChecklistNota.map((item) => (
+                              <div
+                                key={item.id}
+                                className="group flex items-center justify-between gap-1.5 px-1.5 py-1 rounded-md bg-slate-900/60 hover:bg-slate-800/50 text-xs transition-colors"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleItemChecklist(item.id)}
+                                  className="flex items-center gap-1.5 text-left flex-1 min-w-0 cursor-pointer"
+                                >
+                                  {item.completado ? (
+                                    <CheckSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} />
+                                  ) : (
+                                    <Square className="w-3.5 h-3.5 text-slate-500 shrink-0" strokeWidth={1.75} />
+                                  )}
+                                  <span
+                                    className={`truncate ${
+                                      item.completado ? 'line-through text-slate-500' : 'text-slate-200'
+                                    }`}
+                                  >
+                                    {item.texto}
+                                  </span>
+                                </button>
 
-                    {onAbrirAsistenteIA && (
-                      <button
-                        type="button"
-                        id="btn-quick-idea-ai"
-                        disabled={isListening || guardando}
-                        onClick={() => {
-                          cerrarPopover();
-                          onAbrirAsistenteIA();
-                        }}
-                        className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-sky-400 hover:text-sky-300 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
-                          isListening ? 'opacity-40 pointer-events-none' : ''
-                        }`}
-                        title="Clarificar con Asistente IA"
-                        aria-label="Clarificar con Asistente IA"
-                      >
-                        <Sparkles className="w-4 h-4 text-sky-400 shrink-0" strokeWidth={1.5} />
-                      </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEliminarItemChecklist(item.id)}
+                                  className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition-opacity p-0.5 cursor-pointer shrink-0"
+                                  title="Eliminar ítem"
+                                >
+                                  <X className="w-3 h-3" strokeWidth={1.75} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Input para añadir nuevo ítem con Enter */}
+                        <div className="flex items-center gap-1 px-1">
+                          <input
+                            type="text"
+                            value={nuevoItemChecklist}
+                            onChange={(e) => setNuevoItemChecklist(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAgregarItemChecklist();
+                              }
+                            }}
+                            placeholder="Añadir ítem y presionar Enter..."
+                            className="flex-1 bg-slate-900/70 border border-slate-800/80 rounded-lg px-2 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 font-sans"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAgregarItemChecklist}
+                            disabled={!nuevoItemChecklist.trim()}
+                            className="p-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 text-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                            title="Añadir ítem"
+                          >
+                            <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </div>
 
-                  {/* Derecha: Atajo visual + Botón Enviar con flecha técnica */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] font-mono text-slate-500 select-none">
-                      Ctrl ↵
-                    </span>
-                    <button
-                      type="button"
-                      id="btn-quick-idea-submit"
-                      disabled={guardando || procesandoAdjunto || (!enunciado.trim() && !adjunto)}
-                      onClick={handleGuardarIdea}
-                      className={`h-8 px-3 rounded-lg font-semibold text-xs transition-all duration-150 active:scale-95 flex items-center gap-1.5 shrink-0 ${
-                        !guardando && !procesandoAdjunto && (enunciado.trim() || adjunto)
-                          ? 'bg-sky-500 hover:bg-sky-400 text-slate-950 cursor-pointer'
-                          : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed'
-                      }`}
-                    >
-                      <span>{guardando ? 'Guardando...' : 'Guardar'}</span>
-                      <CornerDownLeft className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
-                    </button>
+                    {/* Barra Inferior (Emerald Theme) */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <VoicePill
+                          id="btn-quick-voice-record-nota"
+                          reactive="simulated"
+                          showTime={false}
+                          waveform={false}
+                          slideToCancel={false}
+                          reach={0}
+                          shape="rounded"
+                          size={32}
+                          accentColor="#10b981"
+                          iconColor="#94a3b8"
+                          background="#0B1220"
+                          className="rounded-lg text-slate-400 hover:text-emerald-300 hover:shadow-[0_0_12px_rgba(16,185,129,0.2)] [&>span:first-child]:!border-slate-800/80 hover:[&>span:first-child]:!border-emerald-500/40 data-[state=listening]:shadow-[0_0_14px_rgba(16,185,129,0.28)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 focus-visible:outline-offset-1"
+                          active={isListening}
+                          resetSignal={voiceResetSignal}
+                          disabled={guardando}
+                          ariaLabel={isListening ? 'Detener dictado de voz' : 'Dictar contenido de nota'}
+                          title={isListening ? 'Detener dictado de voz' : 'Dictar contenido de nota'}
+                          onStart={handleVoiceStart}
+                          onStop={handleVoiceStop}
+                        />
+
+                        <button
+                          type="button"
+                          id="btn-toggle-checklist-nota"
+                          onClick={() => setMostrarChecklistNota((prev) => !prev)}
+                          className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-emerald-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(16,185,129,0.2)] transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 shrink-0 ${
+                            mostrarChecklistNota ? 'text-emerald-400 border-emerald-500/40' : 'text-slate-400 hover:text-emerald-400'
+                          }`}
+                          title={mostrarChecklistNota ? 'Ocultar Checklist' : 'Agregar Checklist'}
+                          aria-label="Toggle Checklist"
+                        >
+                          <ListTodo className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-mono text-slate-500 select-none">
+                          Ctrl ↵
+                        </span>
+                        <button
+                          type="button"
+                          id="btn-quick-nota-submit"
+                          disabled={guardando || (!tituloNota.trim() && !cuerpoNota.trim() && itemsChecklistNota.length === 0)}
+                          onClick={handleGuardarNotaRapida}
+                          className={`h-8 px-3 rounded-lg font-semibold text-xs transition-all duration-150 active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                            !guardando && (tituloNota.trim() || cuerpoNota.trim() || itemsChecklistNota.length > 0)
+                              ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.25)]'
+                              : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed'
+                          }`}
+                        >
+                          <span>{guardando ? 'Guardando...' : 'Guardar Nota'}</span>
+                          <CornerDownLeft className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </SpotlightCard>
             </motion.div>
           )}
