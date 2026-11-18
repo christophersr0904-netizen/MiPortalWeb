@@ -12,6 +12,7 @@ import type { GastoRecord } from '../types';
 import { syncManager } from './syncManager';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
 import { generateSafeUUID } from '../utils/uuidGenerator';
+import { sincronizarGastoCalendar } from './calendarSyncService';
 
 export async function crearGasto(datos: Partial<GastoRecord>): Promise<GastoRecord> {
   const nowIso = new Date().toISOString();
@@ -33,11 +34,19 @@ export async function crearGasto(datos: Partial<GastoRecord>): Promise<GastoReco
     monto_pen: Math.max(0, Number(datos.monto_pen) || 0),
     metodo_pago: datos.metodo_pago || 'Efectivo',
     estado_pago: datos.estado_pago || 'PAGADO',
+    agendar_calendar: datos.agendar_calendar,
+    agendado_calendar: datos.agendado_calendar || (datos.agendar_calendar !== false ? 'Sí' : 'No'),
     updated_at: nowIso,
     sync_status: 'pending'
   };
 
   await db.gastos.put(payload);
+
+  if (datos.agendar_calendar !== false && datos.agendado_calendar !== 'No') {
+    sincronizarGastoCalendar(payload, 'UPSERT').catch((err) => {
+      console.warn('[gastosService] Error al sincronizar gasto con Google Calendar:', err);
+    });
+  }
 
   syncManager.syncPendingRecords().catch((err) => {
     console.warn('[gastosService] Error en syncManager.syncPendingRecords tras crear gasto:', err);
@@ -60,6 +69,12 @@ export async function actualizarGasto(id: string, cambios: Partial<GastoRecord>)
 
   const actualizado = { ...(actual || {}), ...updates } as GastoRecord;
 
+  if (cambios.agendar_calendar !== false && cambios.agendado_calendar !== 'No') {
+    sincronizarGastoCalendar(actualizado, 'UPSERT').catch((err) => {
+      console.warn('[gastosService] Error al sincronizar actualización de gasto con Google Calendar:', err);
+    });
+  }
+
   syncManager.syncPendingRecords().catch((err) => {
     console.warn('[gastosService] Error en syncManager.syncPendingRecords tras actualizar gasto:', err);
   });
@@ -68,8 +83,15 @@ export async function actualizarGasto(id: string, cambios: Partial<GastoRecord>)
 }
 
 export async function eliminarGasto(id: string): Promise<boolean> {
+  const actual = await db.gastos.get(id);
   await registrarTombstone('gastos', id);
   await db.gastos.delete(id);
+
+  if (actual) {
+    sincronizarGastoCalendar(actual, 'DELETE').catch((err) => {
+      console.warn('[gastosService] Error al eliminar gasto en Google Calendar:', err);
+    });
+  }
 
   syncManager.syncPendingRecords().catch((err) => {
     console.warn('[gastosService] Error en syncManager.syncPendingRecords tras eliminar gasto:', err);

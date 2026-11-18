@@ -381,6 +381,16 @@ async function persistirEventIdEnDexie(actividad: AgendableCalendarInput, eventI
         id_evento_calendar: eid,
         updated_at: now
       });
+    } else if (actividad.tipo_entidad === 'GASTO' && db.gastos && typeof db.gastos.update === 'function') {
+      await db.gastos.update(actividadId, {
+        id_evento_calendar: eid,
+        updated_at: now
+      } as any);
+    } else if (actividad.tipo_entidad === 'INGRESO' && db.ingresos && typeof db.ingresos.update === 'function') {
+      await db.ingresos.update(actividadId, {
+        id_evento_calendar: eid,
+        updated_at: now
+      } as any);
     }
   } catch {
     // Tolerar entorno de test donde IndexedDB no está disponible
@@ -852,6 +862,46 @@ export async function sincronizarTareaCalendar(
   opcionesAlcance?: OpcionesAlcanceCalendar
 ): Promise<ResultadoCalendarSync> {
   return sincronizarActividadCalendar(tarea, accion, opcionesAlcance);
+}
+
+/**
+ * Facade polimórfico universal para despachar Gastos hacia Google Calendar API v3.
+ */
+export async function sincronizarGastoCalendar(
+  gasto: any,
+  accion: 'UPSERT' | 'DELETE' = 'UPSERT'
+): Promise<ResultadoCalendarSync> {
+  const agendado = gasto.agendar_calendar !== false && gasto.agendado_calendar !== 'No' ? 'Sí' : 'No';
+  return sincronizarActividadCalendar(
+    {
+      ...gasto,
+      tipo_entidad: 'GASTO',
+      nombre: gasto.nombre || gasto.descripcion_gasto,
+      fecha_programada: gasto.fecha_programada || gasto.fecha_gasto,
+      agendado_calendar: agendado
+    },
+    accion
+  );
+}
+
+/**
+ * Facade polimórfico universal para despachar Ingresos hacia Google Calendar API v3.
+ */
+export async function sincronizarIngresoCalendar(
+  ingreso: any,
+  accion: 'UPSERT' | 'DELETE' = 'UPSERT'
+): Promise<ResultadoCalendarSync> {
+  const agendado = ingreso.agendar_calendar !== false && ingreso.agendado_calendar !== 'No' ? 'Sí' : 'No';
+  return sincronizarActividadCalendar(
+    {
+      ...ingreso,
+      tipo_entidad: 'INGRESO',
+      nombre: ingreso.nombre || ingreso.descripcion_ingreso,
+      fecha_programada: ingreso.fecha_programada || ingreso.fecha_ingreso,
+      agendado_calendar: agendado
+    },
+    accion
+  );
 }
 
 /**

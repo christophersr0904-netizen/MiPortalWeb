@@ -516,6 +516,9 @@ export interface GastoRecord {
   metodo_pago?: string;
   estado_pago: 'PAGADO' | 'PENDIENTE' | 'PROGRAMADO' | string;
   comprobante_url?: string;
+  agendar_calendar?: boolean;
+  agendado_calendar?: 'Sí' | 'No' | string;
+  id_evento_calendar?: string;
   updated_at: string;
   sync_status: SyncStatus;
 }
@@ -535,6 +538,9 @@ export interface IngresoRecord {
   metodo_cobro?: string;
   cuenta_destino?: string;
   estado_cobro: 'COBRADO' | 'PENDIENTE' | string;
+  agendar_calendar?: boolean;
+  agendado_calendar?: 'Sí' | 'No' | string;
+  id_evento_calendar?: string;
   updated_at: string;
   sync_status: SyncStatus;
 }

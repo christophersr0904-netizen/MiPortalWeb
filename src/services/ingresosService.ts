@@ -12,6 +12,7 @@ import type { IngresoRecord } from '../types';
 import { syncManager } from './syncManager';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
 import { generateSafeUUID } from '../utils/uuidGenerator';
+import { sincronizarIngresoCalendar } from './calendarSyncService';
 
 export async function crearIngreso(datos: Partial<IngresoRecord>): Promise<IngresoRecord> {
   const nowIso = new Date().toISOString();
@@ -32,11 +33,19 @@ export async function crearIngreso(datos: Partial<IngresoRecord>): Promise<Ingre
     monto_pen: Math.max(0, Number(datos.monto_pen) || 0),
     cuenta_destino: datos.cuenta_destino || 'Principal',
     estado_cobro: datos.estado_cobro || 'COBRADO',
+    agendar_calendar: datos.agendar_calendar,
+    agendado_calendar: datos.agendado_calendar || (datos.agendar_calendar !== false ? 'Sí' : 'No'),
     updated_at: nowIso,
     sync_status: 'pending'
   };
 
   await db.ingresos.put(payload);
+
+  if (datos.agendar_calendar !== false && datos.agendado_calendar !== 'No') {
+    sincronizarIngresoCalendar(payload, 'UPSERT').catch((err) => {
+      console.warn('[ingresosService] Error al sincronizar ingreso con Google Calendar:', err);
+    });
+  }
 
   syncManager.syncPendingRecords().catch((err) => {
     console.warn('[ingresosService] Error en syncManager.syncPendingRecords tras crear ingreso:', err);
@@ -59,6 +68,12 @@ export async function actualizarIngreso(id: string, cambios: Partial<IngresoReco
 
   const actualizado = { ...(actual || {}), ...updates } as IngresoRecord;
 
+  if (cambios.agendar_calendar !== false && cambios.agendado_calendar !== 'No') {
+    sincronizarIngresoCalendar(actualizado, 'UPSERT').catch((err) => {
+      console.warn('[ingresosService] Error al sincronizar actualización de ingreso con Google Calendar:', err);
+    });
+  }
+
   syncManager.syncPendingRecords().catch((err) => {
     console.warn('[ingresosService] Error en syncManager.syncPendingRecords tras actualizar ingreso:', err);
   });
@@ -67,8 +82,15 @@ export async function actualizarIngreso(id: string, cambios: Partial<IngresoReco
 }
 
 export async function eliminarIngreso(id: string): Promise<boolean> {
+  const actual = await db.ingresos.get(id);
   await registrarTombstone('ingresos', id);
   await db.ingresos.delete(id);
+
+  if (actual) {
+    sincronizarIngresoCalendar(actual, 'DELETE').catch((err) => {
+      console.warn('[ingresosService] Error al eliminar ingreso en Google Calendar:', err);
+    });
+  }
 
   syncManager.syncPendingRecords().catch((err) => {
     console.warn('[ingresosService] Error en syncManager.syncPendingRecords tras eliminar ingreso:', err);

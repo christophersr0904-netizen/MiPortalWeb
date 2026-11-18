@@ -150,7 +150,9 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
       tipo_cambio: tipoCambio,
       monto_pen: montoPEN,
       cuenta_destino: cuentaDestino,
-      estado_cobro: modoDual === 'REAL' ? 'COBRADO' : 'PENDIENTE'
+      estado_cobro: modoDual === 'REAL' ? 'COBRADO' : 'PENDIENTE',
+      agendar_calendar: agendarCalendar,
+      agendado_calendar: agendarCalendar ? 'Sí' : 'No'
     };
 
     let resultado: IngresoRecord;

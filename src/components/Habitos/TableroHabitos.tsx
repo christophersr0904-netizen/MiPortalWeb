@@ -30,8 +30,7 @@ import {
   Target,
   Sun,
   CalendarRange,
-  Layers,
-  Calendar
+  Layers
 } from 'lucide-react';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { ModalAlcanceRecurrencia } from '../Modals/ModalAlcanceRecurrencia';
@@ -39,13 +38,6 @@ import { ModalRegistroAvanceHabito } from '../Modals/ModalRegistroAvanceHabito';
 import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
 import { recalcularProgresoMetaLocal } from '../../services/metasService';
 import { esActividadCompletadaHoy } from '../../services/habitosService';
-import {
-  autorizarGoogleCalendarOAuth,
-  limpiarTokenGoogleCalendar,
-  obtenerEstadoConexionGoogleCalendar,
-  suscribirEstadoGoogleCalendar,
-  type EstadoConexionGoogleCalendar
-} from '../../services/calendarSyncService';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { evaluarOcurrenciaEnFecha } from '../../utils/recurrenceEngine';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
@@ -137,12 +129,6 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
   const [modoOrden, setModoOrden] = useState<ModoOrden>('TIME');
   const [showSortPopover, setShowSortPopover] = useState(false);
   const [showTemporalPopover, setShowTemporalPopover] = useState(false);
-  const [gcalEstado, setGcalEstado] = useState<EstadoConexionGoogleCalendar>(() => obtenerEstadoConexionGoogleCalendar());
-
-  useEffect(() => {
-    setGcalEstado(obtenerEstadoConexionGoogleCalendar());
-    return suscribirEstadoGoogleCalendar(setGcalEstado);
-  }, []);
 
   // Cerrar popovers de toolbar con Escape (respetando prioridad de modales superiores)
   useEffect(() => {
@@ -943,39 +929,6 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
               </>
             )}
           </div>
-
-          {/* Estado y Conexión Google Calendar API v3 (1 clic) */}
-          <button
-            type="button"
-            id="btn-gcal-status-habitos"
-            onClick={async () => {
-              if (gcalEstado.conectado) {
-                limpiarTokenGoogleCalendar();
-                mostrarToastCobalt('Sesión de Google Calendar desconectada', 'info');
-                return;
-              }
-              const res = await autorizarGoogleCalendarOAuth();
-              if (res.success) {
-                mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
-              } else {
-                mostrarToastCobalt(res.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
-              }
-            }}
-            className={`h-9 px-2.5 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 transition cursor-pointer shrink-0 whitespace-nowrap ${
-              gcalEstado.conectado
-                ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/50'
-                : 'bg-[#040711]/60 border-slate-800/60 text-slate-300 hover:border-sky-500/40 hover:text-sky-300'
-            }`}
-            title={
-              gcalEstado.conectado
-                ? 'Google Calendar conectado (clic para desconectar)'
-                : 'Conectar Google Calendar para sincronización automática Create/Update/Delete'
-            }
-          >
-            <Calendar className={`w-3.5 h-3.5 shrink-0 ${gcalEstado.conectado ? 'text-emerald-400' : 'text-sky-400'}`} strokeWidth={1.75} />
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${gcalEstado.conectado ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-            <span className="hidden xl:inline">{gcalEstado.conectado ? 'Calendar Conectado' : 'Conectar Calendar'}</span>
-          </button>
         </div>
       </div>
 

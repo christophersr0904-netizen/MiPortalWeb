@@ -277,7 +277,9 @@ export function useGastoForm({
       tipo_cambio: tipoCambio,
       monto_pen: montoPEN,
       metodo_pago: metodoPago,
-      estado_pago: modoDual === 'REAL' ? 'PAGADO' : 'PENDIENTE'
+      estado_pago: modoDual === 'REAL' ? 'PAGADO' : 'PENDIENTE',
+      agendar_calendar: agendarCalendar,
+      agendado_calendar: agendarCalendar ? 'Sí' : 'No'
     };
 
     let resultado: GastoRecord;
@@ -303,6 +305,7 @@ export function useGastoForm({
     montoPEN,
     metodoPago,
     modoDual,
+    agendarCalendar,
     gastoEditar,
     onGuardadoExitoso,
     onClose
