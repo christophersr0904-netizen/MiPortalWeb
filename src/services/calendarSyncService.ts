@@ -27,6 +27,7 @@ export const GOOGLE_CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3/
 export const GCAL_EVENT_MAP_KEY = 'pmo_gcal_event_map';
 export const GCAL_TOKEN_STORAGE_KEY = 'pmo_gcal_access_token';
 export const GCAL_EXPIRES_STORAGE_KEY = 'pmo_gcal_expires_at';
+export const GCAL_HINT_STORAGE_KEY = 'pmo_gcal_user_hint';
 export const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar';
 
 export interface EntidadAgendable {
@@ -144,8 +145,11 @@ export function setGoogleCalendarAccessToken(token: string | null, expiresInSeco
   emitirCambioEstado();
 }
 
-export function limpiarTokenGoogleCalendar(): void {
+export function limpiarTokenGoogleCalendar(limpiarHint = false): void {
   setGoogleCalendarAccessToken(null);
+  if (limpiarHint) {
+    escribirLocalStorage(GCAL_HINT_STORAGE_KEY, null);
+  }
 }
 
 function obtenerTokenSincrono(): string | null {
@@ -186,17 +190,39 @@ export function suscribirEstadoGoogleCalendar(
 }
 
 /**
+ * REQ-GCAL-AUTH-01-FIX: Renovación proactiva al volver a la pestaña activa.
+ * Si existe un hint guardado y el token está vencido o a menos de 10 minutos de caducar,
+ * renueva silenciosamente en background para mantener conectado: true antes de guardar.
+ */
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      const hint = leerLocalStorage(GCAL_HINT_STORAGE_KEY);
+      if (hint) {
+        const expRaw = leerLocalStorage(GCAL_EXPIRES_STORAGE_KEY);
+        const exp = expRaw ? parseInt(expRaw, 10) : 0;
+        const diezMinMs = 10 * 60 * 1000;
+        if (!exp || Date.now() + diezMinMs >= exp) {
+          void obtenerTokenGoogleCalendar();
+        }
+      }
+    }
+  });
+}
+
+/**
  * Obtiene un Bearer access_token vigente desde memoria/localStorage o desde Supabase Auth (`provider_token`).
- * Si el token en localStorage está a menos de 5 minutos de caducar o ya caducó, invoca autorizarGoogleCalendarOAuth(true) silencioso.
+ * Si el token en localStorage está a menos de 5 minutos de caducar o ya caducó, invoca autorizarGoogleCalendarOAuth(true) silencioso con hint.
  */
 export async function obtenerTokenGoogleCalendar(): Promise<string | null> {
   const tokenStorage = leerLocalStorage(GCAL_TOKEN_STORAGE_KEY);
   const expRaw = leerLocalStorage(GCAL_EXPIRES_STORAGE_KEY);
   const expStorage = expRaw ? parseInt(expRaw, 10) : 0;
   const cincoMinutosMs = 5 * 60 * 1000;
+  const hintStorage = leerLocalStorage(GCAL_HINT_STORAGE_KEY);
 
-  // Si existe registro previo en localStorage y está a menos de 5 min de caducar o ya caducó:
-  if (tokenStorage && (!expStorage || Date.now() + cincoMinutosMs >= expStorage)) {
+  // Si existe token o hint previo y está a menos de 5 min de caducar o ya caducó:
+  if ((tokenStorage || hintStorage) && (!expStorage || Date.now() + cincoMinutosMs >= expStorage)) {
     const authSilenciosa = await autorizarGoogleCalendarOAuth(true).catch(() => ({ success: false, token: undefined }));
     if (authSilenciosa.success && authSilenciosa.token) {
       return authSilenciosa.token;
@@ -252,8 +278,40 @@ async function cargarScriptGIS(): Promise<void> {
 }
 
 /**
+ * REQ-GCAL-AUTH-01-FIX: Resuelve y persiste en localStorage el correo principal
+ * de la cuenta Google autorizada (usado como `hint` en renovaciones silenciosas).
+ */
+async function resolverYGuardarHint(token: string): Promise<void> {
+  try {
+    const existente = leerLocalStorage(GCAL_HINT_STORAGE_KEY);
+    if (existente && existente.trim()) return;
+    const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const email = String(data?.id || '').trim();
+      if (email && email.includes('@')) {
+        escribirLocalStorage(GCAL_HINT_STORAGE_KEY, email);
+      }
+    }
+  } catch (err) {
+    console.warn('[CalendarSync] No se pudo resolver hint de email:', err);
+  }
+}
+
+// Single-flight lock para colapsar múltiples llamadas concurrentes de renovación silenciosa
+let promesaRenovacionEnCurso: Promise<{
+  success: boolean;
+  token?: string;
+  requiereConfigClientId?: boolean;
+  error?: string;
+}> | null = null;
+
+/**
  * Inicia autorización OAuth2 directa con Google Identity Services (`https://www.googleapis.com/auth/calendar`).
- * Si silencioso es true, pasa prompt: 'none' para renovación silenciosa sin modal.
+ * Si silencioso es true, pasa prompt: 'none' e inyecta el `hint` guardado para renovación transparente.
+ * Si ya existe una promesa silenciosa en vuelo, la reutiliza evitando duplicar ventanas o clientes GIS.
  */
 export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<{
   success: boolean;
@@ -261,56 +319,83 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
   requiereConfigClientId?: boolean;
   error?: string;
 }> {
-  const clientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
-  if (!clientId) {
-    return {
-      success: false,
-      requiereConfigClientId: true,
-      error: 'Configura VITE_GOOGLE_CLIENT_ID en .env para habilitar OAuth automático con Google Calendar.'
-    };
+  if (silencioso && promesaRenovacionEnCurso) {
+    return promesaRenovacionEnCurso;
   }
 
-  try {
-    await cargarScriptGIS();
-    const win = window as any;
-    if (!win.google?.accounts?.oauth2?.initTokenClient) {
+  const ejecutarAuth = async () => {
+    const clientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+    if (!clientId) {
       return {
         success: false,
-        error: 'Google Identity Services no inicializó el cliente OAuth2.'
+        requiereConfigClientId: true,
+        error: 'Configura VITE_GOOGLE_CLIENT_ID en .env para habilitar OAuth automático con Google Calendar.'
       };
     }
 
-    return await new Promise((resolve) => {
-      const tokenClient = win.google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: GCAL_SCOPE,
-        callback: (resp: any) => {
-          if (resp?.error || !resp?.access_token) {
+    try {
+      await cargarScriptGIS();
+      const win = window as any;
+      if (!win.google?.accounts?.oauth2?.initTokenClient) {
+        return {
+          success: false,
+          error: 'Google Identity Services no inicializó el cliente OAuth2.'
+        };
+      }
+
+      const hint = leerLocalStorage(GCAL_HINT_STORAGE_KEY) || undefined;
+
+      return await new Promise<{
+        success: boolean;
+        token?: string;
+        requiereConfigClientId?: boolean;
+        error?: string;
+      }>((resolve) => {
+        const tokenClient = win.google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: GCAL_SCOPE,
+          ...(hint ? { hint } : {}),
+          callback: (resp: any) => {
+            if (resp?.error || !resp?.access_token) {
+              resolve({
+                success: false,
+                error: resp?.error_description || resp?.error || 'Autorización denegada por el usuario.'
+              });
+              return;
+            }
+            const expiresIn = Number(resp.expires_in) || 3500;
+            setGoogleCalendarAccessToken(resp.access_token, expiresIn);
+            void resolverYGuardarHint(resp.access_token);
+            resolve({ success: true, token: resp.access_token });
+          },
+          error_callback: (err: any) => {
             resolve({
               success: false,
-              error: resp?.error_description || resp?.error || 'Autorización denegada por el usuario.'
+              error: err?.message || 'Ventana de autorización Google cerrada o bloqueada.'
             });
-            return;
           }
-          const expiresIn = Number(resp.expires_in) || 3500;
-          setGoogleCalendarAccessToken(resp.access_token, expiresIn);
-          resolve({ success: true, token: resp.access_token });
-        },
-        error_callback: (err: any) => {
-          resolve({
-            success: false,
-            error: err?.message || 'Ventana de autorización Google cerrada o bloqueada.'
-          });
-        }
+        });
+        tokenClient.requestAccessToken({
+          prompt: silencioso ? 'none' : 'consent',
+          ...(hint ? { hint } : {})
+        });
       });
-      tokenClient.requestAccessToken({ prompt: silencioso ? 'none' : 'consent' });
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || 'Error al iniciar autorización OAuth con Google Calendar.'
+      };
+    }
+  };
+
+  if (silencioso) {
+    promesaRenovacionEnCurso = ejecutarAuth().finally(() => {
+      promesaRenovacionEnCurso = null;
     });
-  } catch (err: any) {
-    return {
-      success: false,
-      error: err?.message || 'Error al iniciar autorización OAuth con Google Calendar.'
-    };
+    return promesaRenovacionEnCurso;
   }
+
+  return ejecutarAuth();
 }
 
 // ============================================================================

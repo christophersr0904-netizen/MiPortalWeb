@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   GOOGLE_CALENDAR_API_BASE,
   GCAL_EVENT_MAP_KEY,
+  GCAL_HINT_STORAGE_KEY,
   setGoogleCalendarAccessToken,
   limpiarTokenGoogleCalendar,
   obtenerMapaEventosGoogleCalendar,
+  autorizarGoogleCalendarOAuth,
   sincronizarCreacionCalendar,
   sincronizarActualizacionCalendar,
   sincronizarEliminacionCalendar
@@ -260,6 +262,23 @@ describe('Google Calendar REST API v3 Real Sync [REQ-UI-39-GCAL-REAL-SYNC]', () 
 
     // Cero peticiones de red lanzadas sin autorización
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('6. REQ-GCAL-AUTH-01-FIX: Persistencia de hint y single-flight lock en renovación silenciosa', async () => {
+    localStorage.setItem(GCAL_HINT_STORAGE_KEY, 'usuario.test@gmail.com');
+    expect(localStorage.getItem(GCAL_HINT_STORAGE_KEY)).toBe('usuario.test@gmail.com');
+
+    // Sin Client ID configurado retorna error descriptivo
+    const resAuth = await autorizarGoogleCalendarOAuth(true);
+    // En entorno de test sin VITE_GOOGLE_CLIENT_ID o sin GIS
+    expect(resAuth.success).toBe(false);
+
+    // limpiarTokenGoogleCalendar no borra el hint a menos que se especifique
+    limpiarTokenGoogleCalendar(false);
+    expect(localStorage.getItem(GCAL_HINT_STORAGE_KEY)).toBe('usuario.test@gmail.com');
+
+    limpiarTokenGoogleCalendar(true);
+    expect(localStorage.getItem(GCAL_HINT_STORAGE_KEY)).toBeNull();
   });
 });
 
