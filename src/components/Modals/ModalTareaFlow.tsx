@@ -570,6 +570,8 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();

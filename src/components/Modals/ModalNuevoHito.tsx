@@ -163,6 +163,8 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
     if (!visible) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         cerrar();
       }
     };

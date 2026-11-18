@@ -94,6 +94,18 @@ export const ModalCrearCuaderno: React.FC<ModalCrearCuadernoProps> = ({
     onClose();
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <div
       role="dialog"
@@ -105,12 +117,6 @@ export const ModalCrearCuaderno: React.FC<ModalCrearCuadernoProps> = ({
     >
       <div
         className="w-full max-w-md bg-[#0D1526] border border-slate-800/60 rounded-2xl shadow-cobalt-2 p-5 text-slate-100 flex flex-col gap-4 relative"
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation();
-            onClose();
-          }
-        }}
       >
         {/* Cabecera del Modal */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800/60">
@@ -152,7 +158,6 @@ export const ModalCrearCuaderno: React.FC<ModalCrearCuadernoProps> = ({
                 setNombre(e.target.value);
                 if (error) setError(null);
               }}
-              onKeyDown={(e) => e.stopPropagation()}
               placeholder="Ej. Arquitectura, Finanzas, Personal..."
               className="w-full bg-slate-900/80 border border-slate-700/60 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/40 transition"
               maxLength={40}
@@ -171,7 +176,6 @@ export const ModalCrearCuaderno: React.FC<ModalCrearCuadernoProps> = ({
               rows={2}
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
-              onKeyDown={(e) => e.stopPropagation()}
               placeholder="Breve propósito de este cuaderno (ej. Decisiones técnicas y notas de arquitectura)"
               className="w-full bg-slate-900/80 border border-slate-700/60 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/40 transition resize-none custom-scrollbar"
               maxLength={200}

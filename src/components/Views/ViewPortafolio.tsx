@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   FolderKanban,
   FileDown,
@@ -51,6 +51,22 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
   const [filtroOrden, setFiltroOrden] = useState<string>('avance_desc');
   const [busqueda, setBusqueda] = useState<string>('');
   const [vistaModo, setVistaModo] = useState<'grid' | 'table'>('grid');
+
+  // Listener para evento custom global 'pmo:clear-filters' (tecla X) (REQ-UI-UX-16-FEAT)
+  useEffect(() => {
+    const handleClearFilters = () => {
+      setBusqueda('');
+      setFiltroTipo('');
+      setFiltroEstado('');
+      setFiltroSalud('');
+      setFiltroOrden('avance_desc');
+      setCarteraAbierta(false);
+    };
+    window.addEventListener('pmo:clear-filters', handleClearFilters);
+    return () => {
+      window.removeEventListener('pmo:clear-filters', handleClearFilters);
+    };
+  }, []);
 
   // Estados de modales canónicos
   const [modalPdfAbierto, setModalPdfAbierto] = useState(false);

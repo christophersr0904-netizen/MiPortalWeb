@@ -56,6 +56,22 @@ export const ViewFinanzas: React.FC = () => {
   const [filtrosTrxAbiertos, setFiltrosTrxAbiertos] = useState(false);
   const deferredBusquedaTrx = useDeferredValue(busquedaTrx);
 
+  // Listener para evento custom global 'pmo:clear-filters' (tecla X) (REQ-UI-UX-16-FEAT)
+  useEffect(() => {
+    const handleClearFilters = () => {
+      setBusquedaTrx('');
+      setTipoFlujo('TODOS');
+      setEstadoFlujo('TODOS');
+      setSegmento('TODOS');
+      setPeriodo('MES_ACTUAL');
+      setFiltrosTrxAbiertos(false);
+    };
+    window.addEventListener('pmo:clear-filters', handleClearFilters);
+    return () => {
+      window.removeEventListener('pmo:clear-filters', handleClearFilters);
+    };
+  }, []);
+
   // Modales de Nueva Transacción & Edición
   const [modalGastoAbierto, setModalGastoAbierto] = useState(false);
   const [modalIngresoAbierto, setModalIngresoAbierto] = useState(false);

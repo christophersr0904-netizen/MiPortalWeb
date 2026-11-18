@@ -84,8 +84,11 @@ export const ModalTechosPresupuesto: React.FC<ModalTechosPresupuestoProps> = ({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
       }
     };

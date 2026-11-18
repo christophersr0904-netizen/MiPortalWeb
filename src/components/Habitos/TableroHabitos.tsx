@@ -177,6 +177,25 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
   // Selector de categoría activa en móvil (REQ-PWA-07)
   const [categoriaMovilActiva, setCategoriaMovilActiva] = useState<CategoriaVida>('SALUD_DEPORTE');
 
+  // Listener para evento custom global 'pmo:clear-filters' (tecla X) (REQ-UI-UX-16-FEAT)
+  useEffect(() => {
+    const handleClearFilters = () => {
+      setFiltroTexto('');
+      setFiltroTemporal('TODOS');
+      setFiltroMetaId('TODAS');
+      setFiltroCompromiso('TODOS');
+      setModoOrden('TIME');
+      setCategoriaMovilActiva('SALUD_DEPORTE');
+      setCategoriaSeleccionada('SALUD_DEPORTE');
+      setShowSortPopover(false);
+      setShowTemporalPopover(false);
+    };
+    window.addEventListener('pmo:clear-filters', handleClearFilters);
+    return () => {
+      window.removeEventListener('pmo:clear-filters', handleClearFilters);
+    };
+  }, [setFiltroTexto]);
+
   const hoyStr = formatFechaIsoLocal();
 
   // Metas ordenadas alfabéticamente para el selector

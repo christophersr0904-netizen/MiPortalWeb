@@ -103,26 +103,19 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
     setDescripcion(meta.descripcion || '');
   }, [meta]);
 
-  // Cierre con Escape respetando inhibición en campos editables (Regla Transversal LIFO)
+  // Cierre directo con Escape respetando gobernanza unificada
   useEffect(() => {
+    if (!meta) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
       }
-      e.stopPropagation();
-      onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [meta, onClose]);
 
   const hoyStr = formatFechaIsoLocal();
 

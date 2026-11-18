@@ -99,6 +99,22 @@ export const VisorNotas: React.FC = () => {
   const [blockActivo, setBlockActivo] = useState<string | null>(null); // null = todas, '__sin_block__' = sueltas
   const [blocksLocales, setBlocksLocales] = useState<string[]>([]);
 
+  // Listener para evento custom global 'pmo:clear-filters' (tecla X) (REQ-UI-UX-16-FEAT)
+  useEffect(() => {
+    const handleClearFilters = () => {
+      setBusqueda('');
+      setSubFiltros([]);
+      setTagsSeleccionados([]);
+      setColorFiltro('');
+      setBlockActivo(null);
+      setFiltrosNotasAbiertos(false);
+    };
+    window.addEventListener('pmo:clear-filters', handleClearFilters);
+    return () => {
+      window.removeEventListener('pmo:clear-filters', handleClearFilters);
+    };
+  }, []);
+
   // UndoDelete Integration y Toast Reactivo (REQ-SYNC-PROD-12-FIX)
   const { programarEliminacion, estaOculto, hiddenIdsSet } = useUndoDelete();
 

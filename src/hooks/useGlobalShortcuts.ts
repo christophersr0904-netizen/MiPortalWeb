@@ -147,7 +147,15 @@ export function useGlobalShortcuts({
         }
 
         // Nivel 5 LIFO: Desenfocar inputs activos si no hay modales abiertos
-        if (esInput && document.activeElement && typeof (document.activeElement as HTMLElement).blur === 'function') {
+        const hayModalAbiertoDeteccion =
+          stateRef.current.modalAtajosAbierto ||
+          stateRef.current.modalPdfAbierto ||
+          stateRef.current.drawerArchivadosAbierto ||
+          Boolean(stateRef.current.asistenteIaAbierto) ||
+          (typeof document !== 'undefined' &&
+            document.querySelectorAll('[role="dialog"], [aria-modal="true"]').length > 0);
+
+        if (!hayModalAbiertoDeteccion && esInput && document.activeElement && typeof (document.activeElement as HTMLElement).blur === 'function') {
           e.preventDefault();
           (document.activeElement as HTMLElement).blur();
           return;

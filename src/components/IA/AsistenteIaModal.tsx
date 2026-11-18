@@ -48,7 +48,11 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -140,7 +144,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
   };
 
   return createPortal(
-    <div 
+    <div
       className="fixed inset-0 z-[10000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -190,11 +194,10 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
               setModo('clarificar_idea');
               reset();
             }}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-all ${
-              modo === 'clarificar_idea'
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-all ${modo === 'clarificar_idea'
                 ? 'border-sky-500 text-sky-400 bg-sky-500/10 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
+              }`}
           >
             <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
             Clarificar & Evaluar Idea
@@ -206,11 +209,10 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
               setModo('desglosar_wbs');
               reset();
             }}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-all ${
-              modo === 'desglosar_wbs'
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-all ${modo === 'desglosar_wbs'
                 ? 'border-sky-500 text-sky-400 bg-sky-500/10 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
+              }`}
           >
             <GitFork className="w-3.5 h-3.5 text-sky-400" />
             Desglosar WBS de Proyecto

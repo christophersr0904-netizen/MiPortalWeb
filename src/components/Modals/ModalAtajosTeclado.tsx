@@ -167,12 +167,15 @@ export const ModalAtajosTeclado: React.FC<ModalAtajosTecladoProps> = ({
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (grabandoAccionId) return;
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, grabandoAccionId]);
 
   // Cargar personalizaciones desde localStorage
   useEffect(() => {

@@ -9,7 +9,7 @@
  * ============================================================================
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useGastoForm, type UseGastoFormProps } from '../../hooks/useGastoForm';
 import {
@@ -83,6 +83,19 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
     handleGuardar,
     handleEliminar
   } = useGastoForm(props);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

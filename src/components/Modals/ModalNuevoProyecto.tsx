@@ -490,6 +490,8 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
     if (!abierto) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         onCerrar();
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();

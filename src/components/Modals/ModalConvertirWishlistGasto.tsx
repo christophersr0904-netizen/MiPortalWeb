@@ -22,6 +22,8 @@ export const ModalConvertirWishlistGasto: React.FC<ModalConvertirWishlistGastoPr
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
       } else if (e.key === 'Enter') {
         onConfirmar();

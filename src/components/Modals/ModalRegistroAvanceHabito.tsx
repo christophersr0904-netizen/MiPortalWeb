@@ -47,6 +47,7 @@ export const ModalRegistroAvanceHabito: React.FC<ModalRegistroAvanceHabitoProps>
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         e.stopPropagation();
         onClose();
       }

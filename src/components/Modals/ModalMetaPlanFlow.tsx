@@ -173,11 +173,8 @@ export const ModalMetaPlanFlow: React.FC<ModalMetaPlanFlowProps> = ({
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        const target = e.target as HTMLElement;
-        if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
-          target.blur();
-          return;
-        }
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
       }
     };

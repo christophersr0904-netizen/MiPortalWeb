@@ -487,6 +487,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (mostrarModalAlcance) return;
+        e.preventDefault();
+        e.stopPropagation();
         onClose();
       }
     };

@@ -382,6 +382,8 @@ export const ModalDesgloseTareasIA: React.FC<ModalDesgloseTareasIAProps> = ({
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         abortStream();
         onClose();
       }
