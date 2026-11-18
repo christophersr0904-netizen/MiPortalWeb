@@ -60,6 +60,7 @@ export const CANONICAL_SHORTCUTS: ShortcutItem[] = [
   { id: 'global_nav_habitos', scope: 'global', defaultKey: '3', label: 'Ir a Hábitos & Vida', iconName: 'habitos', desc: 'Navega a la gestión de hábitos y compromisos personales' },
   { id: 'global_nav_finanzas', scope: 'global', defaultKey: '4', label: 'Ir a Flujo y Finanzas', iconName: 'finanzas', desc: 'Navega al control financiero, gastos e ingresos' },
   { id: 'global_nav_notas', scope: 'global', defaultKey: '5', label: 'Ir a Notas Inteligentes', iconName: 'notas', desc: 'Navega a notas inteligentes, checklists y referencias' },
+  { id: 'global_quick_capture', scope: 'global', defaultKey: 'i', label: 'Nueva Idea / Nota Express', iconName: 'sparkles', desc: 'Abre el micro-popover de captura rápida de ideas o notas' },
   { id: 'global_calendar', scope: 'global', defaultKey: 'c', label: 'Abrir Google Calendar', iconName: 'calendar', desc: 'Abre Google Calendar en pestaña nueva (blindado fuera de inputs)' },
   { id: 'global_sync', scope: 'global', defaultKey: 'r', label: 'Sincronizar y Refrescar', iconName: 'refresh', desc: 'Sincroniza datos con la nube y puente local, y refresca estados' },
   { id: 'global_limpiar', scope: 'global', defaultKey: 'x', label: 'Limpiar Filtros Activos', iconName: 'limpiar', desc: 'Resetea filtros, búsquedas y selecciones en la vista activa' },
@@ -331,19 +332,19 @@ export const ModalAtajosTeclado: React.FC<ModalAtajosTecladoProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
             <div className="p-2 rounded-lg bg-slate-900/80 border border-indigo-800/40 flex items-center justify-between">
               <span className="text-slate-300 font-medium">Cerrar / Cancelar</span>
-              <kbd className="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono font-bold text-[10px] border border-slate-700">Esc</kbd>
+              <kbd className="px-2 py-0.5 rounded bg-[#0B1220] border border-slate-700/80 text-sky-300 font-mono font-bold text-[10px]">Esc</kbd>
             </div>
             <div className="p-2 rounded-lg bg-slate-900/80 border border-indigo-800/40 flex items-center justify-between">
               <span className="text-slate-300 font-medium">Google Calendar</span>
-              <kbd className="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono font-bold text-[10px] border border-slate-700">C</kbd>
+              <kbd className="px-2 py-0.5 rounded bg-[#0B1220] border border-slate-700/80 text-sky-300 font-mono font-bold text-[10px]">C</kbd>
             </div>
             <div className="p-2 rounded-lg bg-slate-900/80 border border-indigo-800/40 flex items-center justify-between">
               <span className="text-slate-300 font-medium">Limpiar Filtros</span>
-              <kbd className="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono font-bold text-[10px] border border-slate-700">X</kbd>
+              <kbd className="px-2 py-0.5 rounded bg-[#0B1220] border border-slate-700/80 text-sky-300 font-mono font-bold text-[10px]">X</kbd>
             </div>
             <div className="p-2 rounded-lg bg-slate-900/80 border border-indigo-800/40 flex items-center justify-between">
               <span className="text-slate-300 font-medium">Confirmar Acción</span>
-              <kbd className="px-2 py-0.5 rounded bg-slate-800 text-indigo-300 font-mono font-bold text-[10px] border border-slate-700">Enter</kbd>
+              <kbd className="px-2 py-0.5 rounded bg-[#0B1220] border border-slate-700/80 text-sky-300 font-mono font-bold text-[10px]">Enter</kbd>
             </div>
           </div>
         </div>
@@ -418,7 +419,7 @@ export const ModalAtajosTeclado: React.FC<ModalAtajosTecladoProps> = ({
             return (
               <div
                 key={item.id}
-                className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shadow-2xs hover:border-indigo-400/40 transition-all"
+                className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shadow-2xs hover:bg-slate-800/80 hover:ring-1 hover:ring-sky-500/30 hover:border-sky-500/40 transition-all duration-200"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
@@ -437,7 +438,7 @@ export const ModalAtajosTeclado: React.FC<ModalAtajosTecladoProps> = ({
                     className={`px-3 py-1 rounded-lg border font-mono font-black text-xs shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 ${
                       esGrabando
                         ? 'bg-amber-500 text-slate-950 border-amber-300 ring-2 ring-amber-400 animate-pulse'
-                        : 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border-slate-300 dark:border-slate-700 hover:border-indigo-400 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40'
+                        : 'bg-[#0B1220] border-slate-700/80 text-sky-300 hover:border-sky-400 hover:text-sky-200 hover:bg-sky-950/30'
                     }`}
                     title="Haz clic para reasignar esta tecla"
                   >

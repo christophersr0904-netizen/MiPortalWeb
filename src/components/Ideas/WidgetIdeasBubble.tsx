@@ -365,6 +365,22 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     return () => cancelAnimationFrame(frameId);
   }, [popoverAbierto]);
 
+  // Escucha del atajo universal de captura rápida (REQ-UI-UX-05-FEAT)
+  useEffect(() => {
+    const handleQuickCapture = () => {
+      setPopoverAbierto(true);
+      setModoCaptura('idea');
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 50);
+    };
+
+    window.addEventListener('pmo:open-quick-capture', handleQuickCapture);
+    return () => {
+      window.removeEventListener('pmo:open-quick-capture', handleQuickCapture);
+    };
+  }, []);
+
   const handleVoiceStart = useCallback(() => {
     if (!isSupported) {
       mostrarToastCobalt('Tu navegador no soporta reconocimiento de voz nativo. Usa Chrome o Edge.', 'info');

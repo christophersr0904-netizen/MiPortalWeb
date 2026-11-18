@@ -186,6 +186,34 @@ export function useGlobalShortcuts({
         return;
       }
 
+      // ======================================================================
+      // 4.1 AISLAMIENTO DE CAPAS (MODAL BLOCKING) (REQ-UI-UX-05-FEAT)
+      // Si existe algún modal abierto en la aplicación, se bloquea la navegación
+      // de pestañas (1..5), filtros (X), sync (R) y atajos modulares.
+      // Se permite estrictamente '?' (ayuda) e 'I' (captura rápida).
+      // ======================================================================
+      const hayModalAbierto =
+        stateRef.current.modalAtajosAbierto ||
+        stateRef.current.modalPdfAbierto ||
+        stateRef.current.drawerArchivadosAbierto ||
+        Boolean(stateRef.current.asistenteIaAbierto) ||
+        (typeof document !== 'undefined' &&
+          document.querySelectorAll('[role="dialog"], [aria-modal="true"], [id^="modal-"], .portal-surface').length > 0);
+
+      if (hayModalAbierto) {
+        const keyTest = e.key.toLowerCase();
+        if (keyTest === '?' || keyTest === 'i') {
+          if (keyTest === '?') {
+            e.preventDefault();
+            setModalAtajosAbierto((prev) => !prev);
+          } else if (keyTest === 'i') {
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent('pmo:open-quick-capture'));
+          }
+        }
+        return;
+      }
+
       // 5. Verificación de atajos habilitados (respetando prop y localStorage)
       const habilitados = obtenerAtajosHabilitados(stateRef.current.atajosHabilitados);
       if (!habilitados) {
@@ -230,6 +258,9 @@ export function useGlobalShortcuts({
             return;
           case 'notas':
             onCambiarVista('notas');
+            return;
+          case 'quick-capture':
+            window.dispatchEvent(new CustomEvent('pmo:open-quick-capture'));
             return;
           case 'calendar':
             window.open('https://calendar.google.com/calendar/r', '_blank', 'noopener,noreferrer');
@@ -299,6 +330,12 @@ export function useGlobalShortcuts({
           e.preventDefault();
           // Disparar evento para resetear filtros en la vista activa
           window.dispatchEvent(new CustomEvent('pmo:clear-filters'));
+          break;
+
+        case 'i':
+          e.preventDefault();
+          // Disparar evento para abrir captura rápida de idea / nota express (REQ-UI-UX-05-FEAT)
+          window.dispatchEvent(new CustomEvent('pmo:open-quick-capture'));
           break;
 
         case '?':
