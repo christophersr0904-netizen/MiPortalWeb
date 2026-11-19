@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import type { ActividadPersonal, SubtareaPaso, AlcanceRecurrencia, MetaPlanRecord } from '../../types';
 import { CATEGORIAS_VIDA_MAP } from '../../types';
 import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
@@ -214,12 +215,14 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
   };
 
   return (
-    <div
+    <motion.div
       style={{ contain: 'layout paint' }}
-      className={`group shrink-0 h-auto portal-surface p-3 pl-3.5 space-y-2 transition-all duration-200 ease-out border rounded-2xl relative will-change-[transform,opacity] ${
+      whileHover={{ y: -1, transition: { duration: 0.12, ease: [0.22, 1, 0.36, 1] } }}
+      whileTap={{ scale: 0.992, transition: { duration: 0.08 } }}
+      className={`group shrink-0 h-auto portal-surface p-3 pl-3.5 space-y-2 transition-[border-color,background-color,box-shadow,opacity] duration-150 ease-out border rounded-2xl relative will-change-[transform,opacity] select-none ${
         esCompletada
           ? 'opacity-70 border-slate-800/40 bg-[#070B14]/90'
-          : 'bg-[#0D1526]/90 border-slate-800/70 hover:border-sky-500/40 hover:-translate-y-1 hover:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(30,58,138,0.18)] shadow-sm'
+          : 'bg-[#0D1526]/90 border-slate-800/70 hover:border-sky-500/40 hover:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(30,58,138,0.18)] shadow-sm'
       }`}
     >
       {/* Micro-franja lateral de acento semántico por categoría con halo sutil */}
@@ -535,7 +538,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           </span>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 

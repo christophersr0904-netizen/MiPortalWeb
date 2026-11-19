@@ -789,8 +789,8 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap w-full lg:w-auto shrink-0 relative z-40">
-          {/* Cápsula Sólida de Filtro por Meta (Alto Contraste y Opcional 360°) */}
-          <div className="w-full sm:w-60 shrink-0 flex items-center gap-1.5 p-1 rounded-xl bg-[#080D1A] border border-slate-700/80 shadow-inner relative z-40">
+          {/* Selector de Filtro por Meta (Limpio sin doble recuadro) */}
+          <div className="w-full sm:w-60 shrink-0 flex items-center gap-1.5 relative z-40">
             <div className="flex-1 min-w-0">
               <SelectIconicoCobalt
                 id="filtro-meta-select"
@@ -798,14 +798,14 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                 onChange={(val) => setFiltroMetaId(val)}
                 opciones={opcionesFiltroMeta}
                 placeholder="Filtrar por meta..."
-                className="[&_button]:bg-[#0D1526] [&_button]:border-slate-700/60 [&_button]:min-h-[34px] [&_button]:py-1.5 [&_button]:rounded-lg"
+                className="[&_button]:bg-[#0D1526] [&_button]:border-slate-800/80 [&_button]:min-h-[36px] [&_button]:py-1.5 [&_button]:rounded-xl"
               />
             </div>
             {filtroMetaId !== 'TODAS' && filtroMetaId !== '__SIN_META__' && (
               <button
                 type="button"
                 onClick={() => setMeta360Id(filtroMetaId)}
-                className="h-8 px-2 rounded-lg bg-sky-500/15 hover:bg-sky-500 text-sky-300 hover:text-slate-950 border border-sky-500/30 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0 font-mono active:scale-95 shadow-[0_0_10px_rgba(56,189,248,0.2)]"
+                className="h-9 px-2 rounded-xl bg-sky-500/15 hover:bg-sky-500 text-sky-300 hover:text-slate-950 border border-sky-500/30 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0 font-mono active:scale-95 shadow-[0_0_10px_rgba(56,189,248,0.2)]"
                 title="Abrir Vista Detallada 360°"
               >
                 <span>360°</span>
@@ -834,43 +834,51 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
               </span>
             </button>
 
-            {showSortPopover && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowSortPopover(false)}
-                />
-                <div className="absolute right-0 top-full mt-1.5 z-[100] flex flex-col gap-1 p-1.5 min-w-[150px] bg-[#080D1A] border border-slate-800/80 rounded-xl shadow-xl backdrop-blur-md">
-                  {[
-                    { key: 'TIME', label: 'Por Hora' },
-                    { key: 'GOAL', label: 'Por Metas' },
-                    { key: 'ALPHA', label: 'Alfabético (A-Z)' },
-                    { key: 'PRIORITY', label: 'Por Prioridad' },
-                    { key: 'STREAK', label: 'Mayor Racha' }
-                  ].map((m) => {
-                    const activo = modoOrden === m.key;
-                    return (
-                      <button
-                        key={m.key}
-                        type="button"
-                        onClick={() => {
-                          setModoOrden(m.key as ModoOrden);
-                          setShowSortPopover(false);
-                        }}
-                        className={`font-mono text-xs px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer flex items-center justify-between ${
-                          activo
-                            ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 font-semibold shadow-xs'
-                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
-                        }`}
-                      >
-                        <span>{m.label}</span>
-                        {activo && <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0 ml-1.5" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+            <AnimatePresence>
+              {showSortPopover && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowSortPopover(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                    transition={{ type: 'spring', stiffness: 540, damping: 44, mass: 0.75 }}
+                    className="absolute right-0 top-full mt-1.5 z-[100] flex flex-col gap-1 p-1.5 min-w-[150px] bg-[#080D1A] border border-slate-800/80 rounded-xl shadow-xl backdrop-blur-md"
+                  >
+                    {[
+                      { key: 'TIME', label: 'Por Hora' },
+                      { key: 'GOAL', label: 'Por Metas' },
+                      { key: 'ALPHA', label: 'Alfabético (A-Z)' },
+                      { key: 'PRIORITY', label: 'Por Prioridad' },
+                      { key: 'STREAK', label: 'Mayor Racha' }
+                    ].map((m) => {
+                      const activo = modoOrden === m.key;
+                      return (
+                        <button
+                          key={m.key}
+                          type="button"
+                          onClick={() => {
+                            setModoOrden(m.key as ModoOrden);
+                            setShowSortPopover(false);
+                          }}
+                          className={`font-mono text-xs px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer flex items-center justify-between ${
+                            activo
+                              ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 font-semibold shadow-xs'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+                          }`}
+                        >
+                          <span>{m.label}</span>
+                          {activo && <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0 ml-1.5" />}
+                        </button>
+                      );
+                    })}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Buscador Rápido con Halo Neón Cobalt */}
@@ -913,40 +921,48 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
               <span>{opcionActiva.label}</span>
             </button>
 
-            {showTemporalPopover && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowTemporalPopover(false)}
-                />
-                <div className="absolute right-0 top-full mt-1.5 z-[100] flex flex-col gap-1 p-1.5 min-w-[135px] bg-[#080D1A] border border-slate-800/80 rounded-xl shadow-2xl backdrop-blur-md">
-                  {OPCIONES_FILTRO_TEMPORAL.map(({ key, label, Icon }) => {
-                    const activo = filtroTemporal === key;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => {
-                          setFiltroTemporal(key);
-                          setShowTemporalPopover(false);
-                        }}
-                        className={`flex items-center justify-between gap-2 cursor-pointer transition-colors px-2.5 py-1.5 text-xs rounded-lg ${
-                          activo
-                            ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 font-semibold'
-                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
-                        }`}
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <Icon className="w-3.5 h-3.5" strokeWidth={1.75} />
-                          <span>{label}</span>
-                        </span>
-                        {activo && <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+            <AnimatePresence>
+              {showTemporalPopover && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowTemporalPopover(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                    transition={{ type: 'spring', stiffness: 540, damping: 44, mass: 0.75 }}
+                    className="absolute right-0 top-full mt-1.5 z-[100] flex flex-col gap-1 p-1.5 min-w-[135px] bg-[#080D1A] border border-slate-800/80 rounded-xl shadow-2xl backdrop-blur-md"
+                  >
+                    {OPCIONES_FILTRO_TEMPORAL.map(({ key, label, Icon }) => {
+                      const activo = filtroTemporal === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            setFiltroTemporal(key);
+                            setShowTemporalPopover(false);
+                          }}
+                          className={`flex items-center justify-between gap-2 cursor-pointer transition-colors px-2.5 py-1.5 text-xs rounded-lg ${
+                            activo
+                              ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40 font-semibold'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Icon className="w-3.5 h-3.5" strokeWidth={1.75} />
+                            <span>{label}</span>
+                          </span>
+                          {activo && <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -1024,7 +1040,18 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                     </h3>
                   </div>
                   <span className="text-[10px] font-mono tabular-nums font-bold text-sky-300 bg-sky-950/60 px-2 py-0.5 rounded-full border border-sky-800/60 shrink-0">
-                    {ratioTxt}
+                    <AnimatePresence mode="popLayout">
+                      <motion.span
+                        key={ratioTxt}
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 4 }}
+                        transition={{ duration: 0.12 }}
+                        className="inline-block font-mono tabular-nums"
+                      >
+                        {ratioTxt}
+                      </motion.span>
+                    </AnimatePresence>
                   </span>
                 </div>
 
@@ -1098,25 +1125,11 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                           {pendientes.map((act) => (
                             <motion.div
                               key={act.id}
-                              layout
-                              initial={{ opacity: 0, scale: 0.96, y: 8 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{
-                                opacity: 0,
-                                scale: 0.92,
-                                height: 0,
-                                marginTop: 0,
-                                marginBottom: 0,
-                                paddingTop: 0,
-                                paddingBottom: 0,
-                                transition: {
-                                  type: 'spring',
-                                  stiffness: 500,
-                                  damping: 40,
-                                  mass: 1
-                                }
-                              }}
-                              transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.8 }}
+                              layout="position"
+                              initial={{ opacity: 0, y: 4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                              transition={{ type: 'spring', stiffness: 550, damping: 45, mass: 0.75 }}
                               className="overflow-hidden"
                             >
                               <TarjetaHabito
@@ -1148,25 +1161,11 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
                           {completadas.map((act) => (
                             <motion.div
                               key={act.id}
-                              layout
-                              initial={{ opacity: 0, scale: 0.96, y: 8 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{
-                                opacity: 0,
-                                scale: 0.92,
-                                height: 0,
-                                marginTop: 0,
-                                marginBottom: 0,
-                                paddingTop: 0,
-                                paddingBottom: 0,
-                                transition: {
-                                  type: 'spring',
-                                  stiffness: 500,
-                                  damping: 40,
-                                  mass: 1
-                                }
-                              }}
-                              transition={{ type: 'spring', stiffness: 500, damping: 35, mass: 0.8 }}
+                              layout="position"
+                              initial={{ opacity: 0, y: 4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                              transition={{ type: 'spring', stiffness: 550, damping: 45, mass: 0.75 }}
                               className="overflow-hidden"
                             >
                               <TarjetaHabito

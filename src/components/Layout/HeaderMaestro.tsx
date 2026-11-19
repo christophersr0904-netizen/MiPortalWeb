@@ -64,6 +64,22 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
   const [busquedaArchivados, setBusquedaArchivados] = useState('');
   const [recargandoAnim, setRecargandoAnim] = useState(false);
   const [syncManagerEstado, setSyncManagerEstado] = useState<SyncState>(() => syncManager.getStatus());
+  const [syncingVisualDebounced, setSyncingVisualDebounced] = useState(false);
+
+  // Histéresis visual: debounce de entrada de 350ms para evitar micro-parpadeos ante syncs ultrarrápidos (REQ-FIX-SYNC-CALENDAR-02)
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    if (syncManagerEstado === 'syncing') {
+      timer = setTimeout(() => {
+        setSyncingVisualDebounced(true);
+      }, 350);
+    } else {
+      setSyncingVisualDebounced(false);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [syncManagerEstado]);
 
   // Menú de Herramientas y Configuración (REQ-UI-UX-17-FEAT / REQ-ELECTRON-COCKPIT-02)
   const [menuHerramientasAbierto, setMenuHerramientasAbierto] = useState(false);
@@ -132,7 +148,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
     };
   }, []);
 
-  const estaSincronizando = sincronizando || syncManagerEstado === 'syncing' || recargandoAnim;
+  const estaSincronizando = sincronizando || recargandoAnim || syncingVisualDebounced;
 
   // Queries reactivas para badges superiores
   const totalKanban = useLiveQuery(

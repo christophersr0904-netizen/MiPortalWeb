@@ -1656,8 +1656,9 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
 
         expect(syncTodoSpy).toHaveBeenCalled();
 
-        // Disparar focus
+        // Disparar focus (reseteando cooldown para simular siguiente ventana de foco REQ-FIX-SYNC-CALENDAR-02)
         syncTodoSpy.mockClear();
+        (syncManager as any).ultimaSyncPorFocoMs = 0;
         if (fakeListeners['focus']) {
           fakeListeners['focus']();
         }

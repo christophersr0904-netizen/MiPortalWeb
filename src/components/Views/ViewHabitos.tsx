@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { TableroHabitos } from '../Habitos/TableroHabitos';
 import { DashboardHabitos } from '../Habitos/Dashboard/DashboardHabitos';
 import { ViewMetasPlanes } from '../Habitos/Metas/ViewMetasPlanes';
@@ -115,13 +115,24 @@ export const ViewHabitos: React.FC = () => {
       {/* VISTA CONDICIONAL SEGÚN SUBPESTAÑA ACTIVA                         */}
       {/* ================================================================= */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        {tabActiva === 'tablero' ? (
-          <TableroHabitos ocultarHeader={true} />
-        ) : tabActiva === 'metas' ? (
-          <ViewMetasPlanes onCrearMeta={() => setModalActividadAbierto(true)} />
-        ) : (
-          <DashboardHabitos onCrearActividad={() => setModalActividadAbierto(true)} />
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tabActiva}
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -2 }}
+            transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
+            className="flex-1 min-h-0 flex flex-col"
+          >
+            {tabActiva === 'tablero' ? (
+              <TableroHabitos ocultarHeader={true} />
+            ) : tabActiva === 'metas' ? (
+              <ViewMetasPlanes onCrearMeta={() => setModalActividadAbierto(true)} />
+            ) : (
+              <DashboardHabitos onCrearActividad={() => setModalActividadAbierto(true)} />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Modal Canónico ActividadFlow para creación directa */}

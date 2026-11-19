@@ -522,15 +522,20 @@ function construirResultadoAuthRequerida(
   rrule: string | null,
   eventoV3: EventoGoogleCalendarV3
 ): ResultadoCalendarSync {
+  const tieneClientId = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
   return {
     success: false,
     requiereAuth: true,
+    requiereConfigClientId: !tieneClientId,
     mode: 'AUTH_REQUIRED',
     rrule,
     eventoV3,
     googleCalendarUrl: construirUrlGoogleCalendar(actividad),
     icsContent: generarArchivoICS(actividad),
-    message: 'Conecta tu cuenta Google Calendar para sincronizar automáticamente'
+    message: tieneClientId
+      ? 'Conecta tu cuenta Google Calendar para sincronizar automáticamente'
+      : 'Google Calendar no configurado en este entorno (falta VITE_GOOGLE_CLIENT_ID)',
+    error: !tieneClientId ? 'Falta configurar VITE_GOOGLE_CLIENT_ID en variables de entorno' : undefined
   };
 }
 

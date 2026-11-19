@@ -42,11 +42,12 @@ function sonRegistrosIdenticos(remoto: any, local: any): boolean {
   if (!local || !remoto) return false;
   if (String(remoto.id) !== String(local.id)) return false;
 
-  // Si ambos tienen updated_at, comparar timestamp ISO
+  // Si ambos tienen updated_at, comparar timestamp ISO con tolerancia de 2s (REQ-FIX-SYNC-CALENDAR-02)
+  // para absorber el redondeo de microsegundos de PostgreSQL frente a milisegundos de JS/Dexie
   if (remoto.updated_at && local.updated_at) {
     const tRemoto = new Date(remoto.updated_at).getTime();
     const tLocal = new Date(local.updated_at).getTime();
-    if (!isNaN(tRemoto) && !isNaN(tLocal) && tRemoto !== tLocal) {
+    if (!isNaN(tRemoto) && !isNaN(tLocal) && Math.abs(tRemoto - tLocal) > 2000) {
       return false;
     }
   }
@@ -119,11 +120,15 @@ class SyncManager {
   // Impide bucles infinitos de reintento que saturen la red y congelen el event loop de React (REQ-DESKTOP-11)
   private registrosFkCuarentena = new Set<string>();
 
+  // Cooldown de sincronización por ciclo de vida (focus / visibilitychange) para erradicar micro-parpadeos (REQ-FIX-SYNC-CALENDAR-02)
+  private ultimaSyncPorFocoMs = 0;
+  private readonly COOLDOWN_FOCO_MS = 60_000;
+
   constructor() {
     this.initSupabaseClient();
     this.setupNetworkListeners();
     this.setupRealtimeSubscriptions();
-    this.inicializacionPromise = this.resolverUsuarioActivo().then(() => {}).catch(() => {});
+    this.inicializacionPromise = this.resolverUsuarioActivo().then(() => { }).catch(() => { });
   }
 
   /**
@@ -151,7 +156,7 @@ class SyncManager {
           this.inicializacionPromise,
           new Promise((resolve) => setTimeout(resolve, timeoutMs))
         ]);
-      } catch {}
+      } catch { }
     }
     while (this.isSyncing && Date.now() - inicio < timeoutMs) {
       await new Promise((resolve) => setTimeout(resolve, 80));
@@ -411,7 +416,7 @@ class SyncManager {
               this.setUserId(session.user.id);
             }
           });
-        } catch {}
+        } catch { }
       }
     } catch (err) {
       console.warn('[SyncManager] Error al inicializar cliente Supabase:', err);
@@ -465,24 +470,32 @@ class SyncManager {
       }
     }, 45000);
 
-    // REQ-ARCH-75-EXEC: Refresco instantáneo por Ciclo de Vida (Page Visibility / App Resume - Sprint 3)
+    // REQ-ARCH-75-EXEC / REQ-FIX-SYNC-CALENDAR-02: Refresco por Ciclo de Vida con Throttle (Cooldown de 60s)
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-          this.reconectarRealtimeSiEsNecesario();
-          this.sincronizarTodo().catch((err) => {
-            console.warn('[SyncManager] Error al sincronizar en visibilitychange:', err);
-          });
+          const ahora = Date.now();
+          if (ahora - this.ultimaSyncPorFocoMs >= this.COOLDOWN_FOCO_MS) {
+            this.ultimaSyncPorFocoMs = ahora;
+            this.reconectarRealtimeSiEsNecesario();
+            this.sincronizarTodo().catch((err) => {
+              console.warn('[SyncManager] Error al sincronizar en visibilitychange:', err);
+            });
+          }
         }
       });
     }
 
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', () => {
-        this.reconectarRealtimeSiEsNecesario();
-        this.sincronizarTodo().catch((err) => {
-          console.warn('[SyncManager] Error al sincronizar en window focus:', err);
-        });
+        const ahora = Date.now();
+        if (ahora - this.ultimaSyncPorFocoMs >= this.COOLDOWN_FOCO_MS) {
+          this.ultimaSyncPorFocoMs = ahora;
+          this.reconectarRealtimeSiEsNecesario();
+          this.sincronizarTodo().catch((err) => {
+            console.warn('[SyncManager] Error al sincronizar en window focus:', err);
+          });
+        }
       });
     }
   }
@@ -553,7 +566,7 @@ class SyncManager {
       const delId = payload?.old?.id || payload?.new?.id;
       if (delId) {
         if ((db as any)[targetTable] && typeof (db as any)[targetTable].delete === 'function') {
-          (db as any)[targetTable].delete(delId).catch(() => {});
+          (db as any)[targetTable].delete(delId).catch(() => { });
         }
         const nowIso = new Date().toISOString();
         if (db.tombstones && typeof db.tombstones.put === 'function') {
@@ -564,7 +577,7 @@ class SyncManager {
             deleted_at: nowIso,
             fecha_eliminacion: nowIso,
             sync_status: 'synced'
-          } as any).catch(() => {});
+          } as any).catch(() => { });
         }
         if (db.sync_deletions && typeof db.sync_deletions.put === 'function') {
           db.sync_deletions.put({
@@ -572,7 +585,7 @@ class SyncManager {
             tabla: targetTable,
             deleted_at: nowIso,
             sync_status: 'synced'
-          } as any).catch(() => {});
+          } as any).catch(() => { });
         }
       }
       return;
@@ -669,7 +682,7 @@ class SyncManager {
     if (this.realtimeChannel && typeof this.realtimeChannel.unsubscribe === 'function') {
       try {
         this.realtimeChannel.unsubscribe();
-      } catch {}
+      } catch { }
       this.realtimeChannel = null;
     }
   }
@@ -831,13 +844,13 @@ class SyncManager {
 
     const limpiarColaLocal = async (id: string) => {
       if (db.sync_deletions && typeof db.sync_deletions.delete === 'function') {
-        await db.sync_deletions.delete(id).catch(() => {});
+        await db.sync_deletions.delete(id).catch(() => { });
       }
     };
 
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
       await Promise.all([
-        ...pending.map((t) => (db.tombstones && typeof db.tombstones.update === 'function' ? db.tombstones.update(t.id, { sync_status: 'synced' }).catch(() => {}) : Promise.resolve())),
+        ...pending.map((t) => (db.tombstones && typeof db.tombstones.update === 'function' ? db.tombstones.update(t.id, { sync_status: 'synced' }).catch(() => { }) : Promise.resolve())),
         ...pending.map((t) => limpiarColaLocal(t.id))
       ]);
       result.success = pending.length;
@@ -846,7 +859,7 @@ class SyncManager {
 
     for (const tombstone of pending) {
       if (this.debeOmitirTablaRemota(tombstone.tabla)) {
-        if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => {});
+        if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => { });
         await limpiarColaLocal(tombstone.id);
         result.success++;
         continue;
@@ -861,7 +874,7 @@ class SyncManager {
         if (error) {
           if (this.esErrorTablaInexistente(error)) {
             this.registrarTablaInexistente(tombstone.tabla);
-            if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => {});
+            if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => { });
             await limpiarColaLocal(tombstone.id);
             result.success++;
           } else {
@@ -869,18 +882,18 @@ class SyncManager {
               `[SyncManager] Error al sincronizar tombstone en Supabase (${tombstone.tabla}:${tombstone.id}):`,
               error
             );
-            if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'error' }).catch(() => {});
+            if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'error' }).catch(() => { });
             result.failed++;
           }
         } else {
-          if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => {});
+          if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => { });
           await limpiarColaLocal(tombstone.id);
           result.success++;
         }
       } catch (err) {
         if (this.esErrorTablaInexistente(err)) {
           this.registrarTablaInexistente(tombstone.tabla);
-          if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => {});
+          if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => { });
           await limpiarColaLocal(tombstone.id);
           result.success++;
         } else {
@@ -888,7 +901,7 @@ class SyncManager {
             `[SyncManager] Excepción al sincronizar tombstone (${tombstone.tabla}:${tombstone.id}):`,
             err
           );
-          if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'error' }).catch(() => {});
+          if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'error' }).catch(() => { });
           result.failed++;
         }
       }
@@ -1571,7 +1584,7 @@ class SyncManager {
 
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
       await Promise.all(
-        pending.map((c) => db.configuracion_usuario.update(c.id, { sync_status: 'synced' }).catch(() => {}))
+        pending.map((c) => db.configuracion_usuario.update(c.id, { sync_status: 'synced' }).catch(() => { }))
       );
       result.success = pending.length;
       return result;
@@ -1603,11 +1616,11 @@ class SyncManager {
         if (this.esErrorFkNoRecuperable(error)) {
           for (const item of pendientes) {
             this.registrosFkCuarentena.add(item.id);
-            await db.configuracion_usuario.update(item.id, { sync_status: 'quarantined' }).catch(() => {});
+            await db.configuracion_usuario.update(item.id, { sync_status: 'quarantined' }).catch(() => { });
           }
         } else {
           for (const item of pendientes) {
-            await db.configuracion_usuario.update(item.id, { sync_status: 'error' }).catch(() => {});
+            await db.configuracion_usuario.update(item.id, { sync_status: 'error' }).catch(() => { });
           }
         }
         result.failed += pendientes.length;
@@ -1617,7 +1630,7 @@ class SyncManager {
           await db.configuracion_usuario.update(item.id, {
             sync_status: 'synced',
             updated_at: matchedPayload?.updated_at || new Date().toISOString()
-          }).catch(() => {});
+          }).catch(() => { });
         }
         result.success += pendientes.length;
       }
@@ -1630,9 +1643,9 @@ class SyncManager {
       for (const item of pendientes) {
         if (this.esErrorFkNoRecuperable(err)) {
           this.registrosFkCuarentena.add(item.id);
-          await db.configuracion_usuario.update(item.id, { sync_status: 'quarantined' }).catch(() => {});
+          await db.configuracion_usuario.update(item.id, { sync_status: 'quarantined' }).catch(() => { });
         } else {
-          await db.configuracion_usuario.update(item.id, { sync_status: 'error' }).catch(() => {});
+          await db.configuracion_usuario.update(item.id, { sync_status: 'error' }).catch(() => { });
         }
       }
       result.failed += pendientes.length;
@@ -1877,10 +1890,10 @@ class SyncManager {
 
     // REQ-BUGFIX-73-EXEC: Bypass de autenticación (Zero-Login Sync Local-First).
     // Proceder incondicionalmente a sincronizar con la API de Supabase vía Anon Key.
-    await this.resolverUsuarioActivo().catch(() => {});
+    await this.resolverUsuarioActivo().catch(() => { });
 
     // REQ-SYNC-PROD-15-FIX: Auto-Recuperación de Cuarentena FK
-    await this.liberarRegistrosCuarentena().catch(() => {});
+    await this.liberarRegistrosCuarentena().catch(() => { });
 
     try {
       // 1. Verificar registros pendientes en IndexedDB a través de las 13 entidades (incluyendo tombstones / sync_deletions)
@@ -1991,7 +2004,7 @@ class SyncManager {
         this.setSyncState('synced');
       }
 
-      this.guardarSnapshotEnPuenteLocal().catch(() => {});
+      this.guardarSnapshotEnPuenteLocal().catch(() => { });
     } catch (err) {
       console.error('[SyncManager] Error general en orquestación de sincronización:', err);
       this.setSyncState('error');
@@ -2271,8 +2284,8 @@ class SyncManager {
           const keys = typeof w.equals === 'function'
             ? await w.equals('pending').primaryKeys()
             : typeof w.anyOf === 'function'
-            ? await w.anyOf(['pending']).primaryKeys()
-            : [];
+              ? await w.anyOf(['pending']).primaryKeys()
+              : [];
           keys.forEach((k: any) => idsPendientesLocales.add(String(k)));
         } catch {
           // Fallback defensivo
@@ -2338,8 +2351,8 @@ class SyncManager {
 
             const locCod = extraerCodigoCanonico(loc);
             const existeEnRemoto = idsRemotosDescargados.has(locId) ||
-                                   idsRemotosDescargados.has(locId.toLowerCase()) ||
-                                   (locCod && (codigosRemotosDescargados.has(locCod) || codigosRemotosDescargados.has(locCod.toUpperCase())));
+              idsRemotosDescargados.has(locId.toLowerCase()) ||
+              (locCod && (codigosRemotosDescargados.has(locCod) || codigosRemotosDescargados.has(locCod.toUpperCase())));
 
             if (!existeEnRemoto) {
               idsObsoletosAEliminar.push(locId);
@@ -2473,7 +2486,7 @@ class SyncManager {
    * 3. Sincronización de fallback con el puente HTTP local 127.0.0.1:48123
    */
   public async sincronizarTodo(): Promise<void> {
-    await this.resolverUsuarioActivo().catch(() => {});
+    await this.resolverUsuarioActivo().catch(() => { });
 
     const pullResult = await this.descargarDatosDescendientes();
     if (pullResult.fallidos > 0) {

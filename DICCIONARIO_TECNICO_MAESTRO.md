@@ -10534,3 +10534,24 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Batería de Tests Unitarios:** `npm test` $\rightarrow$ 33/33 suites passed (333/333 tests al 100% verde, +4 nuevos tests de resiliencia distribuida).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,984 módulos transformados exitosamente en 10.86s).
 
+---
+
+### [REQ-FIX-SYNC-CALENDAR-02: Eliminación de Parpadeo "Sincronizando" y Diagnóstico Explícito en Google Calendar]
+**Fecha:** Noviembre 2026 | **Fase:** 8.5 (Estabilidad de Sincronización y Resiliencia en Producción) | **Archivos Modificados:** `src/services/syncManager.ts`, `src/services/calendarSyncService.ts`, `src/components/Layout/HeaderMaestro.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/services/__tests__/syncManager.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Micro-Parpadeo Estroboscópico de la Píldora "Sincronizando...":** Disparos incondicionales de `sincronizarTodo()` en cada evento `focus` y `visibilitychange`, sumados a una comparación estricta de timestamps (`tRemoto !== tLocal`) en `sonRegistrosIdenticos()` que forzaba reescrituras innecesarias en Dexie (`bulkPut`) por el desfase de microsegundos de PostgreSQL vs milisegundos de JS. La UI del Header cambiaba instantáneamente de verde a azul por 50-150 ms sin ningún tipo de histéresis.
+- **Fallo Silencioso de Google Calendar en Producción:** Falta de origen autorizado en Google Cloud Console para la URL oficial y ausencia de inyección de `VITE_GOOGLE_CLIENT_ID` en el build de producción, generando fallos silenciosos o toasts informativos genéricos sin diagnóstico explícito.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Throttle en Eventos de Ciclo de Vida (`syncManager.ts`):** Cooldown de 60 segundos (`COOLDOWN_FOCO_MS = 60_000` con `ultimaSyncPorFocoMs`) en los listeners de `focus` y `visibilitychange`, suprimiendo sincronizaciones redundantes al alternar ventanas o hacer click en el navegador.
+2. **Tolerancia Temporal en Diffing Inbound (`syncManager.ts`):** Sustitución de `tRemoto !== tLocal` por `Math.abs(tRemoto - tLocal) > 2000` (2 segundos de tolerancia) en `sonRegistrosIdenticos()`, erradicando escrituras fantasma y llamadas espurias a `useLiveQuery`.
+3. **Histéresis Visual en Header (`HeaderMaestro.tsx`):** Debounce de entrada de 350 ms para el estado en segundo plano (`syncManagerEstado === 'syncing'`). Si la sincronización dura <350 ms, la píldora se mantiene serenamente en verde ("Al Día"). Si el usuario pulsa manualmente el botón de refresco (`handleEjecutarSync`), la respuesta visual es inmediata (0 ms).
+4. **Feedback Explícito en Google Calendar (`calendarSyncService.ts` & `ModalActividadFlow.tsx`):** Diagnóstico claro en modales cuando falta `VITE_GOOGLE_CLIENT_ID` o cuando ocurre un error en la API V3, guiando al usuario con advertencias visibles en lugar de absorber silenciosamente el fallo.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 14.25s).
+
+

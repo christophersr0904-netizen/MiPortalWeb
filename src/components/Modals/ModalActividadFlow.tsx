@@ -695,10 +695,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
         if (editRes.calendarResult) {
           if (editRes.calendarResult.success && editRes.calendarResult.mode === 'API_V3') {
             mostrarToastCobalt(editRes.calendarResult.message || 'Actualizado en Google Calendar', 'success');
+          } else if (editRes.calendarResult.requiereConfigClientId) {
+            mostrarToastCobalt('Google Calendar no configurado en este entorno (falta VITE_GOOGLE_CLIENT_ID)', 'warning', 4500);
+          } else if (!editRes.calendarResult.success && editRes.calendarResult.error) {
+            mostrarToastCobalt(`Guardado local · ${editRes.calendarResult.error}`, 'warning', 4000);
           } else if (editRes.calendarResult.requiereAuth) {
             mostrarToastCobalt('Cambios guardados · Conecta Google Calendar para sync automático', 'info', 3500);
-          } else if (!editRes.calendarResult.success && editRes.calendarResult.error) {
-            mostrarToastCobalt(`Guardado local · ${editRes.calendarResult.error}`, 'warning', 3500);
           }
         }
       }).catch((e) => {
@@ -711,14 +713,17 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
           .then((calRes) => {
             if (calRes?.success && calRes.mode === 'API_V3') {
               mostrarToastCobalt('Sincronizado en Google Calendar', 'success');
+            } else if (calRes?.requiereConfigClientId) {
+              mostrarToastCobalt('Google Calendar no configurado en este entorno (falta VITE_GOOGLE_CLIENT_ID)', 'warning', 4500);
+            } else if (calRes && !calRes.success && calRes.error) {
+              mostrarToastCobalt(`Guardado local · ${calRes.error}`, 'warning', 4000);
             } else if (calRes?.requiereAuth) {
               mostrarToastCobalt('Actividad guardada · Conecta Google Calendar para sync automático', 'info', 3500);
-            } else if (calRes && !calRes.success && calRes.error) {
-              mostrarToastCobalt(`Guardado local · ${calRes.error}`, 'warning', 3500);
             }
           })
           .catch((e) => {
             console.warn('[ModalActividadFlow] Fallo en sincronización inicial Calendar:', e);
+            mostrarToastCobalt('Guardado local · Error inesperado al agendar en Calendar', 'warning', 4000);
           });
       }
     }
