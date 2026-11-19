@@ -1574,6 +1574,7 @@ export const VisorNotas: React.FC = () => {
         nota={notaEnEdicion}
         initialBlock={blockActivo && blockActivo !== '__sin_block__' ? blockActivo : undefined}
         blocksDisponibles={bloquesUnicos}
+        etiquetasDisponibles={catalogoEtiquetas}
         onClose={() => {
           setModalAbierto(false);
           setNotaEnEdicion(null);
