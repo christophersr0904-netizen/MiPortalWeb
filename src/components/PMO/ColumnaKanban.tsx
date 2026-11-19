@@ -100,10 +100,10 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
       data-state={col.id}
       className={`kanban-col-container ${
         isActivaMovil === false ? 'hidden md:flex' : 'flex'
-      } flex-col rounded-xl md:rounded-2xl border border-t-2 ${borderTopColor} p-2 md:p-3 h-full min-h-0 w-full transition-[transform,opacity,border-color,box-shadow] duration-200 ease-out transform-gpu shadow-sm select-none ${
+      } flex-col rounded-xl md:rounded-2xl border border-t-2 ${borderTopColor} p-2 md:p-3 h-full min-h-0 w-full transition-colors duration-150 select-none ${
         isOverThisCol
-          ? 'kanban-dropzone-active bg-sky-950/20 border-sky-500/40 shadow-[0_0_20px_rgba(56,189,248,0.15)] ring-1 ring-sky-400/30'
-          : 'portal-surface bg-slate-200/50 dark:bg-[#0D1526]/80 border-slate-300/60 dark:border-slate-800/40'
+          ? 'kanban-dropzone-active bg-sky-950/20 border-sky-500/50 shadow-sm'
+          : 'bg-[#0D1526]/95 border-slate-800/80 shadow-sm'
       }`}
       onDragOver={(e) => onDragOver(e, col.id)}
       onDragLeave={onDragLeave}
@@ -115,7 +115,7 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
           <div className="flex items-center gap-1.5 min-w-0">
             <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-semibold ${col.iconoColor} relative shrink-0`}>
               {col.headerGlow && (
-                <span className="animate-ping absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 opacity-75"></span>
+                <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]"></span>
               )}
               {col.id === '01_Backlog' && <Layers className="w-3.5 h-3.5 text-slate-300" strokeWidth={1.75} />}
               {col.id === '02_Por_Hacer' && <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />}
@@ -137,7 +137,18 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
               {cargandoDatosIniciales ? (
                 <span className="inline-block w-4 h-3 bg-slate-700/60 rounded animate-pulse" />
               ) : (
-                tareasColumna.length
+                <AnimatePresence mode="popLayout">
+                  <motion.span
+                    key={tareasColumna.length}
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.12 }}
+                    className="inline-block font-mono tabular-nums"
+                  >
+                    {tareasColumna.length}
+                  </motion.span>
+                </AnimatePresence>
               )}
             </span>
             <button
@@ -195,9 +206,14 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
             </div>
           </div>
         ) : tareasColumna.length === 0 ? (
-          <div className="text-center py-10 text-xs text-slate-400 dark:text-slate-600 italic">
-            Columna vacía
-          </div>
+          <button
+            type="button"
+            onClick={() => onAbrirModalNuevaTarea(col.id)}
+            className="w-full py-8 px-4 rounded-xl border border-dashed border-slate-800/80 hover:border-sky-500/40 bg-slate-950/20 hover:bg-slate-900/40 flex flex-col items-center justify-center gap-1.5 text-slate-500 hover:text-sky-300 transition-colors cursor-pointer group"
+          >
+            <Plus className="w-4 h-4 text-slate-600 group-hover:text-sky-400 transition-colors" strokeWidth={1.75} />
+            <span className="text-[11px] font-medium">Sin tareas · Añadir</span>
+          </button>
         ) : (
           <AnimatePresence mode="popLayout" initial={false}>
             {tareasColumna.map((tar) => {
@@ -223,25 +239,19 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
               return (
                 <motion.div
                   key={tar.id}
-                  layout="position"
-                  initial={{ opacity: 1, scale: 1 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  layout={draggedTaskId === tar.id ? false : 'position'}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
                   exit={{
                     opacity: 0,
-                    scale: 0.92,
+                    y: -4,
                     height: 0,
                     marginTop: 0,
                     marginBottom: 0,
                     paddingTop: 0,
-                    paddingBottom: 0,
-                    transition: {
-                      type: 'spring',
-                      stiffness: 500,
-                      damping: 40,
-                      mass: 1
-                    }
+                    paddingBottom: 0
                   }}
-                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  transition={{ type: 'spring', stiffness: 550, damping: 45, mass: 0.75 }}
                   className="overflow-hidden"
                 >
                   <TarjetaTareaKanban

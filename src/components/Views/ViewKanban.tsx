@@ -32,7 +32,7 @@ import {
   X,
   SlidersHorizontal
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
@@ -733,8 +733,8 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   }, [hoveredTaskId, rawTareas, tareasFiltradas, tareasLookupMap]);
 
   // Columnas Kanban Canónicas Dark Cobalt
-  const getFiltroTriggerClass = (activo: boolean, disabled = false) =>
-    `h-9 px-2.5 rounded-lg text-xs font-medium tracking-wide transition-colors inline-flex items-center gap-1.5 shrink-0 select-none border ${disabled
+  const getFiltroTriggerClass = (activo: boolean, disabled = false, hClass = 'h-8') =>
+    `${hClass} px-2.5 rounded-lg text-xs font-medium tracking-wide transition-colors inline-flex items-center gap-1.5 shrink-0 select-none border ${disabled
       ? 'opacity-40 cursor-not-allowed border-slate-800/60 bg-[#0D1526]/60 text-slate-500'
       : activo
         ? 'bg-sky-950/40 text-sky-300 border-sky-500/50 cursor-pointer'
@@ -1417,7 +1417,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   type="button"
                   id="btn-time-capsule"
                   onClick={() => setDropdownTiempoAbierto(!dropdownTiempoAbierto)}
-                  className={getFiltroTriggerClass(filtroTemporal !== 'TODO')}
+                  className={getFiltroTriggerClass(filtroTemporal !== 'TODO', false, 'h-9')}
                   title="Filtro de horizonte temporal"
                 >
                   {filtroTemporal === 'TODO' && <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />}
@@ -1433,38 +1433,44 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
                 </button>
 
-                {dropdownTiempoAbierto && (
-                  <div
-                    id="popover-time-filter"
-                    className="absolute right-0 top-full mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[160px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
-                  >
-                    {[
-                      { id: 'TODO', label: 'Todo', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'HOY', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'SEMANA', label: 'Esta Semana', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'MES', label: 'Este Mes', icon: <CalendarCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} /> }
-                    ].map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => {
-                          setFiltroTemporal(opt.id as TimeFilter);
-                          setDropdownTiempoAbierto(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroTemporal === opt.id
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                          }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          {opt.icon}
-                          <span>{opt.label}</span>
-                        </span>
-                        {filtroTemporal === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <AnimatePresence>
+                  {dropdownTiempoAbierto && (
+                    <motion.div
+                      id="popover-time-filter"
+                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                      className="absolute right-0 top-full mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[160px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                    >
+                      {[
+                        { id: 'TODO', label: 'Todo', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'HOY', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'SEMANA', label: 'Esta Semana', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'MES', label: 'Este Mes', icon: <CalendarCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} /> }
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setFiltroTemporal(opt.id as TimeFilter);
+                            setDropdownTiempoAbierto(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroTemporal === opt.id
+                            ? 'bg-sky-950/50 text-sky-300 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                            }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            {opt.icon}
+                            <span>{opt.label}</span>
+                          </span>
+                          {filtroTemporal === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Bloque de Gasto Acumulado / Presupuesto Global (Solo Desktop md+ per REQ-UI-24) */}
@@ -1502,9 +1508,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
           {/* =============================================================== */}
           {/* FILA 2: BARRA DE FILTROS OPERATIVOS KANBAN (Desktop md+)        */}
           {/* =============================================================== */}
-          <div className="p-2 rounded-xl flex flex-col gap-2 text-xs overflow-visible relative bg-[#080E1C]/90 border border-slate-800/80">
-            <div className="hidden md:flex items-center gap-2 text-xs overflow-visible relative flex-wrap w-full">
-              {/* Buscador de Tareas Desktop (h-9 Dark Cobalt) */}
+          <div className="hidden md:flex items-center justify-between gap-2 flex-wrap pt-0.5 text-xs overflow-visible relative w-full">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              {/* Buscador de Tareas Desktop (h-8 Dark Cobalt) */}
               <div className="hidden md:block relative w-40 md:w-48 shrink-0">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 w-3.5 h-3.5" strokeWidth={1.75} />
                 <input
@@ -1513,7 +1519,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   value={busquedaTarea}
                   onChange={(e) => setBusquedaTarea(e.target.value)}
                   placeholder="Buscar tarea..."
-                  className="w-full h-9 bg-[#0D1526] hover:border-sky-500/40 focus:border-sky-500/60 text-slate-200 placeholder-slate-400 text-xs rounded-lg border border-slate-800/80 pl-8 pr-7 outline-none transition-colors font-medium"
+                  className="w-full h-8 bg-[#0D1526] hover:border-sky-500/40 focus:border-sky-500/60 text-slate-200 placeholder-slate-400 text-xs rounded-lg border border-slate-800/80 pl-8 pr-7 outline-none transition-colors font-medium"
                 />
                 {busquedaTarea && (
                   <button
@@ -1527,9 +1533,12 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 )}
               </div>
 
-              {/* Micro-Riel Compacto de Ordenamiento Kanban (h-9) */}
+              {/* Micro-divisor 1 */}
+              <div className="hidden sm:block w-px h-4 bg-slate-800/90 mx-0.5" />
+
+              {/* Micro-Riel Compacto de Ordenamiento Kanban (h-8) */}
               <div
-                className="h-9 inline-flex items-center p-0.5 rounded-lg bg-[#0D1526] border border-slate-800/80 gap-0.5 shrink-0"
+                className="h-8 inline-flex items-center p-0.5 rounded-lg bg-[#0D1526] border border-slate-800/80 gap-0.5 shrink-0"
                 role="group"
                 aria-label="Criterio de Ordenamiento"
               >
@@ -1594,6 +1603,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 </button>
               </div>
 
+              {/* Micro-divisor 2 */}
+              <div className="hidden sm:block w-px h-4 bg-slate-800/90 mx-0.5" />
+
               {/* Selector de Paquetes de Trabajo WBS */}
               <div
                 className="relative shrink-0 kanban-popover-container group/filter-hito"
@@ -1640,50 +1652,56 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   )}
                 </button>
 
-                {proyectoSeleccionadoCodigo && popoverHitoAbierto && (
-                  <div
-                    className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[220px] max-w-[calc(100vw-20px)] max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
-                  >
-                    <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase border-b border-slate-800/60 mb-1">
-                      Filtrar por Paquete de Trabajo
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFiltroHito('');
-                        setPopoverHitoAbierto(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${!filtroHito ? 'bg-sky-950/50 text-sky-300 font-bold' : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                        }`}
+                <AnimatePresence>
+                  {proyectoSeleccionadoCodigo && popoverHitoAbierto && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[220px] max-w-[calc(100vw-20px)] max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
                     >
-                      <span className="flex items-center gap-2">
-                        <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
-                        <span>Todos los Paquetes</span>
-                      </span>
-                      {!filtroHito && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                    </button>
-                    {hitosDisponibles.map((h) => (
+                      <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase border-b border-slate-800/60 mb-1">
+                        Filtrar por Paquete de Trabajo
+                      </div>
                       <button
-                        key={h.id}
                         type="button"
                         onClick={() => {
-                          setFiltroHito(h.codigo_legado);
+                          setFiltroHito('');
                           setPopoverHitoAbierto(false);
                         }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between truncate transition cursor-pointer text-xs font-medium ${filtroHito === h.codigo_legado
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${!filtroHito ? 'bg-sky-950/50 text-sky-300 font-bold' : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
                           }`}
                       >
-                        <span className="flex items-center gap-2 truncate">
-                          <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} />
-                          <span className="truncate">{h.codigo_legado} · {h.nombre_elemento}</span>
+                        <span className="flex items-center gap-2">
+                          <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
+                          <span>Todos los Paquetes</span>
                         </span>
-                        {filtroHito === h.codigo_legado && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0 ml-1" strokeWidth={1.75} />}
+                        {!filtroHito && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
                       </button>
-                    ))}
-                  </div>
-                )}
+                      {hitosDisponibles.map((h) => (
+                        <button
+                          key={h.id}
+                          type="button"
+                          onClick={() => {
+                            setFiltroHito(h.codigo_legado);
+                            setPopoverHitoAbierto(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between truncate transition cursor-pointer text-xs font-medium ${filtroHito === h.codigo_legado
+                            ? 'bg-sky-950/50 text-sky-300 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                            }`}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <Milestone className="w-3.5 h-3.5 text-purple-400 shrink-0" strokeWidth={1.75} />
+                            <span className="truncate">{h.codigo_legado} · {h.nombre_elemento}</span>
+                          </span>
+                          {filtroHito === h.codigo_legado && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0 ml-1" strokeWidth={1.75} />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Prioridad Eisenhower */}
@@ -1710,38 +1728,44 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
                 </button>
 
-                {popoverPrioAbierto && (
-                  <div
-                    className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
-                  >
-                    {[
-                      { id: '', label: 'Todas', icon: <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: '01_P1_Alta', label: 'P1: Alta', icon: <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
-                      { id: '02_P2_Media', label: 'P2: Media', icon: <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: '03_P3_Baja', label: 'P3: Baja', icon: <ArrowDownCircle className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: '04_P4', label: 'P4: Sin prioridad', icon: <CheckSquare className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
-                    ].map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => {
-                          setFiltroPrioridad(p.id);
-                          setPopoverPrioAbierto(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroPrioridad === p.id
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                          }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          {p.icon}
-                          <span>{p.label}</span>
-                        </span>
-                        {filtroPrioridad === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <AnimatePresence>
+                  {popoverPrioAbierto && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                    >
+                      {[
+                        { id: '', label: 'Todas', icon: <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: '01_P1_Alta', label: 'P1: Alta', icon: <Flame className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
+                        { id: '02_P2_Media', label: 'P2: Media', icon: <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: '03_P3_Baja', label: 'P3: Baja', icon: <ArrowDownCircle className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: '04_P4', label: 'P4: Sin prioridad', icon: <CheckSquare className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
+                      ].map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setFiltroPrioridad(p.id);
+                            setPopoverPrioAbierto(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroPrioridad === p.id
+                            ? 'bg-sky-950/50 text-sky-300 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                            }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            {p.icon}
+                            <span>{p.label}</span>
+                          </span>
+                          {filtroPrioridad === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Nivel de Energía */}
@@ -1768,37 +1792,43 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
                 </button>
 
-                {popoverEnergiaAbierto && (
-                  <div
-                    className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
-                  >
-                    {[
-                      { id: '', label: 'Todos', icon: <Zap className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'Alta_DeepWork', label: 'DeepWork', icon: <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'Media_Operativa', label: 'Operativa', icon: <Activity className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'Baja_Automatica', label: 'Mecánica', icon: <Coffee className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
-                    ].map((e) => (
-                      <button
-                        key={e.id}
-                        type="button"
-                        onClick={() => {
-                          setFiltroEnergia(e.id);
-                          setPopoverEnergiaAbierto(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroEnergia === e.id
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                          }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          {e.icon}
-                          <span>{e.label}</span>
-                        </span>
-                        {filtroEnergia === e.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <AnimatePresence>
+                  {popoverEnergiaAbierto && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                    >
+                      {[
+                        { id: '', label: 'Todos', icon: <Zap className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'Alta_DeepWork', label: 'DeepWork', icon: <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'Media_Operativa', label: 'Operativa', icon: <Activity className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'Baja_Automatica', label: 'Mecánica', icon: <Coffee className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
+                      ].map((e) => (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => {
+                            setFiltroEnergia(e.id);
+                            setPopoverEnergiaAbierto(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroEnergia === e.id
+                            ? 'bg-sky-950/50 text-sky-300 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                            }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            {e.icon}
+                            <span>{e.label}</span>
+                          </span>
+                          {filtroEnergia === e.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Plazo / Vencimiento */}
@@ -1827,38 +1857,44 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
                 </button>
 
-                {popoverPlazoAbierto && (
-                  <div
-                    className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
-                  >
-                    {[
-                      { id: '', label: 'Cualquier fecha', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'vencidas', label: 'Vencidas', icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'hoy', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: '7dias', label: 'Próximos 7d', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'sin_fecha', label: 'Sin fecha', icon: <CalendarOff className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
-                    ].map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => {
-                          setFiltroPlazo(p.id);
-                          setPopoverPlazoAbierto(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroPlazo === p.id
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                          }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          {p.icon}
-                          <span>{p.label}</span>
-                        </span>
-                        {filtroPlazo === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <AnimatePresence>
+                  {popoverPlazoAbierto && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                    >
+                      {[
+                        { id: '', label: 'Cualquier fecha', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'vencidas', label: 'Vencidas', icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'hoy', label: 'Hoy', icon: <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: '7dias', label: 'Próximos 7d', icon: <CalendarDays className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'sin_fecha', label: 'Sin fecha', icon: <CalendarOff className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> }
+                      ].map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setFiltroPlazo(p.id);
+                            setPopoverPlazoAbierto(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroPlazo === p.id
+                            ? 'bg-sky-950/50 text-sky-300 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                            }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            {p.icon}
+                            <span>{p.label}</span>
+                          </span>
+                          {filtroPlazo === p.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Dependencias / Bloqueos */}
@@ -1883,61 +1919,67 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   <ChevronDown className="w-3 h-3 opacity-60" strokeWidth={1.75} />
                 </button>
 
-                {popoverDepAbierto && (
-                  <div
-                    className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
-                  >
-                    {[
-                      { id: '', label: 'Todos', icon: <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'con_dep', label: 'Bloqueadas', icon: <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
-                      { id: 'sin_dep', label: 'Libres', icon: <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
-                    ].map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => {
-                          setFiltroDependencia(d.id);
-                          setPopoverDepAbierto(false);
-                        }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroDependencia === d.id
-                          ? 'bg-sky-950/50 text-sky-300 font-bold'
-                          : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
-                          }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          {d.icon}
-                          <span>{d.label}</span>
-                        </span>
-                        {filtroDependencia === d.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <AnimatePresence>
+                  {popoverDepAbierto && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                      transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                    >
+                      {[
+                        { id: '', label: 'Todos', icon: <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'con_dep', label: 'Bloqueadas', icon: <Lock className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} /> },
+                        { id: 'sin_dep', label: 'Libres', icon: <Unlock className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} /> }
+                      ].map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => {
+                            setFiltroDependencia(d.id);
+                            setPopoverDepAbierto(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition cursor-pointer text-xs font-medium ${filtroDependencia === d.id
+                            ? 'bg-sky-950/50 text-sky-300 font-bold'
+                            : 'text-slate-300 hover:bg-slate-800/90 hover:text-white'
+                            }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            {d.icon}
+                            <span>{d.label}</span>
+                          </span>
+                          {filtroDependencia === d.id && <Check className="w-3.5 h-3.5 text-sky-400 font-bold shrink-0" strokeWidth={1.75} />}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-
-              {/* Indicador reactivo y botón Limpiar Filtros (h-9 Dark Cobalt) */}
-              {hayFiltrosActivos && (
-                <div className="ml-auto hidden md:flex items-center gap-2 shrink-0">
-                  <span
-                    id="badge-filtro-activo-resumen"
-                    className="h-9 px-2.5 rounded-lg bg-[#0D1526] border border-amber-500/35 text-amber-300 font-mono tabular-nums text-xs inline-flex items-center gap-1 whitespace-nowrap"
-                  >
-                    <span>{tareasFiltradas.length}/{tareas.length} tareas</span>
-                  </span>
-
-                  <button
-                    type="button"
-                    id="btn-limpiar-filtros-kanban"
-                    onClick={limpiarTodosLosFiltros}
-                    className="filter-ghost-btn h-9 px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 bg-[#0D1526] text-slate-300 hover:text-rose-300 hover:bg-rose-500/10 border border-slate-800/80 hover:border-rose-500/40 transition-colors cursor-pointer"
-                    title="Restablecer filtros (X)"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.75} />
-                    <span>Limpiar (X)</span>
-                  </button>
-                </div>
-              )}
             </div>
+
+            {/* Indicador reactivo y botón Limpiar Filtros (h-8 Dark Cobalt) */}
+            {hayFiltrosActivos && (
+              <div className="ml-auto hidden md:flex items-center gap-2 shrink-0">
+                <span
+                  id="badge-filtro-activo-resumen"
+                  className="h-8 px-2.5 rounded-lg bg-[#0D1526] border border-amber-500/35 text-amber-300 font-mono tabular-nums text-xs inline-flex items-center gap-1 whitespace-nowrap"
+                >
+                  <span>{tareasFiltradas.length}/{tareas.length} tareas</span>
+                </span>
+
+                <button
+                  type="button"
+                  id="btn-limpiar-filtros-kanban"
+                  onClick={limpiarTodosLosFiltros}
+                  className="filter-ghost-btn h-8 px-3 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 bg-[#0D1526] text-slate-300 hover:text-rose-300 hover:bg-rose-500/10 border border-slate-800/80 hover:border-rose-500/40 transition-colors cursor-pointer"
+                  title="Restablecer filtros (X)"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  <span>Limpiar (X)</span>
+                </button>
+              </div>
+            )}
           </div>
         </header>
 

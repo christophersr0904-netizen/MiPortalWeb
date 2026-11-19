@@ -1,4 +1,5 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
+import { MotionConfig, AnimatePresence, motion } from 'motion/react';
 import { HeaderMaestro, type VistaGlobal } from './components/Layout/HeaderMaestro';
 import { BottomNavMobile } from './components/Layout/BottomNavMobile';
 import { WidgetIdeasBubble } from './components/Ideas/WidgetIdeasBubble';
@@ -526,57 +527,69 @@ export const App: React.FC = () => {
   return (
     <CockpitErrorBoundary scope="Portal">
       <UndoDeleteProvider>
-        <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden bg-[#040711] text-slate-200 antialiased font-sans safe-area-insets">
-        {/* 1. Header Maestro Global */}
-        <HeaderMaestro
-          vistaActiva={vistaActiva}
-          onCambiarVista={handleCambiarVista}
-          onAbrirAsistenteIA={() => setAsistenteAbierto(true)}
-          onAbrirAtajos={() => setModalAtajosAbierto(true)}
-          onAbrirExportarPdf={() => setModalPdfAbierto(true)}
-          drawerArchivadosAbierto={drawerArchivadosAbierto}
-          onToggleDrawerArchivados={setDrawerArchivadosAbierto}
-        />
+        <MotionConfig reducedMotion="user" transition={{ type: 'spring', stiffness: 540, damping: 44, mass: 0.75 }}>
+          <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden bg-[#040711] text-slate-200 antialiased font-sans safe-area-insets">
+            {/* 1. Header Maestro Global */}
+            <HeaderMaestro
+              vistaActiva={vistaActiva}
+              onCambiarVista={handleCambiarVista}
+              onAbrirAsistenteIA={() => setAsistenteAbierto(true)}
+              onAbrirAtajos={() => setModalAtajosAbierto(true)}
+              onAbrirExportarPdf={() => setModalPdfAbierto(true)}
+              drawerArchivadosAbierto={drawerArchivadosAbierto}
+              onToggleDrawerArchivados={setDrawerArchivadosAbierto}
+            />
 
-        {/* 2. Área Central con Renderizado Condicional de Vistas Canónicas */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overscroll-contain md:overflow-hidden relative pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
-          <Suspense fallback={<VistaCargandoFallback />}>
-            {vistaActiva === 'kanban' && (
-              <ViewKanban
-                onSeleccionarProyecto={(id) => {
-                  setProyectoSeleccionadoId(id);
-                  handleCambiarVista('detalle');
-                }}
-                onVerDetalle360={(id) => {
-                  setProyectoSeleccionadoId(id);
-                  handleCambiarVista('detalle');
-                }}
-              />
-            )}
+            {/* 2. Área Central con Renderizado Condicional de Vistas Canónicas */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overscroll-contain md:overflow-hidden relative pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+              <Suspense fallback={<VistaCargandoFallback />}>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={vistaActiva}
+                    initial={{ opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -2 }}
+                    transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
+                    className="h-full w-full"
+                  >
+                    {vistaActiva === 'kanban' && (
+                      <ViewKanban
+                        onSeleccionarProyecto={(id) => {
+                          setProyectoSeleccionadoId(id);
+                          handleCambiarVista('detalle');
+                        }}
+                        onVerDetalle360={(id) => {
+                          setProyectoSeleccionadoId(id);
+                          handleCambiarVista('detalle');
+                        }}
+                      />
+                    )}
 
-            {vistaActiva === 'portafolio' && (
-              <ViewPortafolio
-                onSeleccionarProyecto={(id) => {
-                  setProyectoSeleccionadoId(id);
-                  handleCambiarVista('detalle');
-                }}
-              />
-            )}
+                    {vistaActiva === 'portafolio' && (
+                      <ViewPortafolio
+                        onSeleccionarProyecto={(id) => {
+                          setProyectoSeleccionadoId(id);
+                          handleCambiarVista('detalle');
+                        }}
+                      />
+                    )}
 
-            {vistaActiva === 'habitos' && <ViewHabitos />}
+                    {vistaActiva === 'habitos' && <ViewHabitos />}
 
-            {vistaActiva === 'financiero' && <ViewFinanzas />}
+                    {vistaActiva === 'financiero' && <ViewFinanzas />}
 
-            {vistaActiva === 'detalle' && (
-              <ViewDetalle360
-                proyectoIdSeleccionado={proyectoSeleccionadoId}
-                onVolverAlPortafolio={() => handleCambiarVista('portafolio')}
-              />
-            )}
+                    {vistaActiva === 'detalle' && (
+                      <ViewDetalle360
+                        proyectoIdSeleccionado={proyectoSeleccionadoId}
+                        onVolverAlPortafolio={() => handleCambiarVista('portafolio')}
+                      />
+                    )}
 
-            {vistaActiva === 'notas' && <ViewNotas />}
-          </Suspense>
-        </div>
+                    {vistaActiva === 'notas' && <ViewNotas />}
+                  </motion.div>
+                </AnimatePresence>
+              </Suspense>
+            </div>
 
         {/* 3. Barra de Foco en Progreso + Micro-Botón '+' Expandible Flotante de Ideas */}
         <BarraFocoTareasEnProgreso
@@ -686,6 +699,7 @@ export const App: React.FC = () => {
       {/* 8. Notificaciones y Búfer Global de Deshacer */}
       <UndoToastContainer />
     </div>
+    </MotionConfig>
   </UndoDeleteProvider>
     </CockpitErrorBoundary>
   );
