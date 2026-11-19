@@ -58,13 +58,6 @@ import {
   resolverSiguienteTareaFoco,
   formatearTiempoInvertido
 } from './cockpitUiHelpers';
-import {
-  autorizarGoogleCalendarOAuth,
-  limpiarTokenGoogleCalendar,
-  obtenerEstadoConexionGoogleCalendar,
-  suscribirEstadoGoogleCalendar,
-  type EstadoConexionGoogleCalendar
-} from '../../services/calendarSyncService';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 const PRESETS_DURACION_FOCO = [10, 15, 25, 45, 60, 90] as const;
@@ -673,12 +666,6 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
 
   // Pestaña activa del Dock desplegado: 'BENTO' vs 'AGENDA'
   const [tabDock, setTabDock] = useState<'BENTO' | 'AGENDA'>('BENTO');
-  const [gcalEstado, setGcalEstado] = useState<EstadoConexionGoogleCalendar>(() => obtenerEstadoConexionGoogleCalendar());
-
-  useEffect(() => {
-    setGcalEstado(obtenerEstadoConexionGoogleCalendar());
-    return suscribirEstadoGoogleCalendar(setGcalEstado);
-  }, []);
 
   // Expansión con sincronización de ventana nativa de Electron si aplica en modo HUD
   const handleAbrirCockpit = () => {
@@ -1375,41 +1362,6 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             </button>
           </div>
 
-          {/* Indicador compacto estado Google Calendar OAuth */}
-          <button
-            type="button"
-            onClick={async () => {
-              if (gcalEstado.conectado) {
-                limpiarTokenGoogleCalendar();
-                mostrarToastCobalt('Google Calendar desconectado', 'info');
-                return;
-              }
-              const res = await autorizarGoogleCalendarOAuth();
-              if (res.success) {
-                mostrarToastCobalt('Google Calendar conectado', 'success');
-              } else {
-                mostrarToastCobalt(res.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
-              }
-            }}
-            className={`min-w-[36px] min-h-[36px] w-9 h-9 rounded-lg border transition-colors cursor-pointer flex items-center justify-center relative ${
-              gcalEstado.conectado
-                ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
-                : 'bg-[#040711]/90 border-slate-800/80 text-slate-400 hover:text-sky-300 hover:border-sky-500/40'
-            }`}
-            title={
-              gcalEstado.conectado
-                ? 'Google Calendar sincronizado (clic para desconectar)'
-                : 'Conectar Google Calendar (OAuth2)'
-            }
-            aria-label="Google Calendar Sync"
-          >
-            <Calendar className={`w-3.5 h-3.5 ${gcalEstado.conectado ? 'text-emerald-400' : 'text-slate-400'}`} strokeWidth={1.75} />
-            <span
-              className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${
-                gcalEstado.conectado ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'
-              }`}
-            />
-          </button>
 
           {/* Botón Desacople Always-on-Top PiP */}
           {!pipWindow && !esWidgetNativo && (

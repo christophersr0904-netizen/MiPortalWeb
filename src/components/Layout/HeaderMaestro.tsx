@@ -22,6 +22,14 @@ import { db } from '../../db/db';
 import { esElementoArchivado } from '../../utils/entityNormalizer';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { syncManager, type SyncState } from '../../services/syncManager';
+import {
+  obtenerEstadoConexionGoogleCalendar,
+  autorizarGoogleCalendarOAuth,
+  suscribirEstadoGoogleCalendar,
+  esWidgetElectron,
+  type EstadoConexionGoogleCalendar
+} from '../../services/calendarSyncService';
+import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 export type VistaGlobal = 'kanban' | 'portafolio' | 'habitos' | 'financiero' | 'detalle' | 'notas';
 
@@ -57,9 +65,17 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
   const [recargandoAnim, setRecargandoAnim] = useState(false);
   const [syncManagerEstado, setSyncManagerEstado] = useState<SyncState>(() => syncManager.getStatus());
 
-  // Menú de Herramientas y Configuración (REQ-UI-UX-17-FEAT)
+  // Menú de Herramientas y Configuración (REQ-UI-UX-17-FEAT / REQ-ELECTRON-COCKPIT-02)
   const [menuHerramientasAbierto, setMenuHerramientasAbierto] = useState(false);
   const menuHerramientasRef = useRef<HTMLDivElement>(null);
+
+  const [gcalEstado, setGcalEstado] = useState<EstadoConexionGoogleCalendar>(() => obtenerEstadoConexionGoogleCalendar());
+  const esDesktopWidget = typeof window !== 'undefined' && Boolean((window as any).IS_DESKTOP_WIDGET || esWidgetElectron());
+
+  useEffect(() => {
+    setGcalEstado(obtenerEstadoConexionGoogleCalendar());
+    return suscribirEstadoGoogleCalendar(setGcalEstado);
+  }, []);
 
   useEffect(() => {
     if (!menuHerramientasAbierto) return;
@@ -507,6 +523,47 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                     C
                   </span>
                 </a>
+
+                {/* Ítem Centralizado: Estado y Conexión OAuth Google Calendar (Solo Web) */}
+                {!esDesktopWidget && (
+                  <button
+                    type="button"
+                    id="btn-header-conectar-calendar"
+                    role="menuitem"
+                    onClick={async () => {
+                      const res = await autorizarGoogleCalendarOAuth(false);
+                      if (res.success) {
+                        mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
+                      } else if (res.error) {
+                        mostrarToastCobalt(res.error, 'warning', 3500);
+                      }
+                    }}
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all cursor-pointer group text-left"
+                    title={
+                      gcalEstado.conectado
+                        ? 'Google Calendar conectado (clic para reconectar/renovar token)'
+                        : 'Conectar cuenta Google Calendar (OAuth2)'
+                    }
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 shrink-0 transition-colors">
+                        <Calendar className="w-4 h-4" strokeWidth={1.75} />
+                      </div>
+                      <span className="font-semibold text-slate-200 group-hover:text-sky-200 truncate">
+                        {gcalEstado.conectado ? 'Calendar: Conectado' : 'Conectar Google Calendar'}
+                      </span>
+                    </div>
+                    <span className="flex items-center gap-1.5 shrink-0 pr-1">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          gcalEstado.conectado
+                            ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]'
+                            : 'bg-slate-500'
+                        }`}
+                      />
+                    </span>
+                  </button>
+                )}
 
                 {/* Ítem 2 — Atajos de Teclado */}
                 <button

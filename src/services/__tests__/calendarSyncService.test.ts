@@ -280,5 +280,16 @@ describe('Google Calendar REST API v3 Real Sync [REQ-UI-39-GCAL-REAL-SYNC]', () 
     limpiarTokenGoogleCalendar(true);
     expect(localStorage.getItem(GCAL_HINT_STORAGE_KEY)).toBeNull();
   });
+
+  it('7. REQ-ELECTRON-COCKPIT-02: Aislamiento de OAuth en entorno Electron (esWidgetElectron)', async () => {
+    // Simular entorno Electron con IS_DESKTOP_WIDGET
+    vi.stubGlobal('window', { IS_DESKTOP_WIDGET: true });
+
+    const resAuth = await autorizarGoogleCalendarOAuth(false);
+    expect(resAuth.success).toBe(false);
+    expect(resAuth.error).toContain('OAuth deshabilitado en widget de escritorio');
+
+    vi.unstubAllGlobals();
+  });
 });
 

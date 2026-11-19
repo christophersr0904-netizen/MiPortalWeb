@@ -190,12 +190,21 @@ export function suscribirEstadoGoogleCalendar(
 }
 
 /**
- * REQ-GCAL-AUTH-01-FIX: Renovación proactiva al volver a la pestaña activa.
+ * REQ-ELECTRON-COCKPIT-02: Determina si el entorno actual corresponde al widget nativo de escritorio de Electron.
+ */
+export function esWidgetElectron(): boolean {
+  return typeof window !== 'undefined' && Boolean((window as any).IS_DESKTOP_WIDGET || (window as any).desktopWidget?.isNative);
+}
+
+/**
+ * REQ-GCAL-AUTH-01-FIX / REQ-ELECTRON-COCKPIT-02: Renovación proactiva al volver a la pestaña activa.
  * Si existe un hint guardado y el token está vencido o a menos de 10 minutos de caducar,
  * renueva silenciosamente en background para mantener conectado: true antes de guardar.
+ * En entornos widget de escritorio (Electron) se omite completamente para evitar ventanas OAuth no soportadas.
  */
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
+    if (esWidgetElectron()) return;
     if (document.visibilityState === 'visible') {
       const hint = leerLocalStorage(GCAL_HINT_STORAGE_KEY);
       if (hint) {
@@ -319,6 +328,13 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
   requiereConfigClientId?: boolean;
   error?: string;
 }> {
+  if (esWidgetElectron()) {
+    return {
+      success: false,
+      error: 'OAuth deshabilitado en widget de escritorio; sincronizar desde el portal web.'
+    };
+  }
+
   if (silencioso && promesaRenovacionEnCurso) {
     return promesaRenovacionEnCurso;
   }

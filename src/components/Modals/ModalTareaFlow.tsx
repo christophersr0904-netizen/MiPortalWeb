@@ -39,7 +39,6 @@ import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { crearTarea, actualizarTarea, eliminarTarea } from '../../services/tareasService';
 import { crearGasto, actualizarGasto } from '../../services/gastosService';
 import {
-  autorizarGoogleCalendarOAuth,
   obtenerEstadoConexionGoogleCalendar,
   suscribirEstadoGoogleCalendar
 } from '../../services/calendarSyncService';
@@ -787,7 +786,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                         />
                         {agendadoCalendar === 'Sí' && (
                           <div className="flex items-center gap-1.5">
-                            {gcalEstado.conectado ? (
+                            {gcalEstado.conectado && (
                               <span
                                 className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400"
                                 title="Google Calendar conectado para sync automático"
@@ -795,22 +794,6 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                 <span>Sincronizado</span>
                               </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const authRes = await autorizarGoogleCalendarOAuth();
-                                  if (authRes.success) {
-                                    mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
-                                  } else {
-                                    mostrarToastCobalt(authRes.error || 'No se pudo conectar Google Calendar', 'warning', 3500);
-                                  }
-                                }}
-                                className="text-[10px] font-mono text-sky-400 hover:text-sky-300 underline transition cursor-pointer"
-                                title="Conectar cuenta Google Calendar (OAuth2)"
-                              >
-                                Conectar
-                              </button>
                             )}
                           </div>
                         )}
