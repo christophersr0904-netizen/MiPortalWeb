@@ -402,6 +402,7 @@ export function sanitizarTareaPayload(
     horas_reales: Math.max(0, Number(raw.horas_reales) || 0.00),
     fecha_programada: sanitizeDate(raw.fecha_programada),
     agendado_en_calendar: raw.agendado_calendar === 'Sí' ? 'Sí' : 'No',
+    id_evento_calendar: raw.id_evento_calendar?.trim() || null,
     dependencia_tarea_id: resolvedDependenciaUuid,
     responsable_ejecutor: raw.responsable_ejecutor?.trim() || 'Christopher',
     notas_impedimentos: raw.notas_impedimentos ? truncar(raw.notas_impedimentos, 4000) : null,
@@ -524,6 +525,7 @@ export function sanitizarTareaInbound(
       (remoto.agendado_en_calendar === 'Sí' ? 'Sí' : 'No') ||
       localPrevio?.agendado_calendar ||
       'No',
+    id_evento_calendar: remoto.id_evento_calendar ?? localPrevio?.id_evento_calendar ?? null,
     id_dependencia: resolvedIdDependencia ?? undefined,
     responsable_ejecutor:
       remoto.responsable_ejecutor?.trim() || localPrevio?.responsable_ejecutor?.trim() || 'Christopher',

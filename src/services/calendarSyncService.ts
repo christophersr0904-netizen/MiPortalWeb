@@ -89,11 +89,39 @@ export interface EstadoConexionGoogleCalendar {
   conectado: boolean;
   tieneClientId: boolean;
   expiraEn?: number;
+  email?: string | null;
 }
 
 let accessTokenMemoria: string | null = null;
 let expiresAtMemoria = 0;
 const listenersEstado = new Set<(estado: EstadoConexionGoogleCalendar) => void>();
+
+export function obtenerUrlGcalAuth(): string | null {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl || supabaseUrl.includes('mock')) return null;
+  return `${supabaseUrl.replace(/\/+$/, '')}/functions/v1/gcal-auth`;
+}
+
+async function obtenerHeadersGcalAuth(): Promise<Record<string, string>> {
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  let token = supabaseAnonKey;
+  try {
+    const supabase = syncManager.getSupabaseClient();
+    if (supabase?.auth && typeof supabase.auth.getSession === 'function') {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) {
+        token = data.session.access_token;
+      }
+    }
+  } catch {
+    // Usar anonKey como fallback
+  }
+  return {
+    'Content-Type': 'application/json',
+    apikey: supabaseAnonKey,
+    Authorization: `Bearer ${token}`
+  };
+}
 
 function emitirCambioEstado() {
   const est = obtenerEstadoConexionGoogleCalendar();
@@ -173,10 +201,12 @@ function obtenerTokenSincrono(): string | null {
 export function obtenerEstadoConexionGoogleCalendar(): EstadoConexionGoogleCalendar {
   const token = obtenerTokenSincrono();
   const clientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+  const email = leerLocalStorage(GCAL_HINT_STORAGE_KEY) || null;
   return {
     conectado: Boolean(token),
     tieneClientId: Boolean(clientId),
-    expiraEn: expiresAtMemoria || undefined
+    expiraEn: expiresAtMemoria || undefined,
+    email
   };
 }
 
@@ -190,6 +220,80 @@ export function suscribirEstadoGoogleCalendar(
 }
 
 /**
+ * REQ-GCAL-BACKEND-02: Consulta el estado de vinculación offline en Supabase Edge Function (`gcal-auth`).
+ * Si el backend tiene un refresh_token válido, obtiene de forma transparente un access_token fresco
+ * y actualiza el estado de la aplicación sin abrir ninguna ventana emergente.
+ */
+export async function consultarEstadoGoogleCalendarBackend(): Promise<{ conectado: boolean; email?: string | null }> {
+  const url = obtenerUrlGcalAuth();
+  if (!url) {
+    const est = obtenerEstadoConexionGoogleCalendar();
+    return { conectado: est.conectado, email: est.email };
+  }
+
+  try {
+    const headers = await obtenerHeadersGcalAuth();
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action: 'status' })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.connected) {
+        if (data.email) {
+          escribirLocalStorage(GCAL_HINT_STORAGE_KEY, data.email);
+        }
+        const tokenLocal = obtenerTokenSincrono();
+        if (!tokenLocal) {
+          await obtenerTokenGoogleCalendar();
+        } else {
+          emitirCambioEstado();
+        }
+        return { conectado: true, email: data.email || leerLocalStorage(GCAL_HINT_STORAGE_KEY) };
+      } else {
+        const tokenLocal = obtenerTokenSincrono();
+        if (!tokenLocal) {
+          limpiarTokenGoogleCalendar(false);
+        }
+        return { conectado: Boolean(tokenLocal), email: leerLocalStorage(GCAL_HINT_STORAGE_KEY) };
+      }
+    }
+  } catch (err) {
+    console.warn('[CalendarSync] Error al consultar estado en Edge Function:', err);
+  }
+
+  const est = obtenerEstadoConexionGoogleCalendar();
+  return { conectado: est.conectado, email: est.email };
+}
+
+/**
+ * REQ-GCAL-BACKEND-02: Desconecta Google Calendar revocando credenciales tanto en backend
+ * como en el almacenamiento local.
+ */
+export async function desconectarGoogleCalendar(): Promise<{ success: boolean; error?: string }> {
+  limpiarTokenGoogleCalendar(true);
+
+  const url = obtenerUrlGcalAuth();
+  if (url) {
+    try {
+      const headers = await obtenerHeadersGcalAuth();
+      await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action: 'disconnect' })
+      });
+    } catch (err) {
+      console.warn('[CalendarSync] Error al desconectar en backend:', err);
+    }
+  }
+
+  emitirCambioEstado();
+  return { success: true };
+}
+
+/**
  * REQ-ELECTRON-COCKPIT-02: Determina si el entorno actual corresponde al widget nativo de escritorio de Electron.
  */
 export function esWidgetElectron(): boolean {
@@ -197,50 +301,68 @@ export function esWidgetElectron(): boolean {
 }
 
 /**
- * REQ-GCAL-AUTH-01-FIX / REQ-ELECTRON-COCKPIT-02: Renovación proactiva al volver a la pestaña activa.
- * Si existe un hint guardado y el token está vencido o a menos de 10 minutos de caducar,
- * renueva silenciosamente en background para mantener conectado: true antes de guardar.
- * En entornos widget de escritorio (Electron) se omite completamente para evitar ventanas OAuth no soportadas.
+ * REQ-GCAL-AUTH-01-FIX / REQ-GCAL-BACKEND-02: Renovación proactiva al volver a la pestaña activa.
+ * Consulta silenciosamente al backend o renueva vía refresh_token sin popups.
  */
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (esWidgetElectron()) return;
     if (document.visibilityState === 'visible') {
-      const hint = leerLocalStorage(GCAL_HINT_STORAGE_KEY);
-      if (hint) {
-        const expRaw = leerLocalStorage(GCAL_EXPIRES_STORAGE_KEY);
-        const exp = expRaw ? parseInt(expRaw, 10) : 0;
-        const diezMinMs = 10 * 60 * 1000;
-        if (!exp || Date.now() + diezMinMs >= exp) {
-          void obtenerTokenGoogleCalendar();
-        }
+      const expRaw = leerLocalStorage(GCAL_EXPIRES_STORAGE_KEY);
+      const exp = expRaw ? parseInt(expRaw, 10) : 0;
+      const diezMinMs = 10 * 60 * 1000;
+      if (!exp || Date.now() + diezMinMs >= exp) {
+        void consultarEstadoGoogleCalendarBackend();
       }
     }
   });
 }
 
 /**
- * Obtiene un Bearer access_token vigente desde memoria/localStorage o desde Supabase Auth (`provider_token`).
- * Si el token en localStorage está a menos de 5 minutos de caducar o ya caducó, invoca autorizarGoogleCalendarOAuth(true) silencioso con hint.
+ * REQ-GCAL-BACKEND-02: Obtiene un Bearer access_token vigente.
+ * Prioriza token en memoria/localStorage. Si ha vencido o expira en menos de 5 min,
+ * solicita silenciosamente uno nuevo a la Edge Function usando el refresh_token persistido (CERO popups).
  */
 export async function obtenerTokenGoogleCalendar(): Promise<string | null> {
-  const tokenStorage = leerLocalStorage(GCAL_TOKEN_STORAGE_KEY);
+  const tokenLocal = obtenerTokenSincrono();
   const expRaw = leerLocalStorage(GCAL_EXPIRES_STORAGE_KEY);
   const expStorage = expRaw ? parseInt(expRaw, 10) : 0;
   const cincoMinutosMs = 5 * 60 * 1000;
-  const hintStorage = leerLocalStorage(GCAL_HINT_STORAGE_KEY);
 
-  // Si existe token o hint previo y está a menos de 5 min de caducar o ya caducó:
-  if ((tokenStorage || hintStorage) && (!expStorage || Date.now() + cincoMinutosMs >= expStorage)) {
-    const authSilenciosa = await autorizarGoogleCalendarOAuth(true).catch(() => ({ success: false, token: undefined }));
-    if (authSilenciosa.success && authSilenciosa.token) {
-      return authSilenciosa.token;
+  // 1. Token válido en memoria/localStorage con más de 5 minutos de vigencia
+  if (tokenLocal && (!expStorage || Date.now() + cincoMinutosMs < expStorage)) {
+    return tokenLocal;
+  }
+
+  // 2. Intentar renovación silenciosa contra Edge Function con refresh_token si existe cuenta vinculada
+  const url = obtenerUrlGcalAuth();
+  const hintStorage = leerLocalStorage(GCAL_HINT_STORAGE_KEY);
+  if (url && (tokenLocal || hintStorage || expStorage)) {
+    try {
+      const headers = await obtenerHeadersGcalAuth();
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action: 'token' })
+      });
+
+      if (res && res.ok) {
+        const data = await res.json();
+        if (data?.access_token) {
+          const expiresIn = Number(data.expires_in) || 3500;
+          setGoogleCalendarAccessToken(data.access_token, expiresIn);
+          if (data.email) {
+            escribirLocalStorage(GCAL_HINT_STORAGE_KEY, data.email);
+          }
+          return data.access_token;
+        }
+      }
+    } catch (err) {
+      console.warn('[CalendarSync] Error al renovar token desde backend:', err);
     }
   }
 
-  const tokenLocal = obtenerTokenSincrono();
-  if (tokenLocal) return tokenLocal;
-
+  // 3. Fallback a provider_token de Supabase Auth
   try {
     const supabase = syncManager.getSupabaseClient();
     if (supabase?.auth && typeof supabase.auth.getSession === 'function') {
@@ -252,7 +374,11 @@ export async function obtenerTokenGoogleCalendar(): Promise<string | null> {
       }
     }
   } catch {
-    // Continuar sin token si falla lectura de sesión
+    // Continuar sin token
+  }
+
+  if (tokenLocal) {
+    return tokenLocal;
   }
 
   return null;
@@ -318,9 +444,10 @@ let promesaRenovacionEnCurso: Promise<{
 }> | null = null;
 
 /**
- * Inicia autorización OAuth2 directa con Google Identity Services (`https://www.googleapis.com/auth/calendar`).
- * Si silencioso es true, pasa prompt: 'none' e inyecta el `hint` guardado para renovación transparente.
- * Si ya existe una promesa silenciosa en vuelo, la reutiliza evitando duplicar ventanas o clientes GIS.
+ * REQ-GCAL-BACKEND-02: Inicia autorización OAuth2.
+ * Si hay Edge Function disponible y llamada interactiva, utiliza `initCodeClient` para intercambiar
+ * código por `refresh_token` permanente en Supabase (multi-dispositivo).
+ * Si no hay Edge Function o en tests/fallback, utiliza `initTokenClient`.
  */
 export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<{
   success: boolean;
@@ -335,8 +462,19 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
     };
   }
 
-  if (silencioso && promesaRenovacionEnCurso) {
-    return promesaRenovacionEnCurso;
+  if (silencioso) {
+    if (promesaRenovacionEnCurso) return promesaRenovacionEnCurso;
+    const url = obtenerUrlGcalAuth();
+    if (url) {
+      promesaRenovacionEnCurso = (async () => {
+        const token = await obtenerTokenGoogleCalendar();
+        if (token) return { success: true, token };
+        return { success: false, error: 'No se pudo renovar token silenciosamente' };
+      })().finally(() => {
+        promesaRenovacionEnCurso = null;
+      });
+      return promesaRenovacionEnCurso;
+    }
   }
 
   const ejecutarAuth = async () => {
@@ -352,6 +490,80 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
     try {
       await cargarScriptGIS();
       const win = window as any;
+      const gcalAuthUrl = obtenerUrlGcalAuth();
+
+      // Camino 1: Edge Function + initCodeClient para OAuth offline persistente
+      if (gcalAuthUrl && !silencioso && win.google?.accounts?.oauth2?.initCodeClient) {
+        return await new Promise<{
+          success: boolean;
+          token?: string;
+          requiereConfigClientId?: boolean;
+          error?: string;
+        }>((resolve) => {
+          const codeClient = win.google.accounts.oauth2.initCodeClient({
+            client_id: clientId,
+            scope: GCAL_SCOPE,
+            ux_mode: 'popup',
+            callback: async (resp: any) => {
+              if (resp?.error || !resp?.code) {
+                resolve({
+                  success: false,
+                  error: resp?.error_description || resp?.error || 'Autorización denegada por el usuario.'
+                });
+                return;
+              }
+
+              try {
+                const headers = await obtenerHeadersGcalAuth();
+                const exchangeRes = await fetch(gcalAuthUrl, {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify({ action: 'exchange', code: resp.code })
+                });
+
+                if (!exchangeRes.ok) {
+                  const errText = await exchangeRes.text().catch(() => '');
+                  resolve({
+                    success: false,
+                    error: `Fallo al intercambiar código en backend: ${exchangeRes.status} ${errText.slice(0, 100)}`
+                  });
+                  return;
+                }
+
+                const data = await exchangeRes.json();
+                if (data?.access_token) {
+                  const expiresIn = Number(data.expires_in) || 3500;
+                  setGoogleCalendarAccessToken(data.access_token, expiresIn);
+                  if (data.email) {
+                    escribirLocalStorage(GCAL_HINT_STORAGE_KEY, data.email);
+                  }
+                  emitirCambioEstado();
+                  resolve({ success: true, token: data.access_token });
+                } else {
+                  resolve({
+                    success: false,
+                    error: data?.error || 'No se recibió access_token del backend.'
+                  });
+                }
+              } catch (exchangeErr: any) {
+                resolve({
+                  success: false,
+                  error: exchangeErr?.message || 'Error de conexión al intercambiar código OAuth.'
+                });
+              }
+            },
+            error_callback: (err: any) => {
+              resolve({
+                success: false,
+                error: err?.message || 'Ventana de autorización Google cerrada o bloqueada.'
+              });
+            }
+          });
+          codeClient.requestCode();
+        });
+      }
+
+      // Camino 2 (Fallback estándar o tests): initTokenClient
       if (!win.google?.accounts?.oauth2?.initTokenClient) {
         return {
           success: false,

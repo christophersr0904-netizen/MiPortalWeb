@@ -488,6 +488,7 @@ export interface TareaRecord {
   fecha_programada?: string;
   hora_inicio?: string; // HH:mm
   agendado_calendar?: 'Sí' | 'No';
+  id_evento_calendar?: string;
   id_dependencia?: string;
   responsable_ejecutor?: string;
   notas_impedimentos?: string;

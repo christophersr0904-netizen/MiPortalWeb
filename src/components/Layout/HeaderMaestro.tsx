@@ -24,6 +24,8 @@ import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { syncManager, type SyncState } from '../../services/syncManager';
 import {
   obtenerEstadoConexionGoogleCalendar,
+  consultarEstadoGoogleCalendarBackend,
+  desconectarGoogleCalendar,
   autorizarGoogleCalendarOAuth,
   suscribirEstadoGoogleCalendar,
   esWidgetElectron,
@@ -90,6 +92,13 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
 
   useEffect(() => {
     setGcalEstado(obtenerEstadoConexionGoogleCalendar());
+    void consultarEstadoGoogleCalendarBackend().then((backendEstado) => {
+      setGcalEstado((prev) => ({
+        ...prev,
+        conectado: backendEstado.conectado,
+        email: backendEstado.email ?? prev.email
+      }));
+    });
     return suscribirEstadoGoogleCalendar(setGcalEstado);
   }, []);
 
@@ -542,43 +551,69 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
 
                 {/* Ítem Centralizado: Estado y Conexión OAuth Google Calendar (Solo Web) */}
                 {!esDesktopWidget && (
-                  <button
-                    type="button"
-                    id="btn-header-conectar-calendar"
+                  <div
                     role="menuitem"
-                    onClick={async () => {
-                      const res = await autorizarGoogleCalendarOAuth(false);
-                      if (res.success) {
-                        mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
-                      } else if (res.error) {
-                        mostrarToastCobalt(res.error, 'warning', 3500);
-                      }
-                    }}
-                    className="w-full p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all cursor-pointer group text-left"
-                    title={
-                      gcalEstado.conectado
-                        ? 'Google Calendar conectado (clic para reconectar/renovar token)'
-                        : 'Conectar cuenta Google Calendar (OAuth2)'
-                    }
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 bg-slate-900/40 border border-slate-800/60 transition-all"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 group-hover:bg-sky-500/20 group-hover:border-sky-500/40 shrink-0 transition-colors">
+                      <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
                         <Calendar className="w-4 h-4" strokeWidth={1.75} />
                       </div>
-                      <span className="font-semibold text-slate-200 group-hover:text-sky-200 truncate">
-                        {gcalEstado.conectado ? 'Calendar: Conectado' : 'Conectar Google Calendar'}
-                      </span>
+                      <div className="min-w-0 flex flex-col">
+                        <span className="font-semibold text-slate-200 truncate">
+                          {gcalEstado.conectado ? 'Calendar Conectado' : 'Google Calendar'}
+                        </span>
+                        {gcalEstado.conectado && gcalEstado.email && (
+                          <span className="text-[10px] font-mono tabular-nums text-slate-400 truncate max-w-[150px]">
+                            {gcalEstado.email}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <span className="flex items-center gap-1.5 shrink-0 pr-1">
+                    <div className="flex items-center gap-2 shrink-0">
                       <span
                         className={`w-2 h-2 rounded-full ${
                           gcalEstado.conectado
                             ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]'
                             : 'bg-slate-500'
                         }`}
+                        title={gcalEstado.conectado ? 'Conectado y sincronizado' : 'Sin conexión'}
                       />
-                    </span>
-                  </button>
+                      {gcalEstado.conectado ? (
+                        <button
+                          type="button"
+                          id="btn-header-desconectar-calendar"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await desconectarGoogleCalendar();
+                            mostrarToastCobalt('Google Calendar desconectado', 'info');
+                          }}
+                          className="px-2 py-0.5 text-[10px] font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-rose-900/40 rounded transition-colors"
+                          title="Desconectar cuenta de Google Calendar"
+                        >
+                          Desconectar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          id="btn-header-conectar-calendar"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const res = await autorizarGoogleCalendarOAuth(false);
+                            if (res.success) {
+                              mostrarToastCobalt('Google Calendar conectado para sync automático', 'success');
+                            } else if (res.error) {
+                              mostrarToastCobalt(res.error, 'warning', 3500);
+                            }
+                          }}
+                          className="px-2 py-0.5 text-[10px] font-medium text-sky-400 hover:text-sky-300 hover:bg-sky-950/40 border border-sky-800/40 rounded transition-colors"
+                          title="Conectar cuenta Google Calendar (OAuth2)"
+                        >
+                          Conectar
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )}
 
                 {/* Ítem 2 — Atajos de Teclado */}

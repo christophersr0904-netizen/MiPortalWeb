@@ -10554,4 +10554,54 @@ Cumplimiento estricto de la **Regla 49** de gobernanza (`SYSTEM_RULES.md`) y ali
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 14.25s).
 
+---
+
+### [REQ-GCAL-BACKEND-02: Arquitectura Definitiva Google Calendar OAuth Offline (Supabase Edge Function + Refresh Token Multi-Dispositivo + Paridad Tareas/Hábitos)]
+**Fecha:** Noviembre 2026 | **Fase:** 8.6 (Integración Cloud & Paridad Multi-Dispositivo Google Calendar) | **Archivos Modificados:** `supabase/migrations/20261120000001_gcal_oauth_offline.sql`, `supabase/functions/gcal-auth/index.ts`, `src/services/calendarSyncService.ts`, `src/services/syncPayloadSanitizer.ts`, `src/utils/recurrenceEngine.ts`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `src/types/index.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Vencimiento Efímero y Parpadeo de Ventanas GIS:** La integración anterior dependía exclusivamente del flujo implícito de Google Identity Services (`initTokenClient`), otorgando tokens con vida útil de solo 1 hora. Al vencerse o al cambiar de dispositivo, cualquier acción requería revincular o abría popups que parpadeaban y eran bloqueados por navegadores en producción.
+- **Asimetría de Esquema en Tareas vs Hábitos:** La tabla remota `tareas` en Supabase carecía de la columna `id_evento_calendar`. Los sanitizadores (`syncPayloadSanitizer.ts`) descartaban dicho campo al sincronizar hacia la nube, provocando que los eventos de Google Calendar agendados desde el Kanban se perdieran o desvincularan en el flujo bidireccional.
+- **Cierre Prematuro en Modales (Desincronización de UI):** `ModalActividadFlow.tsx` invocaba `sincronizarCreacionCalendar` y `editarActividadConAlcance` de forma desasistida (`.then(...)`) sin `await`, llamando a `onClose()` de forma inmediata antes de completar la llamada de red a la API V3 de Google Calendar.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Migración SQL Idempotente (`20261120000001_gcal_oauth_offline.sql`):**
+   - Agregada la columna `id_evento_calendar TEXT` a la tabla `public.tareas`.
+   - Creada la tabla `public.google_calendar_integrations` (`user_id UUID PRIMARY KEY`, `refresh_token TEXT NOT NULL`, `access_token TEXT`, `expires_at TIMESTAMPTZ`, `google_email TEXT`, `updated_at TIMESTAMPTZ`), blindada con RLS (`ENABLE ROW LEVEL SECURITY`) restringida al `service_role`.
+2. **Supabase Edge Function (`supabase/functions/gcal-auth/index.ts`):**
+   - Implementada en Deno/TypeScript con soporte CORS universal y 4 acciones atómicas:
+     - `'exchange'`: Intercambia el `code` de autorización de Google por `refresh_token` y `access_token` usando `redirect_uri: 'postmessage'`, consulta el perfil del usuario para obtener `google_email` y persiste las credenciales en `google_calendar_integrations`.
+     - `'token'`: Verifica la validez del `access_token` en caché (>2 min). Si está expirado o próximo a vencer, usa el `refresh_token` contra `https://oauth2.googleapis.com/token` (`grant_type: 'refresh_token'`), actualiza la base de datos y retorna el nuevo token de forma 100% transparente y sin popups.
+     - `'status'`: Retorna `{ connected: boolean, email: string | null }`.
+     - `'disconnect'`: Elimina el registro de integración en la base de datos.
+3. **Paridad de Esquema y Sanitizadores (`syncPayloadSanitizer.ts` & `src/types/index.ts`):**
+   - Inclusión de `id_evento_calendar?: string` en la interfaz TypeScript `TareaRecord`.
+   - Incorporación de `id_evento_calendar` en `sanitizarTareaPayload` (outbound) y `sanitizarTareaInbound` (inbound), garantizando paridad 1:1 con Hábitos, Gastos e Ingresos.
+4. **Enriquecimiento de Descripción en Hábitos (`recurrenceEngine.ts`):**
+   - Inyección de metadatos de alto valor en `construirDescripcionCalendar`: racha actual (`Racha actual: X días consecutivos`), meta diaria estándar con unidad de medida y nivel de rescate mínimo, con tipografía técnica y cero emojis en la descripción de Google Calendar.
+5. **Espera Atómica en Modales (`ModalActividadFlow.tsx`):**
+   - Transformadas las llamadas de creación y edición en operaciones asíncronas con `await` y bloque defensivo `try/catch`, impidiendo que el modal se cierre antes de que el evento de Google Calendar sea confirmado y su ID persistido en Dexie e IndexedDB.
+6. **Gestión de Estado Centralizada en Header (`HeaderMaestro.tsx` & `calendarSyncService.ts`):**
+   - Consulta proactiva del backend al inicio de la aplicación (`consultarEstadoGoogleCalendarBackend()`).
+   - El menú de herramientas del Header muestra el estado de Google Calendar en vivo, la cuenta de correo vinculada con tipografía `font-mono tabular-nums`, el indicador esmeralda de actividad, y botones limpios para conectar o desconectar en un solo clic.
+
+#### 3. Instrucciones de Despliegue en Supabase CLI
+```bash
+# 1. Aplicar la migración de base de datos
+supabase db push
+
+# 2. Configurar los secretos en Supabase Edge Functions
+supabase secrets set GOOGLE_CLIENT_ID="tu-client-id.apps.googleusercontent.com"
+supabase secrets set GOOGLE_CLIENT_SECRET="GOCSPX-tu-client-secret"
+
+# 3. Desplegar la Edge Function gcal-auth
+supabase functions deploy gcal-auth
+```
+
+#### 4. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 11.51s).
+
+
 

@@ -382,6 +382,15 @@ function construirDescripcionCalendar(actividad: ActividadRecurrenciaInput): str
   if (rec.hito_codigo) lineas.push(`Hito: ${rec.hito_codigo}`);
   if (rec.categoria_vida) lineas.push(`Pilar: ${String(rec.categoria_vida).replace(/_/g, ' ')}`);
   if (rec.meta_macro_nombre) lineas.push(`Meta: ${rec.meta_macro_nombre}`);
+  if (rec.racha_actual !== undefined && Number(rec.racha_actual) > 0) {
+    lineas.push(`Racha actual: ${rec.racha_actual} día(s)`);
+  }
+  if (rec.meta_diaria_estandar) {
+    lineas.push(`Objetivo diario: ${rec.meta_diaria_estandar} ${rec.unidad_medida || 'unidades'}`);
+  }
+  if (rec.nivel_rescate_minimo) {
+    lineas.push(`Mínimo de rescate (2 min): ${rec.nivel_rescate_minimo} ${rec.unidad_medida || 'unidades'}`);
+  }
   const notasTexto =
     rec.notas_checklist ||
     rec.notas_impedimentos ||

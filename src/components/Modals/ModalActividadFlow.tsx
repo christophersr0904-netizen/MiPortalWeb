@@ -686,12 +686,13 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     }
 
     if (actividadEditar) {
-      editarActividadConAlcance(
-        actividadEditar,
-        payloadAguardar,
-        alcance,
-        actividadEditar.fecha_programada
-      ).then((editRes) => {
+      try {
+        const editRes = await editarActividadConAlcance(
+          actividadEditar,
+          payloadAguardar,
+          alcance,
+          actividadEditar.fecha_programada
+        );
         if (editRes.calendarResult) {
           if (editRes.calendarResult.success && editRes.calendarResult.mode === 'API_V3') {
             mostrarToastCobalt(editRes.calendarResult.message || 'Actualizado en Google Calendar', 'success');
@@ -703,28 +704,27 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
             mostrarToastCobalt('Cambios guardados · Conecta Google Calendar para sync automático', 'info', 3500);
           }
         }
-      }).catch((e) => {
+      } catch (e) {
         console.warn('[ModalActividadFlow] Error en edición con alcance:', e);
-      });
+      }
     } else {
       await db.actividades_personales.put(payloadAguardar);
       if (calendarSync === 'Sí') {
-        sincronizarCreacionCalendar(payloadAguardar)
-          .then((calRes) => {
-            if (calRes?.success && calRes.mode === 'API_V3') {
-              mostrarToastCobalt('Sincronizado en Google Calendar', 'success');
-            } else if (calRes?.requiereConfigClientId) {
-              mostrarToastCobalt('Google Calendar no configurado en este entorno (falta VITE_GOOGLE_CLIENT_ID)', 'warning', 4500);
-            } else if (calRes && !calRes.success && calRes.error) {
-              mostrarToastCobalt(`Guardado local · ${calRes.error}`, 'warning', 4000);
-            } else if (calRes?.requiereAuth) {
-              mostrarToastCobalt('Actividad guardada · Conecta Google Calendar para sync automático', 'info', 3500);
-            }
-          })
-          .catch((e) => {
-            console.warn('[ModalActividadFlow] Fallo en sincronización inicial Calendar:', e);
-            mostrarToastCobalt('Guardado local · Error inesperado al agendar en Calendar', 'warning', 4000);
-          });
+        try {
+          const calRes = await sincronizarCreacionCalendar(payloadAguardar);
+          if (calRes?.success && calRes.mode === 'API_V3') {
+            mostrarToastCobalt('Sincronizado en Google Calendar', 'success');
+          } else if (calRes?.requiereConfigClientId) {
+            mostrarToastCobalt('Google Calendar no configurado en este entorno (falta VITE_GOOGLE_CLIENT_ID)', 'warning', 4500);
+          } else if (calRes && !calRes.success && calRes.error) {
+            mostrarToastCobalt(`Guardado local · ${calRes.error}`, 'warning', 4000);
+          } else if (calRes?.requiereAuth) {
+            mostrarToastCobalt('Actividad guardada · Conecta Google Calendar para sync automático', 'info', 3500);
+          }
+        } catch (e) {
+          console.warn('[ModalActividadFlow] Fallo en sincronización inicial Calendar:', e);
+          mostrarToastCobalt('Guardado local · Error inesperado al agendar en Calendar', 'warning', 4000);
+        }
       }
     }
 
