@@ -10630,24 +10630,34 @@ supabase functions deploy gcal-auth
 
 ---
 
-### [REQ-UI-GCAL-POLISH-04: Eliminación de Texto Redundante "Calendar activo" y Elevación Estética Minimalista en Modales y Tarjetas]
-**Fecha:** Noviembre 2026 | **Fase:** 8.8 (Pulido Visual High-End Google Calendar) | **Archivos Modificados:** `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+### [REQ-UI-TARJETA-HABITO-02: Rediseño High-End de TarjetaHabito.tsx — Calibración del Check, Paridad 1:1 con Kanban y Micro-Interacciones Motion]
+**Fecha:** Noviembre 2026 | **Fase:** 8.9 (Rediseño Estético High-End & Paridad Arquitectónica 1:1) | **Archivos Modificados:** `src/components/Habitos/TarjetaHabito.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 
 #### 1. Diagnóstico Técnico & Causa Raíz
-- **Ruido Textual en Modales:** La presencia de la etiqueta de texto `"Calendar activo"` junto al switch redundaba con el label de formulario y saturaba el espacio disponible en resoluciones móviles y pantallas compactas.
-- **Carga Visual en Tarjetas:** Los micro-badges con bordes y fondos coloreados en las tarjetas de Kanban y Hábitos competían jerárquicamente con los datos tabulares esenciales (fechas, horas estimadas y rachas).
+- **Desproporción del Check-in Diario:** El botón de marcado utilizaba dimensiones desproporcionadas (`w-6 h-6`, 24x24px) con un icono `Check` pesado (`strokeWidth={2.75}` de 16x16px), gradiente agresivo y brillo estridente que eclipsaba el título del hábito (`12.5px`) e infringía el estándar Cobalt Aerodynamic.
+- **Asimetría con Tarjeta Kanban:** El contenedor raíz de hábitos empleaba `rounded-2xl p-3 pl-3.5 space-y-2` con sombras azules artificiales (`hover:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(30,58,138,0.18)]`) y una franja de 6px (`w-1.5`), contrastando toscamente con el contenedor esbelto y neutro de las tareas (`rounded-xl p-2.5 pl-3.5 space-y-1.5`, franja `w-1` y sombra profunda `hover:shadow-[0_6px_18px_rgba(2,6,23,0.65)]`).
+- **Inconsistencias de Iconografía:** Múltiples iconos en `renderIconoCategoriaVida` carecían de la especificación mandatoria `strokeWidth={1.75}`, y la barra de progreso cuantitativo de 6px (`h-1.5`) generaba pesadez visual.
 
 #### 2. Solución Quirúrgica Implementada
-1. **Indicador Iconográfico Minimalista en Modales (`ModalActividadFlow.tsx` & `ModalTareaFlow.tsx`):**
-   - Eliminado el texto `"Calendar activo"` y sustituido por una cápsula iconográfica de alta fidelidad `w-6 h-6 rounded-md bg-emerald-500/10 text-emerald-400 ring-1 ring-inset ring-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.18)]` con icono `<CalendarCheck2 className="w-3.5 h-3.5" strokeWidth={1.75} />` y tooltip accesible que incluye la cuenta de correo sincronizada si está disponible.
-2. **Micro-Botón Ghost en Tarjetas (`TarjetaTareaKanban.tsx` & `TarjetaHabito.tsx`):**
-   - Transición del estilo contenedor hacia un botón ghost arquitectónico de baja interferencia: `inline-flex items-center justify-center p-1 rounded-md text-sky-400/80 hover:text-sky-300 hover:bg-sky-400/10 transition-colors cursor-pointer` con el icono semántico `CalendarCheck2`.
-   - Preservados `e.stopPropagation()`, la apertura de evento en `abrirGoogleCalendarActividad` y el tooltip `"Agendado en Google Calendar (clic para abrir)"`.
+1. **Calibración Proporcional del Checkbox (18x18px):**
+   - Redimensionado a `w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[5px]` alineado ópticamente al texto (`mt-[1px]`).
+   - Estados de alto diseño: inactivo sobrio `border-slate-600/70 bg-slate-900/30 text-transparent hover:border-emerald-400/70 hover:bg-emerald-500/10` y activo esmeralda atenuado `bg-emerald-500/20 border-emerald-400/60 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.22)]`.
+   - Micro-animación física vía `motion.span`: resorte reactivo `type: 'spring', stiffness: 520, damping: 28` que escala de `0.7 -> 1.15 -> 1` con opacidad suave y check `w-3 h-3` con `strokeWidth={1.75}`.
+2. **Paridad Arquitectónica 1:1 con Kanban (`TarjetaTareaKanban.tsx`):**
+   - Contenedor raíz normalizado a `rounded-xl p-2.5 pl-3.5 space-y-1.5` con sombra neutra `hover:bg-[#0D1526] hover:border-slate-700/90 hover:shadow-[0_6px_18px_rgba(2,6,23,0.65)]`.
+   - Franja de categoría reducida a `w-1 rounded-l-xl` con micro-interacción `origin-left transition-transform duration-150 group-hover:scale-x-125`.
+   - Título calibrado a `text-[12.5px] font-medium leading-snug line-clamp-2` con tachado discreto `line-through text-slate-500` al completarse.
+3. **Refinamiento de Jerarquía e Iconografía:**
+   - Estandarizado `strokeWidth={1.75}` en todos los iconos de `renderIconoCategoriaVida` (`HeartPulse`, `BookOpen`, `Briefcase`, `Wallet`, `Users`, `Coffee`).
+   - Compactada la cápsula de racha a `text-[10.5px]` con icono `Flame w-3 h-3`.
+   - Adelgazada la barra de progreso cuantitativo a `h-1` (4px).
+   - Inviolabilidad del contrato de reconciliación: `TarjetaHabitoProps` y `areHabitoPropsEqual` preservados al 100%.
 
 #### 3. Certificación QA
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
-- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 10.58s).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 12.04s).
+
 
 
 

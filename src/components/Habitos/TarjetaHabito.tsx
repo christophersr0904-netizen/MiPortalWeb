@@ -36,13 +36,13 @@ const formatearFechaCortaHabito = (fechaIso?: string): string => {
 
 export const renderIconoCategoriaVida = (icono: string, className = "w-3 h-3") => {
   switch (icono) {
-    case 'HeartPulse': return <HeartPulse className={className} />;
-    case 'BookOpen': return <BookOpen className={className} />;
-    case 'Briefcase': return <Briefcase className={className} />;
-    case 'Wallet': return <Wallet className={className} />;
-    case 'Users': return <Users className={className} />;
-    case 'Coffee': return <Coffee className={className} />;
-    default: return <HeartPulse className={className} />;
+    case 'HeartPulse': return <HeartPulse className={className} strokeWidth={1.75} />;
+    case 'BookOpen': return <BookOpen className={className} strokeWidth={1.75} />;
+    case 'Briefcase': return <Briefcase className={className} strokeWidth={1.75} />;
+    case 'Wallet': return <Wallet className={className} strokeWidth={1.75} />;
+    case 'Users': return <Users className={className} strokeWidth={1.75} />;
+    case 'Coffee': return <Coffee className={className} strokeWidth={1.75} />;
+    default: return <HeartPulse className={className} strokeWidth={1.75} />;
   }
 };
 
@@ -220,15 +220,15 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
       style={{ contain: 'layout paint' }}
       whileHover={{ y: -1, transition: { duration: 0.12, ease: [0.22, 1, 0.36, 1] } }}
       whileTap={{ scale: 0.992, transition: { duration: 0.08 } }}
-      className={`group shrink-0 h-auto portal-surface p-3 pl-3.5 space-y-2 transition-[border-color,background-color,box-shadow,opacity] duration-150 ease-out border rounded-2xl relative will-change-[transform,opacity] select-none ${
+      className={`group shrink-0 h-auto portal-surface p-2.5 pl-3.5 space-y-1.5 transition-[border-color,background-color,box-shadow,opacity] duration-150 ease-out border rounded-xl relative will-change-[transform,opacity] select-none ${
         esCompletada
           ? 'opacity-70 border-slate-800/40 bg-[#070B14]/90'
-          : 'bg-[#0D1526]/90 border-slate-800/70 hover:border-sky-500/40 hover:shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(30,58,138,0.18)] shadow-sm'
+          : 'bg-[#0D1526]/90 border-slate-800/70 hover:bg-[#0D1526] hover:border-slate-700/90 hover:shadow-[0_6px_18px_rgba(2,6,23,0.65)] shadow-sm'
       }`}
     >
       {/* Micro-franja lateral de acento semántico por categoría con halo sutil */}
       <div
-        className={`!mt-0 absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${catConfig.colorBarra} opacity-85 pointer-events-none`}
+        className={`!mt-0 absolute left-0 top-0 bottom-0 w-1 rounded-l-xl ${catConfig.colorBarra} opacity-85 origin-left transition-transform duration-150 group-hover:scale-x-125 pointer-events-none`}
         title={`Categoría: ${catConfig.nombre}`}
       />
 
@@ -278,11 +278,11 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
         <div className="flex items-center gap-1 shrink-0 ml-auto">
           {racha > 0 && (
             <span
-              className="inline-flex items-center gap-1 text-xs font-mono tabular-nums font-bold px-2 py-0.5 rounded-full shrink-0 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+              className="inline-flex items-center gap-1 text-[10.5px] font-mono tabular-nums font-bold px-1.5 py-0.5 rounded-full shrink-0 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)]"
               title={`Racha consecutiva: ${racha} días`}
             >
               <Flame
-                className={`w-3.5 h-3.5 text-amber-400 fill-amber-400 ${racha >= 7 ? 'animate-pulse' : ''}`}
+                className={`w-3 h-3 text-amber-400 fill-amber-400 ${racha >= 7 ? 'animate-pulse' : ''}`}
                 strokeWidth={1.75}
               />
               <span>{racha}d</span>
@@ -312,7 +312,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
         </div>
       </div>
 
-      {/* NIVEL 2: Checkbox Ergonómico Gema Esmeralda 24x24px + Título */}
+      {/* NIVEL 2: Checkbox Calibrado Proporcional (18x18px) + Título */}
       <div className="flex items-start gap-2.5">
         <button
           type="button"
@@ -320,28 +320,28 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           disabled={toggleInFlight}
           aria-busy={toggleInFlight}
           aria-label={esCompletada ? 'Marcar como pendiente' : 'Completar avance diario'}
-          className={`group/chk w-6 h-6 min-w-0 min-h-0 shrink-0 rounded-lg flex items-center justify-center mt-0.5 border transition-all duration-200 active:scale-90 ${
+          className={`group/chk w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[5px] flex items-center justify-center mt-[1px] shrink-0 border transition-all duration-150 active:scale-90 ${
             toggleInFlight ? 'opacity-60 cursor-wait' : 'cursor-pointer'
           } ${
             esCompletada
-              ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 border-emerald-300 text-slate-950 shadow-[0_0_14px_rgba(16,185,129,0.55)]'
-              : 'border-slate-700/80 bg-slate-900/60 text-transparent hover:border-sky-400/80 hover:bg-sky-500/10 hover:shadow-[0_0_12px_rgba(56,189,248,0.25)]'
+              ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.22)]'
+              : 'border-slate-600/70 bg-slate-900/30 text-transparent hover:border-emerald-400/70 hover:bg-emerald-500/10'
           }`}
           title={esCompletada ? 'Completado hoy (clic para desmarcar)' : 'Marcar como completado hoy'}
         >
-          <Check
-            className={`w-4 h-4 transition-all duration-150 ${
-              esCompletada
-                ? 'scale-100 opacity-100 text-slate-950'
-                : 'scale-90 opacity-0 group-hover/chk:opacity-50 text-slate-400'
-            }`}
-            strokeWidth={2.75}
-          />
+          <motion.span
+            initial={false}
+            animate={{ scale: esCompletada ? [0.7, 1.15, 1] : 0.85, opacity: esCompletada ? 1 : 0 }}
+            transition={{ type: 'spring', stiffness: 520, damping: 28 }}
+            className="flex items-center justify-center"
+          >
+            <Check className="w-3 h-3 text-emerald-300" strokeWidth={1.75} />
+          </motion.span>
         </button>
 
         <h4
           onClick={handleSolicitarEditar}
-          className={`text-xs sm:text-[13px] font-semibold leading-snug break-words flex-1 select-none transition-colors mb-0 ${
+          className={`text-[12.5px] font-medium leading-snug line-clamp-2 flex-1 select-none transition-colors mb-0 ${
             esCompletada ? 'line-through text-slate-500' : 'text-slate-100'
           } ${onEditar ? 'cursor-pointer hover:text-sky-300' : ''}`}
           title={onEditar ? `${tituloHabito} (Click para editar)` : tituloHabito}
@@ -406,7 +406,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           {(metaTotal > 0 || valorAcum > 0 || rescateMin > 0 || Boolean(onAbrirAvance)) && (
             <div className="space-y-1.5 pt-0.5 border-t border-slate-800/50">
               {metaTotal > 0 && (
-                <div className="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
+                <div className="w-full bg-slate-800/80 h-1 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
                       pctAvance >= 100
