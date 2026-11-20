@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import {
@@ -22,7 +22,8 @@ import {
   ChevronDown,
   Link2,
   Search,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react';
 import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
 import { OPCIONES_CATEGORIA_GASTO_COBALT } from '../../constants/uiMappers';
@@ -84,6 +85,8 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
   // Bloquear scroll de fondo incondicionalmente según isOpen
   useBodyScrollLock(isOpen);
   const { programarEliminacion } = useUndoDelete();
+  const [isSaving, setIsSaving] = useState(false);
+  const guardandoRef = useRef(false);
 
   // Estado reactivo de conexión Google Calendar
   const [gcalEstado, setGcalEstado] = useState(obtenerEstadoConexionGoogleCalendar);
@@ -411,9 +414,12 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
 
   // Guardar Cambios
   const handleGuardar = async () => {
-    if (!nombre.trim()) return;
+    if (!nombre.trim() || guardandoRef.current) return;
+    guardandoRef.current = true;
+    setIsSaving(true);
 
-    const nowIso = new Date().toISOString();
+    try {
+      const nowIso = new Date().toISOString();
     const hEstFinal = horasEstimadas || convertirStringToHorasDecimal(horasEstimadasStr) || 1;
     const hRealFinal = horasReales || convertirStringToHorasDecimal(horasRealesStr) || 0;
 
@@ -533,8 +539,12 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
       }
     }
 
-    if (onGuardado) onGuardado();
-    onClose();
+      if (onGuardado) onGuardado();
+      onClose();
+    } finally {
+      guardandoRef.current = false;
+      setIsSaving(false);
+    }
   };
 
   const handleArchivar = async () => {
@@ -560,7 +570,6 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
         await eliminarTarea(targetId, targetCodigoLegado);
       }
     });
-    if (onGuardado) onGuardado();
     onClose();
   };
 
@@ -788,11 +797,11 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                           <div className="flex items-center gap-1.5">
                             {gcalEstado.conectado && (
                               <span
-                                className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400"
-                                title="Google Calendar conectado para sync automático"
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                                title="Google Calendar conectado para sincronización automática"
                               >
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                <span>Sincronizado</span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                <span>Calendar activo</span>
                               </span>
                             )}
                           </div>
@@ -1341,10 +1350,18 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             </button>
             <button
               type="button"
+              disabled={isSaving}
               onClick={handleGuardar}
-              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 transition-all duration-150 flex items-center justify-center cursor-pointer"
+              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 transition-all duration-150 flex items-center justify-center cursor-pointer"
             >
-              {tareaId ? 'Guardar Cambios' : 'Crear Tarea'}
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <span>{tareaId ? 'Guardar Cambios' : 'Crear Tarea'}</span>
+              )}
             </button>
           </div>
         </div>

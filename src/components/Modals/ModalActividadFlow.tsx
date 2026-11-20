@@ -10,7 +10,7 @@
  * ============================================================================
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -77,7 +77,8 @@ import {
   Clock,
   Tag,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 import {
   formatearDuracionLegible,
@@ -285,6 +286,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   const [mostrarModalAlcance, setMostrarModalAlcance] = useState(false);
   const [payloadPendiente, setPayloadPendiente] = useState<ActividadPersonal | null>(null);
   const [errorLocal, setErrorLocal] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const guardandoRef = useRef(false);
   const [gcalEstado, setGcalEstado] = useState<EstadoConexionGoogleCalendar>(() => obtenerEstadoConexionGoogleCalendar());
 
   useEffect(() => {
@@ -665,7 +668,12 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
   // Commit atómico del guardado en Dexie y despacho a Calendar
   const commitGuardado = async (payloadAguardar: ActividadPersonal, alcance: AlcanceRecurrencia) => {
-    const nowIso = new Date().toISOString();
+    if (guardandoRef.current) return;
+    guardandoRef.current = true;
+    setIsSaving(true);
+
+    try {
+      const nowIso = new Date().toISOString();
     let codigoLegado = actividadEditar?.codigo_legado || payloadAguardar.codigo_legado;
 
     let idMetaFinal = metaSeleccionadaId;
@@ -828,7 +836,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     if (onGuardadoExitoso) onGuardadoExitoso(payloadAguardar);
     setPayloadPendiente(null);
     onClose();
-  };
+  } finally {
+    guardandoRef.current = false;
+    setIsSaving(false);
+  }
+};
 
   // Helper de construcción de payload/recurrencia para guardado y vista previa Calendar
   const construirReglaYFrecuencia = (): {
@@ -884,6 +896,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   // Guardar en Dexie con Dirty Checking y confirmación diferida de alcance
   const handleGuardar = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (guardandoRef.current) return;
     const tituloFinal = titulo.trim() || nombreDisplay.trim();
     if (!tituloFinal) {
       setErrorLocal('El título de la actividad es requerido');
@@ -980,7 +993,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
   };
 
   const handleConfirmarAlcance = async (alcance: AlcanceRecurrencia) => {
-    if (!payloadPendiente) return;
+    if (!payloadPendiente || guardandoRef.current) return;
     setMostrarModalAlcance(false);
     await commitGuardado(payloadPendiente, alcance);
   };
@@ -1483,11 +1496,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                       <div className="flex items-center gap-1.5">
                         {gcalEstado.conectado && (
                           <span
-                            className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400"
-                            title="Google Calendar conectado para sync automático"
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                            title="Google Calendar conectado para sincronización automática"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <span>Sincronizado</span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span>Calendar activo</span>
                           </span>
                         )}
                         <button
@@ -1995,10 +2008,18 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
             <button
               type="button"
               id="btn-submit-flow-actividad"
+              disabled={isSaving}
               onClick={() => handleGuardar()}
-              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 transition-all duration-150 flex items-center justify-center cursor-pointer"
+              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 transition-all duration-150 flex items-center justify-center cursor-pointer"
             >
-              {actividadEditar ? 'Actualizar Actividad' : 'Guardar Actividad'}
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <span>{actividadEditar ? 'Actualizar Actividad' : 'Guardar Actividad'}</span>
+              )}
             </button>
           </div>
         </div>

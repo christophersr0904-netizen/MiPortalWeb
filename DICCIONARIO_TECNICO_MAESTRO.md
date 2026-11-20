@@ -10603,5 +10603,31 @@ supabase functions deploy gcal-auth
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 11.51s).
 
+---
+
+### [REQ-FIX-MODALS-UX-03: Candado Anti-Duplicados en Modales (Actividades/Tareas) y Refinamiento Estético de Badges de Google Calendar]
+**Fecha:** Noviembre 2026 | **Fase:** 8.7 (UX de Guardado Atómico & Paridad Visual Google Calendar) | **Archivos Modificados:** `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Vulnerabilidad de N-Clics Concurrentes:** Los botones de guardado en `ModalActividadFlow.tsx` y `ModalTareaFlow.tsx` carecían de estado reactivo `isSaving`, atributo `disabled` y candado síncrono `guardandoRef` en milisegundo 0. Ante ráfagas de clics del usuario durante la latencia de red de Google Calendar (500 ms - 2,000 ms), se generaban múltiples UUIDs y correlativos correlacionados, despachando N eventos duplicados a Google Calendar y N registros duplicados a la base de datos.
+- **Asimetría Visual de Badges Calendar:** Las tarjetas de tareas (`TarjetaTareaKanban.tsx`) utilizaban un botón de icono desprovisto de contenedor delimitador, mientras que las tarjetas de hábitos (`TarjetaHabito.tsx`) no renderizaban ningún indicador visual de agendamiento/sincronización con Google Calendar a pesar de que el comparador memoizado `areHabitoPropsEqual` vigilaba activamente `agendado_calendar` e `id_evento_calendar`.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Candado Dual Anti-Duplicados en Modales (`ModalActividadFlow.tsx` & `ModalTareaFlow.tsx`):**
+   - Inyección de `guardandoRef = useRef(false)` para bloqueo síncrono instantáneo (0 ms) contra clics repetidos antes de que el ciclo de render de React pueda procesar el cambio de estado.
+   - Inyección de estado reactivo `isSaving = useState(false)` con envoltorio estricto `try ... finally` para garantizar la liberación del candado tanto en flujos exitosos como en excepciones de red o validaciones.
+   - Botón Guardar reforzado con `disabled={isSaving}`, clases `disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100` y feedback dinámico con `<Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Guardando...`.
+2. **Refinamiento de Píldoras de Estado en Modales:**
+   - Erradicado el parpadeo agresivo de `animate-pulse` con texto `"Sincronizado"`, reemplazándolo por una cápsula sobria Cobalt: `inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20` con micro-LED verde estático y texto `"Calendar activo"`.
+3. **Paridad Visual 1:1 en Tarjetas de Kanban y Hábitos (`TarjetaTareaKanban.tsx` & `TarjetaHabito.tsx`):**
+   - Estandarizado el micro-badge compacto en `TarjetaTareaKanban.tsx`: `inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 transition cursor-pointer`.
+   - Incorporado en el Footer (Nivel 4) de `TarjetaHabito.tsx` el mismo micro-badge interactivo con icono `CalendarClock`, `e.stopPropagation()` y enlace directo a Google Calendar vía `abrirGoogleCalendarActividad(actividad)` cuando `agendado_calendar === 'Sí'` o `id_evento_calendar` está presente.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 11.12s).
+
+
 
 

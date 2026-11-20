@@ -462,30 +462,20 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
     };
   }
 
-  if (silencioso) {
-    if (promesaRenovacionEnCurso) return promesaRenovacionEnCurso;
-    const url = obtenerUrlGcalAuth();
-    if (url) {
-      promesaRenovacionEnCurso = (async () => {
-        const token = await obtenerTokenGoogleCalendar();
-        if (token) return { success: true, token };
-        return { success: false, error: 'No se pudo renovar token silenciosamente' };
-      })().finally(() => {
-        promesaRenovacionEnCurso = null;
-      });
-      return promesaRenovacionEnCurso;
-    }
+  const clientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
+  if (!clientId) {
+    return {
+      success: false,
+      requiereConfigClientId: true,
+      error: 'Configura VITE_GOOGLE_CLIENT_ID en .env para habilitar OAuth automático con Google Calendar.'
+    };
+  }
+
+  if (silencioso && promesaRenovacionEnCurso) {
+    return promesaRenovacionEnCurso;
   }
 
   const ejecutarAuth = async () => {
-    const clientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
-    if (!clientId) {
-      return {
-        success: false,
-        requiereConfigClientId: true,
-        error: 'Configura VITE_GOOGLE_CLIENT_ID en .env para habilitar OAuth automático con Google Calendar.'
-      };
-    }
 
     try {
       await cargarScriptGIS();

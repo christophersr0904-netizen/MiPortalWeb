@@ -6,11 +6,12 @@ import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
 import {
   Check, Flame, Calendar, Clock, Trash2,
   HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee, AlertTriangle,
-  Target, ListTodo, Repeat, TrendingUp
+  Target, ListTodo, Repeat, TrendingUp, CalendarClock
 } from 'lucide-react';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
 import { formatFechaIsoLocal, formatearFechaDdMmYyyy, formatearFechaDdMm } from '../../utils/timeFormatters';
 import { esActividadCompletadaHoy } from '../../services/habitosService';
+import { abrirGoogleCalendarActividad } from '../../services/calendarSyncService';
 
 /** Traduce el código técnico de recurrencia a etiqueta humana para tooltips. */
 const formatearCicloLegible = (frecuencia?: string, regla?: string): string => {
@@ -529,6 +530,21 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} />
               <span>{actividad.hora_inicio}</span>
             </span>
+          )}
+
+          {(actividad.agendado_calendar === 'Sí' || (actividad as any).id_evento_calendar) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                abrirGoogleCalendarActividad(actividad);
+              }}
+              className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 transition cursor-pointer"
+              title="Sincronizado en Google Calendar (clic para abrir)"
+              aria-label="Abrir en Google Calendar"
+            >
+              <CalendarClock className="w-3.5 h-3.5" strokeWidth={1.75} />
+            </button>
           )}
         </div>
 
