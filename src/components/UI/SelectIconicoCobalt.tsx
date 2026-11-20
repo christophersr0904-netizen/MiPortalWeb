@@ -9,7 +9,8 @@
  * ============================================================================
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 
 export interface OpcionSelectCobalt<T extends string = string> {
@@ -46,13 +47,67 @@ export function SelectIconicoCobalt<T extends string = string>({
 }: SelectIconicoCobaltProps<T>) {
   const [estaAbierto, setEstaAbierto] = useState(false);
   const contenedorRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{
+    top?: number;
+    bottom?: number;
+    left: number;
+    width: number;
+    openUpward: boolean;
+  }>({
+    left: 0,
+    width: 200,
+    openUpward: false
+  });
 
   const opcionSeleccionada = opciones.find((op) => op.valor === valor);
 
-  // Cierre al hacer clic fuera
+  const actualizarPosicion = useCallback(() => {
+    if (!contenedorRef.current) return;
+    const rect = contenedorRef.current.getBoundingClientRect();
+    const espacioAbajo = window.innerHeight - rect.bottom;
+    const espacioArriba = rect.top;
+    const openUpward = espacioAbajo < 250 && espacioArriba > espacioAbajo;
+
+    setCoords({
+      left: rect.left,
+      width: Math.max(rect.width, 200),
+      openUpward,
+      ...(openUpward
+        ? { bottom: window.innerHeight - rect.top + 6 }
+        : { top: rect.bottom + 6 })
+    });
+  }, []);
+
+  useEffect(() => {
+    if (estaAbierto) {
+      actualizarPosicion();
+      const handleScrollResize = (e: Event) => {
+        // Ignorar eventos de scroll originados dentro del propio listbox
+        if (menuRef.current && menuRef.current.contains(e.target as Node)) {
+          return;
+        }
+        actualizarPosicion();
+      };
+      window.addEventListener('resize', handleScrollResize);
+      window.addEventListener('scroll', handleScrollResize, true);
+      return () => {
+        window.removeEventListener('resize', handleScrollResize);
+        window.removeEventListener('scroll', handleScrollResize, true);
+      };
+    }
+  }, [estaAbierto, actualizarPosicion]);
+
+  // Cierre al hacer clic fuera (validando contenedor y portal)
   useEffect(() => {
     const handleClickFuera = (e: MouseEvent) => {
-      if (contenedorRef.current && !contenedorRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        contenedorRef.current &&
+        !contenedorRef.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
         setEstaAbierto(false);
       }
     };
@@ -142,11 +197,19 @@ export function SelectIconicoCobalt<T extends string = string>({
         </div>
       </button>
 
-      {/* Menú Desplegable Flotante (Fondo 100% Sólido) */}
-      {estaAbierto && (
+      {/* Menú Desplegable Flotante en Portal (Sin recortes por overflow) */}
+      {estaAbierto && typeof document !== 'undefined' && createPortal(
         <div
+          ref={menuRef}
           role="listbox"
-          className="absolute top-[calc(100%+6px)] left-0 right-0 z-[100] p-1.5 rounded-2xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150"
+          style={{
+            position: 'fixed',
+            left: coords.left,
+            width: coords.width,
+            zIndex: 99999,
+            ...(coords.openUpward ? { bottom: coords.bottom } : { top: coords.top })
+          }}
+          className="p-1.5 rounded-2xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150"
         >
           {opciones.map((op) => {
             const esActivo = op.valor === valor;
@@ -208,7 +271,8 @@ export function SelectIconicoCobalt<T extends string = string>({
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

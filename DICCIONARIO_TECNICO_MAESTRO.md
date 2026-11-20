@@ -52,6 +52,23 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.2 — Rediseño High-End Linear Split 2 Columnas en ModalTareaFlow y Portal Flotante en SelectIconicoCobalt (REQ-TAREA-MODAL-03-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/UI/SelectIconicoCobalt.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/components/UI/SelectIconicoCobalt.tsx` (Portal Flotante Anti-Clipping):
+    - Migración del panel desplegable (`role="listbox"`) a `createPortal(..., document.body)` con coordenadas fijas en viewport (`getBoundingClientRect()`) y `zIndex: 99999`.
+    - Detección reactiva de colisión inferior: si `window.innerHeight - rect.bottom < 250` y existe mayor espacio superior, despliega automáticamente hacia arriba (`bottom: window.innerHeight - rect.top + 6`); en caso contrario hacia abajo (`top: rect.bottom + 6`).
+    - Listeners pasivos a eventos `resize` y `scroll` (en fase de captura en `window`, ignorando scrolls internos del menú) y validación de clic exterior en `contenedorRef` y `menuRef`.
+    - Erradicación definitiva de cualquier recorte o corte visual en contenedores con `overflow-x-auto`, `overflow-hidden` o contextos de apilamiento restrictivos.
+  - `src/components/Modals/ModalTareaFlow.tsx` (Rediseño Estilo Linear / Propuesta A):
+    - Reestructuración de monolito vertical a arquitectura Split de 2 columnas de alta densidad (`max-w-5xl`, `md:flex-row`).
+    - **Cabecera Ejecutiva Despejada:** Fila 1 con píldora interactiva de código de tarea (`# CÓDIGO`) con función de copiado al portapapeles y retroalimentación táctil de confirmación (`Hash` a `Check` esmeralda) + selector desplegable popover de Estado Kanban (`01_Backlog`, `02_Por_Hacer`, `03_En_Proceso`, `04_Completado`, `05_Archivado`) con iconografía Lucide (`CircleDot`, `Clock`, `ArrowRightCircle`, `CheckCircle2`, `Archive`) + badge informativo de dependencia predecesora + botón de cierre LIFO (`X`). Fila 2 con título de tarea editable de alta jerarquía tipográfica (`text-lg md:text-xl font-bold`).
+    - **Columna Izquierda (Lienzo Principal):** Área de descripción de tarea, lista y gestión de subtareas / Checklist DoD con casillas de verificación cuadradas redondeadas táctiles (`w-5 h-5 rounded-md border border-slate-700`) e indicador de progreso numérico y porcentual, e incrustación de la sección de notas vinculadas (`SeccionNotasVinculadasModal`).
+    - **Columna Derecha (Inspector Lateral de Propiedades):** Ancho optimizado `md:w-[350px] lg:w-[380px]` con fondo `#080E1C/80` y microborde `border-slate-800/80`. Aloja a ancho completo los selectores WBS (`SelectIconicoCobalt` de Proyecto Principal, Paquete de Trabajo / Hito y Predecesora con nombres largos legibles sin truncamiento), Tiempo y Agenda (`InputFechaCobalt`, `InputHoraCobalt` AM/PM, horas estimadas vs reales, `SwitchCobalt` + badge iconográfico pasivo `CalendarCheck2`), cuadrícula 2x2 para Prioridad Eisenhower (`P1 · Crítica`, `P2 · Alta`, `P3 · Normal`, `P4 · Baja`), cuadrícula de 3 columnas para Nivel de Energía (`DeepWork`, `Operativa`, `Mecánica`), Responsable, interruptor MAV y acordeón desplegable de Gasto Asociado & Costos (presupuesto vs costo real, moneda, comprobante).
+    - Preservación estricta de todos los contratos relacionales de base de datos (`tablas.md`, `entityNormalizer.ts`, Dexie y Supabase Sync).
+  - **Validación QA:** Verificación estática TypeScript limpia (`npx tsc --noEmit`: 0 errores), suite de pruebas Vitest al 100% (35/35 suites aprobadas, 349/349 tests en verde), y empaquetado de producción exitoso con Vite (`npm run build`).
+
+
 ### FASE 8.1 — Atajos Nativos Android (App Shortcuts) y Auto-Recording por Deep Link (REQ-PWA-01-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `public/manifest.json`, `public/manifest.webmanifest`, `src/App.tsx`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
@@ -10657,6 +10674,58 @@ supabase functions deploy gcal-auth
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 12.04s).
+
+---
+
+### [REQ-KANBAN-AESTHETIC-03: Jerarquía de Títulos de Columna, Eliminación de Borde Superior Cromático y Corrección de Recorte en Hover]
+**Fecha:** Noviembre 2026 | **Fase:** 8.10 (Evolución Visual Bento & Elevación de Jerarquía Kanban) | **Archivos Modificados:** `src/components/PMO/ColumnaKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Bordes Cromáticos Toscos:** El contenedor `.kanban-col-container` aplicaba una franja superior coloreada de 2px (`border-t-2 ${borderTopColor}`) que rompía la sobriedad ejecutiva de Cobalt Aerodynamic y competía visualmente con las franjas de prioridad de las tarjetas.
+- **Jerarquía Tipográfica Subordinada:** Los títulos de columna empleaban `text-xs font-bold uppercase tracking-wider` con coloración opaca, pareciendo etiquetas secundarias o metadatos menores en lugar de secciones de primer nivel.
+- **Recorte de Borde Superior y Sombras en Hover:** El contenedor `.kanban-col-body` con `overflow-y-auto` y padding derecho `pr-1` carecía de margen superior e interno, recortando el borde superior de las tarjetas al elevarse `y: -1` y truncando las sombras suaves laterales (`hover:shadow-[0_6px_18px_rgba(2,6,23,0.65)]`).
+
+#### 2. Solución Quirúrgica Implementada
+1. **Estructura Arquitectónica Sobria (`ColumnaKanban.tsx`):**
+   - Eliminado por completo `borderTopColor` y su cálculo condicional.
+   - Normalizado el marco contenedor a un chasis homogéneo: `bg-[#0A101F]/90 border border-slate-800/75 rounded-2xl p-2.5 md:p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]`, conservando el realce `bg-sky-950/20 border-sky-500/50` únicamente en dropzone activa (`isOverThisCol`).
+2. **Elevación de Jerarquía en Header:**
+   - Añadida separación estructural clara respecto al cuerpo mediante `pb-2.5 mb-2.5 border-b border-slate-800/60`.
+   - Tipografía principal jerarquizada a `text-[13.5px] md:text-sm font-semibold tracking-tight text-slate-100 truncate` sin `uppercase` disminutivo.
+   - Contenedor de icono semántico unificado a `w-7 h-7 rounded-lg bg-slate-900/90 border border-slate-800/80 flex items-center justify-center`.
+   - Botón `+` optimizado a `w-7 h-7 rounded-lg hover:bg-slate-800/80` con microborde sobrio.
+   - Esfuerzo horario estimado calibrado a `text-[11px] font-mono text-slate-400`.
+3. **Erradicación de Recorte en Hover (`kanban-col-body`):**
+   - Sustituido `pr-1` por `px-1.5 pt-1 -mx-1.5` en `.kanban-col-body`:
+     `kanban-col-body flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2.5 px-1.5 pt-1 -mx-1.5 custom-scrollbar pb-28 md:pb-8 [&::-webkit-scrollbar]:hidden`.
+   - Los `6px` de holgura interna combinados con margen negativo compensatorio mantienen las tarjetas milimétricamente alineadas al header garantizando que `y: -1` y la sombra de 18px nunca sean truncados por el clipping del scroll.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 11.87s).
+
+---
+
+### [REQ-KANBAN-CLIP-FIX-02: Eliminación de overflow-hidden en Wrapper de Tarjeta Kanban]
+**Fecha:** Noviembre 2026 | **Fase:** 8.11 (Corrección Quirúrgica de Clipping en Animación & Hover) | **Archivos Modificados:** `src/components/PMO/ColumnaKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Clipping en Micro-Interacciones:** El contenedor directo `<motion.div>` que envuelve a cada `<TarjetaTareaKanban />` tenía asignada la clase `overflow-hidden`. Al desplazarse la tarjeta hacia arriba (`y: -1`) y proyectar su halo de sombra `box-shadow` en hover (`hover:shadow-[0_6px_18px_rgba(2,6,23,0.65)]`), el `overflow-hidden` recortaba tajantemente el borde superior y las sombras perimetrales.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Transición a `overflow-visible` (`ColumnaKanban.tsx`):**
+   - Reemplazada la clase `overflow-hidden` por `overflow-visible` en el `<motion.div key={tar.id}>`.
+2. **Optimización de Desmontaje con `AnimatePresence`:**
+   - Dado que el contenedor padre opera bajo `mode="popLayout"`, se simplificó la animación de salida a `exit={{ opacity: 0, scale: 0.96, y: -4 }}`, prescindiendo de colapsar forzosamente la altura (`height: 0`) y eliminando la necesidad de aplicar `overflow-hidden` durante la fase de salida.
+   - Preservados al 100% `layout={draggedTaskId === tar.id ? false : 'position'}`, `initial`, `animate` y los parámetros de resorte físico (`spring stiffness: 550, damping: 45, mass: 0.75`).
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 10.32s).
+
+
 
 
 

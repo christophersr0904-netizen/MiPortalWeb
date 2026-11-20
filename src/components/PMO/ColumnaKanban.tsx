@@ -76,18 +76,6 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
   onEliminarTarea,
   onAbrirModalNuevaTarea
 }) => {
-  // Borde superior acentuado de 2px según fase canónica
-  const borderTopColor =
-    col.id === '01_Backlog'
-      ? 'border-t-slate-500'
-      : col.id === '02_Por_Hacer'
-      ? 'border-t-sky-500'
-      : col.id === '03_En_Proceso'
-      ? 'border-t-amber-500'
-      : col.id === '04_Completado'
-      ? 'border-t-emerald-500'
-      : 'border-t-slate-600';
-
   // Esfuerzo horario total estimado de la columna
   const totalHorasColumna = tareasColumna.reduce((acc, t) => acc + (Number(t.horas_estimadas) || 0), 0);
   const totalHorasStr = totalHorasColumna > 0
@@ -98,22 +86,20 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
     <div
       id={col.domId}
       data-state={col.id}
-      className={`kanban-col-container ${
-        isActivaMovil === false ? 'hidden md:flex' : 'flex'
-      } flex-col rounded-xl md:rounded-2xl border border-t-2 ${borderTopColor} p-2 md:p-3 h-full min-h-0 w-full transition-colors duration-150 select-none ${
-        isOverThisCol
+      className={`kanban-col-container ${isActivaMovil === false ? 'hidden md:flex' : 'flex'
+        } flex-col rounded-2xl border p-2.5 md:p-3.5 h-full min-h-0 w-full transition-colors duration-150 select-none shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] ${isOverThisCol
           ? 'kanban-dropzone-active bg-sky-950/20 border-sky-500/50 shadow-sm'
-          : 'bg-[#0D1526]/95 border-slate-800/80 shadow-sm'
-      }`}
+          : 'bg-[#0A101F]/90 border-slate-800/75 shadow-sm'
+        }`}
       onDragOver={(e) => onDragOver(e, col.id)}
       onDragLeave={onDragLeave}
       onDrop={(e) => onDrop(e, col.id)}
     >
       {/* Cabecera de Columna (Elevación Bento Cobalt con micro-botón y horas) */}
-      <div className="mb-2 shrink-0">
+      <div className="pb-2.5 mb-2.5 border-b border-slate-800/60 shrink-0">
         <div className="hidden md:flex justify-between items-center px-0.5">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-semibold ${col.iconoColor} relative shrink-0`}>
+            <span className="w-7 h-7 rounded-lg bg-slate-900/90 border border-slate-800/80 flex items-center justify-center relative shrink-0">
               {col.headerGlow && (
                 <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]"></span>
               )}
@@ -122,11 +108,11 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
               {col.id === '03_En_Proceso' && <Zap className="w-3.5 h-3.5 text-amber-400" strokeWidth={1.75} />}
               {col.id === '04_Completado' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" strokeWidth={1.75} />}
             </span>
-            <span className={`text-xs font-bold uppercase tracking-wider truncate ${col.tituloColor}`}>
+            <span className="text-[13.5px] md:text-sm font-semibold tracking-tight text-slate-100 truncate">
               {col.titulo}
             </span>
             {totalHorasStr && (
-              <span className="font-mono tabular-nums text-[10px] text-slate-400 shrink-0" title={`Esfuerzo total estimado: ${totalHorasStr}`}>
+              <span className="font-mono tabular-nums text-[11px] text-slate-400 shrink-0" title={`Esfuerzo total estimado: ${totalHorasStr}`}>
                 · {totalHorasStr}
               </span>
             )}
@@ -154,7 +140,7 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
             <button
               type="button"
               onClick={() => onAbrirModalNuevaTarea(col.id)}
-              className="w-6 h-6 rounded-md hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-700/60"
+              className="w-7 h-7 rounded-lg hover:bg-slate-800/80 flex items-center justify-center text-slate-400 hover:text-slate-100 transition-colors cursor-pointer border border-transparent hover:border-slate-700/60"
               title={`Añadir tarea a ${col.titulo}`}
               aria-label={`Añadir tarea a ${col.titulo}`}
             >
@@ -180,7 +166,7 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
       {/* Lista de Tarjetas Scrollable */}
       <div
         id={`body-${col.domId}`}
-        className="kanban-col-body flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2 md:space-y-3 pr-1 custom-scrollbar pb-28 md:pb-8 [&::-webkit-scrollbar]:hidden"
+        className="kanban-col-body flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2.5 px-1.5 pt-1 -mx-1.5 custom-scrollbar pb-28 md:pb-8 [&::-webkit-scrollbar]:hidden"
       >
         {cargandoDatosIniciales ? (
           <div className="space-y-2.5">
@@ -242,17 +228,9 @@ const ColumnaKanbanComponent: React.FC<ColumnaKanbanProps> = ({
                   layout={draggedTaskId === tar.id ? false : 'position'}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{
-                    opacity: 0,
-                    y: -4,
-                    height: 0,
-                    marginTop: 0,
-                    marginBottom: 0,
-                    paddingTop: 0,
-                    paddingBottom: 0
-                  }}
+                  exit={{ opacity: 0, scale: 0.96, y: -4 }}
                   transition={{ type: 'spring', stiffness: 550, damping: 45, mass: 0.75 }}
-                  className="overflow-hidden"
+                  className="overflow-visible"
                 >
                   <TarjetaTareaKanban
                     tar={tar}
