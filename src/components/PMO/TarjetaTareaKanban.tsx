@@ -14,7 +14,7 @@ import {
   Lock,
   CheckCircle2,
   Calendar,
-  CalendarClock,
+  CalendarCheck2,
   Clock,
   RotateCcw,
   Check,
@@ -345,11 +345,11 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
                     tipo_compromiso: 'PUNTUAL'
                   });
                 }}
-                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 transition cursor-pointer"
+                className="inline-flex items-center justify-center p-1 rounded-md text-sky-400/80 hover:text-sky-300 hover:bg-sky-400/10 transition-colors cursor-pointer"
                 title="Agendado en Google Calendar (clic para abrir)"
                 aria-label="Abrir en Google Calendar"
               >
-                <CalendarClock className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+                <CalendarCheck2 className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
             )}
           </div>

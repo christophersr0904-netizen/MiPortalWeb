@@ -78,7 +78,8 @@ import {
   Tag,
   AlertTriangle,
   ExternalLink,
-  Loader2
+  Loader2,
+  CalendarCheck2
 } from 'lucide-react';
 import {
   formatearDuracionLegible,
@@ -1496,11 +1497,11 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                       <div className="flex items-center gap-1.5">
                         {gcalEstado.conectado && (
                           <span
-                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
-                            title="Google Calendar conectado para sincronización automática"
+                            className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-emerald-500/10 text-emerald-400 ring-1 ring-inset ring-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.18)]"
+                            title={gcalEstado.email ? `Sincronización automática activa (${gcalEstado.email})` : 'Sincronización automática activa con Google Calendar'}
+                            aria-label="Google Calendar conectado"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            <span>Calendar activo</span>
+                            <CalendarCheck2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                           </span>
                         )}
                         <button

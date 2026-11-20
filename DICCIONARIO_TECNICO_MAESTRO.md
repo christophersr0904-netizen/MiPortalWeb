@@ -10628,6 +10628,28 @@ supabase functions deploy gcal-auth
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 11.12s).
 
+---
+
+### [REQ-UI-GCAL-POLISH-04: Eliminación de Texto Redundante "Calendar activo" y Elevación Estética Minimalista en Modales y Tarjetas]
+**Fecha:** Noviembre 2026 | **Fase:** 8.8 (Pulido Visual High-End Google Calendar) | **Archivos Modificados:** `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/components/Habitos/TarjetaHabito.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Ruido Textual en Modales:** La presencia de la etiqueta de texto `"Calendar activo"` junto al switch redundaba con el label de formulario y saturaba el espacio disponible en resoluciones móviles y pantallas compactas.
+- **Carga Visual en Tarjetas:** Los micro-badges con bordes y fondos coloreados en las tarjetas de Kanban y Hábitos competían jerárquicamente con los datos tabulares esenciales (fechas, horas estimadas y rachas).
+
+#### 2. Solución Quirúrgica Implementada
+1. **Indicador Iconográfico Minimalista en Modales (`ModalActividadFlow.tsx` & `ModalTareaFlow.tsx`):**
+   - Eliminado el texto `"Calendar activo"` y sustituido por una cápsula iconográfica de alta fidelidad `w-6 h-6 rounded-md bg-emerald-500/10 text-emerald-400 ring-1 ring-inset ring-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.18)]` con icono `<CalendarCheck2 className="w-3.5 h-3.5" strokeWidth={1.75} />` y tooltip accesible que incluye la cuenta de correo sincronizada si está disponible.
+2. **Micro-Botón Ghost en Tarjetas (`TarjetaTareaKanban.tsx` & `TarjetaHabito.tsx`):**
+   - Transición del estilo contenedor hacia un botón ghost arquitectónico de baja interferencia: `inline-flex items-center justify-center p-1 rounded-md text-sky-400/80 hover:text-sky-300 hover:bg-sky-400/10 transition-colors cursor-pointer` con el icono semántico `CalendarCheck2`.
+   - Preservados `e.stopPropagation()`, la apertura de evento en `abrirGoogleCalendarActividad` y el tooltip `"Agendado en Google Calendar (clic para abrir)"`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 10.58s).
+
+
 
 
 

@@ -6,7 +6,7 @@ import { ListaSubtareas } from '../Subtareas/ListaSubtareas';
 import {
   Check, Flame, Calendar, Clock, Trash2,
   HeartPulse, BookOpen, Briefcase, Wallet, Users, Coffee, AlertTriangle,
-  Target, ListTodo, Repeat, TrendingUp, CalendarClock
+  Target, ListTodo, Repeat, TrendingUp, CalendarCheck2
 } from 'lucide-react';
 import { BadgeNotasVinculadas } from '../Notas/BadgeNotasVinculadas';
 import { formatFechaIsoLocal, formatearFechaDdMmYyyy, formatearFechaDdMm } from '../../utils/timeFormatters';
@@ -539,11 +539,11 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
                 e.stopPropagation();
                 abrirGoogleCalendarActividad(actividad);
               }}
-              className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20 hover:text-sky-300 transition cursor-pointer"
-              title="Sincronizado en Google Calendar (clic para abrir)"
+              className="inline-flex items-center justify-center p-1 rounded-md text-sky-400/80 hover:text-sky-300 hover:bg-sky-400/10 transition-colors cursor-pointer"
+              title="Agendado en Google Calendar (clic para abrir)"
               aria-label="Abrir en Google Calendar"
             >
-              <CalendarClock className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <CalendarCheck2 className="w-3.5 h-3.5" strokeWidth={1.75} />
             </button>
           )}
         </div>
