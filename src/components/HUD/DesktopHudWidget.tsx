@@ -122,7 +122,7 @@ export const DesktopHudWidget: React.FC<DesktopHudWidgetProps> = ({
           </div>
           <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
             <div
-              className="bg-gradient-to-r from-sky-500 to-emerald-400 h-full transition-all duration-300"
+              className="bg-gradient-to-r from-sky-500 to-emerald-400 h-full transition-[width] duration-300 ease-out"
               style={{ width: `${progresoPct}%` }}
             />
           </div>
@@ -168,7 +168,7 @@ export const DesktopHudWidget: React.FC<DesktopHudWidgetProps> = ({
               <div
                 key={act.id}
                 onClick={(e) => handleToggleHabito(act, e)}
-                className={`group flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                className={`group flex items-center justify-between p-2.5 rounded-xl border transition-colors duration-150 cursor-pointer ${
                   estaCompletado
                     ? 'bg-emerald-950/20 border-emerald-500/30 text-slate-400'
                     : 'bg-slate-900/50 hover:bg-slate-900 border-slate-800/80 text-slate-200'

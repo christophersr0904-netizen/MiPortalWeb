@@ -194,7 +194,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
               setModo('clarificar_idea');
               reset();
             }}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-all ${modo === 'clarificar_idea'
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-colors duration-150 ${modo === 'clarificar_idea'
                 ? 'border-sky-500 text-sky-400 bg-sky-500/10 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
@@ -209,7 +209,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
               setModo('desglosar_wbs');
               reset();
             }}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-all ${modo === 'desglosar_wbs'
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-colors duration-150 ${modo === 'desglosar_wbs'
                 ? 'border-sky-500 text-sky-400 bg-sky-500/10 rounded-t-lg'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
@@ -341,7 +341,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
               ) : (
                 <button
                   type="submit"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-[transform,box-shadow] duration-150 active:scale-95 cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
                   {status === 'completed' ? 'Regenerar con IA' : 'Ejecutar Inferencia IA'}
@@ -450,7 +450,7 @@ export const AsistenteIaModal: React.FC<AsistenteIaModalProps> = ({
               <button
                 type="submit"
                 form="form-asistente-ia"
-                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-[transform,box-shadow] duration-150 active:scale-95 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
                 {status === 'completed' ? 'Regenerar' : 'Ejecutar IA'}

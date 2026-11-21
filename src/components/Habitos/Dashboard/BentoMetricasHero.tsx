@@ -37,7 +37,7 @@ export const BentoMetricasHero: React.FC<BentoMetricasHeroProps> = ({ kpis, acti
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5 shrink-0">
       {/* CARD 1: CONSISTENCIA GLOBAL HOY */}
-      <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between relative overflow-hidden group hover:border-emerald-500/40 transition-all">
+      <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between relative overflow-hidden group hover:border-emerald-500/40 transition-colors duration-150">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             Consistencia Hoy
@@ -56,7 +56,7 @@ export const BentoMetricasHero: React.FC<BentoMetricasHeroProps> = ({ kpis, acti
         </div>
         <div className="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
           <div
-            className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500"
+            className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-[width] duration-500 ease-out"
             style={{ width: `${pctCumplimiento}%` }}
           />
         </div>
@@ -66,7 +66,7 @@ export const BentoMetricasHero: React.FC<BentoMetricasHeroProps> = ({ kpis, acti
       </div>
 
       {/* CARD 2: MAYOR RACHA ACTIVA */}
-      <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between relative overflow-hidden group hover:border-amber-500/40 transition-all">
+      <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between relative overflow-hidden group hover:border-amber-500/40 transition-colors duration-150">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             Mayor Racha Activa
@@ -89,7 +89,7 @@ export const BentoMetricasHero: React.FC<BentoMetricasHeroProps> = ({ kpis, acti
       </div>
 
       {/* CARD 3: TASA DE RECUPERACIÓN (ATOMIC HABITS) CON MEDIDOR RADIAL SVG */}
-      <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-all">
+      <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-colors duration-150">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             Tasa de Recuperación
@@ -123,7 +123,7 @@ export const BentoMetricasHero: React.FC<BentoMetricasHeroProps> = ({ kpis, acti
                 cx="26"
                 cy="26"
                 r={radius}
-                className="stroke-sky-400 transition-all duration-700 ease-out"
+                className="stroke-sky-400 transition-[stroke-dashoffset] duration-700 ease-out"
                 strokeWidth="4"
                 strokeDasharray={circumference}
                 strokeDashoffset={strokeDashoffset}
@@ -142,7 +142,7 @@ export const BentoMetricasHero: React.FC<BentoMetricasHeroProps> = ({ kpis, acti
       </div>
 
       {/* CARD 4: HORAS INVERTIDAS EN BIENESTAR */}
-      <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-all">
+      <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl border border-slate-800/40 shadow-cobalt-1 flex flex-col justify-between relative overflow-hidden group hover:border-sky-500/40 transition-colors duration-150">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             Inversión en Bienestar

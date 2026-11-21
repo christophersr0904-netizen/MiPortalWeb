@@ -127,7 +127,7 @@ export const HeaderProyectoActivo: React.FC<HeaderProyectoActivoProps> = ({
           </span>
           <div className="w-10 h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50 shrink-0">
             <div
-              className="h-full bg-gradient-to-r from-sky-500 to-emerald-400 rounded-full transition-all duration-300"
+              className="h-full bg-gradient-to-r from-sky-500 to-emerald-400 rounded-full transition-[width] duration-300 ease-out"
               style={{ width: `${Math.min(100, Math.max(0, avanceReal))}%` }}
             />
           </div>

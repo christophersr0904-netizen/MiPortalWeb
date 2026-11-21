@@ -270,7 +270,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
               </div>
             </div>
             <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mt-3 shadow-inner">
-              <div id="bar-semaforo-liquidez" className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: semaforoStatus.barWidth }} />
+              <div id="bar-semaforo-liquidez" className="bg-emerald-500 h-full rounded-full transition-[width] duration-500 ease-out" style={{ width: semaforoStatus.barWidth }} />
             </div>
           </div>
 
@@ -298,7 +298,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
               </div>
             </div>
             <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mt-3 shadow-inner">
-              <div id="bar-gastos-hormiga" className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(pctGastosHormiga * 3, 100)}%` }} />
+              <div id="bar-gastos-hormiga" className="bg-amber-500 h-full rounded-full transition-[width] duration-500 ease-out" style={{ width: `${Math.min(pctGastosHormiga * 3, 100)}%` }} />
             </div>
           </div>
 
@@ -326,7 +326,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
               </div>
             </div>
             <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mt-3 shadow-inner">
-              <div id="bar-capacidad-ahorro" className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(ratioAhorroPct, 100)}%` }} />
+              <div id="bar-capacidad-ahorro" className="bg-emerald-500 h-full rounded-full transition-[width] duration-500 ease-out" style={{ width: `${Math.min(ratioAhorroPct, 100)}%` }} />
             </div>
           </div>
 
@@ -354,7 +354,7 @@ const DashboardFinancieroComponent: React.FC<DashboardFinancieroProps> = ({
               </div>
             </div>
             <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mt-3 shadow-inner">
-              <div id="bar-endeudamiento-cuotas" className="bg-violet-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(ratioEndeudamientoCuotas, 100)}%` }} />
+              <div id="bar-endeudamiento-cuotas" className="bg-violet-500 h-full rounded-full transition-[width] duration-500 ease-out" style={{ width: `${Math.min(ratioEndeudamientoCuotas, 100)}%` }} />
             </div>
           </div>
 

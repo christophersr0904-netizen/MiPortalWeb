@@ -229,7 +229,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
             title={colapsado ? `Todas las Notas (${conteoPorBlock.__todas__ || 0})` : undefined}
             className={`w-full flex items-center ${
               colapsado ? 'justify-center p-2.5' : `justify-between px-3 ${esMovil ? 'min-h-[44px] py-2.5' : 'py-2'}`
-            } rounded-xl text-xs font-semibold transition-all duration-150 active:scale-[0.98] cursor-pointer ${
+            } rounded-xl text-xs font-semibold transition-[transform,colors] duration-150 active:scale-[0.98] cursor-pointer ${
               blockActivo === null
                 ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
@@ -256,7 +256,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
             title={colapsado ? `Notas Sueltas (${conteoPorBlock.__sin_block__ || 0})` : undefined}
             className={`w-full flex items-center ${
               colapsado ? 'justify-center p-2.5' : `justify-between px-3 ${esMovil ? 'min-h-[44px] py-2.5' : 'py-2'}`
-            } rounded-xl text-xs font-semibold transition-all duration-150 active:scale-[0.98] cursor-pointer relative ${
+            } rounded-xl text-xs font-semibold transition-[transform,colors] duration-150 active:scale-[0.98] cursor-pointer relative ${
               dragOverTarget === '__sin_block__'
                 ? 'bg-sky-950/70 border-2 border-sky-400 border-dashed scale-[1.03] shadow-[0_0_20px_rgba(56,189,248,0.45)] ring-2 ring-sky-400/50 text-sky-200'
                 : blockActivo === '__sin_block__'
@@ -324,7 +324,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                     colapsado
                       ? 'justify-center p-2.5'
                       : `justify-between px-3 ${esMovil ? 'min-h-[44px] py-2' : 'py-1.5'}`
-                  } rounded-xl text-xs font-medium transition-all duration-150 active:scale-[0.98] cursor-pointer group relative ${
+                  } rounded-xl text-xs font-medium transition-[transform,colors] duration-150 active:scale-[0.98] cursor-pointer group relative ${
                     isDragOver
                       ? 'bg-sky-950/80 border-2 border-sky-400 border-dashed scale-[1.03] shadow-[0_0_20px_rgba(56,189,248,0.5)] ring-2 ring-sky-400/50 z-20 text-sky-200'
                       : activo
@@ -363,7 +363,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                             esMovil
                               ? 'min-w-[40px] min-h-[40px] flex items-center justify-center'
                               : 'hidden group-hover:flex items-center justify-center p-1'
-                          } rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150 active:scale-90 cursor-pointer pointer-events-auto not-draggable`}
+                          } rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-[transform,colors] duration-150 active:scale-90 cursor-pointer pointer-events-auto not-draggable`}
                         >
                           <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                         </button>
@@ -407,7 +407,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                 type="button"
                 onClick={() => handleToggleFiltro(id)}
                 title={label}
-                className={`${esMovil ? 'min-h-[44px] px-3 py-2' : 'p-2'} rounded-xl text-left border flex items-center gap-1.5 cursor-pointer hover:bg-slate-800/50 hover:border-slate-700/60 transition-all duration-150 active:scale-95 ${
+                className={`${esMovil ? 'min-h-[44px] px-3 py-2' : 'p-2'} rounded-xl text-left border flex items-center gap-1.5 cursor-pointer hover:bg-slate-800/50 hover:border-slate-700/60 transition-[transform,colors] duration-150 active:scale-95 ${
                   colapsado ? 'justify-center w-full' : ''
                 } ${
                   activo
@@ -447,7 +447,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                     type="button"
                     id="btn-crear-nuevo-block"
                     onClick={onAbrirModalCrear}
-                    className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700/60 transition-all duration-150 active:scale-90 cursor-pointer"
+                    className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700/60 transition-[transform,colors] duration-150 active:scale-90 cursor-pointer"
                     title="Crear Nuevo Cuaderno"
                   >
                     <FolderPlus className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -456,7 +456,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                     type="button"
                     id="btn-colapsar-sidebar"
                     onClick={toggleCollapse}
-                    className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 hover:text-slate-200 border border-slate-700/60 transition-all duration-150 active:scale-90 cursor-pointer"
+                    className="p-1.5 rounded-lg bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 hover:text-slate-200 border border-slate-700/60 transition-[transform,colors] duration-150 active:scale-90 cursor-pointer"
                     title="Colapsar menú lateral"
                   >
                     <ChevronLeft className="w-3.5 h-3.5 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] rotate-0" strokeWidth={1.75} />
@@ -469,7 +469,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                   type="button"
                   id="btn-expandir-sidebar"
                   onClick={toggleCollapse}
-                  className="p-2 rounded-xl bg-slate-800/60 hover:bg-sky-500/20 text-slate-400 hover:text-sky-300 border border-slate-700/60 transition-all duration-150 active:scale-90 cursor-pointer"
+                  className="p-2 rounded-xl bg-slate-800/60 hover:bg-sky-500/20 text-slate-400 hover:text-sky-300 border border-slate-700/60 transition-[transform,colors] duration-150 active:scale-90 cursor-pointer"
                   title="Expandir menú lateral"
                 >
                   <ChevronLeft className="w-4 h-4 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] rotate-180" strokeWidth={1.75} />
@@ -477,7 +477,7 @@ export const SidebarCuadernos: React.FC<SidebarCuadernosProps> = ({
                 <button
                   type="button"
                   onClick={onAbrirModalCrear}
-                  className="p-2 rounded-xl bg-slate-800/60 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700/60 transition-all duration-150 active:scale-90 cursor-pointer"
+                  className="p-2 rounded-xl bg-slate-800/60 hover:bg-sky-500/20 text-slate-300 hover:text-sky-300 border border-slate-700/60 transition-[transform,colors] duration-150 active:scale-90 cursor-pointer"
                   title="Crear Nuevo Cuaderno"
                 >
                   <FolderPlus className="w-4 h-4" strokeWidth={1.75} />

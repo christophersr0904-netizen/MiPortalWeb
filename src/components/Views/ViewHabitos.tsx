@@ -44,7 +44,7 @@ export const ViewHabitos: React.FC = () => {
             type="button"
             id="btn-nuevo-habito-header-movil"
             onClick={() => setModalActividadAbierto(true)}
-            className="sm:hidden h-10 px-3.5 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-[0_0_15px_rgba(56,189,248,0.28)] border border-sky-400/40 active:scale-95 cursor-pointer shrink-0"
+            className="sm:hidden h-10 px-3.5 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-[transform,box-shadow] duration-150 shadow-[0_0_15px_rgba(56,189,248,0.28)] border border-sky-400/40 active:scale-95 cursor-pointer shrink-0"
             title="Registrar nuevo hábito"
           >
             <Plus className="w-4 h-4" strokeWidth={2} />
@@ -102,7 +102,7 @@ export const ViewHabitos: React.FC = () => {
             type="button"
             id="btn-nuevo-habito-header"
             onClick={() => setModalActividadAbierto(true)}
-            className="hidden sm:flex h-10 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs items-center gap-2 transition-all shadow-[0_0_20px_rgba(56,189,248,0.28)] border border-sky-400/40 active:scale-95 cursor-pointer shrink-0 group"
+            className="hidden sm:flex h-10 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs items-center gap-2 transition-[transform,box-shadow] duration-150 shadow-[0_0_20px_rgba(56,189,248,0.28)] border border-sky-400/40 active:scale-95 cursor-pointer shrink-0 group"
             title="Registrar nuevo hábito o compromiso personal"
           >
             <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-200" strokeWidth={2} />

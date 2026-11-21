@@ -547,7 +547,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
               type="button"
               id="btn-ia-generar-propuesta"
               onClick={generarPropuestaEstructura}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 via-indigo-500 to-sky-400 hover:from-sky-400 hover:to-indigo-400 text-white font-bold text-xs shadow-md shadow-sky-950/60 flex items-center gap-2 border border-sky-300/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_20px_rgba(56,189,248,0.35)] cursor-pointer group"
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 via-indigo-500 to-sky-400 hover:from-sky-400 hover:to-indigo-400 text-white font-bold text-xs shadow-md shadow-sky-950/60 flex items-center gap-2 border border-sky-300/40 transition-[transform,box-shadow] duration-150 active:scale-95 hover:shadow-[0_0_20px_rgba(56,189,248,0.35)] cursor-pointer group"
               title="Generar propuesta WBS automática con IA"
             >
               <Sparkles className="w-4 h-4 text-amber-300 shrink-0 group-hover:rotate-12 transition-transform duration-200" strokeWidth={1.75} />
@@ -579,7 +579,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setTabActiva(tab.id as any)}
-                className={`relative px-3.5 py-2 rounded-xl transition-all duration-150 flex items-center gap-2 font-bold shrink-0 cursor-pointer active:scale-95 ${
+                className={`relative px-3.5 py-2 rounded-xl transition-colors duration-150 flex items-center gap-2 font-bold shrink-0 cursor-pointer active:scale-95 ${
                   esActivo
                     ? 'text-white'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -791,7 +791,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                               key={opt.id}
                               type="button"
                               onClick={() => setEstadoPartida(opt.id)}
-                              className={`p-2 rounded-xl border text-left transition-all duration-150 font-semibold cursor-pointer flex items-center gap-2 active:scale-95 ${
+                              className={`p-2 rounded-xl border text-left transition-[transform,colors] duration-150 font-semibold cursor-pointer flex items-center gap-2 active:scale-95 ${
                                 esActivo
                                   ? 'border-sky-500 bg-sky-500/10 text-sky-300 ring-1 ring-sky-500/30 shadow-[0_0_12px_rgba(56,189,248,0.15)]'
                                   : 'border-slate-800 bg-[#040711] text-slate-300 hover:border-slate-700 hover:bg-[#070c18]'
@@ -1074,7 +1074,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   <button
                     type="button"
                     onClick={() => agregarHito('PAQUETE_TRABAJO')}
-                    className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 hover:border-sky-400 rounded-xl font-bold text-xs shadow-sm shadow-sky-950/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_15px_rgba(56,189,248,0.2)] flex items-center gap-1.5 cursor-pointer"
+                    className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 hover:border-sky-400 rounded-xl font-bold text-xs shadow-sm shadow-sky-950/40 transition-[transform,colors] duration-150 active:scale-95 hover:shadow-[0_0_15px_rgba(56,189,248,0.2)] flex items-center gap-1.5 cursor-pointer"
                   >
                     <Briefcase className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
                     <span>Nuevo Paquete</span>
@@ -1082,7 +1082,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                   <button
                     type="button"
                     onClick={() => agregarHito('HITO_MARCADOR')}
-                    className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 hover:border-amber-400 rounded-xl font-bold text-xs shadow-sm shadow-amber-950/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.2)] flex items-center gap-1.5 cursor-pointer"
+                    className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 hover:border-amber-400 rounded-xl font-bold text-xs shadow-sm shadow-amber-950/40 transition-[transform,colors] duration-150 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.2)] flex items-center gap-1.5 cursor-pointer"
                   >
                     <Flag className="w-3.5 h-3.5 text-amber-400 shrink-0" strokeWidth={1.75} />
                     <span>Nuevo Hito</span>
@@ -1159,7 +1159,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 <button
                   type="button"
                   onClick={agregarTarea}
-                  className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 hover:border-sky-400 rounded-xl font-bold text-xs shadow-sm shadow-sky-950/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_15px_rgba(56,189,248,0.2)] flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 hover:border-sky-400 rounded-xl font-bold text-xs shadow-sm shadow-sky-950/40 transition-[transform,colors] duration-150 active:scale-95 hover:shadow-[0_0_15px_rgba(56,189,248,0.2)] flex items-center gap-1.5 cursor-pointer"
                 >
                   <CheckSquare className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
                   <span>Añadir Tarea</span>
@@ -1235,7 +1235,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
                 <button
                   type="button"
                   onClick={agregarGasto}
-                  className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 hover:border-emerald-400 rounded-xl font-bold text-xs shadow-sm shadow-emerald-950/40 transition-all duration-200 active:scale-95 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 hover:border-emerald-400 rounded-xl font-bold text-xs shadow-sm shadow-emerald-950/40 transition-[transform,colors] duration-150 active:scale-95 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center gap-1.5 cursor-pointer"
                 >
                   <Receipt className="w-3.5 h-3.5 text-emerald-400 shrink-0" strokeWidth={1.75} />
                   <span>Añadir Gasto</span>
@@ -1325,7 +1325,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             type="button"
             onClick={() => guardarProyecto()}
             disabled={guardando}
-            className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold shadow-md shadow-sky-950/50 flex items-center gap-2 transition-all duration-200 active:scale-95 hover:shadow-[0_0_20px_rgba(56,189,248,0.4)] cursor-pointer disabled:opacity-50"
+            className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold shadow-md shadow-sky-950/50 flex items-center gap-2 transition-[transform,box-shadow] duration-150 active:scale-95 hover:shadow-[0_0_20px_rgba(56,189,248,0.4)] cursor-pointer disabled:opacity-50"
           >
             <CheckCircle2 className="w-4 h-4 text-slate-950" strokeWidth={2} />
             <span>{guardando ? 'Guardando...' : proyectoAEditarId ? 'Guardar Cambios' : 'Guardar Proyecto'}</span>

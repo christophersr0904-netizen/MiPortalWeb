@@ -145,7 +145,7 @@ export const PildoraPrioridadNeon: React.FC<PildoraPrioridadNeonProps> = ({
         type="button"
         disabled={disabled}
         onClick={handlePillClick}
-        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono tabular-nums font-extrabold transition-all duration-200 select-none cursor-pointer active:scale-95 ${cfg.clases} ${className}`}
+        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono tabular-nums font-extrabold transition-[transform,colors] duration-150 select-none cursor-pointer active:scale-95 ${cfg.clases} ${className}`}
         title="Cambiar prioridad (P1/P2/P3)"
       >
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
@@ -163,7 +163,7 @@ export const PildoraPrioridadNeon: React.FC<PildoraPrioridadNeonProps> = ({
                 onChange(op.valor);
                 setMenuAbierto(false);
               }}
-              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all text-left cursor-pointer hover:bg-slate-800/80 ${
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-colors duration-150 text-left cursor-pointer hover:bg-slate-800/80 ${
                 prioridad === op.valor ? `${op.text} bg-slate-800` : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -493,7 +493,7 @@ export const ModalDesgloseTareasIA: React.FC<ModalDesgloseTareasIAProps> = ({
               <button
                 type="button"
                 onClick={handleGenerar}
-                className="h-9 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 shadow-[0_0_15px_rgba(56,189,248,0.25)] transition-all cursor-pointer active:scale-95"
+                className="h-9 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 shadow-[0_0_15px_rgba(56,189,248,0.25)] transition-[transform,box-shadow] duration-150 cursor-pointer active:scale-95"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Generar Desglose con IA</span>
@@ -513,7 +513,7 @@ export const ModalDesgloseTareasIA: React.FC<ModalDesgloseTareasIAProps> = ({
               {tareasPropuestas.map((t, idx) => (
                 <div
                   key={t.id}
-                  className={`p-3 rounded-xl border transition-all duration-150 flex items-center gap-3 flex-wrap ${
+                  className={`p-3 rounded-xl border transition-colors duration-150 flex items-center gap-3 flex-wrap ${
                     t.seleccionada
                       ? 'bg-[#040711]/90 border-slate-700/80 shadow-xs'
                       : 'bg-[#040711]/40 border-slate-800/50 opacity-60'
@@ -523,7 +523,7 @@ export const ModalDesgloseTareasIA: React.FC<ModalDesgloseTareasIAProps> = ({
                   <button
                     type="button"
                     onClick={() => toggleSeleccion(t.id)}
-                    className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all cursor-pointer shrink-0 ${
+                    className={`w-5 h-5 rounded-md flex items-center justify-center border transition-[transform,colors] duration-150 cursor-pointer shrink-0 ${
                       t.seleccionada
                         ? 'bg-sky-500 border-sky-400 text-slate-950 shadow-[0_0_10px_rgba(56,189,248,0.3)]'
                         : 'border-slate-700 hover:border-slate-500 bg-slate-900/60'
@@ -590,7 +590,7 @@ export const ModalDesgloseTareasIA: React.FC<ModalDesgloseTareasIAProps> = ({
               <button
                 type="button"
                 onClick={agregarTareaManual}
-                className="w-full py-2 rounded-xl border border-dashed border-slate-800 hover:border-sky-500/40 hover:bg-sky-500/5 text-slate-400 hover:text-sky-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                className="w-full py-2 rounded-xl border border-dashed border-slate-800 hover:border-sky-500/40 hover:bg-sky-500/5 text-slate-400 hover:text-sky-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Añadir tarea manual al lote</span>
@@ -630,7 +630,7 @@ export const ModalDesgloseTareasIA: React.FC<ModalDesgloseTareasIAProps> = ({
               type="button"
               disabled={tareasSeleccionadas.length === 0 || estaAprobando}
               onClick={handleAprobar}
-              className="h-9 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-all duration-200 active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-9 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-[transform,box-shadow] duration-150 active:scale-95 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {estaAprobando ? (
                 <RotateCw className="w-4 h-4 animate-spin text-slate-950" />

@@ -18,7 +18,7 @@ export const NodoIngreso: React.FC<NodoIngresoProps> = memo(({ data }) => {
   const esCobrado = String(ingreso.estado_cobro || '').toUpperCase().includes('COBRADO');
 
   return (
-    <div className="relative w-[180px] rounded-xl bg-[#0D1526]/95 backdrop-blur-md border border-slate-700/60 border-t-4 border-t-emerald-500 p-2.5 select-none shadow-md">
+    <div className="relative w-[180px] rounded-xl bg-[#0D1526] border border-slate-700/60 border-t-4 border-t-emerald-500 p-2.5 select-none shadow-md">
       {/* Target handle superior (desde Proyecto) */}
       <Handle
         type="target"

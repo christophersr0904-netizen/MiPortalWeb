@@ -184,7 +184,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
               type="button"
               id="btn-modo-gasto-real"
               onClick={() => setModoDual('REAL')}
-              className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer ${
                 modoDual === 'REAL'
                   ? 'bg-slate-800 text-emerald-300 shadow-xs border border-emerald-800/50'
                   : 'text-slate-400 hover:text-emerald-400'
@@ -196,7 +196,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
               type="button"
               id="btn-modo-gasto-prog"
               onClick={() => setModoDual('PROGRAMADO')}
-              className={`py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer ${
                 modoDual === 'PROGRAMADO'
                   ? 'bg-slate-800 text-amber-300 shadow-xs border border-amber-800/50 font-bold'
                   : 'text-slate-400 hover:text-amber-400'
@@ -237,7 +237,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
                 value={montoOriginal}
                 onChange={(e) => setMontoOriginal(e.target.value)}
                 placeholder="0.00"
-                className="w-full bg-[#0D1526] border border-slate-800/80 focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 text-3xl font-mono tabular-nums font-bold text-center py-2 text-slate-100 placeholder-slate-600 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
+                className="w-full bg-[#0D1526] border border-slate-800/80 focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 text-3xl font-mono tabular-nums font-bold text-center py-2 text-slate-100 placeholder-slate-600 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-colors duration-150"
               />
               {moneda !== 'PEN' && (
                 <div className="mt-1.5 text-center text-[11px] font-mono tabular-nums font-bold text-emerald-400">
@@ -270,7 +270,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
                 <button
                   type="button"
                   onClick={() => setTipoOrigen('Actividad Personal')}
-                  className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer ${
                     tipoOrigen === 'Actividad Personal'
                       ? 'bg-slate-800 text-white shadow-2xs'
                       : 'text-slate-400 hover:text-white'
@@ -282,7 +282,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
                 <button
                   type="button"
                   onClick={() => setTipoOrigen('Tarea Proyecto')}
-                  className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer ${
                     tipoOrigen === 'Tarea Proyecto'
                       ? 'bg-slate-800 text-white shadow-2xs'
                       : 'text-slate-400 hover:text-sky-300'
@@ -393,7 +393,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
                       {/* Micro-Barra de Progreso EVM */}
                       <div className="w-full h-1.5 rounded-full bg-slate-900 border border-slate-800 overflow-hidden">
                         <div
-                          className={`h-full transition-all duration-300 ${
+                          className={`h-full transition-[width] duration-300 ease-out ${
                             metricasEVMHito.excedePresupuesto
                               ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]'
                               : metricasEVMHito.pctConsumo > 80
@@ -571,7 +571,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
               </button>
               <button
                 type="submit"
-                className="h-11 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
+                className="h-11 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 transition-[transform,box-shadow] duration-150 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>

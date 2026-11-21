@@ -1307,7 +1307,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col w-full rounded-2xl overflow-hidden border border-slate-800 bg-[#040711] shadow-cobalt-3 transition-all relative ${
+      className={`flex flex-col w-full rounded-2xl overflow-hidden border border-slate-800 bg-[#040711] shadow-cobalt-3 transition-colors duration-150 relative ${
         isFullscreen ? 'h-screen fixed inset-0 z-[10000]' : 'h-full min-h-[680px]'
       }`}
     >

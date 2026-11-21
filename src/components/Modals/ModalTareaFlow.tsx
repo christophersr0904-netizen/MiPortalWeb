@@ -671,7 +671,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                 type="button"
                 id="task-flow-badge-id"
                 onClick={handleCopiarCodigo}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-700/70 hover:border-sky-500/50 text-slate-200 text-[11px] font-mono tabular-nums font-bold tracking-wider transition-all duration-150 cursor-pointer active:scale-95 shrink-0 select-none shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-700/70 hover:border-sky-500/50 text-slate-200 text-[11px] font-mono tabular-nums font-bold tracking-wider transition-[transform,colors] duration-150 cursor-pointer active:scale-95 shrink-0 select-none shadow-2xs"
                 title="Clic para copiar código de tarea"
               >
                 {copiado ? (
@@ -693,7 +693,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                   type="button"
                   id="task-flow-estado-badge"
                   onClick={() => setMenuEstadoAbierto((prev) => !prev)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all duration-150 cursor-pointer select-none active:scale-95 ${
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-[transform,colors] duration-150 cursor-pointer select-none active:scale-95 ${
                     estadoActualConfig?.color || 'bg-slate-900/80 border-slate-800 text-slate-300'
                   }`}
                   title="Cambiar estado de la tarea"
@@ -818,7 +818,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                 {/* Barra de progreso con gradiente */}
                 <div className="w-full bg-[#040711] h-1.5 rounded-full overflow-hidden border border-slate-800/40">
                   <div
-                    className="bg-gradient-to-r from-sky-500 to-emerald-400 h-full rounded-full transition-all duration-300"
+                    className="bg-gradient-to-r from-sky-500 to-emerald-400 h-full rounded-full transition-[width] duration-300 ease-out"
                     style={{ width: `${progresoPct}%` }}
                   />
                 </div>
@@ -864,7 +864,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                               <button
                                 type="button"
                                 onClick={() => toggleSubtareaCompletado(sub, idx)}
-                                className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all cursor-pointer shrink-0 active:scale-95 ${
+                                className={`w-5 h-5 rounded-md flex items-center justify-center border transition-[transform,colors] duration-150 cursor-pointer shrink-0 active:scale-95 ${
                                   sub.completado
                                     ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
                                     : 'border-slate-600 hover:border-emerald-400 bg-slate-900/80 text-transparent'
@@ -920,7 +920,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                   <button
                     type="button"
                     onClick={agregarSubtarea}
-                    className="h-8 px-3 rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-white font-bold text-xs shadow-md shadow-sky-950/50 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    className="h-8 px-3 rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-white font-bold text-xs shadow-md shadow-sky-950/50 active:scale-95 transition-[transform,colors] duration-150 flex items-center gap-1.5 cursor-pointer shrink-0"
                     title="Agregar paso procedural"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -1064,7 +1064,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                         key={p.id}
                         type="button"
                         onClick={() => setPrioridad(p.id)}
-                        className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer border ${
+                        className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-mono font-medium transition-colors duration-150 cursor-pointer border ${
                           isSelected
                             ? p.activeClass
                             : 'border-slate-800/80 bg-[#040711] text-slate-400 hover:text-slate-200 hover:border-slate-700'
@@ -1096,7 +1096,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                         key={e.id}
                         type="button"
                         onClick={() => setNivelEnergia(e.id)}
-                        className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-medium transition-all cursor-pointer border ${
+                        className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-medium transition-colors duration-150 cursor-pointer border ${
                           isSelected
                             ? e.activeClass
                             : 'border-slate-800/80 bg-[#040711] text-slate-400 hover:text-slate-200 hover:border-slate-700'
@@ -1140,11 +1140,11 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
               </div>
 
               {/* 5. Acordeón Gasto Asociado & Costos */}
-              <div className="rounded-xl overflow-hidden border border-emerald-500/30 bg-[#0D1526]/80 transition-all duration-150">
+              <div className="rounded-xl overflow-hidden border border-emerald-500/30 bg-[#0D1526]/80 transition-colors duration-150">
                 <button
                   type="button"
                   onClick={() => setMostrarGasto(!mostrarGasto)}
-                  className="w-full px-3 py-2.5 flex items-center justify-between text-xs font-semibold text-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/30 transition-all duration-150 cursor-pointer"
+                  className="w-full px-3 py-2.5 flex items-center justify-between text-xs font-semibold text-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/30 transition-colors duration-150 cursor-pointer"
                 >
                   <div className="flex items-center gap-1.5 min-w-0 flex-1">
                     <DollarSign className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -1224,7 +1224,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                                   const tc = m === 'USD' ? 3.75 : m === 'EUR' ? 4.10 : 1.0;
                                   setCostoRealPen(Number((val * tc).toFixed(2)));
                                 }}
-                                className={`flex-1 py-1 rounded-md text-xs font-mono font-bold transition-all cursor-pointer ${
+                                className={`flex-1 py-1 rounded-md text-xs font-mono font-bold transition-colors duration-150 cursor-pointer ${
                                   gastoMoneda === m ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
                                 }`}
                               >
@@ -1328,7 +1328,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
                                       setCostoRealPen(g.monto_pen || Number((valNum * tc).toFixed(2)));
                                     }
                                   }}
-                                  className={`p-2 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition-all ${
+                                  className={`p-2 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition-colors duration-150 ${
                                     isSelected
                                       ? 'bg-emerald-950/40 border-emerald-500/80 shadow-xs'
                                       : 'bg-[#040711] border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/40'
@@ -1407,7 +1407,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
               type="button"
               disabled={isSaving}
               onClick={handleGuardar}
-              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 transition-all duration-150 flex items-center justify-center cursor-pointer"
+              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 transition-[transform,box-shadow,opacity] duration-150 flex items-center justify-center cursor-pointer"
             >
               {isSaving ? (
                 <>

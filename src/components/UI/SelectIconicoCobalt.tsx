@@ -153,7 +153,7 @@ export function SelectIconicoCobalt<T extends string = string>({
         onClick={() => !disabled && setEstaAbierto((prev) => !prev)}
         aria-haspopup="listbox"
         aria-expanded={estaAbierto}
-        className={`w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#0D1526] border text-left transition-all duration-200 flex items-center justify-between gap-2.5 cursor-pointer select-none active:scale-[0.99] ${
+        className={`w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#0D1526] border text-left transition-[transform,border-color,box-shadow] duration-150 flex items-center justify-between gap-2.5 cursor-pointer select-none active:scale-[0.99] ${
           estaAbierto
             ? 'border-sky-500/80 shadow-[0_0_15px_rgba(56,189,248,0.18)] ring-1 ring-sky-500/50'
             : 'border-slate-800/90 hover:border-slate-700 hover:bg-[#101b30]'
@@ -224,7 +224,7 @@ export function SelectIconicoCobalt<T extends string = string>({
                   onChange(op.valor);
                   setEstaAbierto(false);
                 }}
-                className={`p-2.5 rounded-xl flex items-center justify-between gap-2.5 cursor-pointer transition-all duration-150 ${
+                className={`p-2.5 rounded-xl flex items-center justify-between gap-2.5 cursor-pointer transition-colors duration-150 ${
                   esActivo
                     ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30 font-semibold shadow-xs'
                     : 'hover:bg-slate-800 text-slate-300 hover:text-slate-100 border border-transparent'

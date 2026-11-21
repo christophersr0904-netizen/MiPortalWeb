@@ -147,8 +147,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      setHoraActual(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
-      setFechaActual(formatFechaIsoLocal(now));
+      const nuevaHora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const nuevaFecha = formatFechaIsoLocal(now);
+      setHoraActual((prev) => (prev !== nuevaHora ? nuevaHora : prev));
+      setFechaActual((prev) => (prev !== nuevaFecha ? nuevaFecha : prev));
     }, 30000);
     return () => clearInterval(timer);
   }, []);
@@ -179,8 +181,8 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
     };
   }, []);
 
-  // 3. Normalización y Ritmo Dinámico
-  const items = useMemo(() => {
+  // 3. Normalización estructural y ordenamiento (desacoplado del reloj reactivo)
+  const itemsBase = useMemo(() => {
     if (!datosDexie) return [];
     const list: DailyScheduleItem[] = [];
 
@@ -212,12 +214,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       const durMin = Math.max(15, Math.round(horasEst * 60));
       const horaFin = sumarMinutosAHora(horaIni, durMin);
 
-      // Estado del ritmo
+      // Estado del ritmo base (desacoplado de hora de pared)
       let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
-      if (fProg < fechaActual || (fechaEfectiva === fechaActual && horaFin < horaActual)) {
+      if (fProg < fechaActual) {
         estadoRitmo = 'VENCIDO_PASADO';
-      } else if (fechaEfectiva === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
-        estadoRitmo = 'FOCUS_ACTUAL';
       }
 
       const codigoLegado = String(getProp(t, 'codigo_legado', 'ID_Tarea', 'idTarea') ?? 'TAR-000');
@@ -339,14 +339,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
           ? (completadoHoy || histFechas.includes(fechaItem) || (estadoAct === '04_Completado' && fProg === fechaItem))
           : (estadoAct === '04_Completado' || (fechaItem === fechaActual && completadoHoy) || histFechas.includes(fechaItem));
 
+        // Estado del ritmo base (desacoplado de hora de pared)
         let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
-        if (
-          (fechaItem === fechaActual && estaEnMora && horaFin < horaActual) ||
-          (fechaItem === fechaActual && horaFin < horaActual && !completadoEnFecha)
-        ) {
+        if (fechaItem < fechaActual && !completadoEnFecha) {
           estadoRitmo = 'VENCIDO_PASADO';
-        } else if (fechaItem === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
-          estadoRitmo = 'FOCUS_ACTUAL';
         }
 
         list.push({
@@ -392,11 +388,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       const horaIni = '08:00'; // Slot contable diurno gastos
       const horaFin = '08:30';
 
+      // Estado del ritmo base (desacoplado de hora de pared)
       let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
-      if (fGasto < fechaActual || (fechaEfectiva === fechaActual && horaFin < horaActual)) {
+      if (fGasto < fechaActual) {
         estadoRitmo = 'VENCIDO_PASADO';
-      } else if (fechaEfectiva === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
-        estadoRitmo = 'FOCUS_ACTUAL';
       }
 
       const codigoLegado = String(getProp(g, 'codigo_legado', 'ID_Gasto', 'ID_Transaccion') ?? 'GAS-000');
@@ -460,11 +455,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       const horaIni = '10:00'; // Slot contable diurno ingresos
       const horaFin = '10:30';
 
+      // Estado del ritmo base (desacoplado de hora de pared)
       let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
-      if (fIngreso < fechaActual || (fechaEfectiva === fechaActual && horaFin < horaActual)) {
+      if (fIngreso < fechaActual) {
         estadoRitmo = 'VENCIDO_PASADO';
-      } else if (fechaEfectiva === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
-        estadoRitmo = 'FOCUS_ACTUAL';
       }
 
       const codigoLegado = String(getProp(ing, 'codigo_legado', 'ID_Ingreso', 'ID_Transaccion') ?? 'ING-000');
@@ -535,11 +529,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       const horaIni = '08:30';
       const horaFin = '09:00';
 
+      // Estado del ritmo base (desacoplado de hora de pared)
       let estadoRitmo: EstadoRitmoItem = 'PROXIMO_EN_ESPERA';
-      if (fVenc < fechaActual || (fechaEfectiva === fechaActual && horaFin < horaActual)) {
+      if (fVenc < fechaActual) {
         estadoRitmo = 'VENCIDO_PASADO';
-      } else if (fechaEfectiva === fechaActual && horaIni <= horaActual && horaFin >= horaActual) {
-        estadoRitmo = 'FOCUS_ACTUAL';
       }
 
       const codigoLegado = String(getProp(c, 'codigo_legado', 'ID_Cuota') ?? 'CUO-000');
@@ -578,7 +571,30 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       if (cmpFecha !== 0) return cmpFecha;
       return a.horaInicio.localeCompare(b.horaInicio);
     });
-  }, [datosDexie, fechasHorizonte, fechasSet, fechaActual, horaActual]);
+  }, [datosDexie, fechasHorizonte, fechasSet, fechaActual]);
+
+  // 3.1 Proyección reactiva liviana del ritmo horario (desacoplada de consultas a Dexie y de normalización)
+  const items: DailyScheduleItem[] = useMemo(() => {
+    if (!itemsBase || itemsBase.length === 0) return [];
+    return itemsBase.map((item) => {
+      let estadoRitmo = item.estadoRitmo;
+      if (item.fecha === fechaActual) {
+        if (item.horaFin < horaActual) {
+          if (item.tipo === 'HABITO') {
+            estadoRitmo = item.completado ? 'PROXIMO_EN_ESPERA' : 'VENCIDO_PASADO';
+          } else {
+            estadoRitmo = 'VENCIDO_PASADO';
+          }
+        } else if (item.horaInicio <= horaActual && item.horaFin >= horaActual) {
+          estadoRitmo = 'FOCUS_ACTUAL';
+        } else {
+          estadoRitmo = 'PROXIMO_EN_ESPERA';
+        }
+      }
+      if (item.estadoRitmo === estadoRitmo) return item;
+      return { ...item, estadoRitmo };
+    });
+  }, [itemsBase, fechaActual, horaActual]);
 
   // 4. Métricas de Ritmo Horario
   const metricas: MetricRitmoHorario = useMemo(() => {

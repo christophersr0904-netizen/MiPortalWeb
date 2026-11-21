@@ -805,7 +805,7 @@ export const ViewFinanzas: React.FC = () => {
                   type="button"
                   id={`btn-seg-fin-${seg.toLowerCase()}`}
                   onClick={() => setSegmento(seg)}
-                  className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-all flex items-center cursor-pointer ${
+                  className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors duration-150 flex items-center cursor-pointer ${
                     activo
                       ? 'bg-sky-950/60 text-sky-300 border border-sky-500/50 shadow-[0_0_10px_rgba(56,189,248,0.15)] font-bold'
                       : 'text-slate-400 hover:text-slate-200 border border-transparent'

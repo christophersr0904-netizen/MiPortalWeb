@@ -72,7 +72,7 @@ const TarjetaTransaccionComponent: React.FC<TarjetaTransaccionProps> = ({
           <div className="flex items-center gap-2">
             <span
               title={`Estado: ${trx.estado} (${trx.esConciliado ? 'Conciliado en Tesorería' : 'Pendiente / Programado'})`}
-              className={`w-2.5 h-2.5 rounded-full shrink-0 transition-all ${
+              className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-150 ${
                 trx.esConciliado
                   ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]'
                   : 'bg-amber-500 shadow-[0_0_8px_#f59e0b] animate-pulse'

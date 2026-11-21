@@ -132,7 +132,7 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
                 style={{ width: `${avPlan}%` }}
               />
               <div
-                className={`${progFill} h-full rounded-full absolute left-0 top-0 transition-all duration-500 ease-out`}
+                className={`${progFill} h-full rounded-full absolute left-0 top-0 transition-[width] duration-500 ease-out`}
                 style={{ width: `${avReal}%` }}
               />
             </div>
@@ -185,7 +185,7 @@ export const TarjetaProyecto: React.FC<TarjetaProyectoProps> = React.memo(
             <div className="w-full bg-slate-800/60 h-1.5 rounded-full overflow-hidden relative">
               <div
                 className={`${burn > 100 ? 'bg-rose-500' : burn > 85 ? 'bg-amber-500' : 'bg-emerald-400'
-                  } h-full rounded-full transition-all duration-500 ease-out`}
+                  } h-full rounded-full transition-[width] duration-500 ease-out`}
                 style={{ width: `${Math.min(burn, 100)}%` }}
               />
             </div>

@@ -88,7 +88,7 @@ export const TooltipFlotanteWBS: React.FC<TooltipFlotanteWBSProps> = ({
       style={{ left: `${posX}px`, top: `${posY}px` }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="absolute z-[9999] pointer-events-auto transition-all duration-150 transform max-w-sm w-80 bg-[#0D1526]/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700/80 shadow-2xl p-3.5 text-xs text-slate-200 select-none animate-in fade-in zoom-in-95"
+      className="absolute z-[9999] pointer-events-auto transition-[opacity,transform] duration-150 transform max-w-sm w-80 bg-[#0D1526] dark:bg-slate-900 rounded-2xl border border-slate-700/80 shadow-2xl p-3.5 text-xs text-slate-200 select-none animate-in fade-in zoom-in-95"
     >
       <div className="space-y-2.5">
         {/* Encabezado: Badge ID + Badges Semánticos + Estado de Salud */}

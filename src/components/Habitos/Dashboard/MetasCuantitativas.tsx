@@ -153,7 +153,7 @@ const MetasCuantitativasComponent: React.FC<MetasCuantitativasProps> = ({
             return (
               <div
                 key={m.id}
-                className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-between hover:border-teal-500/40 transition-all group min-h-[145px]"
+                className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col justify-between hover:border-teal-500/40 transition-colors duration-150 group min-h-[145px]"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1">
@@ -207,7 +207,7 @@ const MetasCuantitativasComponent: React.FC<MetasCuantitativasProps> = ({
                   {/* Barra de progreso con indicador de rescate */}
                   <div className="relative w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden mb-1.5">
                     <div
-                      className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-500"
+                      className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-[width] duration-500 ease-out"
                       style={{ width: `${pct}%` }}
                     />
                     {rescatePct !== null && rescatePct > 0 && (

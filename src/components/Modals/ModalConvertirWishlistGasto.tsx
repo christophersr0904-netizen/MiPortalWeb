@@ -97,7 +97,7 @@ export const ModalConvertirWishlistGasto: React.FC<ModalConvertirWishlistGastoPr
           <button
             type="button"
             onClick={onConfirmar}
-            className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] active:scale-95 flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-[transform,box-shadow] duration-150 shadow-[0_0_12px_rgba(16,185,129,0.3)] active:scale-95 flex items-center gap-1.5 cursor-pointer"
           >
             <ArrowUpRight className="w-3.5 h-3.5" strokeWidth={2.5} />
             <span>Registrar Gasto</span>

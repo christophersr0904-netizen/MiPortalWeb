@@ -168,7 +168,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
                 </div>
                 <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden shadow-inner">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${excede ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                    className={`h-full rounded-full transition-[width] duration-500 ease-out ${excede ? 'bg-rose-500' : 'bg-emerald-500'}`}
                     style={{ width: `${Math.min(pItem.pct, 100)}%` }}
                   />
                 </div>
@@ -224,7 +224,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
                 </div>
                 <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden shadow-inner">
                   <div
-                    className="bg-teal-500 h-full rounded-full transition-all duration-500"
+                    className="bg-teal-500 h-full rounded-full transition-[width] duration-500 ease-out"
                     style={{ width: `${Math.min(act.pct, 100)}%` }}
                   />
                 </div>
@@ -278,7 +278,7 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
 
                 <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden shadow-inner">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${p.burnRate > 80 ? 'bg-rose-500' : 'bg-sky-500'}`}
+                    className={`h-full rounded-full transition-[width] duration-500 ease-out ${p.burnRate > 80 ? 'bg-rose-500' : 'bg-sky-500'}`}
                     style={{ width: `${Math.min(p.burnRate, 100)}%` }}
                   />
                 </div>

@@ -200,7 +200,7 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
         >
           {/* Pastilla deslizante animada */}
           <div
-            className={`absolute top-0.5 bottom-0.5 rounded-lg bg-sky-500/20 border border-sky-500/40 transition-all duration-300 ease-out pointer-events-none ${pillStyle.width > 0 ? 'opacity-100' : 'opacity-0'
+            className={`absolute top-0.5 bottom-0.5 rounded-lg bg-sky-500/20 border border-sky-500/40 transition-[transform,width,opacity] duration-300 ease-out pointer-events-none ${pillStyle.width > 0 ? 'opacity-100' : 'opacity-0'
               }`}
             style={{
               transform: `translateX(${pillStyle.left}px)`,
@@ -260,7 +260,7 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
 
         {openSalud && (
           <div
-            className="absolute left-0 top-full mt-1.5 z-50 w-52 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] space-y-1 transition-opacity duration-150 origin-top"
+            className="absolute left-0 top-full mt-1.5 z-50 w-52 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] space-y-1 transition-opacity duration-150 origin-top"
           >
             {OPCIONES_SALUD.map((item) => {
               const isSelected = filtroSalud === item.key;
@@ -318,7 +318,7 @@ export const FiltrosPortafolio: React.FC<FiltrosPortafolioProps> = ({
 
         {openOrden && (
           <div
-            className="absolute left-0 top-full mt-1.5 z-50 w-48 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 backdrop-blur-md shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] space-y-1 transition-opacity duration-150 origin-top"
+            className="absolute left-0 top-full mt-1.5 z-50 w-48 max-w-[calc(100vw-24px)] p-1.5 rounded-xl bg-[#0D1526] border border-slate-800/80 shadow-[0_10px_25px_-5px_rgba(2,6,23,0.85)] space-y-1 transition-opacity duration-150 origin-top"
           >
             {OPCIONES_ORDEN.map((o) => {
               const isSelected = filtroOrden === o.key;

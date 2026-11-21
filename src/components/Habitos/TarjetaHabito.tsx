@@ -320,7 +320,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
           disabled={toggleInFlight}
           aria-busy={toggleInFlight}
           aria-label={esCompletada ? 'Marcar como pendiente' : 'Completar avance diario'}
-          className={`group/chk w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[5px] flex items-center justify-center mt-[1px] shrink-0 border transition-all duration-150 active:scale-90 ${
+          className={`group/chk w-[18px] h-[18px] min-w-[18px] min-h-[18px] rounded-[5px] flex items-center justify-center mt-[1px] shrink-0 border transition-[transform,colors] duration-150 active:scale-90 ${
             toggleInFlight ? 'opacity-60 cursor-wait' : 'cursor-pointer'
           } ${
             esCompletada
@@ -408,7 +408,7 @@ const TarjetaHabitoComponent: React.FC<TarjetaHabitoProps> = ({
               {metaTotal > 0 && (
                 <div className="w-full bg-slate-800/80 h-1 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-300 ${
+                    className={`h-full rounded-full transition-[width] duration-300 ease-out ${
                       pctAvance >= 100
                         ? 'bg-gradient-to-r from-emerald-400 to-teal-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]'
                         : 'bg-gradient-to-r from-sky-500 to-cyan-400 shadow-[0_0_8px_rgba(56,189,248,0.4)]'

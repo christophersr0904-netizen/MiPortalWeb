@@ -197,7 +197,7 @@ export const ModalCrearCuaderno: React.FC<ModalCrearCuadernoProps> = ({
                     type="button"
                     onClick={() => setIcono(item.id)}
                     title={item.label}
-                    className={`p-2 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer ${
+                    className={`p-2 rounded-lg flex flex-col items-center justify-center transition-[transform,colors] duration-150 cursor-pointer ${
                       seleccionado
                         ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-xs scale-105'
                         : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'

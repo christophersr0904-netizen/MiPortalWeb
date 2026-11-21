@@ -503,6 +503,7 @@ export function useHabitos() {
     actividadesPorHabitoId,
     obtenerActividadesDeHabito,
     metasPlanes,
+    vinculos,
     kpis,
     syncState,
     filtroCategoria,

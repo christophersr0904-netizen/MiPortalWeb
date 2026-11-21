@@ -123,7 +123,7 @@ export const ToastDeshacer: React.FC<ToastDeshacerProps> = ({
       onMouseLeave={handleMouseLeave}
       role="status"
       aria-live="polite"
-      className="pointer-events-auto group relative w-full sm:w-[380px] bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/80 hover:border-slate-700 rounded-2xl p-3 shadow-[0_12px_40px_-5px_rgba(2,6,23,0.85),0_0_20px_rgba(56,189,248,0.12)] transition-all duration-200 overflow-hidden select-none"
+      className="pointer-events-auto group relative w-full sm:w-[380px] bg-[#0D1526]/95 backdrop-blur-xl border border-slate-800/80 hover:border-slate-700 rounded-2xl p-3 shadow-[0_12px_40px_-5px_rgba(2,6,23,0.85),0_0_20px_rgba(56,189,248,0.12)] transition-[transform,opacity] duration-200 overflow-hidden select-none"
     >
       <div className="flex items-center justify-between gap-3 relative z-10">
         {/* Indicador de Tipo con Anillo Circular de Progreso */}
@@ -175,7 +175,7 @@ export const ToastDeshacer: React.FC<ToastDeshacerProps> = ({
           <button
             type="button"
             onClick={() => onDeshacer(item.key)}
-            className="min-h-[32px] px-2.5 py-1 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 hover:border-sky-400 text-sky-300 font-bold text-xs inline-flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm shadow-sky-950/40"
+            className="min-h-[32px] px-2.5 py-1 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 hover:border-sky-400 text-sky-300 font-bold text-xs inline-flex items-center gap-1.5 transition-[transform,colors] duration-150 active:scale-95 cursor-pointer shadow-sm shadow-sky-950/40"
             title="Deshacer eliminación (Restaurar)"
           >
             <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.75} />

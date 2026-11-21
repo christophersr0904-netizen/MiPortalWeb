@@ -76,7 +76,7 @@ export const ListaSubtareas: React.FC<ListaSubtareasProps> = ({
         <div className="flex items-center gap-1.5">
           <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden shrink-0">
             <div
-              className={`${colorBarra} h-full rounded-full transition-all duration-300`}
+              className={`${colorBarra} h-full rounded-full transition-[width] duration-300 ease-out`}
               style={{ width: `${pct}%` }}
             />
           </div>

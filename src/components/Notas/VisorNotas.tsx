@@ -1390,7 +1390,7 @@ export const VisorNotas: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setQuickExpanded(false)}
-                      className="px-3 py-1 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
+                      className="px-3 py-1 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-[transform,colors] duration-150 active:scale-95 cursor-pointer"
                     >
                       Cerrar
                     </button>

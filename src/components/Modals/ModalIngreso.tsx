@@ -287,7 +287,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
             <button
               type="button"
               onClick={() => setModoDual('REAL')}
-              className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`py-1.5 px-3 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer ${
                 modoDual === 'REAL'
                   ? 'bg-slate-800 text-emerald-300 shadow-xs border border-emerald-800/50'
                   : 'text-slate-400 hover:text-emerald-400'
@@ -298,7 +298,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
             <button
               type="button"
               onClick={() => setModoDual('PROGRAMADO')}
-              className={`py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`py-1.5 px-3 rounded-lg font-medium flex items-center justify-center gap-1.5 transition-colors duration-150 cursor-pointer ${
                 modoDual === 'PROGRAMADO'
                   ? 'bg-slate-800 text-amber-300 shadow-xs border border-amber-800/50 font-bold'
                   : 'text-slate-400 hover:text-amber-400'
@@ -339,7 +339,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
                 value={montoOriginal}
                 onChange={(e) => setMontoOriginal(e.target.value)}
                 placeholder="0.00"
-                className="w-full bg-[#0D1526] border border-slate-800/80 focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 text-3xl font-mono tabular-nums font-bold text-center py-2.5 text-slate-100 placeholder-slate-600 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
+                className="w-full bg-[#0D1526] border border-slate-800/80 focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/50 rounded-xl px-3 text-3xl font-mono tabular-nums font-bold text-center py-2.5 text-slate-100 placeholder-slate-600 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-colors duration-150"
               />
               {moneda !== 'PEN' && (
                 <div className="mt-2 text-center text-xs font-mono tabular-nums font-bold text-emerald-400">
@@ -496,7 +496,7 @@ export const ModalIngreso: React.FC<ModalIngresoProps> = ({
               </button>
               <button
                 type="submit"
-                className="h-11 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
+                className="h-11 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 transition-[transform,box-shadow] duration-150 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Save className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>

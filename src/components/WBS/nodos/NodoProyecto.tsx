@@ -49,7 +49,7 @@ export const NodoProyecto: React.FC<NodoProyectoProps> = memo(({ data }) => {
   };
 
   return (
-    <div className="relative w-[320px] h-[120px] rounded-2xl bg-[#0D1526]/95 backdrop-blur-md border border-slate-700/60 shadow-lg border-t-4 border-t-indigo-500 p-3 select-none flex flex-col justify-between overflow-hidden">
+    <div className="relative w-[320px] h-[120px] rounded-2xl bg-[#0D1526] border border-slate-700/60 shadow-lg border-t-4 border-t-indigo-500 p-3 select-none flex flex-col justify-between overflow-hidden">
       {/* Target handle superior (para grafos recursivos) */}
       <Handle
         type="target"
@@ -110,7 +110,7 @@ export const NodoProyecto: React.FC<NodoProyectoProps> = memo(({ data }) => {
           <div className="flex items-center gap-1">
             <div className="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden">
               <div
-                className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                className="h-full bg-indigo-500 rounded-full transition-[width] duration-300 ease-out"
                 style={{ width: `${Math.min(100, Math.max(0, pctAvance))}%` }}
               />
             </div>

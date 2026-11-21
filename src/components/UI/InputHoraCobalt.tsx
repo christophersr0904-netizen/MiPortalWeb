@@ -45,7 +45,7 @@ export const InputHoraCobalt: React.FC<InputHoraCobaltProps> = ({
         </label>
       )}
       <div
-        className={`relative flex items-center gap-2 bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 focus-within:border-sky-500/60 focus-within:ring-1 focus-within:ring-sky-500/20 transition-all ${
+        className={`relative flex items-center gap-2 bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 focus-within:border-sky-500/60 focus-within:ring-1 focus-within:ring-sky-500/20 transition-colors duration-150 ${
           disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
         } ${className}`}
       >

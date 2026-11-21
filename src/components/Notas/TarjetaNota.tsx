@@ -362,7 +362,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             onClick={handleCopiarNota}
             title="Copiar texto plano al portapapeles"
             aria-label="Copiar texto plano"
-            className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-sky-300 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-sky-300 rounded-lg transition-[transform,colors] duration-150 active:scale-90 cursor-pointer"
           >
             {copiado ? (
               <Check className="w-3.5 h-3.5 text-emerald-400 kinetic-pop-bounce" strokeWidth={1.75} />
@@ -375,7 +375,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             onClick={handleEliminarDirecto}
             title="Eliminar Nota"
             aria-label="Eliminar Nota"
-            className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-rose-400 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
+            className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-rose-400 rounded-lg transition-[transform,colors] duration-150 active:scale-90 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
@@ -469,7 +469,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             </div>
             <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden mb-2">
               <div
-                className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                className="bg-emerald-500 h-full rounded-full transition-[width] duration-300 ease-out"
                 style={{ width: `${pctChecklist}%` }}
               />
             </div>
@@ -517,7 +517,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             {/* Barra de progreso de ahorro/gasto */}
             <div className="w-full bg-purple-950/80 h-1.5 rounded-full overflow-hidden">
               <div
-                className="bg-purple-500 h-full rounded-full transition-all duration-300"
+                className="bg-purple-500 h-full rounded-full transition-[width] duration-300 ease-out"
                 style={{ width: `${pctWishlist}%` }}
               />
             </div>
@@ -638,7 +638,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             onClick={handleCopiarNota}
             title="Copiar texto plano al portapapeles"
             aria-label="Copiar texto plano"
-            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] flex items-center justify-center hover:text-sky-300 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
+            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] flex items-center justify-center hover:text-sky-300 rounded-lg transition-[transform,colors] duration-150 active:scale-90 cursor-pointer"
           >
             {copiado ? (
               <Check className="w-3.5 h-3.5 text-emerald-400 kinetic-pop-bounce" strokeWidth={1.75} />
@@ -654,7 +654,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             }}
             title="Editar Nota"
             aria-label="Editar Nota"
-            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] flex items-center justify-center hover:text-sky-400 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
+            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] flex items-center justify-center hover:text-sky-400 rounded-lg transition-[transform,colors] duration-150 active:scale-90 cursor-pointer"
           >
             <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
@@ -663,7 +663,7 @@ const TarjetaNotaComponent: React.FC<TarjetaNotaProps> = ({
             onClick={handleEliminarDirecto}
             title="Eliminar Nota"
             aria-label="Eliminar Nota"
-            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] flex items-center justify-center hover:text-rose-400 rounded-lg transition-all duration-150 active:scale-90 cursor-pointer"
+            className="min-w-[44px] min-h-[44px] sm:min-w-[32px] sm:min-h-[32px] flex items-center justify-center hover:text-rose-400 rounded-lg transition-[transform,colors] duration-150 active:scale-90 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>

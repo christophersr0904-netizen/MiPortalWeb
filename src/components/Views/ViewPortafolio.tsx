@@ -335,7 +335,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
           <button
             type="button"
             onClick={() => setModalPdfAbierto(true)}
-            className="h-10 px-3.5 rounded-xl border border-slate-700/80 bg-[#0D1526] hover:bg-slate-800/90 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all duration-200 active:scale-95 cursor-pointer shadow-[0_0_15px_rgba(15,23,42,0.6)] hover:shadow-[0_0_20px_rgba(56,189,248,0.18)] hover:border-sky-500/40 select-none group"
+            className="h-10 px-3.5 rounded-xl border border-slate-700/80 bg-[#0D1526] hover:bg-slate-800/90 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-[transform,colors,box-shadow] duration-150 active:scale-95 cursor-pointer shadow-[0_0_15px_rgba(15,23,42,0.6)] hover:shadow-[0_0_20px_rgba(56,189,248,0.18)] hover:border-sky-500/40 select-none group"
             title="Compilar y Descargar Ficha Ejecutiva en PDF"
           >
             <FileDown className="w-4 h-4 text-sky-400 transition-transform duration-200 group-hover:-translate-y-0.5" strokeWidth={1.75} />
@@ -348,7 +348,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               setProyectoAEditarId(null);
               setModalProyectoAbierto(true);
             }}
-            className="h-10 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-2 border border-sky-300/40 shadow-[0_0_20px_rgba(56,189,248,0.28)] hover:shadow-[0_0_28px_rgba(56,189,248,0.45)] transition-all duration-200 active:scale-95 cursor-pointer select-none group"
+            className="h-10 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-2 border border-sky-300/40 shadow-[0_0_20px_rgba(56,189,248,0.28)] hover:shadow-[0_0_28px_rgba(56,189,248,0.45)] transition-[transform,box-shadow] duration-150 active:scale-95 cursor-pointer select-none group"
             title="Crear Nuevo Proyecto Estratégico"
           >
             <FolderPlus className="w-4 h-4 text-slate-950 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
@@ -419,12 +419,12 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden relative shadow-inner">
               <div
                 id="kpi-avance-meta-bar"
-                className="bg-sky-950/60 border border-sky-800/40 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
+                className="bg-sky-950/60 border border-sky-800/40 h-full rounded-full absolute left-0 top-0 transition-[width] duration-500 ease-out"
                 style={{ width: `${promMeta}%` }}
               />
               <div
                 id="kpi-avance-real-bar"
-                className="bg-sky-500 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
+                className="bg-sky-500 h-full rounded-full absolute left-0 top-0 transition-[width] duration-500 ease-out"
                 style={{ width: `${promReal}%` }}
               />
             </div>
@@ -566,7 +566,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <button
               type="button"
               onClick={() => setFiltroSalud(filtroSalud === 'En Rango' ? '' : 'En Rango')}
-              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-emerald-950/50 text-emerald-300 border border-emerald-800/60 transition-all duration-200 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-emerald-950/50 text-emerald-300 border border-emerald-800/60 transition-[transform,colors] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
                 filtroSalud === 'En Rango' ? 'ring-2 ring-emerald-500 font-bold bg-emerald-950/80 shadow-[0_0_12px_rgba(52,211,153,0.25)]' : 'hover:border-emerald-500/50'
               }`}
             >
@@ -576,7 +576,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <button
               type="button"
               onClick={() => setFiltroSalud(filtroSalud === 'En Riesgo' ? '' : 'En Riesgo')}
-              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-amber-950/50 text-amber-300 border border-amber-800/60 transition-all duration-200 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+              className={`h-9 px-3 rounded-lg text-xs font-semibold bg-amber-950/50 text-amber-300 border border-amber-800/60 transition-[transform,colors] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
                 filtroSalud === 'En Riesgo' ? 'ring-2 ring-amber-500 font-bold bg-amber-950/80 shadow-[0_0_12px_rgba(245,158,11,0.25)]' : 'hover:border-amber-500/50'
               }`}
             >
@@ -586,7 +586,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <button
               type="button"
               onClick={() => setFiltroSalud(filtroSalud === 'Bloqueado' ? '' : 'Bloqueado')}
-              className={`h-9 px-3 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all duration-200 active:scale-95 ${
+              className={`h-9 px-3 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-pointer transition-[transform,colors] duration-150 active:scale-95 ${
                 filtroSalud === 'Bloqueado'
                   ? 'bg-rose-900/70 text-white border border-rose-500 shadow-[0_0_16px_rgba(244,63,94,0.4)] font-bold'
                   : countBloqueado > 0
@@ -613,7 +613,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
             <>
               {proyEjecucion > 0 && (
                 <div
-                  className="bg-sky-500 h-full transition-all duration-300 cursor-pointer hover:opacity-85"
+                  className="bg-sky-500 h-full transition-[width] duration-300 ease-out cursor-pointer hover:opacity-85"
                   style={{ width: `${(proyEjecucion / totalProyectos) * 100}%` }}
                   title={`En Ejecución: ${proyEjecucion}`}
                   onClick={() => setFiltroEstado(filtroEstado === '03_En_Ejecucion' ? '' : '03_En_Ejecucion')}
@@ -621,7 +621,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               )}
               {proyPlan > 0 && (
                 <div
-                  className="bg-blue-500 h-full transition-all duration-300 cursor-pointer hover:opacity-85"
+                  className="bg-blue-500 h-full transition-[width] duration-300 ease-out cursor-pointer hover:opacity-85"
                   style={{ width: `${(proyPlan / totalProyectos) * 100}%` }}
                   title={`Planificado: ${proyPlan}`}
                   onClick={() => setFiltroEstado(filtroEstado === '02_Planificado' ? '' : '02_Planificado')}
@@ -629,7 +629,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               )}
               {proyBacklog > 0 && (
                 <div
-                  className="bg-slate-500 h-full transition-all duration-300 cursor-pointer hover:opacity-85"
+                  className="bg-slate-500 h-full transition-[width] duration-300 ease-out cursor-pointer hover:opacity-85"
                   style={{ width: `${(proyBacklog / totalProyectos) * 100}%` }}
                   title={`Backlog: ${proyBacklog}`}
                   onClick={() => setFiltroEstado(filtroEstado === '01_Backlog' ? '' : '01_Backlog')}
@@ -637,7 +637,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               )}
               {proyPausa > 0 && (
                 <div
-                  className="bg-amber-500 h-full transition-all duration-300 cursor-pointer hover:opacity-85"
+                  className="bg-amber-500 h-full transition-[width] duration-300 ease-out cursor-pointer hover:opacity-85"
                   style={{ width: `${(proyPausa / totalProyectos) * 100}%` }}
                   title={`En Pausa: ${proyPausa}`}
                   onClick={() => setFiltroEstado(filtroEstado === '04_En_Pausa' ? '' : '04_En_Pausa')}
@@ -645,7 +645,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
               )}
               {proyCerrados > 0 && (
                 <div
-                  className="bg-emerald-500 h-full transition-all duration-300 cursor-pointer hover:opacity-85"
+                  className="bg-emerald-500 h-full transition-[width] duration-300 ease-out cursor-pointer hover:opacity-85"
                   style={{ width: `${(proyCerrados / totalProyectos) * 100}%` }}
                   title={`Cerrado: ${proyCerrados}`}
                   onClick={() => setFiltroEstado(filtroEstado === '06_Cerrado' ? '' : '06_Cerrado')}
@@ -901,7 +901,7 @@ export const ViewPortafolio: React.FC<ViewPortafolioProps> = ({ onSeleccionarPro
                   setProyectoAEditarId(null);
                   setModalProyectoAbierto(true);
                 }}
-                className="h-10 px-5 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 text-xs font-bold shadow-[0_0_20px_rgba(56,189,248,0.3)] hover:shadow-[0_0_28px_rgba(56,189,248,0.5)] border border-sky-300/40 transition-all duration-200 active:scale-95 flex items-center gap-2 cursor-pointer group"
+                className="h-10 px-5 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 text-xs font-bold shadow-[0_0_20px_rgba(56,189,248,0.3)] hover:shadow-[0_0_28px_rgba(56,189,248,0.5)] border border-sky-300/40 transition-[transform,box-shadow] duration-150 active:scale-95 flex items-center gap-2 cursor-pointer group"
               >
                 <FolderPlus className="w-4 h-4 text-slate-950 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
                 <span>Crear Primer Proyecto</span>

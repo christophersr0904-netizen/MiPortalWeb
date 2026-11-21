@@ -216,24 +216,19 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
   const { programarEliminacion, estaOculto, hiddenIdsSet } = useUndoDelete();
 
-  // Live query unificada y atómica desde Dexie (REQ-FIX-08)
-  const datosKanbanLive = useLiveQuery(async () => {
-    const [proyectos, tareas, subtareas, hitos, gastos] = await Promise.all([
-      db.proyectos.toArray(),
-      db.tareas.toArray(),
-      db.subtareas_pasos.toArray(),
-      db.hitos_wbs.toArray(),
-      db.gastos.toArray()
-    ]);
-    return { proyectos, tareas, subtareas, hitos, gastos };
-  }, []);
+  // Live queries granulares e independientes desde Dexie (REQ-PERF-FLUIDITY-04)
+  const rawProyectosLive = useLiveQuery(() => db.proyectos.toArray(), []);
+  const rawTareasLive = useLiveQuery(() => db.tareas.toArray(), []);
+  const rawSubtareasLive = useLiveQuery(() => db.subtareas_pasos.toArray(), []);
+  const rawHitosLive = useLiveQuery(() => db.hitos_wbs.toArray(), []);
+  const rawGastosLive = useLiveQuery(() => db.gastos.toArray(), []);
 
-  const cargandoDatosIniciales = datosKanbanLive === undefined;
-  const rawProyectosLive = datosKanbanLive?.proyectos;
-  const rawTareasLive = datosKanbanLive?.tareas;
-  const rawSubtareasLive = datosKanbanLive?.subtareas;
-  const rawHitosLive = datosKanbanLive?.hitos;
-  const rawGastosLive = datosKanbanLive?.gastos;
+  const cargandoDatosIniciales =
+    rawProyectosLive === undefined ||
+    rawTareasLive === undefined ||
+    rawSubtareasLive === undefined ||
+    rawHitosLive === undefined ||
+    rawGastosLive === undefined;
 
   const rawProyectos = useMemo(
     () => (rawProyectosLive ?? []).filter((p: any) => !hiddenIdsSet.has(p.id) && !hiddenIdsSet.has(p.codigo_legado) && !estaOculto(p.id) && !estaOculto(p.codigo_legado)),
@@ -1206,11 +1201,11 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                         {/* 4. Barra de progreso horizontal de doble tonalidad */}
                         <div className="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden relative">
                           <div
-                            className="bg-sky-400/25 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
+                            className="bg-sky-400/25 h-full rounded-full absolute left-0 top-0 transition-[width] duration-500 ease-out"
                             style={{ width: `${metaPct}%` }}
                           />
                           <div
-                            className="bg-sky-500 h-full rounded-full absolute left-0 top-0 transition-all duration-500"
+                            className="bg-sky-500 h-full rounded-full absolute left-0 top-0 transition-[width] duration-500 ease-out"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -1244,7 +1239,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 setModalNuevoProyectoAbierto(true);
               }
             }}
-            className="w-full h-10 px-3 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 border border-sky-300/30 shadow-[0_0_18px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-all duration-200 active:scale-95 cursor-pointer select-none group"
+            className="w-full h-10 px-3 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 border border-sky-300/30 shadow-[0_0_18px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-[transform,box-shadow] duration-200 active:scale-95 cursor-pointer select-none group"
             title="Crear nuevo proyecto"
           >
             <FolderPlus className="w-4 h-4 shrink-0 text-slate-950 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
@@ -1441,7 +1436,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.96, y: -4 }}
                       transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-                      className="absolute right-0 top-full mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[160px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                      className="absolute right-0 top-full mt-1.5 z-50 bg-[#0D1526] border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[160px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
                     >
                       {[
                         { id: 'TODO', label: 'Todo', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
@@ -1659,7 +1654,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.96, y: -4 }}
                       transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[220px] max-w-[calc(100vw-20px)] max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[220px] max-w-[calc(100vw-20px)] max-h-60 overflow-y-auto custom-scrollbar space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
                     >
                       <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase border-b border-slate-800/60 mb-1">
                         Filtrar por Paquete de Trabajo
@@ -1735,7 +1730,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.96, y: -4 }}
                       transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
                     >
                       {[
                         { id: '', label: 'Todas', icon: <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
@@ -1799,7 +1794,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.96, y: -4 }}
                       transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
                     >
                       {[
                         { id: '', label: 'Todos', icon: <Zap className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
@@ -1864,7 +1859,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.96, y: -4 }}
                       transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[180px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
                     >
                       {[
                         { id: '', label: 'Cualquier fecha', icon: <CalendarRange className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
@@ -1926,7 +1921,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.96, y: -4 }}
                       transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] backdrop-blur-md border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
+                      className="absolute top-full left-0 mt-1.5 z-50 bg-[#0D1526] border border-slate-800/80 rounded-xl shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(56,189,248,0.12)] p-1.5 min-w-[190px] max-w-[calc(100vw-20px)] space-y-0.5 text-xs transform-gpu origin-top before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
                     >
                       {[
                         { id: '', label: 'Todos', icon: <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" strokeWidth={1.75} /> },
@@ -2094,7 +2089,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     if (onNuevoProyecto) onNuevoProyecto();
                     else setModalNuevoProyectoAbierto(true);
                   }}
-                  className="min-h-[44px] px-3.5 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-sky-500 to-cyan-400 border border-sky-300/40 shadow-sm shadow-sky-950/40 flex items-center gap-1.5 cursor-pointer active:scale-95 group transition-all"
+                  className="min-h-[44px] px-3.5 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-sky-500 to-cyan-400 border border-sky-300/40 shadow-sm shadow-sky-950/40 flex items-center gap-1.5 cursor-pointer active:scale-95 group transition-[transform,box-shadow] duration-150"
                 >
                   <FolderPlus className="w-3.5 h-3.5 text-slate-950 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
                   <span>Nuevo</span>

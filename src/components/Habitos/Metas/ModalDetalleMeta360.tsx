@@ -374,7 +374,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
 
               <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden mb-1.5 relative">
                 <div
-                  className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-500"
+                  className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-[width] duration-500 ease-out"
                   style={{ width: `${meta.progresoGlobalPct}%` }}
                 />
               </div>
@@ -527,7 +527,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
                     return (
                       <div
                         key={v.id}
-                        className="p-3.5 rounded-xl bg-[#040711]/80 border border-slate-800/60 hover:border-emerald-500/40 transition-all space-y-2.5"
+                        className="p-3.5 rounded-xl bg-[#040711]/80 border border-slate-800/60 hover:border-emerald-500/40 transition-colors duration-150 space-y-2.5"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-start gap-2.5 min-w-0 flex-1">
@@ -615,7 +615,7 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
                           </div>
                           <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
                             <div
-                              className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                              className="bg-emerald-500 h-full rounded-full transition-[width] duration-300 ease-out"
                               style={{ width: `${pctHab}%` }}
                             />
                           </div>

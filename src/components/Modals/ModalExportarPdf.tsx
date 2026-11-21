@@ -195,7 +195,7 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
                   setTabPdf(t.id);
                   setCompiladoListo(false);
                 }}
-                className={`py-1.5 px-2 rounded-lg text-center truncate transition-all duration-200 cursor-pointer text-[11px] active:scale-95 ${
+                className={`py-1.5 px-2 rounded-lg text-center truncate transition-[transform,colors] duration-150 cursor-pointer text-[11px] active:scale-95 ${
                   tabPdf === t.id
                     ? 'bg-sky-950/50 text-sky-300 border border-sky-500/40 font-bold shadow-xs'
                     : 'text-slate-400 hover:text-sky-300 border border-transparent'
@@ -298,7 +298,7 @@ export const ModalExportarPdf: React.FC<ModalExportarPdfProps> = ({
             id="btn-compilar-pdf"
             disabled={cargando}
             onClick={handleCompilarPdf}
-            className={`relative overflow-hidden w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer active:scale-98 select-none group ${
+            className={`relative overflow-hidden w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-[transform,box-shadow] duration-150 cursor-pointer active:scale-98 select-none group ${
               cargando
                 ? 'bg-sky-950/40 text-sky-300 border border-sky-500/30 cursor-wait'
                 : 'bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 shadow-[0_0_25px_rgba(56,189,248,0.35)] hover:shadow-[0_0_35px_rgba(56,189,248,0.5)] border border-sky-300/40'

@@ -52,6 +52,42 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.6 — Desacoplamiento de useLiveQuery en ViewKanban, Separación de Polling en useDailySchedule y Deduplicación en Hábitos (REQ-PERF-FLUIDITY-04-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewKanban.tsx`, `src/hooks/useDailySchedule.ts`, `src/hooks/useHabitos.ts`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Habitos/Dashboard/DashboardHabitos.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Granularización Atómica de `useLiveQuery` en `ViewKanban` (Eliminación de Re-renders Cruzados):**
+    - Desacoplamiento del `Promise.all` monolítico que leía conjuntamente 5 tablas (`proyectos`, `tareas`, `subtareas_pasos`, `hitos_wbs`, `gastos`).
+    - Implementación de 5 suscripciones atómicas independientes (`rawProyectosLive`, `rawTareasLive`, `rawSubtareasLive`, `rawHitosLive`, `rawGastosLive`), unificadas bajo una bandera de hidratación precisa `cargandoDatosIniciales`.
+    - Ahora, una mutación en una tabla secundaria (ej. crear o editar un gasto o subtarea) únicamente invalida la rebanada reactiva correspondiente, manteniendo inmunes los listados principales de proyectos y tareas.
+  - **Desacoplamiento Estructural vs Ritmo Horario en `useDailySchedule` (Zero Parsing en Ticks de 30s):**
+    - División del memo pesado en dos etapas:
+      1. `itemsBase`: suscrito exclusivamente a `[datosDexie, fechasHorizonte, fechasSet, fechaActual]`, realizando la extracción polimórfica, normalización ISO y ordenación cronológica O(N log N) solo cuando cambian los datos o el horizonte.
+      2. `items`: proyección reactiva liviana dependiente de `[itemsBase, fechaActual, horaActual]`, que actualiza exclusivamente el estado horario (`estadoRitmo: 'VENCIDO_PASADO' | 'FOCUS_ACTUAL' | 'PROXIMO_EN_ESPERA'`) con comparación de igualdad referencial inmutable (`if (item.estadoRitmo === estadoRitmo) return item;`), evitando re-renders en cascada de tarjetas en `DailyCockpit`.
+    - Optimización del timer de pared de 30 segundos con comparador de valor previo para evitar invalidaciones innecesarias de estado dentro del mismo minuto.
+  - **Deduplicación de Suscripciones en Vista Hábitos (Eliminación de Double-Fetch Dexie):**
+    - Exposición de la colección reactiva normalizada `vinculos` desde `useHabitos()`.
+    - Eliminación de la suscripción duplicada `useLiveQuery(() => db.habitos_metas_vinculos.toArray(), [])` tanto en `TableroHabitos.tsx` como en `DashboardHabitos.tsx`, reutilizando la canalización memoizada única del hook.
+
+### FASE 8.5 — Limpieza del Compositor GPU, Purgado de backdrop-blur Opaco y Migración Total de transition-all (REQ-PERF-FLUIDITY-03-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** 30+ componentes en `src/components/`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Purgado de `backdrop-blur-*` sobre Fondos 100% Opacos (Cero Carga Inútil en Compositor GPU):**
+    - Identificación y eliminación exhaustiva de `backdrop-blur-md` en 13 desplegables/menús y 6 nodos WBS donde el elemento poseía un fondo completamente opaco (`bg-[#0D1526]`, `bg-[#040711]`, `bg-slate-900/90`), eliminando capas de rasterizado secundario y recomposición forzada por frame.
+    - Se preservaron de manera estrictamente justificada las 72 ocurrencias legítimas en capas translúcidas (fondos oscuros de modales con canal alfa `bg-slate-950/80 backdrop-blur-sm`, drawer móvil, `BottomNavMobile` y encabezados sticky translúcidos).
+  - **Erradicación Total de `transition-all` en toda la base de código (`src/`):**
+    - Migración del 100% de las 216 ocurrencias iniciales de `transition-all` hacia propiedades CSS focalizadas y aceleradas por GPU, previniendo recálculos masivos de layout (*layout trashing*) e invalidaciones globales de estilo:
+      - **Barras de progreso y medidores:** sustituidas por `transition-[width] duration-300 ease-out` o `transition-[height,opacity]`.
+      - **Anillos radiales y SVG:** sustituidos por `transition-[stroke-dashoffset] duration-700 ease-out` o `transition-[r,fill]`.
+      - **Botones y elementos interactivos:** migrados a `transition-colors duration-150`, `transition-[transform,colors] duration-150 active:scale-95`, o `transition-[transform,box-shadow] duration-150`.
+      - **Tarjetas y contenedores Bento:** migrados a `transition-colors duration-150` y `transition-[box-shadow,border-color] duration-300`.
+      - **Elementos flotantes y popovers:** migrados a `transition-[opacity,transform] duration-200`.
+    - **Resultado:** Conteo final de `transition-all` en `src/`: **0** (cero ocurrencias residuales).
+  - **Aseguramiento de Calidad & Paridad Visual:**
+    - Paridad visual 1:1 con el sistema de diseño Cobalt Aerodynamic (A.2.2). Cero alteraciones en geometría, colores, microbordes o elevaciones.
+    - `npx tsc --noEmit`: 0 errores.
+    - Vitest: 35/35 suites pasadas, 349/349 tests en verde (100% passing rate).
+    - Vite Build: compilación en 16.32s sin regresiones de tamaño de chunk (`main-*.js` en 419.31 kB).
+
 ### FASE 8.4 — Optimización de Arranque en Frío y Code-Splitting de Modales Pesados en App.tsx (REQ-PERF-FLUIDITY-02-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/App.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**

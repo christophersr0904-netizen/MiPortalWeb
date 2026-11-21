@@ -477,7 +477,7 @@ export const ViewMetasPlanes: React.FC<ViewMetasPlanesProps> = () => {
 
                     <div className="w-full bg-slate-800/60 h-2 rounded-full overflow-hidden mb-2">
                       <div
-                        className="bg-sky-500 h-full rounded-full transition-all duration-500"
+                        className="bg-sky-500 h-full rounded-full transition-[width] duration-500 ease-out"
                         style={{ width: `${meta.progresoGlobalPct}%` }}
                       />
                     </div>

@@ -121,7 +121,7 @@ export class CockpitInternalErrorBoundary extends React.Component<
           <button
             type="button"
             onClick={() => this.setState({ hasError: false, error: null })}
-            className="px-3.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-bold transition-all cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-bold transition-colors duration-150 cursor-pointer"
           >
             Reconectar Cockpit
           </button>
@@ -1444,7 +1444,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           aria-label="Porcentaje completado del día"
         >
           <div
-            className="h-full bg-sky-500 shadow-[0_0_8px_rgba(56,189,248,0.25)] transition-all duration-300"
+            className="h-full bg-sky-500 shadow-[0_0_8px_rgba(56,189,248,0.25)] transition-[width] duration-300 ease-out"
             style={{ width: `${porcentajeCompletadoDia}%` }}
           />
         </div>
@@ -1464,7 +1464,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                 '--spotlight-card-shadow': tiempoExpirado ? '0 0 28px rgba(245, 158, 11, 0.28)' : 'none'
               } as React.CSSProperties
             }
-            className={`!rounded-xl !p-3.5 !overflow-visible transition-all border ${
+            className={`!rounded-xl !p-3.5 !overflow-visible transition-[border-color,box-shadow] duration-150 border ${
               customMinutosAbierto || sonidoPopoverAbierto ? 'z-20' : ''
             } ${
               tiempoExpirado
@@ -1576,7 +1576,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             {/* Barra Ultra-Fina de Progreso */}
             <div className="w-full h-1.5 rounded-full bg-slate-900 border border-slate-800/80 overflow-hidden mb-3">
               <div
-                className={`h-full transition-all duration-300 ${
+                className={`h-full transition-[width] duration-300 ease-out ${
                   tiempoExpirado
                     ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.45)]'
                     : 'bg-sky-500 shadow-[0_0_8px_rgba(56,189,248,0.25)]'
@@ -2728,7 +2728,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
                   : pomodoroCorriendo
                   ? 'border-sky-500/60 ring-1 ring-sky-500/20'
                   : 'border-slate-800/80 hover:border-sky-500/40'
-              } flex items-center justify-between px-3 py-1 transition-all cursor-grab active:cursor-grabbing group select-none`}
+              } flex items-center justify-between px-3 py-1 transition-[border-color,box-shadow] duration-150 cursor-grab active:cursor-grabbing group select-none`}
               title="Cockpit Flotante OS (arrastrar para mover / clic para desplegar)"
             >
             {/* Lado Izquierdo: Icono Principal o BellRing en Alerta */}
@@ -2908,7 +2908,7 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
           title={pipWindow ? "Cockpit activo Always-on-Top (clic para enfocar)" : "Arrastrar para mover libremente / Clic para abrir Cockpit"}
         >
           <div
-            className={`w-full h-full px-3 py-1 rounded-full border flex items-center gap-2 transition-all ${
+            className={`w-full h-full px-3 py-1 rounded-full border flex items-center gap-2 transition-[border-color,box-shadow] duration-150 ${
               tiempoExpirado
                 ? 'border-amber-500 bg-amber-500/20 ring-2 ring-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.35)]'
                 : pomodoroCorriendo

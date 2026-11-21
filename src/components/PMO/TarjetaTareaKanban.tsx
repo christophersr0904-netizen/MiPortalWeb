@@ -143,7 +143,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
 
       {/* Badges de relación para dependencias */}
       {isPredecesora && (
-        <div className="kanban-etiqueta-relacion flex items-center justify-between text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 bg-amber-500/15 text-amber-300 border border-amber-500/35 shadow-xs pointer-events-none transition-all duration-200">
+        <div className="kanban-etiqueta-relacion flex items-center justify-between text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 bg-amber-500/15 text-amber-300 border border-amber-500/35 shadow-xs pointer-events-none transition-colors duration-150">
           <span className="inline-flex items-center gap-1">
             <Zap className="w-2.5 h-2.5 shrink-0" />
             <span>Predecesora</span>
@@ -152,7 +152,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
         </div>
       )}
       {isSucesora && (
-        <div className="kanban-etiqueta-relacion flex items-center justify-between text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 shadow-xs pointer-events-none transition-all duration-200">
+        <div className="kanban-etiqueta-relacion flex items-center justify-between text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 shadow-xs pointer-events-none transition-colors duration-150">
           <span className="inline-flex items-center gap-1">
             <CornerDownRight className="w-2.5 h-2.5 shrink-0" strokeWidth={1.75} />
             <span>Sucesora</span>
@@ -303,7 +303,7 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
             </div>
             <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
               <div
-                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all"
+                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-[width] duration-300 ease-out"
                 style={{ width: `${pctSubs}%` }}
               />
             </div>

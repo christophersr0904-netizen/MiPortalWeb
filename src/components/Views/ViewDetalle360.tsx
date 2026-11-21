@@ -837,7 +837,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
             </div>
             <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
               <div
-                className="h-full bg-sky-500 rounded-full transition-all duration-500"
+                className="h-full bg-sky-500 rounded-full transition-[width] duration-500 ease-out"
                 style={{ width: `${Math.min(100, pctTiempo)}%` }}
               />
             </div>
@@ -911,7 +911,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div
                   className={`h-full ${burnPct > 100 ? 'bg-rose-500' : burnPct > 85 ? 'bg-amber-500' : 'bg-emerald-500'
-                    } rounded-full transition-all duration-500`}
+                    } rounded-full transition-[width] duration-500 ease-out`}
                   style={{ width: `${Math.min(burnPct, 100)}%` }}
                 />
               </div>
@@ -942,7 +942,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
                 <path
-                  className="text-sky-400 transition-all duration-700 ease-out"
+                  className="text-sky-400 transition-[stroke-dashoffset] duration-700 ease-out"
                   strokeDasharray={`${pctAvance}, 100`}
                   strokeLinecap="round"
                   strokeWidth="3.5"
@@ -1094,7 +1094,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
               <button
                 type="button"
                 onClick={() => abrirModalCrearHitoFase('Fase General')}
-                className="h-9 px-3.5 rounded-xl border border-sky-500/40 bg-[#0D1526] hover:bg-sky-500/15 text-sky-300 text-xs font-semibold flex items-center gap-2 shadow-[0_0_12px_rgba(56,189,248,0.12)] transition-all duration-150 active:scale-95 cursor-pointer"
+                className="h-9 px-3.5 rounded-xl border border-sky-500/40 bg-[#0D1526] hover:bg-sky-500/15 text-sky-300 text-xs font-semibold flex items-center gap-2 shadow-[0_0_12px_rgba(56,189,248,0.12)] transition-[transform,colors] duration-150 active:scale-95 cursor-pointer"
               >
                 <Milestone className="w-3.5 h-3.5 text-sky-300" strokeWidth={1.75} />
                 <span>Nuevo Hito / Entregable</span>
@@ -1143,7 +1143,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                           <button
                             type="button"
                             onClick={() => abrirModalCrearHitoFase(fase.nombre)}
-                            className="h-9 px-3 rounded-xl border border-slate-800 bg-[#0D1526] hover:border-sky-500/40 hover:bg-sky-500/10 text-sky-300 text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 active:scale-95 cursor-pointer"
+                            className="h-9 px-3 rounded-xl border border-slate-800 bg-[#0D1526] hover:border-sky-500/40 hover:bg-sky-500/10 text-sky-300 text-xs font-semibold flex items-center gap-1.5 transition-[transform,colors] duration-150 active:scale-95 cursor-pointer"
                           >
                             <Flag className="w-3.5 h-3.5 text-sky-300" strokeWidth={1.75} />
                             <span>Entregable</span>
@@ -1194,7 +1194,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                 key={h.id}
                                 id={`wbs-nodo-${hitoIdKey}`}
                                 className={`portal-surface bg-[#0D1526] rounded-2xl border border-slate-800/80 transition-colors ${esElementoResaltado
-                                    ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
+                                    ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-[box-shadow,border-color] duration-300'
                                     : ''
                                   }`}
                               >
@@ -1252,7 +1252,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                       <div className="flex items-center gap-2 mt-2 w-full max-w-xs">
                                         <div className="flex-1 bg-slate-800 h-2 rounded-full overflow-hidden">
                                           <div
-                                            className="bg-sky-500 h-full rounded-full transition-all duration-300"
+                                            className="bg-sky-500 h-full rounded-full transition-[width] duration-300 ease-out"
                                             style={{ width: `${pctHito}%` }}
                                           />
                                         </div>
@@ -1316,7 +1316,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                           setTareaAEditarId(null);
                                           setIsModalTareaOpen(true);
                                         }}
-                                        className="h-8 px-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-[11px] font-bold flex items-center gap-1.5 shadow-[0_0_10px_rgba(56,189,248,0.25)] transition-all duration-150 active:scale-95 cursor-pointer"
+                                        className="h-8 px-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-[11px] font-bold flex items-center gap-1.5 shadow-[0_0_10px_rgba(56,189,248,0.25)] transition-[transform,colors] duration-150 active:scale-95 cursor-pointer"
                                         title="Crear tarea en este paquete"
                                       >
                                         <CheckSquare className="w-3 h-3 text-slate-950" strokeWidth={2} />
@@ -1372,7 +1372,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
 
                                 {/* Body Bicolumna: Tareas (col-span-7) vs Gastos (col-span-5) */}
                                 {!estaColapsado && (
-                                  <div className="p-4 md:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 transition-all">
+                                  <div className="p-4 md:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
                                     {/* COLUMNA IZQUIERDA: TAREAS (58%) */}
                                     <div className="lg:col-span-7 space-y-3">
                                       <div className="flex justify-between items-center px-1 pb-1 border-b border-slate-800">
@@ -1463,7 +1463,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                 key={t.id}
                                                 id={`wbs-tarea-${tareaIdKey}`}
                                                 className={`group relative rounded-xl border border-slate-800/80 bg-[#0B1120]/90 p-3.5 transition-colors hover:border-sky-500/40 hover:bg-[#0D1526] ${esTareaResaltada
-                                                    ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
+                                                    ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-[box-shadow,border-color] duration-300'
                                                     : ''
                                                   }`}
                                               >
@@ -1532,7 +1532,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                             </span>
 
                                                             {/* Popover con conceptos y montos */}
-                                                            <div className="pointer-events-none group-hover/gastos:pointer-events-auto opacity-0 group-hover/gastos:opacity-100 transition-all duration-200 absolute left-0 bottom-full mb-1.5 z-40 w-56 p-2.5 rounded-xl bg-[#0D1526] border border-slate-700/80 shadow-2xl space-y-1 text-left">
+                                                            <div className="pointer-events-none group-hover/gastos:pointer-events-auto opacity-0 group-hover/gastos:opacity-100 transition-[opacity,transform] duration-200 absolute left-0 bottom-full mb-1.5 z-40 w-56 p-2.5 rounded-xl bg-[#0D1526] border border-slate-700/80 shadow-2xl space-y-1 text-left">
                                                               <div className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider pb-1 border-b border-slate-800 flex items-center justify-between">
                                                                 <span>Gastos ({gastosDeEstaTarea.length})</span>
                                                                 <span className="font-mono text-emerald-400">
@@ -1611,7 +1611,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                       {/* Micro barra segmentada de progreso */}
                                                       <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden shrink-0">
                                                         <div
-                                                          className={`h-full transition-all duration-300 ${pctPasos === 100 ? 'bg-emerald-400' : 'bg-sky-400'
+                                                          className={`h-full transition-[width] duration-300 ease-out ${pctPasos === 100 ? 'bg-emerald-400' : 'bg-sky-400'
                                                             }`}
                                                           style={{ width: `${pctPasos}%` }}
                                                         />
@@ -1802,8 +1802,8 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                 <div
                                   key={h.id}
                                   id={`wbs-nodo-${marcadorIdKey}`}
-                                  className={`portal-surface bg-[#0D1526] p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition-all ${esMarcadorResaltado
-                                      ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300'
+                                  className={`portal-surface bg-[#0D1526] p-3.5 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition-colors ${esMarcadorResaltado
+                                      ? 'ring-2 ring-sky-400 shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-[box-shadow,border-color] duration-300'
                                       : ''
                                     }`}
                                 >
@@ -2361,7 +2361,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               nuevo[i].peso = parseFloat(e.target.value) || 0;
                               setCriteriosTradeOff(nuevo);
                             }}
-                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-slate-200 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-slate-200 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-colors duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </td>
                         <td className="p-2.5 text-center">
@@ -2376,7 +2376,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               nuevo[i].scoreA = parseFloat(e.target.value) || 0;
                               setCriteriosTradeOff(nuevo);
                             }}
-                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-sky-400 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-sky-400 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-colors duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </td>
                         <td className="p-2.5 text-center">
@@ -2391,7 +2391,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               nuevo[i].scoreB = parseFloat(e.target.value) || 0;
                               setCriteriosTradeOff(nuevo);
                             }}
-                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-indigo-400 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-indigo-400 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-colors duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </td>
                         <td className="p-2.5 text-center">
@@ -2406,7 +2406,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                               nuevo[i].scoreC = parseFloat(e.target.value) || 0;
                               setCriteriosTradeOff(nuevo);
                             }}
-                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-purple-400 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-all duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            className="w-16 h-8 bg-[#040711]/80 rounded-lg text-center text-xs font-mono font-bold tabular-nums text-purple-400 border border-slate-800/80 focus:border-sky-500/60 focus:bg-[#080d1a] outline-none transition-colors duration-150 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </td>
                       </tr>
@@ -2460,7 +2460,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                   <button
                     type="button"
                     onClick={guardarDecisionTradeOff}
-                    className="h-10 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-all duration-200 active:scale-95 cursor-pointer"
+                    className="h-10 px-4 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] transition-[transform,box-shadow] duration-150 active:scale-95 cursor-pointer"
                   >
                     <Check className="w-4 h-4 stroke-[2.2]" />
                     <span>Guardar y Aprobar Decisión</span>

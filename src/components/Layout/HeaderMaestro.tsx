@@ -458,7 +458,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             onClick={() => onCambiarVista('notas')}
             id="tab-nav-notas"
             data-legacy-id="btn-nav-notas"
-            className={`min-h-[40px] px-2.5 py-1.5 rounded-xl font-bold transition-all duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+            className={`min-h-[40px] px-2.5 py-1.5 rounded-xl font-bold transition-[transform,colors] duration-150 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               vistaActiva === 'notas'
                 ? 'text-sky-300 bg-sky-950/40 border border-sky-800/60 shadow-xs'
                 : 'text-slate-400 hover:text-sky-300 hover:bg-[#0D1526] bg-[#0D1526]/80 border border-slate-800/80 hover:border-sky-500/40'
@@ -483,7 +483,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             id="btn-header-archivados"
             data-legacy-id="btn-header-boveda-archivados"
             onClick={() => setDrawerAbierto(true)}
-            className={`min-w-[40px] min-h-[40px] h-10 rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 select-none ${
+            className={`min-w-[40px] min-h-[40px] h-10 rounded-xl border border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300 active:scale-95 transition-[transform,colors] duration-150 cursor-pointer flex items-center justify-center gap-1.5 shrink-0 select-none ${
               totalArchivados > 0 ? 'px-2.5' : 'w-10 p-0'
             }`}
             title="Bóveda de Archivados (+10 días completados/conciliados)"
@@ -509,7 +509,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               aria-expanded={menuHerramientasAbierto}
               aria-label="Abrir menú de herramientas"
               title="Herramientas y Configuración"
-              className={`min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl border active:scale-95 transition-all cursor-pointer flex items-center justify-center select-none ${
+              className={`min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl border active:scale-95 transition-[transform,colors] duration-150 cursor-pointer flex items-center justify-center select-none ${
                 menuHerramientasAbierto
                   ? 'border-sky-500/50 text-sky-300 bg-[#0D1526] shadow-[0_0_12px_rgba(56,189,248,0.2)]'
                   : 'border-slate-800/80 bg-[#0D1526]/80 hover:border-sky-500/40 hover:bg-[#0D1526] text-slate-400 hover:text-sky-300'
@@ -523,7 +523,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
               <div
                 role="menu"
                 aria-orientation="vertical"
-                className="absolute right-0 top-[calc(100%+8px)] z-[100] w-60 p-1.5 rounded-2xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] flex flex-col gap-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
+                className="absolute right-0 top-[calc(100%+8px)] z-[100] w-60 p-1.5 rounded-2xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150"
               >
                 {/* Ítem 1 — Abrir Google Calendar */}
                 <a
@@ -533,7 +533,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                   id="btn-header-calendar"
                   role="menuitem"
                   onClick={() => setMenuHerramientasAbierto(false)}
-                  className="p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all cursor-pointer group"
+                  className="p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 cursor-pointer group"
                   title="Abrir Google Calendar en pestaña nueva"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -553,7 +553,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                 {!esDesktopWidget && (
                   <div
                     role="menuitem"
-                    className="w-full p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 bg-slate-900/40 border border-slate-800/60 transition-all"
+                    className="w-full p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 bg-slate-900/40 border border-slate-800/60 transition-colors duration-150"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
@@ -625,7 +625,7 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                     setMenuHerramientasAbierto(false);
                     if (onAbrirAtajos) onAbrirAtajos();
                   }}
-                  className="w-full p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all cursor-pointer group text-left"
+                  className="w-full p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors duration-150 cursor-pointer group text-left"
                   title="Guía interactiva de atajos de teclado"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">

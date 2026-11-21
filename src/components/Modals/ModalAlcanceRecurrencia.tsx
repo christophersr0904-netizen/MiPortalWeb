@@ -124,7 +124,7 @@ export const ModalAlcanceRecurrencia: React.FC<ModalAlcanceRecurrenciaProps> = (
               key={alcance}
               type="button"
               onClick={() => onSeleccionarAlcance(alcance)}
-              className={`w-full p-3.5 rounded-xl border transition-all duration-150 flex items-start gap-3.5 text-left cursor-pointer group ${
+              className={`w-full p-3.5 rounded-xl border transition-colors duration-150 flex items-start gap-3.5 text-left cursor-pointer group ${
                 esEliminar
                   ? 'border-slate-800/80 bg-slate-900/40 hover:border-rose-500/50 hover:bg-rose-950/20 text-slate-200'
                   : 'border-slate-800/80 bg-slate-900/40 hover:border-blue-500/50 hover:bg-blue-950/20 text-slate-200'

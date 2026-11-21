@@ -521,7 +521,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setMenuCuadernoAbierto((prev) => !prev)}
-                    className="h-7 px-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-sky-500/40 text-slate-300 hover:text-sky-200 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                    className="h-7 px-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-sky-500/40 text-slate-300 hover:text-sky-200 text-xs font-semibold flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
                     title="Asignar cuaderno temático"
                   >
                     <BookOpen className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} />
@@ -532,7 +532,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                   </button>
 
                   {menuCuadernoAbierto && (
-                    <div className="absolute top-[calc(100%+6px)] left-0 z-[200] w-64 p-2 rounded-xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] flex flex-col gap-1 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+                    <div className="absolute top-[calc(100%+6px)] left-0 z-[200] w-64 p-2 rounded-xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-100">
                       <div className="p-1">
                         <input
                           type="text"
@@ -615,7 +615,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setMenuColorAbierto((prev) => !prev)}
-                    className="h-7 px-2 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                    className="h-7 px-2 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 flex items-center gap-1.5 transition-colors duration-150 cursor-pointer"
                     title="Tono y acento de tarjeta"
                   >
                     <span
@@ -627,7 +627,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                   </button>
 
                   {menuColorAbierto && (
-                    <div className="absolute top-[calc(100%+6px)] left-0 z-[200] p-2 rounded-xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] flex items-center gap-1.5 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+                    <div className="absolute top-[calc(100%+6px)] left-0 z-[200] p-2 rounded-xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-100">
                       {PALETA_COLORES_CANONICA.map((col) => (
                         <button
                           key={col.id}
@@ -636,7 +636,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                             setColorTema(col.id);
                             setMenuColorAbierto(false);
                           }}
-                          className={`w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer hover:scale-110 active:scale-95 ${col.dot} ${
+                          className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform duration-150 cursor-pointer hover:scale-110 active:scale-95 ${col.dot} ${
                             colorTema === col.id
                               ? 'ring-2 ring-white ring-offset-2 ring-offset-[#0D1526] scale-110'
                               : 'opacity-80 hover:opacity-100'
@@ -658,7 +658,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCopiar}
-                  className="min-w-[32px] min-h-[32px] w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-sky-300 hover:border-sky-500/40 flex items-center justify-center transition-all cursor-pointer"
+                  className="min-w-[32px] min-h-[32px] w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-sky-300 hover:border-sky-500/40 flex items-center justify-center transition-colors duration-150 cursor-pointer"
                   title="Copiar texto plano al portapapeles"
                 >
                   {copiado ? (
@@ -671,7 +671,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setEsFijada(!esFijada)}
-                  className={`min-w-[32px] min-h-[32px] w-8 h-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                  className={`min-w-[32px] min-h-[32px] w-8 h-8 rounded-lg border flex items-center justify-center transition-colors duration-150 cursor-pointer ${
                     esFijada
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
                       : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-amber-300 hover:border-amber-500/40'
@@ -684,7 +684,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="min-w-[32px] min-h-[32px] w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-800 flex items-center justify-center transition-all cursor-pointer"
+                  className="min-w-[32px] min-h-[32px] w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-800 flex items-center justify-center transition-colors duration-150 cursor-pointer"
                   title="Cerrar modal (Esc)"
                 >
                   <X className="w-4 h-4" strokeWidth={1.75} />
@@ -1156,7 +1156,7 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                         <div className="w-full mt-0.5 space-y-1">
                           <div className="w-full h-0.5 rounded-full bg-slate-800 overflow-hidden">
                             <div
-                              className="h-full bg-gradient-to-r from-violet-500 to-sky-400 transition-all duration-300 rounded-full"
+                              className="h-full bg-gradient-to-r from-violet-500 to-sky-400 transition-[width] duration-300 ease-out rounded-full"
                               style={{
                                 width: `${Math.min(100, Math.round((montoRealGastado / costoEstimado) * 100))}%`
                               }}
@@ -1322,14 +1322,14 @@ export const EditorNotaModal: React.FC<EditorNotaModalProps> = ({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-[transform,colors] duration-150 active:scale-95 cursor-pointer"
                   >
                     Cancelar
                   </button>
 
                   <button
                     type="submit"
-                    className="px-4 py-1.5 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                    className="px-4 py-1.5 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-cobalt-1 transition-[transform,box-shadow] duration-150 active:scale-95 cursor-pointer flex items-center gap-1.5"
                     title="Guardar nota (Ctrl+Enter)"
                   >
                     <span>{nota ? 'Guardar Cambios' : 'Crear Nota'}</span>

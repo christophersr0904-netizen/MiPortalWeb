@@ -1520,7 +1520,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                           id="btn-quick-idea-attach"
                           disabled={isListening || procesandoAdjunto || guardando}
                           onClick={() => fileInputRef.current?.click()}
-                          className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
+                          className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-[transform,colors] duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
                             isListening || procesandoAdjunto ? 'opacity-40 pointer-events-none' : ''
                           }`}
                           title="Adjuntar archivo o imagen"
@@ -1534,7 +1534,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                           id="btn-quick-idea-camera"
                           disabled={isListening || procesandoAdjunto || guardando}
                           onClick={() => cameraInputRef.current?.click()}
-                          className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
+                          className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-slate-400 hover:text-slate-100 transition-[transform,colors] duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
                             isListening || procesandoAdjunto ? 'opacity-40 pointer-events-none' : ''
                           }`}
                           title="Capturar imagen con cámara"
@@ -1552,7 +1552,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                               cerrarPopover();
                               onAbrirAsistenteIA();
                             }}
-                            className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-sky-400 hover:text-sky-300 transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
+                            className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-sky-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(56,189,248,0.2)] text-sky-400 hover:text-sky-300 transition-[transform,colors] duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 shrink-0 ${
                               isListening ? 'opacity-40 pointer-events-none' : ''
                             }`}
                             title="Clarificar con Asistente IA"
@@ -1573,7 +1573,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                           id="btn-quick-idea-submit"
                           disabled={guardando || procesandoAdjunto || (!enunciado.trim() && !adjunto)}
                           onClick={handleGuardarIdea}
-                          className={`h-8 px-3 rounded-lg font-semibold text-xs transition-all duration-150 active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                          className={`h-8 px-3 rounded-lg font-semibold text-xs transition-[transform,colors] duration-150 active:scale-95 flex items-center gap-1.5 shrink-0 ${
                             !guardando && !procesandoAdjunto && (enunciado.trim() || adjunto)
                               ? 'bg-sky-500 hover:bg-sky-400 text-slate-950 cursor-pointer'
                               : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed'
@@ -1714,7 +1714,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                           type="button"
                           id="btn-toggle-checklist-nota"
                           onClick={() => setMostrarChecklistNota((prev) => !prev)}
-                          className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-emerald-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(16,185,129,0.2)] transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 shrink-0 ${
+                          className={`w-8 h-8 rounded-lg bg-[#0B1220]/70 border border-slate-800/80 hover:border-emerald-500/40 hover:bg-slate-800/60 hover:shadow-[0_0_12px_rgba(16,185,129,0.2)] transition-[transform,colors] duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 shrink-0 ${
                             mostrarChecklistNota ? 'text-emerald-400 border-emerald-500/40' : 'text-slate-400 hover:text-emerald-400'
                           }`}
                           title={mostrarChecklistNota ? 'Ocultar Checklist' : 'Agregar Checklist'}
@@ -1733,7 +1733,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                           id="btn-quick-nota-submit"
                           disabled={guardando || (!tituloNota.trim() && !cuerpoNota.trim() && itemsChecklistNota.length === 0)}
                           onClick={handleGuardarNotaRapida}
-                          className={`h-8 px-3 rounded-lg font-semibold text-xs transition-all duration-150 active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                          className={`h-8 px-3 rounded-lg font-semibold text-xs transition-[transform,colors] duration-150 active:scale-95 flex items-center gap-1.5 shrink-0 ${
                             !guardando && (tituloNota.trim() || cuerpoNota.trim() || itemsChecklistNota.length > 0)
                               ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer shadow-[0_0_12px_rgba(16,185,129,0.25)]'
                               : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed'
@@ -1758,7 +1758,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
           className="group flex items-center p-1 rounded-full bg-[#0D1526]/90 backdrop-blur-xl border border-slate-800/80 hover:border-sky-500/40 text-slate-200 shadow-sm hover:shadow-[0_0_15px_rgba(56,189,248,0.12)] transition-colors duration-200 select-none pointer-events-auto"
         >
           {/* Botón Gestor Completo desplegable hacia la izquierda en Hover */}
-          <div className="max-w-0 opacity-0 overflow-hidden group-hover:max-w-xs group-hover:opacity-100 group-focus-within:max-w-xs group-focus-within:opacity-100 transition-all duration-300 ease-out flex items-center pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
+          <div className="max-w-0 opacity-0 overflow-hidden group-hover:max-w-xs group-hover:opacity-100 group-focus-within:max-w-xs group-focus-within:opacity-100 transition-[max-width,opacity] duration-300 ease-out flex items-center pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
             <button
               type="button"
               id="btn-widget-ideas-bubble"
@@ -1974,7 +1974,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                       return (
                         <div
                           key={idea.id}
-                          className="p-3.5 rounded-2xl bg-[#040711]/40 hover:bg-[#040711]/70 border border-slate-800/60 hover:border-sky-500/30 transition-all duration-150 flex flex-col gap-2.5 group shadow-xs"
+                          className="p-3.5 rounded-2xl bg-[#040711]/40 hover:bg-[#040711]/70 border border-slate-800/60 hover:border-sky-500/30 transition-colors duration-150 flex flex-col gap-2.5 group shadow-xs"
                         >
                           {/* Fila 1: ID, Tipo y Fecha */}
                           <div className="flex items-center justify-between gap-2">

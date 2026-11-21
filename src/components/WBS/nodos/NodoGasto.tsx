@@ -19,7 +19,7 @@ export const NodoGasto: React.FC<NodoGastoProps> = memo(({ data }) => {
   const esPagado = String(gasto.estado_pago || '').toUpperCase().includes('PAGADO');
 
   return (
-    <div className="relative w-[180px] h-[60px] rounded-xl bg-[#0D1526]/95 backdrop-blur-md border border-slate-700/60 border-t-2 border-t-amber-500/80 p-1.5 select-none shadow-md flex flex-col justify-between overflow-hidden">
+    <div className="relative w-[180px] h-[60px] rounded-xl bg-[#0D1526] border border-slate-700/60 border-t-2 border-t-amber-500/80 p-1.5 select-none shadow-md flex flex-col justify-between overflow-hidden">
       {/* Target handle superior (desde Tarea o WP) */}
       <Handle
         type="target"

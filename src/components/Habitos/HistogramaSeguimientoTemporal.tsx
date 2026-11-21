@@ -503,7 +503,7 @@ export const HistogramaSeguimientoTemporal: React.FC<HistogramaSeguimientoTempor
                     setGrano(op.id);
                     setOffsetPeriodo(0);
                   }}
-                  className={`px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg text-xs transition-colors duration-150 cursor-pointer ${
                     activo
                       ? 'text-sky-300 bg-sky-950/30 font-bold border-b-2 border-sky-400'
                       : 'text-slate-400 hover:text-sky-300 font-medium'
@@ -628,7 +628,7 @@ export const HistogramaSeguimientoTemporal: React.FC<HistogramaSeguimientoTempor
                   >
                     {/* Valor numérico sobre la barra */}
                     <span
-                      className={`text-[10px] font-mono tabular-nums font-bold mb-1 transition-all ${
+                      className={`text-[10px] font-mono tabular-nums font-bold mb-1 transition-colors duration-150 ${
                         superoMeta
                           ? 'text-emerald-300'
                           : tieneAvance
@@ -642,7 +642,7 @@ export const HistogramaSeguimientoTemporal: React.FC<HistogramaSeguimientoTempor
                     {/* Barra proporcional */}
                     <div className="w-full max-w-[44px] h-full flex items-end justify-center">
                       <div
-                        className={`w-full rounded-t-lg transition-all duration-300 relative ${
+                        className={`w-full rounded-t-lg transition-[height,opacity] duration-300 ease-out relative ${
                           superoMeta
                             ? 'bg-gradient-to-t from-teal-600/90 to-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
                             : tieneAvance

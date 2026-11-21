@@ -80,7 +80,7 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
       {/* Barra Fija Inferior (< 768px) con Touch Targets de 48px y Safe-Area */}
       <nav
         id="bottom-navigation-bar"
-        className={`fixed bottom-0 inset-x-0 z-[9999] md:hidden bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/80 shadow-[0_-8px_25px_rgba(0,0,0,0.35)] px-3 pt-1 safe-area-bottom flex items-center justify-around select-none transition-all duration-200 ${
+        className={`fixed bottom-0 inset-x-0 z-[9999] md:hidden bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-slate-800/80 shadow-[0_-8px_25px_rgba(0,0,0,0.35)] px-3 pt-1 safe-area-bottom flex items-center justify-around select-none transition-[transform,opacity] duration-200 ${
           tecladoVisible ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'
         }`}
         style={{

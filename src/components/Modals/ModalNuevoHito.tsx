@@ -309,7 +309,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
               <button
                 type="button"
                 onClick={() => setTipoElemento('PAQUETE_TRABAJO')}
-                className={`p-3 rounded-xl border text-left transition-all duration-200 active:scale-[0.98] flex items-start gap-3 cursor-pointer ${
+                className={`p-3 rounded-xl border text-left transition-[transform,colors] duration-150 active:scale-[0.98] flex items-start gap-3 cursor-pointer ${
                   tipoElemento === 'PAQUETE_TRABAJO'
                     ? 'bg-sky-500/10 border-sky-500/50 shadow-[0_0_15px_rgba(56,189,248,0.15)] ring-1 ring-sky-500/40'
                     : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400'
@@ -345,7 +345,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
                   setPresupuesto(0);
                   setDuracionDias(0);
                 }}
-                className={`p-3 rounded-xl border text-left transition-all duration-200 active:scale-[0.98] flex items-start gap-3 cursor-pointer ${
+                className={`p-3 rounded-xl border text-left transition-[transform,colors] duration-150 active:scale-[0.98] flex items-start gap-3 cursor-pointer ${
                   tipoElemento === 'HITO_MARCADOR'
                     ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/40'
                     : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-400'
@@ -534,7 +534,7 @@ export const ModalNuevoHito: React.FC<ModalNuevoHitoProps> = ({
             <button
               type="submit"
               disabled={guardando}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 text-slate-950 text-xs font-black flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.4)] hover:shadow-[0_0_28px_rgba(56,189,248,0.6)] transition-all duration-200 cursor-pointer disabled:opacity-50 active:scale-95"
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 text-slate-950 text-xs font-black flex items-center gap-2 shadow-[0_0_20px_rgba(56,189,248,0.4)] hover:shadow-[0_0_28px_rgba(56,189,248,0.6)] transition-[transform,box-shadow] duration-150 cursor-pointer disabled:opacity-50 active:scale-95"
             >
               {tipoElemento === 'PAQUETE_TRABAJO' ? (
                 <Briefcase className="w-4 h-4 text-slate-950" strokeWidth={2} />

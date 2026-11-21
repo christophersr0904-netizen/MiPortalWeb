@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../../db/db';
-import { deduplicarHitosPlan, deduplicarVinculosMeta } from '../../../utils/entityNormalizer';
+import { deduplicarHitosPlan } from '../../../utils/entityNormalizer';
 import { calcularProgresoBimodal, type MetaConDetalle } from '../../../services/metasService';
 import { useHabitos } from '../../../hooks/useHabitos';
 import { BentoMetricasHero } from './BentoMetricasHero';
@@ -17,13 +17,11 @@ interface DashboardHabitosProps {
 }
 
 export const DashboardHabitos: React.FC<DashboardHabitosProps> = ({ onCrearActividad }) => {
-  const { actividades, todasLasActividades, metasPlanes, kpis, registrarAvance } = useHabitos();
+  const { actividades, todasLasActividades, metasPlanes, kpis, registrarAvance, vinculos } = useHabitos();
   const [meta360Id, setMeta360Id] = useState<string | null>(null);
 
   const hitosRaw = useLiveQuery(() => db.planes_accion_hitos.toArray(), []) || [];
   const hitos = React.useMemo(() => deduplicarHitosPlan(hitosRaw), [hitosRaw]);
-  const vinculosRaw = useLiveQuery(() => db.habitos_metas_vinculos.toArray(), []) || [];
-  const vinculos = React.useMemo(() => deduplicarVinculosMeta(vinculosRaw), [vinculosRaw]);
   const logs = useLiveQuery(() => db.habito_cumplimiento_logs.toArray(), []) || [];
 
   const meta360Seleccionada: MetaConDetalle | null = React.useMemo(() => {

@@ -172,7 +172,7 @@ const TabControlCuotasComponent: React.FC<TabControlCuotasProps> = ({
                     </div>
                     <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden shadow-inner">
                       <div
-                        className="bg-violet-500 h-full rounded-full transition-all duration-500"
+                        className="bg-violet-500 h-full rounded-full transition-[width] duration-500 ease-out"
                         style={{ width: `${avancePct}%` }}
                       />
                     </div>

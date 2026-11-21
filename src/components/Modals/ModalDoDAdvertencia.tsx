@@ -100,7 +100,7 @@ export const ModalDoDAdvertencia: React.FC<ModalDoDAdvertenciaProps> = ({
           <button
             type="button"
             onClick={onConfirmar}
-            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all shadow-[0_0_12px_rgba(245,158,11,0.3)] active:scale-95 flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-[transform,box-shadow] duration-150 shadow-[0_0_12px_rgba(245,158,11,0.3)] active:scale-95 flex items-center gap-1.5 cursor-pointer"
           >
             <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={2} />
             <span>Completar de todos modos</span>

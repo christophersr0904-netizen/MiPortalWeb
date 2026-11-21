@@ -126,7 +126,7 @@ export const RadarBalanceVida: React.FC<RadarBalanceVidaProps> = ({ pilarCounts 
             stroke="#10b981"
             strokeWidth="2"
             strokeLinejoin="round"
-            className="transition-all duration-500"
+            className="transition-[d,opacity] duration-500"
           />
 
           {/* Vértices interactivos y etiquetas */}
@@ -150,7 +150,7 @@ export const RadarBalanceVida: React.FC<RadarBalanceVidaProps> = ({ pilarCounts 
                   cx={pt.x}
                   cy={pt.y}
                   r={isHovered ? 6 : 4}
-                  className="fill-emerald-400 stroke-[#0D1526] transition-all duration-200"
+                  className="fill-emerald-400 stroke-[#0D1526] transition-[r,fill] duration-200"
                   strokeWidth="2"
                 />
 

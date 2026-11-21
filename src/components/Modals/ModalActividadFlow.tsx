@@ -1082,7 +1082,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                   type="button"
                   id="act-flow-badge-id"
                   onClick={handleCopiarCodigo}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-700/70 hover:border-sky-500/50 text-slate-200 text-[11px] font-mono tabular-nums font-bold tracking-wider transition-all duration-150 cursor-pointer active:scale-95 shrink-0 select-none shadow-2xs"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/90 border border-slate-700/70 hover:border-sky-500/50 text-slate-200 text-[11px] font-mono tabular-nums font-bold tracking-wider transition-[transform,colors] duration-150 cursor-pointer active:scale-95 shrink-0 select-none shadow-2xs"
                   title="Clic para copiar código de actividad"
                 >
                   {copiado ? (
@@ -1269,7 +1269,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               {pasosLocales.length > 0 && (
                 <div className="w-full bg-[#040711] h-1.5 rounded-full overflow-hidden border border-slate-800/40">
                   <div
-                    className={`${progresoPasos >= 100 ? 'bg-emerald-500' : 'bg-sky-500'} h-full rounded-full transition-all duration-300`}
+                    className={`${progresoPasos >= 100 ? 'bg-emerald-500' : 'bg-sky-500'} h-full rounded-full transition-[width] duration-300 ease-out`}
                     style={{ width: `${progresoPasos}%` }}
                   />
                 </div>
@@ -1289,7 +1289,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                         <button
                           type="button"
                           onClick={() => togglePasoCompletado(paso.id)}
-                          className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                          className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-[transform,colors] duration-150 cursor-pointer active:scale-95 ${
                             paso.completado
                               ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
                               : 'border-slate-600 bg-slate-900/80 hover:border-emerald-400 text-transparent'
@@ -1338,7 +1338,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                 <button
                   type="button"
                   onClick={agregarPaso}
-                  className="h-8 px-3 rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-white font-bold text-xs shadow-md shadow-sky-950/50 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  className="h-8 px-3 rounded-lg bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-white font-bold text-xs shadow-md shadow-sky-950/50 active:scale-95 transition-[transform,colors] duration-150 flex items-center gap-1.5 cursor-pointer shrink-0"
                   title="Agregar paso"
                 >
                   <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -1413,7 +1413,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                       key={p.id}
                       type="button"
                       onClick={() => setPrioridad(p.id as any)}
-                      className={`py-1.5 px-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer flex flex-col items-center justify-center gap-0.5 border active:scale-95 ${
+                      className={`py-1.5 px-2 rounded-xl text-xs font-semibold transition-[transform,colors] duration-150 cursor-pointer flex flex-col items-center justify-center gap-0.5 border active:scale-95 ${
                         isSelected
                           ? p.activeClass
                           : 'border-slate-800/80 bg-[#040711] text-slate-400 hover:text-slate-200 hover:border-slate-700'
@@ -1510,7 +1510,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                               setDiasSemana([...diasSemana, id]);
                             }
                           }}
-                          className={`w-8 h-8 rounded-full text-xs font-mono font-black transition-all duration-150 flex items-center justify-center cursor-pointer select-none active:scale-90 ${
+                          className={`w-8 h-8 rounded-full text-xs font-mono font-black transition-[transform,colors] duration-150 flex items-center justify-center cursor-pointer select-none active:scale-90 ${
                             activo
                               ? 'bg-gradient-to-b from-sky-400 to-sky-600 text-slate-950 border border-sky-300 shadow-[0_0_12px_rgba(56,189,248,0.5),inset_0_1px_1px_rgba(255,255,255,0.4)]'
                               : esFinde
@@ -1835,7 +1835,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               <button
                 type="button"
                 onClick={() => setMostrarGasto(!mostrarGasto)}
-                className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold text-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/30 transition-all duration-150 cursor-pointer"
+                className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold text-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/30 transition-colors duration-150 cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-emerald-400" />
@@ -1907,7 +1907,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                                 key={m}
                                 type="button"
                                 onClick={() => setGastoMoneda(m)}
-                                className={`flex-1 py-1.5 rounded-md text-xs font-mono font-bold transition-all cursor-pointer ${gastoMoneda === m ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                                className={`flex-1 py-1.5 rounded-md text-xs font-mono font-bold transition-colors duration-150 cursor-pointer ${gastoMoneda === m ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
                                   }`}
                               >
                                 {m}
@@ -2000,7 +2000,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
                                     setGastoConcepto(g.descripcion_gasto || '');
                                   }
                                 }}
-                                className={`p-2.5 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition-all ${isSelected
+                                className={`p-2.5 rounded-xl flex items-center justify-between text-xs cursor-pointer border transition-colors duration-150 ${isSelected
                                     ? 'bg-emerald-950/40 border-emerald-500/80 shadow-xs'
                                     : 'bg-[#040711] border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/40'
                                   }`}
@@ -2073,7 +2073,7 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
               id="btn-submit-flow-actividad"
               disabled={isSaving}
               onClick={() => handleGuardar()}
-              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 transition-all duration-150 flex items-center justify-center cursor-pointer"
+              className="h-10 px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 shadow-[0_0_20px_rgba(56,189,248,0.25)] hover:shadow-[0_0_25px_rgba(56,189,248,0.4)] active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 transition-[transform,box-shadow,opacity] duration-150 flex items-center justify-center cursor-pointer"
             >
               {isSaving ? (
                 <>
