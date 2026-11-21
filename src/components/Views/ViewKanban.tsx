@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import {
   FolderKanban,
@@ -78,6 +78,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   const deferredBusquedaProyecto = useDeferredValue(busquedaProyecto);
   const [filtroTipoProyecto, setFiltroTipoProyecto] = useState<string>('');
   const [proyectoSeleccionadoCodigo, setProyectoSeleccionadoCodigo] = useState<string | null>(null);
+  const [, startKanbanTransition] = useTransition();
 
   // Filtro Temporal
   const [filtroTemporal, setFiltroTemporal] = useState<TimeFilter>('TODO');
@@ -1129,11 +1130,13 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                 <div
                   key={proy.id}
                   onClick={() => {
-                    if (isActivo) {
-                      setProyectoSeleccionadoCodigo(null);
-                    } else {
-                      setProyectoSeleccionadoCodigo(proy.codigo_legado);
-                    }
+                    startKanbanTransition(() => {
+                      if (isActivo) {
+                        setProyectoSeleccionadoCodigo(null);
+                      } else {
+                        setProyectoSeleccionadoCodigo(proy.codigo_legado);
+                      }
+                    });
                   }}
                   title={sidebarColapsado ? `${proy.codigo_legado} · ${proy.nombre} (${healthLabel} - ${pct}%) · ${contadores.activas}/${contadores.total} tareas` : undefined}
                   className={`group relative overflow-hidden transition-colors duration-150 cursor-pointer ${sidebarColapsado ? 'p-2 flex flex-col items-center justify-center gap-1.5' : 'p-2.5'
@@ -1296,7 +1299,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                   id={`tab-col-movil-${col.id}`}
                   aria-selected={isActiva}
                   type="button"
-                  onClick={() => setColumnaMovilActiva(col.id)}
+                  onClick={() => startKanbanTransition(() => setColumnaMovilActiva(col.id))}
                   className={`snap-start shrink-0 h-9 px-2.5 rounded-xl text-[11px] font-semibold transition-[transform,colors] flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap active:scale-95 ${isActiva
                     ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-sm'
                     : 'text-slate-400 bg-slate-900/60 border border-slate-800/80 hover:text-slate-200'
@@ -2136,7 +2139,9 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
                     key={proy.id}
                     type="button"
                     onClick={() => {
-                      setProyectoSeleccionadoCodigo(isActivo ? null : proy.codigo_legado);
+                      startKanbanTransition(() => {
+                        setProyectoSeleccionadoCodigo(isActivo ? null : proy.codigo_legado);
+                      });
                       setSelectorProyectosMovilAbierto(false);
                     }}
                     className={`w-full min-h-[52px] px-3.5 py-2.5 rounded-2xl border flex items-center justify-between gap-3 text-left cursor-pointer active:scale-[0.99] transition-[colors,transform] ${isActivo

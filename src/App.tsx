@@ -1,5 +1,6 @@
-import React, { useEffect, useState, lazy, Suspense } from 'react';
+import React, { useEffect, useState, lazy, Suspense, useTransition } from 'react';
 import { MotionConfig, AnimatePresence, motion } from 'motion/react';
+import { TRANSITION_VIEW } from './constants/motionPresets';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ChevronRight, X } from 'lucide-react';
 import { HeaderMaestro, type VistaGlobal } from './components/Layout/HeaderMaestro';
@@ -257,9 +258,12 @@ export const App: React.FC = () => {
   );
 
   const [vistaActiva, setVistaActiva] = useState<VistaGlobal>(() => getVistaDesdeHash());
+  const [, startViewTransition] = useTransition();
 
   const handleCambiarVista = (vista: VistaGlobal) => {
-    setVistaActiva(vista);
+    startViewTransition(() => {
+      setVistaActiva(vista);
+    });
     if (typeof window !== 'undefined' && !esModoHud && !esWidgetNativo) {
       if (window.location.hash.replace(/^#/, '') !== vista) {
         window.history.replaceState(null, '', `#${vista}`);
@@ -271,7 +275,9 @@ export const App: React.FC = () => {
     if (esModoHud || esWidgetNativo) return;
     const handleHashChange = () => {
       const vista = getVistaDesdeHash();
-      setVistaActiva(vista);
+      startViewTransition(() => {
+        setVistaActiva(vista);
+      });
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -551,7 +557,7 @@ export const App: React.FC = () => {
   return (
     <CockpitErrorBoundary scope="Portal">
       <UndoDeleteProvider>
-        <MotionConfig reducedMotion="user" transition={{ type: 'spring', stiffness: 540, damping: 44, mass: 0.75 }}>
+        <MotionConfig reducedMotion="user" transition={TRANSITION_VIEW}>
           <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden bg-[#040711] text-slate-200 antialiased font-sans safe-area-insets">
             {/* 1. Header Maestro Global */}
             <HeaderMaestro

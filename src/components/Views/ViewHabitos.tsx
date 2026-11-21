@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SPRING_SNAPPY } from '../../constants/motionPresets';
 import { TableroHabitos } from '../Habitos/TableroHabitos';
 import { DashboardHabitos } from '../Habitos/Dashboard/DashboardHabitos';
 import { ViewMetasPlanes } from '../Habitos/Metas/ViewMetasPlanes';
@@ -10,6 +11,7 @@ type SubtabHabitos = 'tablero' | 'metas' | 'dashboard';
 
 export const ViewHabitos: React.FC = () => {
   const [tabActiva, setTabActiva] = useState<SubtabHabitos>('tablero');
+  const [, startTabTransition] = useTransition();
   const [modalActividadAbierto, setModalActividadAbierto] = useState(false);
 
   return (
@@ -74,8 +76,8 @@ export const ViewHabitos: React.FC = () => {
                   role="tab"
                   aria-selected={estaActiva}
                   id={`subtab-habitos-${tab.id}`}
-                  onClick={() => setTabActiva(tab.id)}
-                  className={`relative flex-1 sm:flex-initial h-9 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer select-none shrink-0 ${
+                  onClick={() => startTabTransition(() => setTabActiva(tab.id))}
+                  className={`relative flex-1 sm:flex-initial h-9 px-3 rounded-xl text-xs font-semibold active:scale-[0.97] transition-[transform,colors] duration-150 flex items-center justify-center gap-1.5 cursor-pointer select-none shrink-0 ${
                     estaActiva
                       ? 'text-sky-300 font-bold'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
@@ -85,7 +87,7 @@ export const ViewHabitos: React.FC = () => {
                     <motion.div
                       layoutId="subtab-habitos-indicator"
                       className="absolute inset-0 rounded-xl bg-sky-500/15 border border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.22)]"
-                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                      transition={SPRING_SNAPPY}
                     />
                   )}
                   <span className="relative z-10 flex items-center gap-1.5">

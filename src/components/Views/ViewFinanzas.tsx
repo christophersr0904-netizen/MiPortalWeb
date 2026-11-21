@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useDeferredValue, useEffect } from 'react';
+import React, { useState, useMemo, useDeferredValue, useEffect, useTransition } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { SPRING_SNAPPY } from '../../constants/motionPresets';
 import { eliminarGasto } from '../../services/gastosService';
 import { eliminarIngreso } from '../../services/ingresosService';
 import {
@@ -40,6 +41,7 @@ type EstadoFlujo = 'TODOS' | 'REAL' | 'PROGRAMADO';
 
 export const ViewFinanzas: React.FC = () => {
   const [tabActiva, setTabActiva] = useState<TabFinanzas>('transacciones');
+  const [, startTabTransition] = useTransition();
   const [segmento, setSegmento] = useState<SegmentoFinanzas>('TODOS');
   const [periodo, setPeriodo] = useState<PeriodoFinanzas>('MES_ACTUAL');
   const [tipoCambioSunat, setTipoCambioSunat] = useState<number>(3.75);
@@ -756,8 +758,8 @@ export const ViewFinanzas: React.FC = () => {
                 id={`tab-btn-fin-${tab.id}`}
                 role="tab"
                 aria-selected={estaActiva}
-                onClick={() => setTabActiva(tab.id)}
-                className={`relative h-9 px-3.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer select-none shrink-0 ${
+                onClick={() => startTabTransition(() => setTabActiva(tab.id))}
+                className={`relative h-9 px-3.5 rounded-xl text-xs font-semibold active:scale-[0.97] transition-[transform,colors] duration-150 flex items-center gap-2 cursor-pointer select-none shrink-0 ${
                   estaActiva
                     ? 'text-sky-300 font-bold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
@@ -767,7 +769,7 @@ export const ViewFinanzas: React.FC = () => {
                   <motion.div
                     layoutId="tab-finanzas-indicator"
                     className="absolute inset-0 rounded-xl bg-sky-500/15 border border-sky-500/40 shadow-[0_0_15px_rgba(56,189,248,0.22)]"
-                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    transition={SPRING_SNAPPY}
                   />
                 )}
                 <span className="relative z-10 flex items-center gap-2">
@@ -1167,10 +1169,12 @@ export const ViewFinanzas: React.FC = () => {
           radarCategorias={radarCategorias}
           proximosVencimientos={proximosVencimientos}
           optimisticConciliados={optimisticConciliados}
-          onIrAPresupuesto={() => setTabActiva('presupuesto')}
+          onIrAPresupuesto={() => startTabTransition(() => setTabActiva('presupuesto'))}
           onIrATransaccionesProgramadas={() => {
-            setTabActiva('transacciones');
-            setEstadoFlujo('PROGRAMADO');
+            startTabTransition(() => {
+              setTabActiva('transacciones');
+              setEstadoFlujo('PROGRAMADO');
+            });
           }}
           onToggleConciliarCuota={handleToggleConciliarCuota}
           onToggleConciliarGasto={handleToggleConciliarGasto}

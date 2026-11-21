@@ -125,6 +125,25 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Micro-optimizaciones táctiles smartphone (REQ-PERF-FLUIDITY-05) */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+[role="tab"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Contención de scroll en modales y paneles para evitar rubber-banding en límites */
+.modal-scroll-container,
+[data-scroll-container],
+.scroll-touch-contain {
+  overscroll-behavior-y: contain;
+}
+
 /* Safe Area Paddings */
 .safe-area-top {
   padding-top: env(safe-area-inset-top, 0px);

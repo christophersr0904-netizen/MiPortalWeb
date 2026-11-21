@@ -52,6 +52,25 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.7 — Fluidez Táctil Nivel Smartphone, MotionConfig Global, Resortes Calibrados y useTransition (REQ-PERF-FLUIDITY-05-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/constants/motionPresets.ts`, `src/App.tsx`, `src/index.css`, `src/components/Views/ViewHabitos.tsx`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Estandarización de Físicas de Resortes y Presets de Movimiento (`src/constants/motionPresets.ts`):**
+    - Creación del catálogo maestro de resortes y desaceleraciones calibrados para pantallas a 60/120 Hz:
+      - `SPRING_SNAPPY`: `{ type: 'spring', stiffness: 460, damping: 34, mass: 0.7 }` (pestañas activas con `layoutId`, selectores y micro-botones).
+      - `SPRING_MODAL`: `{ type: 'spring', stiffness: 380, damping: 32, mass: 0.85 }` (modales Bento, sheets y drawers).
+      - `EASE_IOS`: `[0.22, 1, 0.36, 1]` (curva cúbica de desaceleración suave estilo Apple Human Interface).
+      - `TRANSITION_VIEW`: `{ duration: 0.18, ease: EASE_IOS }` (transición canónica de vistas globales).
+    - Envolvente global en `src/App.tsx` con `<MotionConfig reducedMotion="user" transition={TRANSITION_VIEW}>` para paridad táctil coherente.
+  - **Navegación Concurrente Ininterrumpida con `useTransition` (React 19):**
+    - Envoltorio de `setVistaActiva` en `startTransition` dentro de `handleCambiarVista` y `handleHashChange` en `src/App.tsx`. Los clics en `HeaderMaestro`, `BottomNavMobile` y accesos directos devuelven respuesta visual táctil a 0ms sin bloquear el hilo principal mientras React 19 prepara el árbol de la vista solicitada.
+    - Aplicación de `startTransition` en el conmutador de subpestañas de `ViewHabitos.tsx` (Tablero vs Metas vs Dashboard) y `ViewFinanzas.tsx` (Transacciones vs Presupuestos vs Cuotas vs Dashboard), así como en la selección de proyectos del sidebar y pestañas móviles de `ViewKanban.tsx`.
+    - Incorporación de micro-interacciones táctiles `active:scale-[0.97] transition-[transform,colors] duration-150` en todos los selectores de subpestaña.
+  - **Micro-Optimizaciones CSS Globales para Smartphone (`src/index.css`):**
+    - Eliminación del retraso de 300ms de doble-tap táctil mediante `touch-action: manipulation;` en `button`, `a`, `input`, `select`, `textarea` y elementos con `role="button"` / `role="tab"`.
+    - Purgado del parpadeo de foco móvil con `-webkit-tap-highlight-color: transparent;` en todos los controles interactivos.
+    - Contención de rebote elástico no deseado mediante `overscroll-behavior-y: contain;` en contenedores de scroll modal y paneles.
+
 ### FASE 8.6 — Desacoplamiento de useLiveQuery en ViewKanban, Separación de Polling en useDailySchedule y Deduplicación en Hábitos (REQ-PERF-FLUIDITY-04-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewKanban.tsx`, `src/hooks/useDailySchedule.ts`, `src/hooks/useHabitos.ts`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Habitos/Dashboard/DashboardHabitos.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
