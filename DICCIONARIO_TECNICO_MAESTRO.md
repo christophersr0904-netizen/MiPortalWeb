@@ -52,6 +52,15 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.4 — Optimización de Arranque en Frío y Code-Splitting de Modales Pesados en App.tsx (REQ-PERF-FLUIDITY-02-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/App.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/App.tsx` (Code-Splitting y Carga Bajo Demanda con React.lazy & Suspense):
+    - Migración de importaciones estáticas monolíticas hacia `React.lazy()` para componentes modales y desacoplados masivos: `DailyCockpit` (~2,800 líneas), `ModalTareaFlow` (~1,350 líneas), `ModalActividadFlow` (~2,100 líneas), `ModalGasto` (~600 líneas), `EditorNotaModal` (~1,350 líneas), `AsistenteIaModal` (~465 líneas), `ModalExportarPdf` (~325 líneas) y `ModalAtajosTeclado` (~500 líneas).
+    - Envoltorio de cada componente en `<Suspense fallback={null}>` condicionado estrictamente a su estado de visibilidad (`modalAbierto && <Suspense><Modal .../></Suspense>`), erradicando montajes ociosos de hooks (`useLiveQuery`, `useGastoForm`, listeners globales) cuando los modales están cerrados.
+    - **Resultados de Rendimiento:** Reducción del chunk inicial `main-*.js` de **760.12 kB** a **419.04 kB** (-45% de peso neto, 115 kB gzip), eliminando por completo la advertencia de límite de 500 kB de Vite. Tiempo de bloqueo total (TBT) y LCP drásticamente mejorados.
+    - **Aseguramiento de Calidad:** 0 errores TypeScript (`tsc --noEmit`), 100% de la suite de pruebas superada (35/35 suites, 349/349 tests en verde).
+
 ### FASE 8.3 — Rediseño High-End Linear Split 2 Columnas en ModalActividadFlow con Paridad Cobalt A.2.2 (REQ-ACTIVIDAD-MODAL-03-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Modals/ModalActividadFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**

@@ -1,8 +1,17 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { MotionConfig, AnimatePresence, motion } from 'motion/react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { ChevronRight, X } from 'lucide-react';
 import { HeaderMaestro, type VistaGlobal } from './components/Layout/HeaderMaestro';
 import { BottomNavMobile } from './components/Layout/BottomNavMobile';
 import { WidgetIdeasBubble } from './components/Ideas/WidgetIdeasBubble';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { useUndoDelete } from './hooks/useUndoDelete';
+import { db, inicializarDatosSemillaSiVacio } from './db/db';
+import { syncManager } from './services/syncManager';
+import type { ActividadPersonal, VinculoEntidad } from './types';
+import { UndoDeleteProvider } from './context/UndoDeleteContext';
+import { UndoToastContainer } from './components/UI/UndoToastContainer';
 
 // ErrorBoundary global para blindar tanto el Cockpit como el Portal contra pantallas azules vacías
 interface ErrorBoundaryState {
@@ -94,6 +103,32 @@ const ViewFinanzas = lazy(() =>
   import('./components/Views/ViewFinanzas').then((m) => ({ default: m.ViewFinanzas }))
 );
 
+// Carga diferida de modales pesados y DailyCockpit bajo demanda (REQ-PERF-FLUIDITY-02)
+const DailyCockpit = lazy(() =>
+  import('./components/Cockpit/DailyCockpit').then((m) => ({ default: m.DailyCockpit }))
+);
+const ModalTareaFlow = lazy(() =>
+  import('./components/Modals/ModalTareaFlow').then((m) => ({ default: m.ModalTareaFlow }))
+);
+const ModalActividadFlow = lazy(() =>
+  import('./components/Modals/ModalActividadFlow').then((m) => ({ default: m.ModalActividadFlow }))
+);
+const ModalGasto = lazy(() =>
+  import('./components/Modals/ModalGasto').then((m) => ({ default: m.ModalGasto }))
+);
+const EditorNotaModal = lazy(() =>
+  import('./components/Notas/EditorNotaModal').then((m) => ({ default: m.EditorNotaModal }))
+);
+const AsistenteIaModal = lazy(() =>
+  import('./components/IA/AsistenteIaModal').then((m) => ({ default: m.AsistenteIaModal }))
+);
+const ModalExportarPdf = lazy(() =>
+  import('./components/Modals/ModalExportarPdf').then((m) => ({ default: m.ModalExportarPdf }))
+);
+const ModalAtajosTeclado = lazy(() =>
+  import('./components/Modals/ModalAtajosTeclado').then((m) => ({ default: m.ModalAtajosTeclado }))
+);
+
 const getVistaDesdeHash = (): VistaGlobal => {
   if (typeof window === 'undefined') return 'kanban';
   const rawHash = window.location.hash.replace(/^#/, '').toLowerCase().trim();
@@ -110,23 +145,6 @@ const VistaCargandoFallback: React.FC = () => (
     <span className="text-xs font-mono text-slate-400 tracking-wider">CARGANDO VISTA...</span>
   </div>
 );
-import { useLiveQuery } from 'dexie-react-hooks';
-import { ChevronRight, X } from 'lucide-react';
-import { AsistenteIaModal } from './components/IA/AsistenteIaModal';
-import { DailyCockpit } from './components/Cockpit/DailyCockpit';
-import { ModalAtajosTeclado } from './components/Modals/ModalAtajosTeclado';
-import { ModalExportarPdf } from './components/Modals/ModalExportarPdf';
-import { ModalTareaFlow } from './components/Modals/ModalTareaFlow';
-import { ModalActividadFlow } from './components/Modals/ModalActividadFlow';
-import { ModalGasto } from './components/Modals/ModalGasto';
-import { EditorNotaModal } from './components/Notas/EditorNotaModal';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-import { useUndoDelete } from './hooks/useUndoDelete';
-import { db, inicializarDatosSemillaSiVacio } from './db/db';
-import { syncManager } from './services/syncManager';
-import type { ActividadPersonal, VinculoEntidad } from './types';
-import { UndoDeleteProvider } from './context/UndoDeleteContext';
-import { UndoToastContainer } from './components/UI/UndoToastContainer';
 
 /** Barra de estado flotante compacta para tareas en progreso (REQ-OPS-28). */
 const BarraFocoTareasEnProgreso: React.FC<{
@@ -505,20 +523,26 @@ export const App: React.FC = () => {
     return (
       <CockpitErrorBoundary>
         <div className="w-full h-full bg-transparent p-0 overflow-hidden flex flex-col font-sans select-none">
-          <DailyCockpit
-            modoForzadoDesacoplado={true}
-            onCerrarDesacoplado={() => {
-              if (esWidgetNativo && window.desktopWidget?.close) {
-                window.desktopWidget.close();
-              } else {
-                setEsModoHud(false);
-              }
-            }}
-          />
-          <AsistenteIaModal
-            isOpen={asistenteAbierto}
-            onClose={() => setAsistenteAbierto(false)}
-          />
+          <Suspense fallback={null}>
+            <DailyCockpit
+              modoForzadoDesacoplado={true}
+              onCerrarDesacoplado={() => {
+                if (esWidgetNativo && window.desktopWidget?.close) {
+                  window.desktopWidget.close();
+                } else {
+                  setEsModoHud(false);
+                }
+              }}
+            />
+          </Suspense>
+          {asistenteAbierto && (
+            <Suspense fallback={null}>
+              <AsistenteIaModal
+                isOpen={asistenteAbierto}
+                onClose={() => setAsistenteAbierto(false)}
+              />
+            </Suspense>
+          )}
         </div>
       </CockpitErrorBoundary>
     );
@@ -626,14 +650,16 @@ export const App: React.FC = () => {
 
         {/* Modal TareaFlow para conversiones globales */}
         {modalTareaProps?.isOpen && (
-          <ModalTareaFlow
-            isOpen={modalTareaProps.isOpen}
-            onClose={() => setModalTareaProps(null)}
-            tareaId={modalTareaProps.tareaId}
-            initialColumna={modalTareaProps.initialColumna}
-            initialTitulo={modalTareaProps.initialTitulo}
-            initialNotas={modalTareaProps.initialNotas}
-          />
+          <Suspense fallback={null}>
+            <ModalTareaFlow
+              isOpen={modalTareaProps.isOpen}
+              onClose={() => setModalTareaProps(null)}
+              tareaId={modalTareaProps.tareaId}
+              initialColumna={modalTareaProps.initialColumna}
+              initialTitulo={modalTareaProps.initialTitulo}
+              initialNotas={modalTareaProps.initialNotas}
+            />
+          </Suspense>
         )}
 
         {/* 4. Barra Fija Inferior Móvil con Bottom Sheets */}
@@ -654,47 +680,71 @@ export const App: React.FC = () => {
         />
 
       {/* Modal Canónico ActividadFlow (Global) */}
-      <ModalActividadFlow
-        isOpen={modalHabitoGlobalAbierto}
-        actividadEditar={actividadEditarGlobal}
-        onClose={() => {
-          setModalHabitoGlobalAbierto(false);
-          setActividadEditarGlobal(null);
-        }}
-      />
+      {modalHabitoGlobalAbierto && (
+        <Suspense fallback={null}>
+          <ModalActividadFlow
+            isOpen={modalHabitoGlobalAbierto}
+            actividadEditar={actividadEditarGlobal}
+            onClose={() => {
+              setModalHabitoGlobalAbierto(false);
+              setActividadEditarGlobal(null);
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* Modal Canónico Gasto (Global) */}
-      <ModalGasto
-        isOpen={modalGastoGlobalAbierto}
-        onClose={() => setModalGastoGlobalAbierto(false)}
-      />
+      {modalGastoGlobalAbierto && (
+        <Suspense fallback={null}>
+          <ModalGasto
+            isOpen={modalGastoGlobalAbierto}
+            onClose={() => setModalGastoGlobalAbierto(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Modal Canónico Nota Rápida / Deep-Link (Global) */}
-      <EditorNotaModal
-        isOpen={modalNotaGlobalAbierto}
-        nota={null}
-        onClose={() => setModalNotaGlobalAbierto(false)}
-      />
+      {modalNotaGlobalAbierto && (
+        <Suspense fallback={null}>
+          <EditorNotaModal
+            isOpen={modalNotaGlobalAbierto}
+            nota={null}
+            onClose={() => setModalNotaGlobalAbierto(false)}
+          />
+        </Suspense>
+      )}
 
       {/* 5. Modal Asistente IA */}
-      <AsistenteIaModal
-        isOpen={asistenteAbierto}
-        onClose={() => setAsistenteAbierto(false)}
-      />
+      {asistenteAbierto && (
+        <Suspense fallback={null}>
+          <AsistenteIaModal
+            isOpen={asistenteAbierto}
+            onClose={() => setAsistenteAbierto(false)}
+          />
+        </Suspense>
+      )}
 
       {/* 6. Modal Canónico de Atajos de Teclado */}
-      <ModalAtajosTeclado
-        isOpen={modalAtajosAbierto}
-        onClose={() => setModalAtajosAbierto(false)}
-        scopeInicial={vistaActiva === 'financiero' ? 'finanzas' : vistaActiva === 'detalle' ? 'portafolio' : vistaActiva}
-      />
+      {modalAtajosAbierto && (
+        <Suspense fallback={null}>
+          <ModalAtajosTeclado
+            isOpen={modalAtajosAbierto}
+            onClose={() => setModalAtajosAbierto(false)}
+            scopeInicial={vistaActiva === 'financiero' ? 'finanzas' : vistaActiva === 'detalle' ? 'portafolio' : vistaActiva}
+          />
+        </Suspense>
+      )}
 
       {/* 7. Modal Canónico de Exportación PDF */}
-      <ModalExportarPdf
-        isOpen={modalPdfAbierto}
-        onClose={() => setModalPdfAbierto(false)}
-        proyectoIdSeleccionado={proyectoSeleccionadoId}
-      />
+      {modalPdfAbierto && (
+        <Suspense fallback={null}>
+          <ModalExportarPdf
+            isOpen={modalPdfAbierto}
+            onClose={() => setModalPdfAbierto(false)}
+            proyectoIdSeleccionado={proyectoSeleccionadoId}
+          />
+        </Suspense>
+      )}
 
       {/* 8. Notificaciones y Búfer Global de Deshacer */}
       <UndoToastContainer />
