@@ -52,6 +52,22 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.3 — Rediseño High-End Linear Split 2 Columnas en ModalActividadFlow con Paridad Cobalt A.2.2 (REQ-ACTIVIDAD-MODAL-03-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Modals/ModalActividadFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - `src/components/Modals/ModalActividadFlow.tsx` (Estructura Linear Split 2 Columnas - Propuesta A):
+    - Ampliado el contenedor raíz `#modal-actividad-flow-card` a `max-w-5xl` con chasis aeroespacial Cobalt (`#0D1526`, microborde `border-slate-800/80` y elevación de cristalina con `overflow-hidden`).
+    - **Cabecera Ejecutiva Despejada:** Fila 1 con placa de código interactiva `#act-flow-badge-id` (copiado al portapapeles con feedback táctil `Hash` a `Check` esmeralda) + píldora semántica dinámica de configuración/recurrencia `#act-flow-frecuencia-badge` con iconos Lucide reales (`Repeat`, `Briefcase`, `Sun`, `CalendarDays`, `CalendarRange`, `Calendar`, `SlidersHorizontal`, `CircleDot`) + píldora dinámica de duración (`Bloque` con `Clock` vs `Puntual (0m)` con `Zap` ámbar) + badge de racha (`Flame`) + botón de cierre LIFO (`X`). Fila 2 con título prominente editable en alto contraste (`#act-flow-titulo` / `#act-flow-titulo-readonly`).
+    - **Columna Izquierda (Lienzo de Trabajo):** Área superior de Apuntes y Notas Rápidas de ejecución (`bg-[#080E1C]/80`, microborde y auto-resize), gestión completa de Pasos Procedurales / Subtareas (DoD) con casillas de verificación táctiles cuadradas redondeadas (`w-5 h-5 rounded-md border border-slate-600 hover:border-emerald-400` / `bg-emerald-500/20 text-emerald-400 border-emerald-500` con `Check`), y componente dinámico `<SeccionNotasVinculadasModal />`.
+    - **Columna Derecha (Inspector Lateral de Propiedades `md:w-[350px] lg:w-[380px]`):**
+      1. *Pilar de Vida / Categoría:* Tarjeta read-only con icono Lucide real (`HeartPulse`, `BookOpen`, `Briefcase`, `Wallet`, `Users`, `Coffee`) en edición/detalle o `<SelectIconicoCobalt />` en creación nueva.
+      2. *Prioridad Operativa:* Riel táctil 3-col con iconos vectoriales (`Flame`, `AlertCircle`, `ArrowDown`) y valores canónicos de BD (`01_P1_Alta`, `02_P2_Media`, `03_P3_Baja`).
+      3. *Tiempo, Recurrencia & Duración:* `<InputFechaCobalt />`, `<InputHoraCobalt />` (AM/PM), selector de frecuencia con `OPCIONES_RECURRENCIA_ACTIVIDAD_COBALT`, grilla circular táctil L-M-M-J-V-S-D, intervalo personalizado con **control segmentado Cobalt** (`días | sem | meses`) erradicando el `<select>` nativo crudo, vencimiento `Sin límite` vs `Hasta`, duración `H:MM` con botón `Micro (0m)` y accesos rápidos `15m..2h`, e interruptor `<SwitchCobalt />` para Google Calendar con micro-indicador `<CalendarCheck2 />`.
+      4. *Meta Estratégica & Métricas:* `<SelectIconicoCobalt />` con `opcionesMetasCobalt` sin códigos redundantes en subtítulo, toggle `+ Nueva rápida` y grilla cuantitativa 2x2 en `font-mono tabular-nums`.
+      5. *Acordeón Gastos Asociados & Costos:* 100% preservado en modos `NUEVO` y `VINCULAR` adaptado a la columna lateral.
+    - **Footer & Modales Secundarios:** Footer full-width con soft-delete/Undo, cancelar y guardar/actualizar (`Loader2`), y preservación estricta de `<ModalAlcanceRecurrencia />`.
+  - **Validación QA:** Chequeo estricto TypeScript limpio (`npx tsc --noEmit`: 0 errores), suite de pruebas Vitest al 100% (35/35 suites pasadas, 349/349 tests en verde), y compilación de producción exitosa con Vite (`npm run build`).
+
 ### FASE 8.2 — Rediseño High-End Linear Split 2 Columnas en ModalTareaFlow y Portal Flotante en SelectIconicoCobalt (REQ-TAREA-MODAL-03-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/UI/SelectIconicoCobalt.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**

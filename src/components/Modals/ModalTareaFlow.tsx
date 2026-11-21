@@ -181,7 +181,6 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     ...proyectos.map((p) => ({
       valor: p.codigo_legado || p.id,
       etiqueta: p.nombre_proyecto,
-      subtitulo: p.codigo_legado,
       badge: p.codigo_legado,
       colorBadge: 'bg-sky-950/60 text-sky-300 border-sky-500/40 font-mono font-bold',
       icono: FolderKanban
@@ -193,7 +192,6 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
     ...hitosDelProyecto.map((h) => ({
       valor: h.codigo_legado || h.id,
       etiqueta: h.nombre_elemento || h.nombre_hito || h.codigo_legado,
-      subtitulo: h.codigo_legado,
       badge: h.codigo_legado,
       colorBadge: 'bg-purple-950/60 text-purple-300 border-purple-500/40 font-mono font-bold',
       icono: Milestone
