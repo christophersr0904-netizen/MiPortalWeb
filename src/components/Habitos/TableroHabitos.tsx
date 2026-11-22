@@ -34,9 +34,10 @@ import {
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { ModalAlcanceRecurrencia } from '../Modals/ModalAlcanceRecurrencia';
 import { ModalRegistroAvanceHabito } from '../Modals/ModalRegistroAvanceHabito';
+import { ModalDecisionMoraHabito } from '../Modals/ModalDecisionMoraHabito';
 import { SelectIconicoCobalt, type OpcionSelectCobalt } from '../UI/SelectIconicoCobalt';
 import { recalcularProgresoMetaLocal } from '../../services/metasService';
-import { esActividadCompletadaHoy } from '../../services/habitosService';
+import { esActividadCompletadaHoy, type ModoResolucionMora } from '../../services/habitosService';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { evaluarOcurrenciaEnFecha } from '../../utils/recurrenceEngine';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
@@ -532,7 +533,26 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
   }, [actividades, hoyStr]);
 
   // Toggle de completado con UI Optimista persistente hasta la emisión reactiva de useLiveQuery
+  const [actividadMoraModal, setActividadMoraModal] = useState<ActividadPersonal | null>(null);
+
   const handleToggleCompletar = useCallback(async (act: ActividadPersonal, completadoDeseado: boolean) => {
+    const fProg = (act.fecha_programada || '').split(/[\sT]/)[0];
+    const tieneRecurrencia = Boolean(
+      (act.frecuencia_ciclo && act.frecuencia_ciclo !== 'NINGUNA') ||
+      (act.regla_repeticion && act.regla_repeticion.trim() !== '') ||
+      act.tipo_compromiso === 'HABITUAL'
+    );
+    const estaEnMora = Boolean(fProg && fProg < hoyStr);
+
+    if (completadoDeseado && tieneRecurrencia && estaEnMora) {
+      setActividadMoraModal(act);
+      return {
+        actividadActualizada: act,
+        esRepetida: true,
+        nuevaRacha: act.racha_actual || 0
+      };
+    }
+
     setOptimisticCompletados((prev) => ({ ...prev, [act.id]: completadoDeseado }));
     try {
       return await toggleCompletar(act, completadoDeseado);
@@ -545,7 +565,25 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
       });
       throw err;
     }
-  }, [toggleCompletar]);
+  }, [toggleCompletar, hoyStr]);
+
+  const handleConfirmarModoMora = useCallback(async (modo: ModoResolucionMora) => {
+    if (!actividadMoraModal) return;
+    const act = actividadMoraModal;
+    setActividadMoraModal(null);
+    setOptimisticCompletados((prev) => ({ ...prev, [act.id]: true }));
+    try {
+      await toggleCompletar(act, true, modo);
+    } catch (err) {
+      setOptimisticCompletados((prev) => {
+        if (!(act.id in prev)) return prev;
+        const rollback = { ...prev };
+        delete rollback[act.id];
+        return rollback;
+      });
+      throw err;
+    }
+  }, [actividadMoraModal, toggleCompletar]);
 
   const handleAbrirAvance = useCallback((act: ActividadPersonal) => {
     setModalAvance({ isOpen: true, actividad: act });
@@ -1195,6 +1233,14 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
         actividadEditar={actividadEditar}
         categoriaInicial={categoriaSeleccionada || actividadEditar?.categoria_vida || 'SALUD_DEPORTE'}
         alcanceEdicion={alcanceEdicion}
+      />
+
+      {/* Modal Elevado de Decisión de Mora (Salto a Hoy vs Avanzar 1 Paso) */}
+      <ModalDecisionMoraHabito
+        isOpen={Boolean(actividadMoraModal)}
+        onClose={() => setActividadMoraModal(null)}
+        actividad={actividadMoraModal}
+        onElegirModo={handleConfirmarModoMora}
       />
 
       {/* Modal Elevado de Alcance de Recurrencia (Single Instance Pattern) */}

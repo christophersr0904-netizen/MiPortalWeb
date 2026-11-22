@@ -383,6 +383,69 @@ describe('Retención Visual de Hábitos Completados Hoy y Sincronización Calend
     putSpy.mockRestore();
   });
 
+  it('REQ-HABITOS-FIX-02: completarActividadPersonalLocal con modoMora: "SALTO_A_HOY" programa la fecha siguiente a partir de hoy', async () => {
+    const { completarActividadPersonalLocal, formatFechaIsoLocal, calcularSiguienteFechaCiclo } = await import('../habitosService');
+    const { db } = await import('../../db/db');
+
+    const hoyStr = formatFechaIsoLocal(new Date());
+    const mockActMoraSalto = {
+      id: 'test-act-mora-salto',
+      user_id: 'user-1',
+      codigo_legado: 'ACT-909',
+      nombre_actividad: 'Ejercicio Vencido Salto',
+      tipo_compromiso: 'HABITUAL' as const,
+      categoria_vida: 'SALUD_DEPORTE' as const,
+      estado: '02_Por_Hacer' as const,
+      racha_actual: 5,
+      fecha_programada: '2026-10-01', // Muy atrasada
+      duracion_horas: 0,
+      agendado_calendar: 'No' as const,
+      frecuencia_ciclo: 'DIARIA' as const,
+      regla_repeticion: '',
+      updated_at: '2026-10-01T08:00:00Z',
+      version: 1,
+      sync_status: 'synced' as const
+    };
+
+    let putItem: any = null;
+    const putSpy = vi.spyOn(db.actividades_personales, 'put').mockImplementation((async (item: any) => {
+      putItem = item;
+      return item.id;
+    }) as any);
+
+    const res = await completarActividadPersonalLocal(mockActMoraSalto as any, true, 'SALTO_A_HOY');
+
+    const proxEsperada = calcularSiguienteFechaCiclo(hoyStr, 'DIARIA', '');
+    expect(res.actividadActualizada).toBeDefined();
+    expect(putItem.fecha_programada).toBe(proxEsperada);
+    expect(putItem.proxima_fecha_programada).toBe(proxEsperada);
+    expect(putItem.ultima_fecha_completado).toBe(hoyStr);
+    expect(putItem.historial_fechas).toContain(hoyStr);
+    expect(putItem.duracion_horas).toBe(0); // Preserva duración 0m
+
+    putSpy.mockRestore();
+  });
+
+  it('REQ-HABITOS-FIX-02: sanitizarActividadPayload preserva duracion_horas = 0 (no lo transforma a 1.00)', async () => {
+    const { sanitizarActividadPayload } = await import('../syncPayloadSanitizer');
+
+    const mockActCeroDur = {
+      id: 'a0000000-0000-0000-0000-000000000001',
+      user_id: '00000000-0000-0000-0000-000000000001',
+      codigo_legado: 'ACT-001',
+      nombre_actividad: 'Hábito Puntual 0 minutos',
+      tipo_compromiso: 'HABITUAL' as const,
+      categoria_vida: 'SALUD_DEPORTE' as const,
+      estado: '02_Por_Hacer' as const,
+      duracion_horas: 0,
+      racha_actual: 0,
+      fecha_programada: '2026-11-22'
+    };
+
+    const payload = sanitizarActividadPayload(mockActCeroDur as any);
+    expect(payload.duracion_horas).toBe(0);
+  });
+
   describe('FIX-HABITOS-ACTIVIDADES-METAS-LINK-103: Vinculación Canónica de Actividades y Metas en Hábitos', () => {
     it('Resuelve metas vinculadas tolerando disparidad de tipos (string vs number) y nomenclatura dual (habitoId vs habito_id)', () => {
       const metas = [

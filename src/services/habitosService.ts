@@ -153,12 +153,15 @@ export function calcularSiguienteFechaCiclo(
   return calcularProximaFechaValida(mananaStr, frecuenciaCiclo, reglaRepeticion, diasSeleccionados);
 }
 
+export type ModoResolucionMora = 'AVANZAR_UN_PASO' | 'SALTO_A_HOY';
+
 /**
  * Marca como completada o pendiente una actividad personal, aplicando avance de ciclo y racha.
  */
 export async function completarActividadPersonalLocal(
   actividad: ActividadPersonal,
-  completar: boolean
+  completar: boolean,
+  modoMora: ModoResolucionMora = 'AVANZAR_UN_PASO'
 ): Promise<{
   actividadActualizada: ActividadPersonal;
   esRepetida: boolean;
@@ -231,8 +234,9 @@ export async function completarActividadPersonalLocal(
   if (completar) {
     ultimaFechaCompletado = hoyStr;
     if (esRutinaria && actividadBase.frecuencia_ciclo && actividadBase.frecuencia_ciclo !== 'NINGUNA') {
+      const fechaBaseCalculo = modoMora === 'SALTO_A_HOY' ? hoyStr : actividadBase.fecha_programada;
       const prox = calcularSiguienteFechaCiclo(
-        actividadBase.fecha_programada,
+        fechaBaseCalculo,
         actividadBase.frecuencia_ciclo,
         actividadBase.regla_repeticion
       );

@@ -53,6 +53,9 @@ import {
 import { syncManager, esEntornoEscritorioLocal } from '../../services/syncManager';
 import { crearTarea } from '../../services/tareasService';
 import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
+import { ModalDecisionMoraHabito } from '../Modals/ModalDecisionMoraHabito';
+import type { ModoResolucionMora } from '../../services/habitosService';
+import type { ActividadPersonal } from '../../types';
 import {
   obtenerIdentificadoresWbs,
   resolverSiguienteTareaFoco,
@@ -1025,12 +1028,34 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
   const completadosHabitos = useMemo(() => habitosHoy.filter((h) => h.completado).length, [habitosHoy]);
   const totalHabitos = habitosHoy.length;
 
-  // Completar rápido con aislamiento de propagación
+  // Completar rápido con aislamiento de propagación y guard de mora
+  const [itemMoraModal, setItemMoraModal] = useState<DailyScheduleItem | null>(null);
+
   const handleToggle = async (item: DailyScheduleItem, e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
     }
+    if (item.tipo === 'HABITO' && !item.completado) {
+      const act = item.raw as ActividadPersonal;
+      const fProg = (act?.fecha_programada || item.fecha || '').split(/[\sT]/)[0];
+      const tieneRecurrencia = Boolean(
+        (act?.frecuencia_ciclo && act.frecuencia_ciclo !== 'NINGUNA') ||
+        (act?.regla_repeticion && act.regla_repeticion.trim() !== '') ||
+        act?.tipo_compromiso === 'HABITUAL'
+      );
+      if (tieneRecurrencia && fProg && fProg < fechaActual) {
+        setItemMoraModal(item);
+        return;
+      }
+    }
     await toggleCompletar(item);
+  };
+
+  const handleConfirmarModoMoraCockpit = async (modo: ModoResolucionMora) => {
+    if (!itemMoraModal) return;
+    const it = itemMoraModal;
+    setItemMoraModal(null);
+    await toggleCompletar(it, modo);
   };
 
   // Quick-Add de Tareas Clave con WBS Selectors (REQ-SYNC-44-EXEC)
@@ -3009,6 +3034,16 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
             setInputQuickAddTarea('');
             setQuickAddTareaAbierto(false);
           }}
+        />
+      )}
+
+      {/* D. MODAL DE DECISIÓN DE MORA INVOCADO DESDE COCKPIT */}
+      {itemMoraModal && (
+        <ModalDecisionMoraHabito
+          isOpen={Boolean(itemMoraModal)}
+          onClose={() => setItemMoraModal(null)}
+          actividad={itemMoraModal.raw as ActividadPersonal}
+          onElegirModo={handleConfirmarModoMoraCockpit}
         />
       )}
     </>

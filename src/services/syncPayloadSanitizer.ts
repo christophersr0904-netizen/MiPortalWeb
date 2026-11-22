@@ -663,7 +663,9 @@ export function sanitizarActividadPayload(raw: ActividadPersonal, userId: string
     racha_actual: Math.max(0, Number(raw.racha_actual) || 0),
     fecha_programada: sanitizeDate(raw.fecha_programada),
     hora_inicio: raw.hora_inicio?.trim() || '08:00',
-    duracion_horas: Math.max(0, Number(raw.duracion_horas) || 1.00),
+    duracion_horas: raw.duracion_horas !== undefined && raw.duracion_horas !== null && !Number.isNaN(Number(raw.duracion_horas))
+      ? Math.max(0, Number(raw.duracion_horas))
+      : 1.00,
     agendado_calendar: raw.agendado_calendar || 'No',
     id_evento_calendar: raw.id_evento_calendar?.trim() || null,
     frecuencia_ciclo: raw.frecuencia_ciclo || 'DIARIA',
@@ -721,7 +723,11 @@ export function sanitizarActividadInbound(remoto: any, localPrevio?: any): Activ
     fecha_programada: sanitizeDate(remoto.fecha_programada) || sanitizeDate(localPrevio?.fecha_programada) || new Date().toISOString().split('T')[0],
     fecha_fin: sanitizeDate(remoto.fecha_fin) ?? localPrevio?.fecha_fin,
     hora_inicio: remoto.hora_inicio?.trim() || localPrevio?.hora_inicio || '08:00',
-    duracion_horas: Math.max(0, Number(remoto.duracion_horas ?? localPrevio?.duracion_horas ?? 1)),
+    duracion_horas: remoto.duracion_horas !== undefined && remoto.duracion_horas !== null && !Number.isNaN(Number(remoto.duracion_horas))
+      ? Math.max(0, Number(remoto.duracion_horas))
+      : (localPrevio?.duracion_horas !== undefined && localPrevio?.duracion_horas !== null && !Number.isNaN(Number(localPrevio.duracion_horas))
+          ? Math.max(0, Number(localPrevio.duracion_horas))
+          : 1),
     agendado_calendar: remoto.agendado_calendar || localPrevio?.agendado_calendar || 'No',
     id_evento_calendar: remoto.id_evento_calendar ?? localPrevio?.id_evento_calendar ?? null,
     // Preservación inquebrantable de campos locales que no existen en Supabase

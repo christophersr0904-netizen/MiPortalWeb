@@ -11,7 +11,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { completarActividadPersonalLocal } from '../services/habitosService';
+import { completarActividadPersonalLocal, type ModoResolucionMora } from '../services/habitosService';
 import { syncManager } from '../services/syncManager';
 import { esElementoArchivado, getProp } from '../utils/entityNormalizer';
 import { evaluarOcurrenciaEnFecha } from '../utils/recurrenceEngine';
@@ -314,7 +314,10 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       if (fechasAplicables.length === 0) continue;
 
       const horaIni = String(getProp(a, 'hora_inicio', 'Hora_Inicio') ?? '07:00').trim() || '07:00';
-      const durHoras = Number(getProp(a, 'duracion_horas', 'Duracion_Horas') ?? 0.5) || 0.5;
+      const rawDur = getProp(a, 'duracion_horas', 'Duracion_Horas');
+      const durHoras = rawDur !== undefined && rawDur !== null && rawDur !== '' && !Number.isNaN(Number(rawDur))
+        ? Math.max(0, Number(rawDur))
+        : 0.5;
       const durMin = Math.round(durHoras * 60);
       const horaFin = sumarMinutosAHora(horaIni, durMin);
       const codigoLegado = String(getProp(a, 'codigo_legado', 'ID_Actividad') ?? 'ACT-000');
@@ -641,7 +644,7 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
   }, [items, fechaActual, horaActual]);
 
   // 5. Toggle de completado rápido Local-First para cualquier tipo de ente
-  const toggleCompletar = useCallback(async (item: DailyScheduleItem) => {
+  const toggleCompletar = useCallback(async (item: DailyScheduleItem, modoMora: ModoResolucionMora = 'AVANZAR_UN_PASO') => {
     const nowIso = new Date().toISOString();
     const marcarCompletado = !item.completado;
     const realId = (item.raw as any)?.id || item.id.split('_')[0];
@@ -657,7 +660,7 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
       } as any);
     } else if (item.tipo === 'HABITO') {
       const actRaw = (await db.actividades_personales.get(realId)) || (item.raw as ActividadPersonal);
-      const res = await completarActividadPersonalLocal(actRaw, marcarCompletado);
+      const res = await completarActividadPersonalLocal(actRaw, marcarCompletado, modoMora);
       const fechaTarget = item.fecha || fechaActual;
       const histActual = Array.isArray(res.actividadActualizada.historial_fechas)
         ? [...res.actividadActualizada.historial_fechas]

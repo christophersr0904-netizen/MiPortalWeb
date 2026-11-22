@@ -15,7 +15,8 @@ import {
   editarActividadConAlcance,
   autoHidratarVinculosHabitosActividades,
   formatFechaIsoLocal,
-  esActividadCompletadaHoy
+  esActividadCompletadaHoy,
+  type ModoResolucionMora
 } from '../services/habitosService';
 import { syncManager, type SyncState } from '../services/syncManager';
 
@@ -396,8 +397,12 @@ export function useHabitos() {
     syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
   };
 
-  const toggleCompletar = async (actividad: ActividadPersonal, completadoDeseado: boolean) => {
-    const res = await completarActividadPersonalLocal(actividad, completadoDeseado);
+  const toggleCompletar = async (
+    actividad: ActividadPersonal,
+    completadoDeseado: boolean,
+    modoMora: ModoResolucionMora = 'AVANZAR_UN_PASO'
+  ) => {
+    const res = await completarActividadPersonalLocal(actividad, completadoDeseado, modoMora);
     notificarSyncYPuente();
     return res;
   };

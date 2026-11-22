@@ -10909,6 +10909,35 @@ supabase functions deploy gcal-auth
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (352/352 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,992 módulos transformados exitosamente en 11.77s, `main-*.js` 419.43 kB < 500 kB).
 
+---
+
+### [REQ-HABITOS-FIX-02: Preservar duracion_horas = 0 en Sanitización/Agenda y Modal de Decisión de Mora (Avanzar 1 Paso vs. Saltar a Hoy)]
+**Fecha:** Noviembre 2026 | **Fase:** 8.14 (Preservación de Duración Puntual & Modal de Decisión de Mora) | **Archivos Modificados:** `src/services/syncPayloadSanitizer.ts`, `src/hooks/useDailySchedule.ts`, `src/services/habitosService.ts`, `src/hooks/useHabitos.ts`, `src/components/Modals/ModalDecisionMoraHabito.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `src/components/Cockpit/DailyCockpit.tsx`, `src/services/__tests__/habitosService.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Coerción Falsy de `duracion_horas: 0`:** En `syncPayloadSanitizer.ts` (L666), la expresión `Math.max(0, Number(raw.duracion_horas) || 1.00)` convertía `0` en `1.00` debido a la falsedad de `0` ante el operador `||`. Al sincronizar o re-hidratar (`inbound` L724), Dexie recibía `1` en lugar de la duración puntual legítima (`0m`). En `useDailySchedule.ts` (L317), un fallback similar forzaba `0.5h` (30m).
+- **Inflexibilidad en Completado de Hábitos con Mora:** Al hacer check en un hábito recurrente vencido hace varios días, `calcularSiguienteFechaCiclo` avanzaba únicamente un paso desde la fecha vencida (`fecha_programada`), dejando la actividad aún en mora y requiriendo múltiples clics sin permitir ponerse al día directamente.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Preservación Inquebrantable de `duracion_horas: 0` (`syncPayloadSanitizer.ts` & `useDailySchedule.ts`):**
+   - Sanitizador outbound e inbound actualizado con chequeo estricto `raw.duracion_horas !== undefined && raw.duracion_horas !== null && !Number.isNaN(Number(raw.duracion_horas)) ? Math.max(0, Number(raw.duracion_horas)) : 1.00`.
+   - Agenda diaria en Cockpit actualizada para respetar duraciones puntuales de 0 minutos sin forzar 30m.
+2. **Estrategia Dual de Resolución de Mora (`habitosService.ts`):**
+   - Incorporado parámetro `modoMora?: 'AVANZAR_UN_PASO' | 'SALTO_A_HOY'` en `completarActividadPersonalLocal`.
+   - Con `'SALTO_A_HOY'`, se registra cumplimiento hoy (`ultima_fecha_completado = hoyStr`, suma a `historial_fechas`), se calcula la próxima fecha a partir de `hoyStr` (`calcularSiguienteFechaCiclo(hoyStr, ...)`), y se incrementa la racha diaria.
+   - Con `'AVANZAR_UN_PASO'`, se preserva la retrocompatibilidad avanzando secuencialmente desde la fecha vencida.
+3. **Modal Cobalt A.2.2 de Decisión de Mora (`ModalDecisionMoraHabito.tsx`):**
+   - Componente modal elevado (Portal) con cabecera `#0A101D`, icono `CalendarClock` ámbar y cálculo en tiempo real de días en mora y fechas proyectadas.
+   - Ofrece dos alternativas visuales claras:
+     - **Opción A (Recomendado):** *"Completar hoy y ponerse al día"* (salta la mora y programa el próximo ciclo desde hoy).
+     - **Opción B:** *"Completar solo el día vencido"* (avance secuencial de 1 paso).
+   - Intercepción automática en `TableroHabitos.tsx` y `DailyCockpit.tsx` al marcar como completada cualquier actividad recurrente en mora.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (**354/354 tests al 100% verde** con 2 nuevos tests unitarios para preservación de duración 0 y salto a hoy).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,993 módulos transformados exitosamente en 12.16s, `main-*.js` 419.78 kB < 500 kB).
+
 
 
 
