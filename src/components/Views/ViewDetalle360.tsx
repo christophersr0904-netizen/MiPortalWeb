@@ -477,6 +477,52 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
     return calcularRutaCriticaCPM(hitosProyecto);
   }, [hitosProyecto]);
 
+  // REQ-METRICS-EXECUTION-03 / REQ-PORTAFOLIO-HOTFIX-01: Cálculo de Desfase Temporal Físico y Esfuerzo Real en Tareas
+  // Ubicado estrictamente ANTES de cualquier return condicional temprano (Rules of Hooks)
+  const { desfasePromedioTareas, conteoTareasConDesfase, esfuerzoDesviacionProyecto } = useMemo(() => {
+    if (!tareasProyecto || tareasProyecto.length === 0) {
+      return {
+        desfasePromedioTareas: null,
+        conteoTareasConDesfase: 0,
+        esfuerzoDesviacionProyecto: calcularDesviacionEsfuerzo(0, 0)
+      };
+    }
+
+    let sumaDesfase = 0;
+    let countConDesfase = 0;
+    let sumEst = 0;
+    let sumReal = 0;
+
+    for (const t of tareasProyecto) {
+      const fProg = t.fecha_programada || (t as any).Fecha_Programada;
+      const fComp = t.fecha_completado || (t as any).Fecha_Completado;
+      const est = String(t.estado_tarea || (t as any).Estado_Tarea || '').toLowerCase();
+      const esComp = est.includes('04_') || est.includes('completad');
+
+      if (esComp && fProg && fComp) {
+        const dias = calcularDesfaseDias(fProg, fComp);
+        if (dias !== null) {
+          sumaDesfase += dias;
+          countConDesfase++;
+        }
+      }
+
+      const hEst = Number(t.horas_estimadas || (t as any).Horas_Estimadas) || 0;
+      const hReal = Number(t.horas_reales || (t as any).Horas_Reales) || 0;
+      sumEst += hEst;
+      sumReal += hReal;
+    }
+
+    const avgDias = countConDesfase > 0 ? Number((sumaDesfase / countConDesfase).toFixed(1)) : null;
+    const desviacion = calcularDesviacionEsfuerzo(sumEst, sumReal);
+
+    return {
+      desfasePromedioTareas: avgDias,
+      conteoTareasConDesfase: countConDesfase,
+      esfuerzoDesviacionProyecto: desviacion
+    };
+  }, [tareasProyecto]);
+
   if (!proyectoActivo) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#040711] text-slate-400">
@@ -535,43 +581,6 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
   const tareasCompletadas = tareasProyecto.filter((t: any) =>
     String(t.Estado_Tarea || t.estado_tarea || '').includes('Completad')
   ).length;
-
-  // REQ-METRICS-EXECUTION-03: Cálculo de Desfase Temporal Físico y Esfuerzo Real en Tareas
-  const { desfasePromedioTareas, conteoTareasConDesfase, esfuerzoDesviacionProyecto } = useMemo(() => {
-    let sumaDesfase = 0;
-    let countConDesfase = 0;
-    let sumEst = 0;
-    let sumReal = 0;
-
-    for (const t of tareasProyecto) {
-      const fProg = t.fecha_programada || (t as any).Fecha_Programada;
-      const fComp = t.fecha_completado || (t as any).Fecha_Completado;
-      const est = String(t.estado_tarea || (t as any).Estado_Tarea || '').toLowerCase();
-      const esComp = est.includes('04_') || est.includes('completad');
-
-      if (esComp && fProg && fComp) {
-        const dias = calcularDesfaseDias(fProg, fComp);
-        if (dias !== null) {
-          sumaDesfase += dias;
-          countConDesfase++;
-        }
-      }
-
-      const hEst = Number(t.horas_estimadas || (t as any).Horas_Estimadas) || 0;
-      const hReal = Number(t.horas_reales || (t as any).Horas_Reales) || 0;
-      sumEst += hEst;
-      sumReal += hReal;
-    }
-
-    const avgDias = countConDesfase > 0 ? Number((sumaDesfase / countConDesfase).toFixed(1)) : null;
-    const desviacion = calcularDesviacionEsfuerzo(sumEst, sumReal);
-
-    return {
-      desfasePromedioTareas: avgDias,
-      conteoTareasConDesfase: countConDesfase,
-      esfuerzoDesviacionProyecto: desviacion
-    };
-  }, [tareasProyecto]);
 
   // Días transcurridos vs días totales
   const totalDias = fInicio > 0 && fFin > fInicio ? Math.round((fFin - fInicio) / (1000 * 60 * 60 * 24)) : 0;

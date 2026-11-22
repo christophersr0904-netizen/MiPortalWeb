@@ -10997,6 +10997,25 @@ supabase functions deploy gcal-auth
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (371/371 tests al 100% verde)**.
 - **Compilador de Producción:** `npx vite build` $\rightarrow$ Exit Code 0 (8,995 módulos transformados exitosamente en 10.32s, `main-*.js` 420.17 kB < 500 kB).
 
+---
+
+### [REQ-PORTAFOLIO-HOTFIX-01: Blindaje de Rules of Hooks en ViewDetalle360.tsx]
+**Fecha:** Noviembre 2026 | **Fase:** 8.17 (Hotfix de React Rules of Hooks) | **Archivos Modificados:** `src/components/Views/ViewDetalle360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Causa Raíz
+- En `ViewDetalle360.tsx`, el hook `useMemo` para el cómputo de `desfasePromedioTareas, conteoTareasConDesfase, esfuerzoDesviacionProyecto` había quedado declarado en la línea 540, posterior a la guarda condicional temprana `if (!proyectoActivo) return (...)` (L480).
+- Cuando el componente montaba inicialmente sin `proyectoActivo` disponible (durante la carga reactiva de Dexie), ejecutaba un número de hooks menor que al re-renderizar con el proyecto resuelto, disparando la advertencia crítica de React: *"Rendered more hooks than during the previous render"*.
+
+#### 2. Solución Quirúrgica
+- Se reubicó el bloque `useMemo` íntegramente a la línea 482, inmediatamente después de `cpmCalculo` y **estrictamente antes** de la guarda temprana `if (!proyectoActivo)`.
+- Se protegió internamente con un early check seguro `if (!tareasProyecto || tareasProyecto.length === 0)` que devuelve valores predeterminados seguros (`null`, `0`, esfuerzo en 0) sin romper la regla de hooks.
+- Se verificó que el 100% de los hooks del componente (23 hooks de estado, 13 useMemo, useLiveQuery y useUndoDelete) se declaren de manera incondicional en la raíz de la función.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (371/371 tests al 100% verde)**.
+- **Compilador de Producción:** `npx vite build` $\rightarrow$ Exit Code 0 (8,995 módulos transformados exitosamente en 12.26s, `main-*.js` 420.17 kB < 500 kB).
+
 
 
 
