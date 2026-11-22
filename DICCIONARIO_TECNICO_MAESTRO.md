@@ -52,6 +52,43 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.9 — Cálculo Dinámico de Burn Rate en TabPresupuestos, Persistencia de id_proyecto/id_tarea en useGastoForm y Visibilidad Inteligente de Periodos (REQ-FINANZAS-GASTOS-04-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/utils/finanzasHelpers.ts`, `src/components/Finanzas/TabPresupuestos.tsx`, `src/hooks/useGastoForm.ts`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Finanzas/__tests__/DashboardFinanciero.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Cálculo Dinámico de Costo Real (AC) y Matriz Burn Rate (`TabPresupuestos.tsx` & `finanzasHelpers.ts`):**
+    - Implementación de la función pura y canónica `resolverCostoEjecutadoProyecto()`, que sustituye la lectura escalar estática de `p.costo_ejecutado_real_pen`.
+    - Suscripción reactiva ligera a `db.hitos_wbs` y `db.tareas` en `TabPresupuestos` para construir mapas relacionales `tarea -> proyecto` e `hito -> proyecto`.
+    - Agrupación determinista de gastos (`gastosRaw`) soportando imputación directa (`id_proyecto`, `ID_Proyecto`), vinculación directa (`id_origen_vinculado === PRO-*`) o indirecta a través de tareas e hitos WBS del proyecto. Fallback transparente al valor estático de Dexie si no existen gastos dinámicos.
+    - Indicador visual ergonómico en la tarjeta de cada proyecto indicando el conteo exacto de gastos vinculados (ej. `• 4 gastos`).
+  - **Persistencia Robusta de Entidades Padre en `useGastoForm.ts`:**
+    - `handleGuardar()` ahora resuelve e inyecta explícitamente `id_proyecto` e `id_tarea` en `payloadDatos`. Si el usuario selecciona una tarea o hito sin tener seleccionado el proyecto directamente, se resuelve el proyecto padre desde la colección de tareas/hitos, eliminando registros de gastos huérfanos.
+  - **Visibilidad Inteligente de Periodo en `ViewFinanzas.tsx`:**
+    - Preserva `periodo === 'MES_ACTUAL'` por defecto sin ocultar silenciosamente los registros históricos.
+    - Cuando la consulta del mes en curso retorna 0 resultados pero existen transacciones en otros periodos (ej. 23 gastos de proyectos del seed en meses anteriores), el estado vacío muestra un banner informativo con el conteo exacto y un botón de 1 clic: *"Ver todos los periodos (X)"* que activa `setPeriodo('TODOS')` de forma instantánea.
+  - **QA & Testing:**
+    - Suite `DashboardFinanciero.test.ts` ampliada a 9 tests unitarios (cobertura total de resolución directa, relacional y fallback estático).
+    - 35/35 suites aprobadas, 352/352 tests en verde y build de producción limpio (bundle inicial en 419.43 kB).
+
+### FASE 8.8 — Corrección Integral de Escritura, Clasificación, Zona Horaria y Visibilidad de Gastos de Proyectos, Tareas y Actividades en Finanzas y Kanban (REQ-FINANZAS-GASTOS-02-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/types/index.ts`, `src/services/gastosService.ts`, `src/utils/finanzasHelpers.ts` (Nuevo), `src/components/Views/ViewFinanzas.tsx`, `src/components/Modals/ModalTareaFlow.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/components/Modals/ModalNuevoProyecto.tsx`, `src/components/Views/ViewKanban.tsx`, `src/components/Finanzas/__tests__/DashboardFinanciero.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Ampliación de Contrato Tipado (`src/types/index.ts`):**
+    - Adición de `id_tarea?: string;` a la interfaz `GastoRecord`, cerrando la brecha relacional entre gastos y tareas específicas.
+  - **Servicio Canónico de Gastos (`src/services/gastosService.ts`):**
+    - `crearGasto()` ahora preserva explícitamente `id_proyecto` e `id_tarea` en su payload normalizado y genera correlativos `GAS-XXX` atómicos con sincronización a `Google Calendar` y despacho pendiente a `syncManager`.
+  - **Helpers Canónicos y Puros Desacoplados (`src/utils/finanzasHelpers.ts`):**
+    - `esGastoDeProyecto(g)`: Discriminador canónico de segmentos. Clasifica deterministicamente como `PROYECTO` si `tipo_origen === 'PROYECTO' | 'TAREA' | 'TAREA_PROYECTO'`, si posee `id_proyecto` o si `id_origen_vinculado` inicia con `PRY- | TAR- | WP- | HIT-`. Clasifica como `PERSONAL` si `tipo_origen === 'ACTIVIDAD_PERSONAL' | 'PERSONAL'` o si vincula a `ACT- | HAB-`.
+    - `esIngresoDeProyecto(i)`: Clasificador puro para ingresos por segmento.
+    - `coincideFechaConPeriodo()`: Erradicación del bug de desfase de medianoche en husos horarios negativos (UTC-5 Perú). Parsea aritméticamente `YYYY-MM-DD` sin invocar `new Date(string)` en medianoche UTC, garantizando visibilidad inmediata de transacciones del día 1 de cada mes y soporte completo de `ULTIMOS_3_MESES`.
+  - **Normalización de Vistas y Modales:**
+    - `src/components/Views/ViewFinanzas.tsx`: Integra los helpers canónicos en `gastosFiltrados` e `ingresosFiltrados`.
+    - `src/components/Modals/ModalTareaFlow.tsx`: Enlaza `id_proyecto: proyectoCodigo`, `id_tarea: codTarFinal` y `tipo_origen: 'TAREA_PROYECTO'` tanto en creación como en actualización de egresos.
+    - `src/components/Modals/ModalActividadFlow.tsx`: Migra `db.gastos.add()` crudo a `crearGasto()` canónico con `tipo_origen: 'ACTIVIDAD_PERSONAL'`, `id_origen_vinculado: codigoLegado`, `metodo_pago: 'Efectivo'` y `estado_pago: 'PAGADO'`, activando el auto-dispatch de `syncManager`.
+    - `src/components/Modals/ModalNuevoProyecto.tsx`: Asigna `id_proyecto: codigoProyecto`, `sync_status: 'pending'` e invoca `syncManager.syncPendingRecords()` tras la transacción atómica.
+    - `src/components/Views/ViewKanban.tsx`: En `gastosPorTarea`, incorpora `g.id_origen_vinculado` a la cadena de coalescencia, permitiendo reflejar el costo acumulado en las tarjetas del tablero Kanban.
+  - **QA y Tests:**
+    - Suite de pruebas `DashboardFinanciero.test.ts` ampliada a 8 tests (cobertura total de discriminadores y paridad horaria). 35 suites de prueba pasando (351/351 tests) y build de producción limpio (bundle inicial en 419.43 kB).
+
 ### FASE 8.7 — Fluidez Táctil Nivel Smartphone, MotionConfig Global, Resortes Calibrados y useTransition (REQ-PERF-FLUIDITY-05-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/constants/motionPresets.ts`, `src/App.tsx`, `src/index.css`, `src/components/Views/ViewHabitos.tsx`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**

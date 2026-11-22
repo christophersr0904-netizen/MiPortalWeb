@@ -555,7 +555,9 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
           if (gastoAEnlazar) {
             await actualizarGasto(gastoAEnlazar.id, {
               id_origen_vinculado: codTarFinal,
-              tipo_origen: 'TAREA'
+              id_tarea: codTarFinal,
+              id_proyecto: proyectoCodigo || undefined,
+              tipo_origen: 'TAREA_PROYECTO'
             });
           }
         }
@@ -573,12 +575,18 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = ({
             monto_pen: costoPenCalculado,
             categoria_gasto: gastoCategoria,
             descripcion_gasto: gastoConcepto.trim() || `Gasto en ${nombre.trim()}`,
-            fecha_gasto: fechaProgramada || formatFechaIsoLocal(new Date())
+            fecha_gasto: fechaProgramada || formatFechaIsoLocal(new Date()),
+            id_origen_vinculado: codTarFinal,
+            id_tarea: codTarFinal,
+            id_proyecto: proyectoCodigo || undefined,
+            tipo_origen: 'TAREA_PROYECTO'
           });
         } else {
           await crearGasto({
-            tipo_origen: 'TAREA',
+            tipo_origen: 'TAREA_PROYECTO',
             id_origen_vinculado: codTarFinal,
+            id_tarea: codTarFinal,
+            id_proyecto: proyectoCodigo || undefined,
             categoria_gasto: gastoCategoria,
             fecha_gasto: fechaProgramada || formatFechaIsoLocal(new Date()),
             descripcion_gasto: gastoConcepto.trim() || `Gasto en ${nombre.trim()}`,

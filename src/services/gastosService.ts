@@ -23,6 +23,8 @@ export async function crearGasto(datos: Partial<GastoRecord>): Promise<GastoReco
     id: idFinal,
     user_id: datos.user_id || '00000000-0000-0000-0000-000000000001',
     codigo_legado: codigoLegado,
+    id_proyecto: datos.id_proyecto || undefined,
+    id_tarea: datos.id_tarea || undefined,
     tipo_origen: datos.tipo_origen || 'Personal',
     id_origen_vinculado: datos.id_origen_vinculado || undefined,
     categoria_gasto: datos.categoria_gasto || 'General',

@@ -504,6 +504,7 @@ export interface GastoRecord {
   user_id: string;
   codigo_legado: string; // GAS-XXX
   id_proyecto?: string;
+  id_tarea?: string;
   tipo_origen: string;
   id_origen_vinculado?: string;
   categoria_gasto: string;

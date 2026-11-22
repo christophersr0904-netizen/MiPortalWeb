@@ -10,7 +10,10 @@
 
 import React, { memo, useMemo, useState, useEffect } from 'react';
 import { Target, Flame, Building } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../db/db';
 import { getProp } from '../../utils/entityNormalizer';
+import { resolverCostoEjecutadoProyecto } from '../../utils/finanzasHelpers';
 import {
   obtenerTechosConfigurados,
   obtenerTechosConfiguradosAsync,
@@ -101,11 +104,49 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
     });
   }, [actividadesRaw]);
 
+  // Suscripción reactiva ligera a hitos y tareas para imputación relacional de gastos
+  const rawHitosLive = useLiveQuery(() => db.hitos_wbs.toArray(), []) ?? [];
+  const rawTareasLive = useLiveQuery(() => db.tareas.toArray(), []) ?? [];
+
+  // Mapeos relacionales para imputar gastos a proyectos de forma reactiva
+  const { tareasAProyectoMap, hitosAProyectoMap } = useMemo(() => {
+    const tMap = new Map<string, string>();
+    const hMap = new Map<string, string>();
+
+    rawHitosLive.forEach((h: any) => {
+      const pCod = String(h.proyecto_codigo || h.proyecto_id || h.ID_Proyecto || '').trim().toUpperCase();
+      if (pCod) {
+        if (h.codigo_legado) hMap.set(String(h.codigo_legado).trim().toUpperCase(), pCod);
+        if (h.id) hMap.set(String(h.id).trim().toUpperCase(), pCod);
+        if (h.ID_Hito) hMap.set(String(h.ID_Hito).trim().toUpperCase(), pCod);
+        if (h.id_hito) hMap.set(String(h.id_hito).trim().toUpperCase(), pCod);
+      }
+    });
+
+    rawTareasLive.forEach((t: any) => {
+      let pCod = String(t.proyecto_codigo || t.proyecto_id || '').trim().toUpperCase();
+      if (!pCod) {
+        const hCod = String(t.hito_codigo || t.id_hito || t.ID_Hito || '').trim().toUpperCase();
+        if (hCod && hMap.has(hCod)) {
+          pCod = hMap.get(hCod)!;
+        }
+      }
+      if (pCod) {
+        if (t.codigo_legado) tMap.set(String(t.codigo_legado).trim().toUpperCase(), pCod);
+        if (t.id) tMap.set(String(t.id).trim().toUpperCase(), pCod);
+        if (t.ID_Tarea) tMap.set(String(t.ID_Tarea).trim().toUpperCase(), pCod);
+        if (t.id_tarea) tMap.set(String(t.id_tarea).trim().toUpperCase(), pCod);
+      }
+    });
+
+    return { tareasAProyectoMap: tMap, hitosAProyectoMap: hMap };
+  }, [rawHitosLive, rawTareasLive]);
+
   // Memoización de matriz de proyectos (Burn Rate Matrix)
   const proyectosBurnRate = useMemo(() => {
     return proyectosRaw.map((p) => {
       const bac = Number(p.presupuesto_tope || 5000);
-      const ac = Number(p.costo_ejecutado_real_pen || 0);
+      const { ac, cantidadGastos } = resolverCostoEjecutadoProyecto(p, gastosRaw, tareasAProyectoMap, hitosAProyectoMap);
       const burnRate = Math.round((ac / (bac || 1)) * 100);
       const remanente = Math.max(bac - ac, 0);
       return {
@@ -115,10 +156,11 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
         bac,
         ac,
         burnRate,
-        remanente
+        remanente,
+        cantidadGastos
       };
     });
-  }, [proyectosRaw]);
+  }, [proyectosRaw, gastosRaw, tareasAProyectoMap, hitosAProyectoMap]);
 
   return (
     <div id="vista-fin-tab-presupuesto" className="tab-fin-view p-4 md:p-6 space-y-5 flex-1 animate-in fade-in duration-150">
@@ -267,11 +309,18 @@ const TabPresupuestosComponent: React.FC<TabPresupuestosProps> = ({
                 className="p-4 rounded-xl bg-[#0D1526]/90 border border-slate-800/80 hover:border-sky-500/40 space-y-3 transition-colors"
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] font-mono tabular-nums font-bold text-sky-400">{p.codigo}</span>
+                  <div className="min-w-0 flex-1 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono tabular-nums font-bold text-sky-400">{p.codigo}</span>
+                      {p.cantidadGastos > 0 && (
+                        <span className="text-[10px] text-slate-400 font-mono tabular-nums">
+                          • {p.cantidadGastos} {p.cantidadGastos === 1 ? 'gasto' : 'gastos'}
+                        </span>
+                      )}
+                    </div>
                     <h5 className="text-xs font-bold text-slate-100 line-clamp-1">{p.nombre}</h5>
                   </div>
-                  <span className={`text-[10px] font-mono tabular-nums font-bold px-2 py-0.5 rounded-full border ${p.burnRate > 80 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                  <span className={`text-[10px] font-mono tabular-nums font-bold px-2 py-0.5 rounded-full border shrink-0 ${p.burnRate > 80 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
                     {p.burnRate}% BAC
                   </span>
                 </div>

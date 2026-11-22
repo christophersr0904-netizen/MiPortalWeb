@@ -24,6 +24,7 @@ import {
   editarActividadConAlcance,
   eliminarActividadConAlcance
 } from '../../services/habitosService';
+import { crearGasto, actualizarGasto } from '../../services/gastosService';
 import {
   sincronizarCreacionCalendar,
   abrirGoogleCalendarActividad,
@@ -797,13 +798,8 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
     // Si se registró nuevo gasto directo
     const montoGastoFinal = parseFloat(gastoMonto) || undefined;
     if (mostrarGasto && tabGasto === 'NUEVO' && montoGastoFinal && montoGastoFinal > 0 && codigoLegado) {
-      const countGastos = await db.gastos.count();
-      const codGasto = `GAS-${String(countGastos + 1).padStart(3, '0')}`;
       const tc = gastoMoneda === 'USD' ? 3.75 : gastoMoneda === 'EUR' ? 4.10 : 1.0;
-      await db.gastos.add({
-        id: crypto.randomUUID(),
-        user_id: '00000000-0000-0000-0000-000000000001',
-        codigo_legado: codGasto,
+      await crearGasto({
         tipo_origen: 'ACTIVIDAD_PERSONAL',
         id_origen_vinculado: codigoLegado,
         categoria_gasto: gastoCategoria,
@@ -813,18 +809,15 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
         monto_original: montoGastoFinal,
         tipo_cambio: tc,
         monto_pen: Number((montoGastoFinal * tc).toFixed(2)),
-        estado_pago: 'PAGADO',
-        updated_at: nowIso,
-        sync_status: 'pending'
+        metodo_pago: 'Efectivo',
+        estado_pago: 'PAGADO'
       });
     } else if (mostrarGasto && tabGasto === 'VINCULAR' && gastoVinculadoId && codigoLegado) {
       const gastoExistente = await db.gastos.where('codigo_legado').equals(gastoVinculadoId).first();
       if (gastoExistente) {
-        await db.gastos.update(gastoExistente.id, {
+        await actualizarGasto(gastoExistente.id, {
           tipo_origen: 'ACTIVIDAD_PERSONAL',
-          id_origen_vinculado: codigoLegado,
-          updated_at: nowIso,
-          sync_status: 'pending'
+          id_origen_vinculado: codigoLegado
         });
       }
     }

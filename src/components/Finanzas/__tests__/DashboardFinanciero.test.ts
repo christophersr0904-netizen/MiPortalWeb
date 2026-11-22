@@ -1,4 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import {
+  esGastoDeProyecto,
+  esIngresoDeProyecto,
+  coincideFechaConPeriodo,
+  resolverCostoEjecutadoProyecto
+} from '../../../utils/finanzasHelpers';
 
 describe('Finanzas Dashboard & Componentes Desacoplados [REQ-SYS-001-F5]', () => {
   describe('UI Optimista de Conciliación (0ms de latencia)', () => {
@@ -141,6 +147,119 @@ describe('Finanzas Dashboard & Componentes Desacoplados [REQ-SYS-001-F5]', () =>
       const burnRateCero = 0;
       const runwayInfinito = burnRateCero > 0 ? balanceLiquido / burnRateCero : 999;
       expect(runwayInfinito).toBe(999);
+    });
+  });
+
+  describe('Discriminador Canónico de Segmento y Fechas Locales [REQ-FINANZAS-GASTOS-02]', () => {
+    it('clasifica correctamente gastos personales de actividades/hábitos y proyectos', () => {
+      // Gastos de Actividades Personales (Hábitos)
+      const gastoHabito = {
+        tipo_origen: 'ACTIVIDAD_PERSONAL',
+        id_origen_vinculado: 'ACT-001',
+        categoria_gasto: 'Salud',
+        monto_pen: 50
+      };
+      expect(esGastoDeProyecto(gastoHabito)).toBe(false);
+
+      const gastoPersonalComun = {
+        tipo_origen: 'Personal',
+        categoria_gasto: 'Alimentación',
+        monto_pen: 30
+      };
+      expect(esGastoDeProyecto(gastoPersonalComun)).toBe(false);
+
+      // Gastos vinculados a prefijo ACT / HAB
+      const gastoPrefijoAct = {
+        id_origen_vinculado: 'HAB-102',
+        monto_pen: 20
+      };
+      expect(esGastoDeProyecto(gastoPrefijoAct)).toBe(false);
+
+      // Gastos de Tareas de Proyectos (ModalTareaFlow)
+      const gastoTarea = {
+        tipo_origen: 'TAREA_PROYECTO',
+        id_origen_vinculado: 'TAR-005',
+        id_tarea: 'TAR-005',
+        id_proyecto: 'PRY-001',
+        monto_pen: 120
+      };
+      expect(esGastoDeProyecto(gastoTarea)).toBe(true);
+
+      // Gastos de Proyectos directos (ModalNuevoProyecto)
+      const gastoProyectoDirecto = {
+        tipo_origen: 'PROYECTO',
+        id_origen_vinculado: 'PRY-002',
+        id_proyecto: 'PRY-002',
+        monto_pen: 500
+      };
+      expect(esGastoDeProyecto(gastoProyectoDirecto)).toBe(true);
+
+      // Ingresos
+      expect(esIngresoDeProyecto({ tipo_origen: 'PROYECTO' })).toBe(true);
+      expect(esIngresoDeProyecto({ tipo_origen: 'Personal' })).toBe(false);
+    });
+
+    it('coincideFechaConPeriodo es inmune al bug de medianoche UTC en UTC-5', () => {
+      // Noviembre 2026 (mes 10 en base 0)
+      const mesNov2026 = 10;
+      const anio2026 = 2026;
+      const mesOct2026 = 9;
+
+      // El 1 de Noviembre a las 00:00:00 suele desfasarse a Octubre 31 en UTC-5 con new Date('2026-11-01')
+      const fechaPrimeroMes = '2026-11-01';
+      expect(coincideFechaConPeriodo(fechaPrimeroMes, 'MES_ACTUAL', mesNov2026, anio2026, mesOct2026, anio2026)).toBe(true);
+      expect(coincideFechaConPeriodo(fechaPrimeroMes, 'MES_ANTERIOR', mesNov2026, anio2026, mesOct2026, anio2026)).toBe(false);
+      expect(coincideFechaConPeriodo(fechaPrimeroMes, 'ANIO_ACTUAL', mesNov2026, anio2026, mesOct2026, anio2026)).toBe(true);
+      expect(coincideFechaConPeriodo(fechaPrimeroMes, 'TODOS', mesNov2026, anio2026, mesOct2026, anio2026)).toBe(true);
+
+      // Fecha del mes anterior (Octubre 2026)
+      const fechaMesAnterior = '2026-10-15';
+      expect(coincideFechaConPeriodo(fechaMesAnterior, 'MES_ACTUAL', mesNov2026, anio2026, mesOct2026, anio2026)).toBe(false);
+      expect(coincideFechaConPeriodo(fechaMesAnterior, 'MES_ANTERIOR', mesNov2026, anio2026, mesOct2026, anio2026)).toBe(true);
+
+      // Fecha de otro año (2025)
+      const fechaAnioPasado = '2025-11-01';
+      expect(coincideFechaConPeriodo(fechaAnioPasado, 'ANIO_ACTUAL', mesNov2026, anio2026, mesOct2026, anio2026)).toBe(false);
+    });
+
+    it('resolverCostoEjecutadoProyecto calcula dinámicamente el costo real (AC) por asignación directa o relacional', () => {
+      const proyecto = {
+        id: 'p01',
+        codigo_legado: 'PRO-001',
+        costo_ejecutado_real_pen: 500 // fallback estático
+      };
+
+      const tareasMap = new Map<string, string>([
+        ['TAR-01', 'PRO-001'],
+        ['TAR-02', 'PRO-002']
+      ]);
+
+      const hitosMap = new Map<string, string>([
+        ['WP-01', 'PRO-001']
+      ]);
+
+      const gastos = [
+        { id: 'g1', monto_pen: 250, id_proyecto: 'PRO-001' }, // directo
+        { id: 'g2', monto_pen: 150, id_origen_vinculado: 'TAR-01' }, // via tarea map
+        { id: 'g3', monto_pen: 300, id_origen_vinculado: 'WP-01' }, // via hito map
+        { id: 'g4', monto_pen: 999, id_origen_vinculado: 'TAR-02' } // otro proyecto
+      ];
+
+      const res = resolverCostoEjecutadoProyecto(proyecto, gastos, tareasMap, hitosMap);
+      expect(res.esDinamico).toBe(true);
+      expect(res.cantidadGastos).toBe(3);
+      expect(res.ac).toBe(700); // 250 + 150 + 300
+
+      // Si no hay gastos para el proyecto, hace fallback seguro al valor estático de Dexie
+      const proyectoSinGastos = {
+        id: 'p99',
+        codigo_legado: 'PRO-099',
+        costo_ejecutado_real_pen: 1200
+      };
+      const resFallback = resolverCostoEjecutadoProyecto(proyectoSinGastos, gastos, tareasMap, hitosMap);
+      expect(resFallback.esDinamico).toBe(false);
+      expect(resFallback.cantidadGastos).toBe(0);
+      expect(resFallback.ac).toBe(1200);
     });
   });
 });

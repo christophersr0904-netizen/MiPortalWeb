@@ -328,7 +328,7 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
   const gastosPorTarea = useMemo(() => {
     const map = new Map<string, number>();
     rawGastos.forEach((g: any) => {
-      const cod = String(g.id_entidad_vinculada || g.id_tarea || g.ID_Entidad_Vinculada || g.ID_Tarea || '').toUpperCase();
+      const cod = String(g.id_origen_vinculado || g.id_entidad_vinculada || g.id_tarea || g.ID_Entidad_Vinculada || g.ID_Tarea || '').toUpperCase();
       if (cod) {
         const monto = Number(g.monto_pen || g.monto_original || g.Monto_PEN || g.Monto_Original || 0);
         map.set(cod, (map.get(cod) || 0) + monto);

@@ -33,9 +33,18 @@ import { TabPresupuestos } from '../Finanzas/TabPresupuestos';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import type { GastoRecord, IngresoRecord } from '../../types';
 
+import {
+  type SegmentoFinanzas,
+  type PeriodoFinanzas,
+  esGastoDeProyecto,
+  esIngresoDeProyecto,
+  coincideFechaConPeriodo
+} from '../../utils/finanzasHelpers';
+
+export { esGastoDeProyecto, esIngresoDeProyecto, coincideFechaConPeriodo };
+export type { SegmentoFinanzas, PeriodoFinanzas };
+
 type TabFinanzas = 'transacciones' | 'cuotas' | 'presupuesto' | 'general';
-type SegmentoFinanzas = 'TODOS' | 'PROYECTOS' | 'PERSONAL';
-type PeriodoFinanzas = 'MES_ACTUAL' | 'MES_ANTERIOR' | 'ULTIMOS_3_MESES' | 'ANIO_ACTUAL' | 'TODOS';
 type TipoFlujo = 'TODOS' | 'INGRESO' | 'GASTO';
 type EstadoFlujo = 'TODOS' | 'REAL' | 'PROGRAMADO';
 
@@ -129,28 +138,13 @@ export const ViewFinanzas: React.FC = () => {
     return gastosRaw.filter((g) => {
       // Segmento
       if (segmento === 'PROYECTOS') {
-        const esProy = g.tipo_origen?.toLowerCase() === 'proyecto' || g.id_origen_vinculado;
-        if (!esProy) return false;
+        if (!esGastoDeProyecto(g)) return false;
       } else if (segmento === 'PERSONAL') {
-        const esProy = g.tipo_origen?.toLowerCase() === 'proyecto' || g.id_origen_vinculado;
-        if (esProy) return false;
+        if (esGastoDeProyecto(g)) return false;
       }
 
       // Periodo
-      if (periodo === 'TODOS') return true;
-      const fecha = g.fecha_gasto || '';
-      if (!fecha) return true;
-      const d = new Date(fecha);
-      if (periodo === 'MES_ACTUAL') {
-        return d.getMonth() === mesHoy && d.getFullYear() === anioHoy;
-      }
-      if (periodo === 'MES_ANTERIOR') {
-        return d.getMonth() === mesAnt && d.getFullYear() === anioAnt;
-      }
-      if (periodo === 'ANIO_ACTUAL') {
-        return d.getFullYear() === anioHoy;
-      }
-      return true;
+      return coincideFechaConPeriodo(g.fecha_gasto, periodo, mesHoy, anioHoy, mesAnt, anioAnt);
     });
   }, [gastosRaw, segmento, periodo]);
 
@@ -164,28 +158,13 @@ export const ViewFinanzas: React.FC = () => {
     return ingresosRaw.filter((i) => {
       // Segmento
       if (segmento === 'PROYECTOS') {
-        const esProy = i.tipo_origen?.toLowerCase() === 'proyecto';
-        if (!esProy) return false;
+        if (!esIngresoDeProyecto(i)) return false;
       } else if (segmento === 'PERSONAL') {
-        const esProy = i.tipo_origen?.toLowerCase() === 'proyecto';
-        if (esProy) return false;
+        if (esIngresoDeProyecto(i)) return false;
       }
 
       // Periodo
-      if (periodo === 'TODOS') return true;
-      const fecha = i.fecha_ingreso || '';
-      if (!fecha) return true;
-      const d = new Date(fecha);
-      if (periodo === 'MES_ACTUAL') {
-        return d.getMonth() === mesHoy && d.getFullYear() === anioHoy;
-      }
-      if (periodo === 'MES_ANTERIOR') {
-        return d.getMonth() === mesAnt && d.getFullYear() === anioAnt;
-      }
-      if (periodo === 'ANIO_ACTUAL') {
-        return d.getFullYear() === anioHoy;
-      }
-      return true;
+      return coincideFechaConPeriodo(i.fecha_ingreso, periodo, mesHoy, anioHoy, mesAnt, anioAnt);
     });
   }, [ingresosRaw, segmento, periodo]);
 
@@ -539,6 +518,29 @@ export const ViewFinanzas: React.FC = () => {
     return lista.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
   }, [ingresosFiltrados, gastosFiltrados, tipoFlujo, estadoFlujo, deferredBusquedaTrx, optimisticConciliados]);
 
+  // Detección de movimientos fuera del periodo activo para Empty State inteligente (REQ-FINANZAS-GASTOS-04)
+  const totalTransaccionesOtrosPeriodos = useMemo(() => {
+    if (periodo === 'TODOS') return 0;
+    let count = 0;
+    if (tipoFlujo === 'TODOS' || tipoFlujo === 'GASTO') {
+      const gastosOtros = gastosRaw.filter((g) => {
+        if (segmento === 'PROYECTOS' && !esGastoDeProyecto(g)) return false;
+        if (segmento === 'PERSONAL' && esGastoDeProyecto(g)) return false;
+        return true;
+      });
+      count += gastosOtros.length;
+    }
+    if (tipoFlujo === 'TODOS' || tipoFlujo === 'INGRESO') {
+      const ingresosOtros = ingresosRaw.filter((i) => {
+        if (segmento === 'PROYECTOS' && !esIngresoDeProyecto(i)) return false;
+        if (segmento === 'PERSONAL' && esIngresoDeProyecto(i)) return false;
+        return true;
+      });
+      count += ingresosOtros.length;
+    }
+    return count;
+  }, [periodo, tipoFlujo, segmento, gastosRaw, ingresosRaw]);
+
   // Alternar conciliación con UI Optimista instantánea (0ms)
   const handleToggleConciliar = async (trx: TransaccionUnificada) => {
     const nuevoEstado = !trx.esConciliado;
@@ -759,11 +761,10 @@ export const ViewFinanzas: React.FC = () => {
                 role="tab"
                 aria-selected={estaActiva}
                 onClick={() => startTabTransition(() => setTabActiva(tab.id))}
-                className={`relative h-9 px-3.5 rounded-xl text-xs font-semibold active:scale-[0.97] transition-[transform,colors] duration-150 flex items-center gap-2 cursor-pointer select-none shrink-0 ${
-                  estaActiva
+                className={`relative h-9 px-3.5 rounded-xl text-xs font-semibold active:scale-[0.97] transition-[transform,colors] duration-150 flex items-center gap-2 cursor-pointer select-none shrink-0 ${estaActiva
                     ? 'text-sky-300 font-bold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
-                }`}
+                  }`}
               >
                 {estaActiva && (
                   <motion.div
@@ -807,11 +808,10 @@ export const ViewFinanzas: React.FC = () => {
                   type="button"
                   id={`btn-seg-fin-${seg.toLowerCase()}`}
                   onClick={() => setSegmento(seg)}
-                  className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors duration-150 flex items-center cursor-pointer ${
-                    activo
+                  className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-colors duration-150 flex items-center cursor-pointer ${activo
                       ? 'bg-sky-950/60 text-sky-300 border border-sky-500/50 shadow-[0_0_10px_rgba(56,189,248,0.15)] font-bold'
                       : 'text-slate-400 hover:text-slate-200 border border-transparent'
-                  }`}
+                    }`}
                 >
                   <span>{etiquetas[seg]}</span>
                 </button>
@@ -956,11 +956,10 @@ export const ViewFinanzas: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setFiltrosTrxAbiertos(!filtrosTrxAbiertos)}
-                className={`h-9 px-3 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer shrink-0 md:hidden ${
-                  (tipoFlujo !== 'TODOS' || estadoFlujo !== 'TODOS') || filtrosTrxAbiertos
+                className={`h-9 px-3 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer shrink-0 md:hidden ${(tipoFlujo !== 'TODOS' || estadoFlujo !== 'TODOS') || filtrosTrxAbiertos
                     ? 'bg-sky-950/40 border-sky-500/40 text-sky-300'
                     : 'bg-[#040711]/70 border-slate-800/80 text-slate-300 hover:text-white'
-                }`}
+                  }`}
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Filtros</span>
@@ -980,11 +979,10 @@ export const ViewFinanzas: React.FC = () => {
                     type="button"
                     id="pill-tipo-todos"
                     onClick={() => setTipoFlujo('TODOS')}
-                    className={`h-8 px-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${
-                      tipoFlujo === 'TODOS'
+                    className={`h-8 px-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${tipoFlujo === 'TODOS'
                         ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
                         : 'text-slate-400 hover:text-white border border-transparent'
-                    }`}
+                      }`}
                   >
                     Todos
                   </button>
@@ -992,11 +990,10 @@ export const ViewFinanzas: React.FC = () => {
                     type="button"
                     id="pill-tipo-ingreso"
                     onClick={() => setTipoFlujo('INGRESO')}
-                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
-                      tipoFlujo === 'INGRESO'
+                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${tipoFlujo === 'INGRESO'
                         ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/40'
                         : 'text-slate-400 hover:text-emerald-400 border border-transparent'
-                    }`}
+                      }`}
                   >
                     <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 shrink-0" strokeWidth={1.75} />
                     <span>Ingresos</span>
@@ -1005,11 +1002,10 @@ export const ViewFinanzas: React.FC = () => {
                     type="button"
                     id="pill-tipo-gasto"
                     onClick={() => setTipoFlujo('GASTO')}
-                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
-                      tipoFlujo === 'GASTO'
+                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${tipoFlujo === 'GASTO'
                         ? 'bg-rose-950/40 text-rose-300 border border-rose-500/40'
                         : 'text-slate-400 hover:text-rose-400 border border-transparent'
-                    }`}
+                      }`}
                   >
                     <ArrowDownRight className="w-3.5 h-3.5 text-rose-500 shrink-0" strokeWidth={1.75} />
                     <span>Gastos</span>
@@ -1025,11 +1021,10 @@ export const ViewFinanzas: React.FC = () => {
                     type="button"
                     id="pill-estado-todos"
                     onClick={() => setEstadoFlujo('TODOS')}
-                    className={`h-8 px-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${
-                      estadoFlujo === 'TODOS'
+                    className={`h-8 px-2.5 rounded-lg font-semibold transition-colors cursor-pointer ${estadoFlujo === 'TODOS'
                         ? 'bg-sky-950/40 text-sky-300 border border-sky-500/40'
                         : 'text-slate-400 hover:text-white border border-transparent'
-                    }`}
+                      }`}
                   >
                     Todos
                   </button>
@@ -1037,11 +1032,10 @@ export const ViewFinanzas: React.FC = () => {
                     type="button"
                     id="pill-estado-real"
                     onClick={() => setEstadoFlujo('REAL')}
-                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
-                      estadoFlujo === 'REAL'
+                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${estadoFlujo === 'REAL'
                         ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-500/40'
                         : 'text-slate-400 hover:text-emerald-400 border border-transparent'
-                    }`}
+                      }`}
                   >
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" strokeWidth={1.75} />
                     <span>Conciliados</span>
@@ -1050,11 +1044,10 @@ export const ViewFinanzas: React.FC = () => {
                     type="button"
                     id="pill-estado-programado"
                     onClick={() => setEstadoFlujo('PROGRAMADO')}
-                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
-                      estadoFlujo === 'PROGRAMADO'
+                    className={`h-8 px-2.5 rounded-lg font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${estadoFlujo === 'PROGRAMADO'
                         ? 'bg-amber-950/40 text-amber-300 border border-amber-500/40'
                         : 'text-slate-400 hover:text-amber-400 border border-transparent'
-                    }`}
+                      }`}
                   >
                     <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" strokeWidth={1.75} />
                     <span>Programados</span>
@@ -1067,16 +1060,33 @@ export const ViewFinanzas: React.FC = () => {
           {/* CONTENEDOR DE TARJETAS TRANSACCIONALES */}
           <div id="lista-transacciones-unificada" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pb-8">
             {transaccionesUnificadas.length === 0 ? (
-              <div className="col-span-full min-h-[140px] flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700/50 bg-slate-900/30 text-slate-400 p-8 text-center space-y-2">
+              <div id="empty-state-transacciones" className="col-span-full min-h-[160px] flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700/50 bg-slate-900/30 text-slate-400 p-8 text-center space-y-3">
                 <div className="w-10 h-10 rounded-xl bg-slate-800/60 flex items-center justify-center text-slate-400">
                   <Receipt className="w-5 h-5 text-slate-400" strokeWidth={1.75} />
                 </div>
                 <div className="text-xs font-semibold text-slate-300">
-                  No se encontraron transacciones con los filtros seleccionados
+                  No se encontraron transacciones en {periodo === 'MES_ACTUAL' ? 'el Mes Actual' : 'este periodo'}
                 </div>
-                <p className="text-[11px] text-slate-500 max-w-sm">
-                  Ajusta los filtros de segmento, periodo o término de búsqueda para visualizar otros movimientos.
-                </p>
+                {totalTransaccionesOtrosPeriodos > 0 ? (
+                  <>
+                    <p className="text-[11px] text-slate-400 max-w-sm">
+                      Existen <span className="text-sky-300 font-bold font-mono tabular-nums">{totalTransaccionesOtrosPeriodos}</span> movimientos registrados en otros periodos {segmento === 'PROYECTOS' ? 'de proyectos' : segmento === 'PERSONAL' ? 'personales' : ''}.
+                    </p>
+                    <button
+                      type="button"
+                      id="btn-ver-todos-periodos"
+                      onClick={() => setPeriodo('TODOS')}
+                      className="px-3.5 py-2 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Layers className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      <span>Ver todos los periodos ({totalTransaccionesOtrosPeriodos})</span>
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-slate-500 max-w-sm">
+                    Ajusta los filtros de segmento, periodo o término de búsqueda para visualizar otros movimientos.
+                  </p>
+                )}
               </div>
             ) : (
               <AnimatePresence mode="popLayout" initial={false}>

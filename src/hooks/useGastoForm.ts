@@ -263,11 +263,39 @@ export function useGastoForm({
       return;
     }
 
+    let idProyectoFinal =
+      tipoOrigen === 'Tarea Proyecto'
+        ? selectedProyecto || proyectoSeleccionado?.codigo_legado || proyectoSeleccionado?.id || undefined
+        : undefined;
+
+    // Si no tenemos id_proyecto directo pero sí tarea seleccionada, resolver proyecto desde la tarea
+    if (tipoOrigen === 'Tarea Proyecto' && !idProyectoFinal && selectedTarea) {
+      const tareaObj = listaTareas.find((t) => t.codigo_legado === selectedTarea || t.id === selectedTarea);
+      if (tareaObj) {
+        idProyectoFinal = tareaObj.proyecto_codigo || (tareaObj as any).proyecto_id || undefined;
+      }
+    }
+
+    // O si tenemos hito seleccionado
+    if (tipoOrigen === 'Tarea Proyecto' && !idProyectoFinal && selectedHito) {
+      const hitoObj = listaHitos.find((h) => h.codigo_legado === selectedHito || h.id === selectedHito);
+      if (hitoObj) {
+        idProyectoFinal = hitoObj.proyecto_codigo || (hitoObj as any).proyecto_id || undefined;
+      }
+    }
+
+    const idTareaFinal =
+      tipoOrigen === 'Tarea Proyecto'
+        ? selectedTarea || undefined
+        : undefined;
+
     const payloadDatos: Partial<GastoRecord> = {
       tipo_origen: tipoOrigen === 'Tarea Proyecto' ? 'TAREA_PROYECTO' : 'ACTIVIDAD_PERSONAL',
+      id_proyecto: idProyectoFinal,
+      id_tarea: idTareaFinal,
       id_origen_vinculado:
         tipoOrigen === 'Tarea Proyecto'
-          ? selectedTarea || selectedHito || selectedProyecto || undefined
+          ? selectedTarea || selectedHito || idProyectoFinal || undefined
           : undefined,
       categoria_gasto: categoriaGasto,
       fecha_gasto: fecha || formatFechaIsoLocal(new Date()),
@@ -307,6 +335,9 @@ export function useGastoForm({
     modoDual,
     agendarCalendar,
     gastoEditar,
+    proyectoSeleccionado,
+    listaTareas,
+    listaHitos,
     onGuardadoExitoso,
     onClose
   ]);

@@ -25,6 +25,7 @@ import {
   OPCIONES_ESTADO_PARTIDA
 } from '../../constants/uiMappers';
 import { db } from '../../db/db';
+import { syncManager } from '../../services/syncManager';
 import type { ProyectoRecord, HitoWbsRecord, TareaRecord, GastoRecord } from '../../types';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import { generateSafeUUID } from '../../utils/uuidGenerator';
@@ -455,6 +456,7 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             id: g.id,
             user_id: '00000000-0000-0000-0000-000000000001',
             codigo_legado: g.codigo,
+            id_proyecto: codigoProyecto,
             tipo_origen: 'PROYECTO',
             id_origen_vinculado: codigoProyecto,
             categoria_gasto: g.categoria,
@@ -467,10 +469,14 @@ export const ModalNuevoProyecto: React.FC<ModalNuevoProyectoProps> = ({
             estado_pago: 'PROGRAMADO',
             metodo_pago: 'Transferencia',
             updated_at: nowIso,
-            sync_status: 'synced'
+            sync_status: 'pending'
           };
           await db.gastos.add(gastoRecord);
         }
+      });
+
+      syncManager.syncPendingRecords().catch((err) => {
+        console.warn('[ModalNuevoProyecto] Error al sincronizar registros pendientes:', err);
       });
 
       if (onProyectoCreado) {
