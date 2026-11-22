@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { TipoEntidadVinculable, NotaRecord } from '../../types';
 import { useMapaNotasVinculadas } from '../../hooks/useNotasVinculadas';
@@ -136,8 +136,11 @@ export const BadgeNotasVinculadas: React.FC<BadgeNotasVinculadasProps> = ({
   };
 
   // Listeners para reposicionar en scroll/resize y cerrar al hacer click fuera o Escape
-  useEffect(() => {
-    if (!popoverAbierto) return;
+  useLayoutEffect(() => {
+    if (!popoverAbierto) {
+      setCoords(null);
+      return;
+    }
 
     const handlePointerDown = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -205,7 +208,8 @@ export const BadgeNotasVinculadas: React.FC<BadgeNotasVinculadasProps> = ({
             top: coords.placeAbove ? 'auto' : `${coords.top}px`,
             bottom: coords.placeAbove ? `${window.innerHeight - coords.top}px` : 'auto',
             left: `${coords.left}px`,
-            zIndex: 99999
+            zIndex: 99999,
+            transformOrigin: coords.placeAbove ? 'bottom left' : 'top left'
           }}
           className="pointer-events-auto select-auto"
           onMouseEnter={handlePopoverMouseEnter}

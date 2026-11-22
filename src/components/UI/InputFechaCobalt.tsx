@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Calendar } from 'lucide-react';
 
 export interface InputFechaCobaltProps {
@@ -43,6 +43,8 @@ export const InputFechaCobalt: React.FC<InputFechaCobaltProps> = ({
   placeholder = 'Seleccionar fecha',
   name
 }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
     <div className="w-full">
       {label && (
@@ -51,6 +53,14 @@ export const InputFechaCobalt: React.FC<InputFechaCobaltProps> = ({
         </label>
       )}
       <div
+        onClick={() => {
+          if (disabled) return;
+          try {
+            inputRef.current?.showPicker?.();
+          } catch {
+            inputRef.current?.focus();
+          }
+        }}
         className={`relative flex items-center gap-2 bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 focus-within:border-sky-500/60 focus-within:ring-1 focus-within:ring-sky-500/20 transition-colors duration-150 ${
           disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
         } ${className}`}
@@ -64,11 +74,20 @@ export const InputFechaCobalt: React.FC<InputFechaCobaltProps> = ({
           {formatearFechaHumana(value, placeholder)}
         </span>
         <input
+          ref={inputRef}
           type="date"
           id={id}
           name={name}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
+          onClick={() => {
+            if (disabled) return;
+            try {
+              inputRef.current?.showPicker?.();
+            } catch {
+              // fallback nativo
+            }
+          }}
           disabled={disabled}
           required={required}
           min={min}

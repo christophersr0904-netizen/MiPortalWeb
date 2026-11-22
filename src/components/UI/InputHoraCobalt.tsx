@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Clock } from 'lucide-react';
 
 export interface InputHoraCobaltProps {
@@ -37,6 +37,8 @@ export const InputHoraCobalt: React.FC<InputHoraCobaltProps> = ({
   placeholder = 'Seleccionar hora',
   name
 }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
     <div className="w-full">
       {label && (
@@ -45,6 +47,14 @@ export const InputHoraCobalt: React.FC<InputHoraCobaltProps> = ({
         </label>
       )}
       <div
+        onClick={() => {
+          if (disabled) return;
+          try {
+            inputRef.current?.showPicker?.();
+          } catch {
+            inputRef.current?.focus();
+          }
+        }}
         className={`relative flex items-center gap-2 bg-[#040711] px-2.5 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 focus-within:border-sky-500/60 focus-within:ring-1 focus-within:ring-sky-500/20 transition-colors duration-150 ${
           disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
         } ${className}`}
@@ -58,11 +68,20 @@ export const InputHoraCobalt: React.FC<InputHoraCobaltProps> = ({
           {formatearHora12(value, placeholder)}
         </span>
         <input
+          ref={inputRef}
           type="time"
           id={id}
           name={name}
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
+          onClick={() => {
+            if (disabled) return;
+            try {
+              inputRef.current?.showPicker?.();
+            } catch {
+              // fallback nativo
+            }
+          }}
           disabled={disabled}
           required={required}
           className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 [color-scheme:dark]"

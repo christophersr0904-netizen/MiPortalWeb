@@ -52,6 +52,23 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.10 — Erradicación de Salto Inicial (0,0) en Desplegables con Portal Flotante (REQ-UI-DROPDOWN-01-EXEC)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/UI/SelectIconicoCobalt.tsx`, `src/components/Notas/BadgeNotasVinculadas.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Erradicación del Estado Inicial `{ left: 0, top: 0 }` en `SelectIconicoCobalt.tsx`:**
+    - Se transformó el estado de coordenadas a `useState<CoordsDropdown | null>(null)`.
+    - Blindaje de renderizado: el portal flotante solo se monta si `estaAbierto && coords && typeof document !== 'undefined'`, impidiendo que el motor de pintado dibuje el primer frame en el origen (0,0).
+  - **Cálculo Síncrono Previo al Primer Pintado:**
+    - Al pulsar el botón disparador (`handleToggle`), se ejecuta síncronamente `calcularCoordenadas()` en el mismo ciclo de despacho antes de invocar `setEstaAbierto(true)`.
+    - Se migró la sincronización en el ciclo de vida de `useEffect` a `useLayoutEffect`, asegurando que cualquier reajuste de geometría ocurra antes de que el navegador trace la pantalla, con listeners desacoplados en `resize` y `scroll`.
+    - Al cerrarse el menú o al hacer clic fuera/Escape, las coordenadas se restablecen de inmediato a `null` vía `cerrar()`.
+  - **Eliminación de Transiciones Horizontales Inoportunas:**
+    - Se fijó `transformOrigin: coords.openUpward ? 'bottom' : 'top'` con `duration-120`, garantizando que la animación `zoom-in-95` y `fade-in` emerja estrictamente desde el botón ancla sin desplazamiento horizontal ni saltos desde la esquina superior izquierda.
+  - **Replicación Defensiva en `BadgeNotasVinculadas.tsx`:**
+    - Se aplicó `useLayoutEffect` y reseteo defensivo `setCoords(null)` al cerrar el popover flotante de notas vinculadas.
+  - **QA & Testing:**
+    - 35/35 suites aprobadas, 352/352 tests en verde y build de producción limpio (bundle inicial en 419.43 kB).
+
 ### FASE 8.9 — Cálculo Dinámico de Burn Rate en TabPresupuestos, Persistencia de id_proyecto/id_tarea en useGastoForm y Visibilidad Inteligente de Periodos (REQ-FINANZAS-GASTOS-04-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/utils/finanzasHelpers.ts`, `src/components/Finanzas/TabPresupuestos.tsx`, `src/hooks/useGastoForm.ts`, `src/components/Views/ViewFinanzas.tsx`, `src/components/Finanzas/__tests__/DashboardFinanciero.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
@@ -10841,6 +10858,56 @@ supabase functions deploy gcal-auth
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (349/349 tests al 100% verde).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,990 módulos transformados exitosamente en 10.32s).
+
+---
+
+### [REQ-PORTAFOLIO-GASTO-02: Corrección de Apertura Nativa en InputFechaCobalt y Elevación Estética Cobalt A.2.2 en ModalGasto]
+**Fecha:** Noviembre 2026 | **Fase:** 8.12 (Apertura Global de DatePicker & Estandarización Visual de ModalGasto) | **Archivos Modificados:** `src/components/UI/InputFechaCobalt.tsx`, `src/components/Modals/ModalGasto.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Bloqueo Percibido de Fecha en Chromium/Windows:** El componente `InputFechaCobalt` superponía un `<input type="date">` con `opacity: 0` sin invocar programáticamente `showPicker()`. En navegadores de escritorio basados en Chromium (Chrome/Edge), hacer clic sobre la superficie o texto de un input date transparente solo activa el foco en los segmentos internos, pero no despliega el selector emergente si no se acierta al micro-indicador nativo del extremo derecho (`::-webkit-calendar-picker-indicator`). Para el usuario, el campo parecía inerte o bloqueado.
+- **Déficit Estético en Cabecera de `ModalGasto`:** La cabecera utilizaba un punto simple (`w-3 h-3 rounded-full`) en lugar de los contenedores aerodinámicos estándar con icono Lucide (`Receipt` / `CalendarClock` con `strokeWidth={1.75}`) empleados en `ModalTareaFlow` y `ModalActividadFlow`.
+- **Ruido Visual y Espacio Muerto:** Un banner de validación permanente (`min-h-[24px]`) creaba una franja vacía debajo de la cabecera. Asimismo, el bloque de "Tipo de Cambio" (`TC: 1.000`) se mostraba obligatoriamente aun cuando la moneda seleccionada era `PEN`, duplicando información redundante.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Apertura Nativa Inmediata (`InputFechaCobalt.tsx`):**
+   - Vinculado un `useRef<HTMLInputElement>` al `<input type="date">`.
+   - Implementado manejador `onClick` tanto en el contenedor exterior `<div>` como en el `<input>` para invocar `inputRef.current?.showPicker?.()` con fallback defensivo a `.focus()`.
+   - Cualquier clic en cualquier punto del componente (icono, etiqueta, texto formateado o caja) despliega de inmediato el calendario nativo del SO/navegador, manteniendo la posibilidad de interacción por teclado.
+2. **Elevación de Cabecera Cobalt A.2.2 (`ModalGasto.tsx`):**
+   - Incorporado contenedor aerodinámico `w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border`:
+     - Modo `REAL`: `bg-emerald-950/60 text-emerald-400 border-emerald-500/30 shadow-[0_0_14px_rgba(16,185,129,0.18)]` con `<Receipt className="w-4 h-4" strokeWidth={1.75} />`.
+     - Modo `PROGRAMADO`: `bg-amber-950/60 text-amber-400 border-amber-500/30 shadow-[0_0_14px_rgba(245,158,11,0.18)]` con `<CalendarClock className="w-4 h-4" strokeWidth={1.75} />`.
+   - Reemplazado el fondo con desenfoque de GPU por `#0A101D` puro con `border-b border-slate-800/80`.
+3. **Limpieza de Espacio Muerto y Bento Grid Adaptativo:**
+   - Renderizado condicional del micro-banner de validación (`{errorMsg && ( ... )}`), eliminando la separación muerta permanente.
+   - Grilla Bento de fecha inteligente: si `moneda === 'PEN'`, `InputFechaCobalt` ocupa el 100% del ancho (`grid-cols-1`) ocultando el tipo de cambio 1.000; si `moneda !== 'PEN'` (`USD` o `EUR`), se activa la cuadrícula de 2 columnas (`sm:grid-cols-2`) mostrando la tasa de cambio y la conversión en soles (`≈ S/ {montoPEN}`).
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (352/352 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,992 módulos transformados exitosamente en 10.75s, `main-*.js` 419.43 kB < 500 kB).
+
+---
+
+### [REQ-UI-HORA-01: Corrección de Apertura Nativa y Edición de Hora en InputHoraCobalt]
+**Fecha:** Noviembre 2026 | **Fase:** 8.13 (Apertura Global de TimePicker & Paridad con InputFechaCobalt) | **Archivos Modificados:** `src/components/UI/InputHoraCobalt.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Causa Raíz
+- **Bloqueo Percibido de TimePicker en Chromium/Windows:** El componente `InputHoraCobalt` superponía un `<input type="time">` con `opacity: 0` y `z-10` sin invocar programáticamente `showPicker()`. En navegadores de escritorio (Chrome, Edge) sobre Windows, hacer clic en el texto o cuerpo de un input time transparente solo traslada el foco a los subcampos internos sin desplegar el selector de reloj si no se acierta al micro-icono nativo del extremo derecho. Para el usuario, el campo de hora en modales de programación (compromisos futuros en `ModalGasto`, recordatorios en `ModalActividadFlow`, tareas en `ModalTareaFlow` e ingresos en `ModalIngreso`) parecía bloqueado o inerte.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Apertura Nativa Inmediata (`InputHoraCobalt.tsx`):**
+   - Vinculado un `useRef<HTMLInputElement>` al elemento `<input type="time">`.
+   - Implementado manejador `onClick` tanto en el contenedor exterior `<div>` como en el `<input>` para invocar `inputRef.current?.showPicker?.()` con fallback a `.focus()`.
+   - Cualquier clic en cualquier área del campo (icono `Clock`, texto formateado `12H AM/PM`, etiqueta o caja contenedora) despliega instantáneamente el selector nativo de hora del SO/navegador.
+2. **Propagación Transversal Sin Regresiones:**
+   - La corrección beneficia de forma inmediata a todos los modales consumidores (`ModalGasto`, `ModalActividadFlow`, `ModalTareaFlow`, `ModalIngreso`) sin necesidad de alterar sus props ni romper contratos de datos.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (352/352 tests al 100% verde).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,992 módulos transformados exitosamente en 11.77s, `main-*.js` 419.43 kB < 500 kB).
 
 
 

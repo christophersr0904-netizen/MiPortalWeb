@@ -9,7 +9,7 @@
  * ============================================================================
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';
 
@@ -34,6 +34,14 @@ export interface SelectIconicoCobaltProps<T extends string = string> {
   className?: string;
 }
 
+interface CoordsDropdown {
+  top?: number;
+  bottom?: number;
+  left: number;
+  width: number;
+  openUpward: boolean;
+}
+
 export function SelectIconicoCobalt<T extends string = string>({
   id,
   valor,
@@ -48,55 +56,71 @@ export function SelectIconicoCobalt<T extends string = string>({
   const [estaAbierto, setEstaAbierto] = useState(false);
   const contenedorRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [coords, setCoords] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-    width: number;
-    openUpward: boolean;
-  }>({
-    left: 0,
-    width: 200,
-    openUpward: false
-  });
+  const [coords, setCoords] = useState<CoordsDropdown | null>(null);
 
   const opcionSeleccionada = opciones.find((op) => op.valor === valor);
 
-  const actualizarPosicion = useCallback(() => {
-    if (!contenedorRef.current) return;
+  const calcularCoordenadas = useCallback((): CoordsDropdown | null => {
+    if (!contenedorRef.current) return null;
     const rect = contenedorRef.current.getBoundingClientRect();
     const espacioAbajo = window.innerHeight - rect.bottom;
     const espacioArriba = rect.top;
     const openUpward = espacioAbajo < 250 && espacioArriba > espacioAbajo;
 
-    setCoords({
+    return {
       left: rect.left,
       width: Math.max(rect.width, 200),
       openUpward,
       ...(openUpward
         ? { bottom: window.innerHeight - rect.top + 6 }
         : { top: rect.bottom + 6 })
-    });
+    };
   }, []);
 
-  useEffect(() => {
+  const cerrar = useCallback(() => {
+    setEstaAbierto(false);
+    setCoords(null);
+  }, []);
+
+  const handleToggle = () => {
+    if (disabled) return;
+    if (!estaAbierto) {
+      // 1. Cálculo síncrono antes del primer pintado en DOM para erradicar aparición en (0,0)
+      const pos = calcularCoordenadas();
+      if (pos) {
+        setCoords(pos);
+      }
+      setEstaAbierto(true);
+    } else {
+      cerrar();
+    }
+  };
+
+  // useLayoutEffect refuerza la sincronización geométrica antes del render en pantalla y reposiciona en scroll/resize
+  useLayoutEffect(() => {
     if (estaAbierto) {
-      actualizarPosicion();
+      const pos = calcularCoordenadas();
+      if (pos) setCoords(pos);
+
       const handleScrollResize = (e: Event) => {
         // Ignorar eventos de scroll originados dentro del propio listbox
         if (menuRef.current && menuRef.current.contains(e.target as Node)) {
           return;
         }
-        actualizarPosicion();
+        const updated = calcularCoordenadas();
+        if (updated) setCoords(updated);
       };
+
       window.addEventListener('resize', handleScrollResize);
       window.addEventListener('scroll', handleScrollResize, true);
       return () => {
         window.removeEventListener('resize', handleScrollResize);
         window.removeEventListener('scroll', handleScrollResize, true);
       };
+    } else {
+      setCoords(null);
     }
-  }, [estaAbierto, actualizarPosicion]);
+  }, [estaAbierto, calcularCoordenadas]);
 
   // Cierre al hacer clic fuera (validando contenedor y portal)
   useEffect(() => {
@@ -108,27 +132,27 @@ export function SelectIconicoCobalt<T extends string = string>({
         menuRef.current &&
         !menuRef.current.contains(target)
       ) {
-        setEstaAbierto(false);
+        cerrar();
       }
     };
     if (estaAbierto) {
       document.addEventListener('mousedown', handleClickFuera);
     }
     return () => document.removeEventListener('mousedown', handleClickFuera);
-  }, [estaAbierto]);
+  }, [estaAbierto, cerrar]);
 
   // Cierre con Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && estaAbierto) {
-        setEstaAbierto(false);
+        cerrar();
       }
     };
     if (estaAbierto) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [estaAbierto]);
+  }, [estaAbierto, cerrar]);
 
   return (
     <div className={`relative flex flex-col gap-1.5 ${estaAbierto ? 'z-[100]' : 'z-10'} ${className}`} ref={contenedorRef}>
@@ -150,7 +174,7 @@ export function SelectIconicoCobalt<T extends string = string>({
         id={id}
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setEstaAbierto((prev) => !prev)}
+        onClick={handleToggle}
         aria-haspopup="listbox"
         aria-expanded={estaAbierto}
         className={`w-full min-h-[42px] px-3 py-2 rounded-xl bg-[#0D1526] border text-left transition-[transform,border-color,box-shadow] duration-150 flex items-center justify-between gap-2.5 cursor-pointer select-none active:scale-[0.99] ${
@@ -197,8 +221,8 @@ export function SelectIconicoCobalt<T extends string = string>({
         </div>
       </button>
 
-      {/* Menú Desplegable Flotante en Portal (Sin recortes por overflow) */}
-      {estaAbierto && typeof document !== 'undefined' && createPortal(
+      {/* Menú Desplegable Flotante en Portal (Sin recortes por overflow y sin saltos desde 0,0) */}
+      {estaAbierto && coords && typeof document !== 'undefined' && createPortal(
         <div
           ref={menuRef}
           role="listbox"
@@ -207,9 +231,10 @@ export function SelectIconicoCobalt<T extends string = string>({
             left: coords.left,
             width: coords.width,
             zIndex: 99999,
+            transformOrigin: coords.openUpward ? 'bottom' : 'top',
             ...(coords.openUpward ? { bottom: coords.bottom } : { top: coords.top })
           }}
-          className="p-1.5 rounded-2xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150"
+          className="p-1.5 rounded-2xl bg-[#0D1526] border border-slate-700 shadow-[0_16px_36px_-6px_rgba(2,6,23,0.95),0_0_20px_rgba(56,189,248,0.12)] max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-120"
         >
           {opciones.map((op) => {
             const esActivo = op.valor === valor;
@@ -222,7 +247,7 @@ export function SelectIconicoCobalt<T extends string = string>({
                 aria-selected={esActivo}
                 onClick={() => {
                   onChange(op.valor);
-                  setEstaAbierto(false);
+                  cerrar();
                 }}
                 className={`p-2.5 rounded-xl flex items-center justify-between gap-2.5 cursor-pointer transition-colors duration-150 ${
                   esActivo

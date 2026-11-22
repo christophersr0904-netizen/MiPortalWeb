@@ -22,7 +22,9 @@ import {
   FolderKanban,
   CornerDownRight,
   AlertTriangle,
-  DollarSign
+  DollarSign,
+  Receipt,
+  CalendarClock
 } from 'lucide-react';
 import { SwitchCobalt } from '../UI/SwitchCobalt';
 import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
@@ -117,15 +119,22 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
         {/* Cabecera Dinámica */}
         <div
           id="modal-gasto-header"
-          className="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-800 flex justify-between items-center bg-[#0D1526]/80 backdrop-blur-sm"
+          className="shrink-0 px-5 sm:px-6 py-3.5 border-b border-slate-800/80 flex justify-between items-center bg-[#0A101D]"
         >
-          <div className="flex items-center gap-2">
-            <span
-              id="badge-gasto-header-dot"
-              className={`w-3 h-3 rounded-full shadow-sm ${
-                modoDual === 'REAL' ? 'bg-emerald-500' : 'bg-amber-500'
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+                modoDual === 'REAL'
+                  ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/30 shadow-[0_0_14px_rgba(16,185,129,0.18)]'
+                  : 'bg-amber-950/60 text-amber-400 border-amber-500/30 shadow-[0_0_14px_rgba(245,158,11,0.18)]'
               }`}
-            />
+            >
+              {modoDual === 'REAL' ? (
+                <Receipt className="w-4 h-4" strokeWidth={1.75} />
+              ) : (
+                <CalendarClock className="w-4 h-4" strokeWidth={1.75} />
+              )}
+            </div>
             <div>
               <h3 id="txt-modal-gasto-titulo" className="font-bold text-sm text-slate-100 leading-tight">
                 {gastoEditar
@@ -159,14 +168,10 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
           </div>
         </div>
 
-        {/* Micro-banner de Error de Validación Inline con Altura Reservada Anti-CLS */}
-        <div className="mx-5 min-h-[24px] mt-2 flex items-center">
-          <div
-            className={`w-full px-3 py-1 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center justify-between transition-opacity duration-200 ${
-              errorMsg ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
-          >
-            <span>{errorMsg || ''}</span>
+        {/* Micro-banner de Error de Validación Inline */}
+        {errorMsg && (
+          <div className="mx-5 mt-2 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center justify-between animate-in fade-in duration-150">
+            <span>{errorMsg}</span>
             <button
               type="button"
               onClick={() => setErrorMsg(null)}
@@ -175,7 +180,7 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-        </div>
+        )}
 
         {/* Selector Segmentado: Modo Dual */}
         <div className="px-5 pt-3 pb-2 bg-slate-900/40 border-b border-slate-800">
@@ -468,8 +473,8 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
               </div>
             </div>
 
-            {/* Bento Grid Paritario 2: Fecha + Tipo de Cambio */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-end">
+            {/* Bento Grid Paritario 2: Fecha (+ Tipo de Cambio si moneda extranjera) */}
+            <div className={`grid gap-3.5 items-end ${moneda !== 'PEN' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
               <div>
                 <InputFechaCobalt
                   label={modoDual === 'REAL' ? 'Fecha de Pago / Desembolso' : 'Fecha Programada de Vencimiento'}
@@ -479,28 +484,28 @@ export const ModalGasto: React.FC<ModalGastoProps> = (props) => {
                   className="min-h-[42px] rounded-xl px-3 py-2 font-medium"
                 />
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-semibold text-slate-300">Tipo de Cambio</label>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/60 flex items-center gap-1 font-mono">
-                    TC: {tipoCambio.toFixed(3)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    step="0.001"
-                    value={tipoCambio}
-                    readOnly
-                    className="w-full min-h-[42px] bg-[#040711] border border-slate-800 text-slate-400 rounded-xl px-3 py-2 font-mono tabular-nums font-bold select-none outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  {moneda !== 'PEN' && (
+              {moneda !== 'PEN' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-300">Tipo de Cambio</label>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/60 flex items-center gap-1 font-mono">
+                      TC: {tipoCambio.toFixed(3)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={tipoCambio}
+                      readOnly
+                      className="w-full min-h-[42px] bg-[#040711] border border-slate-800 text-slate-400 rounded-xl px-3 py-2 font-mono tabular-nums font-bold select-none outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
                     <span className="text-[11px] font-mono font-bold text-emerald-400 shrink-0">
                       ≈ S/ {montoPEN}
                     </span>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* BLOQUE EXCLUSIVO PARA MOVIMIENTOS PROGRAMADOS */}
