@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { calcularSiguienteFechaCiclo } from '../habitosService';
+import { calcularSiguienteFechaCiclo, completarActividadPersonalLocal } from '../habitosService';
 import { resolverActividadesDeHabitoNativo } from '../../hooks/useHabitos';
+import { db } from '../../db/db';
 
 describe('Motor de Hábitos y Recurrencias (habitosService)', () => {
   it('Calcula la siguiente fecha para frecuencia DIARIA sumando +1 día', () => {
@@ -592,6 +593,55 @@ describe('Retención Visual de Hábitos Completados Hoy y Sincronización Calend
       const habitoLimpio = { id: 'hab-99', codigo_legado: 'ACT-099', nombre_actividad: 'Hábito sin pasos', categoria_vida: 'SALUD_DEPORTE' as const };
       const resVacio = resolverActividadesDeHabitoNativo(habitoLimpio as any, tareas as any, subtareas as any, otrasActividades as any);
       expect(resVacio).toEqual([]);
+    });
+  });
+
+  describe('Trazabilidad en habito_cumplimiento_logs (REQ-METRICS-EXECUTION-02)', () => {
+    it('completarActividadPersonalLocal inserta registro con fecha_programada_original, dias_desfase y duracion en db.habito_cumplimiento_logs', async () => {
+      const actId = 'hab-trazabilidad-1';
+      const actividadTest: any = {
+        id: actId,
+        user_id: '00000000-0000-0000-0000-000000000001',
+        codigo_legado: 'ACT-088',
+        nombre_actividad: 'Lectura Técnica 30m',
+        categoria_vida: 'CRECIMIENTO_PROFESIONAL',
+        tipo_compromiso: 'HABITUAL',
+        frecuencia_ciclo: 'DIARIA',
+        fecha_programada: '2026-11-20',
+        duracion_horas: 0.5,
+        racha_actual: 3,
+        estado: '02_Por_Hacer'
+      };
+
+      let putActividadItem: any = null;
+      const putActSpy = vi.spyOn(db.actividades_personales, 'put').mockImplementation((async (item: any) => {
+        putActividadItem = item;
+        return item.id;
+      }) as any);
+
+      let putLogItem: any = null;
+      const putLogSpy = vi.spyOn(db.habito_cumplimiento_logs, 'put').mockImplementation((async (item: any) => {
+        putLogItem = item;
+        return item.id;
+      }) as any);
+
+      // 1. Marcar como completada
+      const res = await completarActividadPersonalLocal(actividadTest, true, 'AVANZAR_UN_PASO');
+      expect(res.actividadActualizada).toBeDefined();
+      expect(putActividadItem).toBeDefined();
+
+      // 2. Verificar que se insertó el log en db.habito_cumplimiento_logs
+      expect(putLogItem).toBeDefined();
+      expect(putLogItem.habito_id).toBe(actId);
+      expect(putLogItem.completado).toBe(true);
+      expect(putLogItem.fecha_programada_original).toBe('2026-11-20');
+      expect(putLogItem.duracion_estimada_horas).toBe(0.5);
+      expect(putLogItem.duracion_real_horas).toBe(0.5);
+      expect(typeof putLogItem.dias_desfase).toBe('number');
+      expect(putLogItem.sync_status).toBe('pending');
+
+      putActSpy.mockRestore();
+      putLogSpy.mockRestore();
     });
   });
 });

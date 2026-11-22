@@ -57,6 +57,7 @@ import { deduplicarPorCodigoCanonico, sanitizarUrlExterna } from '../../utils/en
 import { generateSafeUUID } from '../../utils/uuidGenerator';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
 import { eliminarProyecto } from '../../services/proyectosService';
+import { calcularDesfaseDias, clasificarDesfase, calcularDesviacionEsfuerzo } from '../../utils/metricasEjecucionHelpers';
 import type { GastoRecord, TareaRecord, HitoWbsRecord, SubtareaPaso } from '../../types';
 
 interface ViewDetalle360Props {
@@ -534,6 +535,43 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
   const tareasCompletadas = tareasProyecto.filter((t: any) =>
     String(t.Estado_Tarea || t.estado_tarea || '').includes('Completad')
   ).length;
+
+  // REQ-METRICS-EXECUTION-03: Cálculo de Desfase Temporal Físico y Esfuerzo Real en Tareas
+  const { desfasePromedioTareas, conteoTareasConDesfase, esfuerzoDesviacionProyecto } = useMemo(() => {
+    let sumaDesfase = 0;
+    let countConDesfase = 0;
+    let sumEst = 0;
+    let sumReal = 0;
+
+    for (const t of tareasProyecto) {
+      const fProg = t.fecha_programada || (t as any).Fecha_Programada;
+      const fComp = t.fecha_completado || (t as any).Fecha_Completado;
+      const est = String(t.estado_tarea || (t as any).Estado_Tarea || '').toLowerCase();
+      const esComp = est.includes('04_') || est.includes('completad');
+
+      if (esComp && fProg && fComp) {
+        const dias = calcularDesfaseDias(fProg, fComp);
+        if (dias !== null) {
+          sumaDesfase += dias;
+          countConDesfase++;
+        }
+      }
+
+      const hEst = Number(t.horas_estimadas || (t as any).Horas_Estimadas) || 0;
+      const hReal = Number(t.horas_reales || (t as any).Horas_Reales) || 0;
+      sumEst += hEst;
+      sumReal += hReal;
+    }
+
+    const avgDias = countConDesfase > 0 ? Number((sumaDesfase / countConDesfase).toFixed(1)) : null;
+    const desviacion = calcularDesviacionEsfuerzo(sumEst, sumReal);
+
+    return {
+      desfasePromedioTareas: avgDias,
+      conteoTareasConDesfase: countConDesfase,
+      esfuerzoDesviacionProyecto: desviacion
+    };
+  }, [tareasProyecto]);
 
   // Días transcurridos vs días totales
   const totalDias = fInicio > 0 && fFin > fInicio ? Math.round((fFin - fInicio) / (1000 * 60 * 60 * 24)) : 0;
@@ -1523,6 +1561,33 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                                           <span>{t.horas_estimadas || t.Horas_Estimadas || 1}h</span>
                                                         </span>
 
+                                                        {/* Micro-badge Desfase Temporal en Tarea Completada (REQ-METRICS-EXECUTION-03) */}
+                                                        {(() => {
+                                                          const fProg = t.fecha_programada || t.Fecha_Programada;
+                                                          const fComp = t.fecha_completado || t.Fecha_Completado;
+                                                          if (!esDone || !fProg || !fComp) return null;
+                                                          const dias = calcularDesfaseDias(fProg, fComp);
+                                                          const clasif = clasificarDesfase(dias);
+                                                          if (clasif.tipo === 'SIN_DATO') return null;
+
+                                                          let badgeClass = 'bg-sky-950/40 text-sky-300 border-sky-800/50';
+                                                          if (clasif.tipo === 'MORA') {
+                                                            badgeClass = 'bg-rose-950/50 text-rose-300 border-rose-800/50';
+                                                          } else if (clasif.tipo === 'ADELANTO') {
+                                                            badgeClass = 'bg-emerald-950/50 text-emerald-300 border-emerald-800/50';
+                                                          }
+
+                                                          return (
+                                                            <span
+                                                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono tabular-nums font-bold border ${badgeClass}`}
+                                                              title={`Programado: ${fProg} | Completado: ${fComp}`}
+                                                            >
+                                                              <Clock className="w-2.5 h-2.5" strokeWidth={1.75} />
+                                                              <span>{clasif.etiqueta}</span>
+                                                            </span>
+                                                          );
+                                                        })()}
+
                                                         {/* Badge y Mini-cápsula de Gastos Asociados (Paso 3) */}
                                                         {totalGastosTarea > 0 && (
                                                           <div className="relative group/gastos inline-block">
@@ -1919,9 +1984,28 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                           <span className="pl-2 font-medium text-slate-200 group-hover:text-sky-300 transition-colors break-words">
                             {t.nombre_tarea_actividad || t.Nombre_Tarea_Actividad}
                           </span>
-                          <span className="font-mono tabular-nums text-slate-400 text-[11px] shrink-0">
-                            {t.horas_estimadas || 1}h
-                          </span>
+                          <div className="font-mono tabular-nums text-slate-400 text-[11px] shrink-0 flex items-center gap-1.5">
+                            {(() => {
+                              const fProg = t.fecha_programada || t.Fecha_Programada;
+                              const fComp = t.fecha_completado || t.Fecha_Completado;
+                              if (esComp && fProg && fComp) {
+                                const dias = calcularDesfaseDias(fProg, fComp);
+                                const clasif = clasificarDesfase(dias);
+                                if (clasif.tipo !== 'SIN_DATO') {
+                                  let bClass = 'text-sky-400 bg-sky-950/40 border-sky-800/40';
+                                  if (clasif.tipo === 'MORA') bClass = 'text-rose-400 bg-rose-950/40 border-rose-800/40';
+                                  else if (clasif.tipo === 'ADELANTO') bClass = 'text-emerald-400 bg-emerald-950/40 border-emerald-800/40';
+                                  return (
+                                    <span className={`text-[9.5px] px-1 py-0.5 rounded border ${bClass}`} title={`Programado: ${fProg} | Completado: ${fComp}`}>
+                                      {clasif.etiqueta}
+                                    </span>
+                                  );
+                                }
+                              }
+                              return null;
+                            })()}
+                            <span>{t.horas_estimadas || 1}h</span>
+                          </div>
                         </div>
                       );
                     })}
@@ -2041,11 +2125,11 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
             </div>
           </div>
 
-          {/* Varianzas e Índices */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Varianzas e Índices & Desfase Físico (REQ-METRICS-EXECUTION-03) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5">
             <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl space-y-2 border border-slate-800">
               <div className="flex items-center justify-between text-xs font-bold text-slate-300">
-                <span>Variación de Costo (CV)</span>
+                <span>Variación Costo (CV)</span>
                 <span className="font-mono text-slate-400">EV - AC</span>
               </div>
               <div className={`text-lg font-black font-mono tabular-nums ${cv >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -2058,7 +2142,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
 
             <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl space-y-2 border border-slate-800">
               <div className="flex items-center justify-between text-xs font-bold text-slate-300">
-                <span>Variación de Cronograma (SV)</span>
+                <span>Variación Plazo (SV)</span>
                 <span className="font-mono text-slate-400">EV - PV</span>
               </div>
               <div className={`text-lg font-black font-mono tabular-nums ${sv >= 0 ? 'text-sky-400' : 'text-amber-400'}`}>
@@ -2089,6 +2173,63 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                 {spi.toFixed(2)}
               </div>
               <p className="text-[11px] text-slate-400">{spi >= 1 ? 'Ritmo acelerado.' : 'Retraso de ejecución.'}</p>
+            </div>
+
+            {/* Tarjeta 5: Desfase Físico (Lead/Lag) */}
+            <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl space-y-2 border border-slate-800">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                <span>Desfase Físico</span>
+                <span className="font-mono text-slate-400">Lead/Lag</span>
+              </div>
+              <div
+                className={`text-lg font-black font-mono tabular-nums ${
+                  desfasePromedioTareas === null
+                    ? 'text-slate-500'
+                    : desfasePromedioTareas > 0
+                    ? 'text-rose-400'
+                    : desfasePromedioTareas < 0
+                    ? 'text-emerald-400'
+                    : 'text-sky-400'
+                }`}
+              >
+                {desfasePromedioTareas === null
+                  ? '—'
+                  : desfasePromedioTareas > 0
+                  ? `+${desfasePromedioTareas}d mora`
+                  : desfasePromedioTareas < 0
+                  ? `${desfasePromedioTareas}d adelanto`
+                  : '0d a tiempo'}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                {conteoTareasConDesfase > 0
+                  ? `${conteoTareasConDesfase} tareas auditadas.`
+                  : 'Sin tareas completadas.'}
+              </p>
+            </div>
+
+            {/* Tarjeta 6: Esfuerzo Real / Plan */}
+            <div className="portal-surface bg-[#0D1526] p-4 rounded-2xl space-y-2 border border-slate-800">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                <span>Esfuerzo Real</span>
+                <span className="font-mono text-slate-400">Real / Plan</span>
+              </div>
+              <div className="text-lg font-black font-mono tabular-nums text-slate-100">
+                {esfuerzoDesviacionProyecto.real.toFixed(1)}h{' '}
+                <span className="text-xs text-slate-400 font-normal">
+                  / {esfuerzoDesviacionProyecto.estimado.toFixed(1)}h
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-mono tabular-nums">
+                {esfuerzoDesviacionProyecto.deltaHoras !== 0 ? (
+                  <span className={esfuerzoDesviacionProyecto.deltaHoras > 0 ? 'text-rose-400' : 'text-emerald-400'}>
+                    {esfuerzoDesviacionProyecto.deltaHoras > 0 ? '+' : ''}
+                    {esfuerzoDesviacionProyecto.deltaHoras.toFixed(1)}h{' '}
+                    {esfuerzoDesviacionProyecto.deltaHoras > 0 ? 'sobrecosto' : 'ahorro'}
+                  </span>
+                ) : (
+                  'Alineado al plan.'
+                )}
+              </p>
             </div>
           </div>
 

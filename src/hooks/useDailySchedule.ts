@@ -694,6 +694,7 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
         Estado: nuevoEstado,
         modalidad: nuevoEstado,
         Modalidad: nuevoEstado,
+        fecha_ejecucion_real: marcarCompletado ? fechaActual : '',
         sync_status: 'pending',
         updated_at: nowIso
       } as any);
@@ -704,8 +705,7 @@ export function useDailySchedule(horizonte: HorizonteAgenda = 'HOY') {
         Estado_Cobro: nuevoEstado,
         estado: nuevoEstado,
         Estado: nuevoEstado,
-        modalidad: nuevoEstado,
-        Modalidad: nuevoEstado,
+        fecha_ejecucion_real: marcarCompletado ? fechaActual : '',
         sync_status: 'pending',
         updated_at: nowIso
       } as any);

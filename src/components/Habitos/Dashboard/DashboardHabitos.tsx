@@ -10,6 +10,7 @@ import { HeatmapConsistencia } from './HeatmapConsistencia';
 import { MetasCuantitativas } from './MetasCuantitativas';
 import { TablaRendimiento } from './TablaRendimiento';
 import { HistogramaSeguimientoTemporal } from '../HistogramaSeguimientoTemporal';
+import { GraficoDesfaseEsfuerzo } from './GraficoDesfaseEsfuerzo';
 import { ModalDetalleMeta360 } from '../Metas/ModalDetalleMeta360';
 
 interface DashboardHabitosProps {
@@ -61,7 +62,15 @@ export const DashboardHabitos: React.FC<DashboardHabitosProps> = ({ onCrearActiv
         onAbrirMeta360={(meta) => setMeta360Id(meta.id)}
       />
 
-      {/* 3. GRID PRINCIPAL: HEATMAP (16 SEMANAS) & RADAR POLIGONAL DE BALANCE DE VIDA */}
+      {/* 3. TRAZABILIDAD DE DESFASE TEMPORAL Y ESFUERZO REAL (REQ-METRICS-EXECUTION-03) */}
+      <GraficoDesfaseEsfuerzo
+        actividades={todasLasActividades}
+        logs={logs}
+        metas={metasPlanes}
+        vinculos={vinculos}
+      />
+
+      {/* 4. GRID PRINCIPAL: HEATMAP (16 SEMANAS) & RADAR POLIGONAL DE BALANCE DE VIDA */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5">
         {/* Heatmap de Consistencia ocupa 7 columnas en desktop */}
         <div className="lg:col-span-7 flex flex-col">

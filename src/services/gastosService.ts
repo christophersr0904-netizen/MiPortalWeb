@@ -13,11 +13,15 @@ import { syncManager } from './syncManager';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
 import { generateSafeUUID } from '../utils/uuidGenerator';
 import { sincronizarGastoCalendar } from './calendarSyncService';
+import { formatFechaIsoLocal } from '../utils/timeFormatters';
 
 export async function crearGasto(datos: Partial<GastoRecord>): Promise<GastoRecord> {
   const nowIso = new Date().toISOString();
   const codigoLegado = datos.codigo_legado || (await generarCodigoCorrelativoSeguro(db.gastos, 'GAS', 3));
   const idFinal = datos.id || generateSafeUUID();
+  const estadoPagoNorm = (datos.estado_pago || 'PAGADO').toUpperCase();
+  const esPagado = estadoPagoNorm === 'PAGADO';
+  const fechaReal = datos.fecha_ejecucion_real || (esPagado ? (datos.fecha_gasto || formatFechaIsoLocal(new Date())) : undefined);
 
   const payload: GastoRecord = {
     id: idFinal,
@@ -29,6 +33,7 @@ export async function crearGasto(datos: Partial<GastoRecord>): Promise<GastoReco
     id_origen_vinculado: datos.id_origen_vinculado || undefined,
     categoria_gasto: datos.categoria_gasto || 'General',
     fecha_gasto: datos.fecha_gasto || nowIso.split('T')[0],
+    fecha_ejecucion_real: fechaReal,
     descripcion_gasto: (datos.descripcion_gasto || 'Gasto').trim(),
     moneda_original: datos.moneda_original || 'PEN',
     monto_original: Math.max(0, Number(datos.monto_original) || 0),
@@ -66,6 +71,14 @@ export async function actualizarGasto(id: string, cambios: Partial<GastoRecord>)
     updated_at: nowIso,
     sync_status: 'pending'
   };
+
+  const estadoFinal = (cambios.estado_pago || actual?.estado_pago || '').toUpperCase();
+  const esPagado = estadoFinal === 'PAGADO';
+  if (esPagado && !cambios.fecha_ejecucion_real && !actual?.fecha_ejecucion_real) {
+    updates.fecha_ejecucion_real = cambios.fecha_gasto || actual?.fecha_gasto || formatFechaIsoLocal(new Date());
+  } else if (!esPagado && cambios.estado_pago !== undefined && cambios.fecha_ejecucion_real === undefined) {
+    updates.fecha_ejecucion_real = '';
+  }
 
   await db.gastos.update(id, updates);
 

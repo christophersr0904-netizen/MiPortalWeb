@@ -1,7 +1,8 @@
 import { db, registrarTombstone } from '../db/db';
-import type { ActividadPersonal, SubtareaPaso, FrecuenciaCiclo, TareaRecord } from '../types';
+import type { ActividadPersonal, SubtareaPaso, FrecuenciaCiclo, TareaRecord, HabitoLogRecord } from '../types';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
 import { generateSafeUUID } from '../utils/uuid';
+import { calcularDesfaseDias } from '../utils/metricasEjecucionHelpers';
 import {
   sincronizarActividadCalendar,
   sincronizarCreacionCalendar,
@@ -279,6 +280,45 @@ export async function completarActividadPersonalLocal(
   };
 
   await db.actividades_personales.put(actividadActualizada);
+
+  // REQ-METRICS-EXECUTION-02: Registro automático de trazabilidad en habito_cumplimiento_logs
+  try {
+    if (completar) {
+      const horaActual = `${String(hoyD.getHours()).padStart(2, '0')}:${String(hoyD.getMinutes()).padStart(2, '0')}`;
+      const desfase = calcularDesfaseDias(fProgLimpia, hoyStr) ?? 0;
+      const duracion = Number(actividadBase.duracion_horas) || 0;
+      const logPayload: HabitoLogRecord = {
+        id: generateSafeUUID(),
+        user_id: actividadBase.user_id || '00000000-0000-0000-0000-000000000001',
+        habito_id: actividadBase.id,
+        fecha_registro: hoyStr,
+        hora_registro: horaActual,
+        completado: true,
+        valor_cuantitativo_sumado: 0,
+        es_rescate: false,
+        fecha_programada_original: fProgLimpia || undefined,
+        dias_desfase: desfase,
+        duracion_estimada_horas: duracion,
+        duracion_real_horas: duracion,
+        created_at: nowIso,
+        updated_at: nowIso,
+        sync_status: 'pending'
+      };
+      await db.habito_cumplimiento_logs.put(logPayload);
+    } else {
+      // Reversión: limpiar logs de cumplimiento registrados hoy para este hábito
+      const logsDeHoy = await db.habito_cumplimiento_logs
+        .where('habito_id')
+        .equals(actividadBase.id)
+        .filter((l) => l.fecha_registro === hoyStr)
+        .toArray();
+      for (const l of logsDeHoy) {
+        await db.habito_cumplimiento_logs.delete(l.id);
+      }
+    }
+  } catch (errLog) {
+    console.warn('[habitosService] Error gestionando habito_cumplimiento_logs:', errLog);
+  }
 
   // Notificar al servicio puente de Calendar de forma reactiva no bloqueante
   if (actividadBase.agendado_calendar === 'Sí') {

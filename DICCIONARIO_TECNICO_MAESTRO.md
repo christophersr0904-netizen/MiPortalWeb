@@ -10938,6 +10938,65 @@ supabase functions deploy gcal-auth
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ 35/35 suites aprobadas (**354/354 tests al 100% verde** con 2 nuevos tests unitarios para preservación de duración 0 y salto a hoy).
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (8,993 módulos transformados exitosamente en 12.16s, `main-*.js` 419.78 kB < 500 kB).
 
+---
+
+### [REQ-METRICS-EXECUTION-02: Formalización de fecha_ejecucion_real, dias_desfase y Esfuerzo Real en Contratos, Sanitizadores y Servicios de Completado]
+**Fecha:** Noviembre 2026 | **Fase:** 8.15 (Trazabilidad de Ejecución Real, Desfase Temporal y Esfuerzo) | **Archivos Creados/Modificados:** `src/types/index.ts`, `src/utils/metricasEjecucionHelpers.ts` (Nuevo), `src/services/syncPayloadSanitizer.ts`, `src/services/habitosService.ts`, `src/services/tareasService.ts`, `src/services/gastosService.ts`, `src/services/ingresosService.ts`, `src/hooks/useDailySchedule.ts`, `src/components/Views/ViewKanban.tsx`, `src/utils/__tests__/metricasEjecucionHelpers.test.ts` (Nuevo), `src/services/__tests__/habitosService.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Requerimiento de Arquitectura
+- **Ausencia de Trazabilidad Temporal de Ejecución Real:** En las 4 entidades del sistema (`TareaRecord`, `HabitoLogRecord`, `GastoRecord`, `IngresoRecord`), no existían campos canónicos normalizados para capturar la fecha efectiva en que un usuario ejecutó una tarea, hábito, pago o cobro, impidiendo computar de forma reactiva métricas de mora, adelanto (lead/lag) y rendimiento de esfuerzo real (horas reales vs horas estimadas).
+- **Riesgo de Desfase por Husos Horarios (UTC-5):** Los cálculos de diferencia de días entre fechas requerían una función pura basada en partes enteras `[anio, mes, dia]` y medianoche UTC (`Date.UTC`), evitando parsing directo de `new Date("YYYY-MM-DD")` que genera desfases por huso horario local.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Formalización de Contratos Tipados (`src/types/index.ts`):**
+   - `TareaRecord`: Adición de `fecha_completado?: string;` (YYYY-MM-DD).
+   - `HabitoLogRecord`: Adición de `fecha_programada_original?: string;`, `dias_desfase?: number;`, `duracion_estimada_horas?: number;`, `duracion_real_horas?: number;`.
+   - `GastoRecord`: Adición de `fecha_ejecucion_real?: string;` (fecha del pago efectivo).
+   - `IngresoRecord`: Adición de `fecha_ejecucion_real?: string;` (fecha del cobro efectivo).
+2. **Motor Puro de Cálculo (`src/utils/metricasEjecucionHelpers.ts`):**
+   - `parsearFechaPartes(fechaIso)`: Extracción segura de componentes enteros `[anio, mes, dia]`.
+   - `calcularDesfaseDias(fechaProgramada, fechaReal)`: Retorna entero en días (`fechaReal - fechaProgramada`), donde `> 0` es mora (`+N d`), `< 0` es adelanto (`-N d`), y `0` es a tiempo.
+   - `clasificarDesfase(dias)`: Mapea a `{ tipo: 'MORA' | 'ADELANTO' | 'A_TIEMPO' | 'SIN_DATO', etiqueta, dias }`.
+   - `calcularDesviacionEsfuerzo(estimado, real)`: Retorna delta en horas y porcentaje de eficiencia.
+3. **Captura Automática en Servicios y Ciclos de Vida:**
+   - **Hábitos (`src/services/habitosService.ts`):** En `completarActividadPersonalLocal`, al marcar `completado === true`, se inserta automáticamente un registro en `db.habito_cumplimiento_logs` sellando `fecha_programada_original`, `dias_desfase`, `duracion_estimada_horas` y `duracion_real_horas`. Al desmarcar, se limpian limpiamente los logs del día.
+   - **Tareas (`src/services/tareasService.ts`, `useDailySchedule.ts`, `ViewKanban.tsx`):** Al pasar a `'04_Completado'`, se sella `fecha_completado = formatFechaIsoLocal(new Date())`; al reabrir a pendiente/en progreso, se resetea a `''`.
+   - **Gastos e Ingresos (`gastosService.ts`, `ingresosService.ts`, `useDailySchedule.ts`):** Al guardar o conciliar con estado `PAGADO` o `COBRADO`, se sella automáticamente `fecha_ejecucion_real`.
+4. **Sanitización y Omni-Sincronización (`src/services/syncPayloadSanitizer.ts`):**
+   - Preservación de `fecha_completado` en tareas (payload e inbound), `fecha_ejecucion_real` en gastos e ingresos, y adición de `sanitizarHabitoLogPayload` y `sanitizarHabitoLogInbound` para `habito_cumplimiento_logs`.
+
+---
+
+### [REQ-METRICS-EXECUTION-03: Visualización SVG de Desfase (Mora/Adelanto) y Esfuerzo Real en DashboardHabitos y ViewDetalle360]
+**Fecha:** Noviembre 2026 | **Fase:** 8.16 (Gráficos Divergentes SVG, KPIs de Puntualidad y Badges en WBS/EVM) | **Archivos Creados/Modificados:** `src/components/Habitos/Dashboard/GraficoDesfaseEsfuerzo.tsx` (Nuevo), `src/components/Habitos/Dashboard/DashboardHabitos.tsx`, `src/components/Views/ViewDetalle360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico & Requerimiento UX/UI
+- Requerimiento de exponer visualmente las métricas de ejecución real y esfuerzo capturadas en REQ-METRICS-EXECUTION-02, tanto a nivel macro de hábitos personales (por categoría y meta) como a nivel de proyectos (desempeño de tareas WBS y varianzas EVM).
+- Respeto irrestricto al sistema de diseño Cobalt Aerodynamic (A.2.2): fondo `#040711`, tarjetas `#0D1526`, microborde `border-slate-800/40`, SVG nativo reactivo sin librerías pesadas y tipografía numérica `font-mono tabular-nums`.
+
+#### 2. Solución Quirúrgica Implementada
+1. **Componente de Alto Desempeño (`GraficoDesfaseEsfuerzo.tsx`):**
+   - Cabecera con 2 selectores `SelectIconicoCobalt` (Filtro por Categoría/Pilar de Vida y Filtro por Meta Macro).
+   - 3 micro-tarjetas KPI con cifras monoespaciadas:
+     - **Desfase Promedio:** Valor neto en días (`+N d` mora en rosa/ámbar, `-N d` adelanto en esmeralda, `0d` en sky).
+     - **Tasa de Puntualidad:** Porcentaje de ejecuciones a tiempo o con adelanto (`dias_desfase <= 0`).
+     - **Esfuerzo Real / Plan:** Horas reales vs estimadas con delta y clasificación de sobreesfuerzo/ahorro.
+   - Gráfico de barras divergentes SVG nativo centrado en `0d`:
+     - Adelanto a la izquierda en gradiente esmeralda (`#10b981`).
+     - A tiempo en el centro con pulso sky (`#38bdf8`).
+     - Mora a la derecha en gradiente ámbar/rosa (`#f59e0b` $\rightarrow$ `#f43f5e`).
+   - Estado vacío limpio y elegante si el filtro activo no posee registros auditados.
+2. **Integración en `DashboardHabitos.tsx`:**
+   - Incorporado como Sección 3 entre el Histograma de Seguimiento y el Heatmap de Consistencia, alimentado reactivamente por `db.habito_cumplimiento_logs`.
+3. **Métricas de Ejecución y Badges en `ViewDetalle360.tsx`:**
+   - **Nivel Proyecto (Pestaña EVM):** Ampliación del Bento Grid de Varianzas a 6 columnas incorporando **Desfase Físico (Lead/Lag)** y **Esfuerzo Real / Plan** calculados sobre las tareas del proyecto.
+   - **Nivel Tarea (Desglose WBS):** Micro-badges condicionales en tareas completadas tanto dentro de paquetes de trabajo como en entregables generales, exhibiendo `clasificarDesfase` (`A tiempo`, `Adelanto -Nd`, `Mora +Nd`) con tooltip de fechas planificadas vs completadas.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (371/371 tests al 100% verde)**.
+- **Compilador de Producción:** `npx vite build` $\rightarrow$ Exit Code 0 (8,995 módulos transformados exitosamente en 10.32s, `main-*.js` 420.17 kB < 500 kB).
+
 
 
 

@@ -18,6 +18,7 @@ import {
 } from './calendarSyncService';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
 import { generateSafeUUID } from '../utils/uuidGenerator';
+import { formatFechaIsoLocal } from '../utils/timeFormatters';
 
 export interface OpcionesCrearTarea extends Partial<TareaRecord> {
   subtareas?: Array<{ descripcion_paso: string; completado?: boolean }>;
@@ -37,6 +38,8 @@ export async function crearTarea(
   datos: OpcionesCrearTarea
 ): Promise<ResultadoOperacionTarea> {
   const nowIso = new Date().toISOString();
+  const esCompletadaInicial = String(datos.estado_tarea || '').includes('04_') || String(datos.estado_tarea || '').toLowerCase().includes('completad');
+  const fechaCompletadoInicial = datos.fecha_completado || (esCompletadaInicial ? formatFechaIsoLocal(new Date()) : undefined);
   const codigoLegadoFinal =
     datos.codigo_legado || (await generarCodigoCorrelativoSeguro(db.tareas, 'TAR', 3));
   const idFinal = datos.id || generateSafeUUID();
@@ -55,6 +58,7 @@ export async function crearTarea(
     horas_estimadas: Math.max(0, Number(datos.horas_estimadas) || 1),
     horas_reales: Math.max(0, Number(datos.horas_reales) || 0),
     fecha_programada: datos.fecha_programada || nowIso.split('T')[0],
+    fecha_completado: fechaCompletadoInicial,
     hora_inicio: datos.hora_inicio?.trim() || '09:00',
     agendado_calendar: datos.agendado_calendar === 'No' ? 'No' : 'Sí',
     es_mav: Boolean(datos.es_mav),
@@ -126,6 +130,17 @@ export async function actualizarTarea(
     sync_status: 'pending',
     updated_at: nowIso
   };
+
+  // REQ-METRICS-EXECUTION-02: Gestión automática de fecha_completado al cambiar estado
+  if (cambios.estado_tarea !== undefined) {
+    const st = String(cambios.estado_tarea).toLowerCase();
+    const esComp = st.includes('04_') || st.includes('completad') || st === 'hecho' || st === 'terminado';
+    if (esComp && !cambios.fecha_completado && !tareaActual?.fecha_completado) {
+      updates.fecha_completado = formatFechaIsoLocal(new Date());
+    } else if (!esComp && cambios.fecha_completado === undefined) {
+      updates.fecha_completado = '';
+    }
+  }
 
   await db.tareas.update(tareaId, updates as any);
 

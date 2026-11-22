@@ -22,7 +22,8 @@ import type {
   CuotaRecord,
   MetaPlanRecord,
   HitoPlanRecord,
-  HabitoMetaVinculo
+  HabitoMetaVinculo,
+  HabitoLogRecord
 } from '../types';
 
 export const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
@@ -401,6 +402,7 @@ export function sanitizarTareaPayload(
     horas_estimadas: Math.max(0, Number(raw.horas_estimadas) || 1.00),
     horas_reales: Math.max(0, Number(raw.horas_reales) || 0.00),
     fecha_programada: sanitizeDate(raw.fecha_programada),
+    fecha_completado: sanitizeDate(raw.fecha_completado || (raw as any).Fecha_Completado) || null,
     agendado_en_calendar: raw.agendado_calendar === 'Sí' ? 'Sí' : 'No',
     id_evento_calendar: raw.id_evento_calendar?.trim() || null,
     dependencia_tarea_id: resolvedDependenciaUuid,
@@ -519,6 +521,7 @@ export function sanitizarTareaInbound(
     horas_estimadas: Math.max(0, Number(remoto.horas_estimadas ?? localPrevio?.horas_estimadas ?? 1.0)),
     horas_reales: Math.max(0, Number(remoto.horas_reales ?? localPrevio?.horas_reales ?? 0.0)),
     fecha_programada: sanitizeDate(remoto.fecha_programada) || sanitizeDate(localPrevio?.fecha_programada) || null,
+    fecha_completado: sanitizeDate(remoto.fecha_completado || remoto.Fecha_Completado) || sanitizeDate(localPrevio?.fecha_completado) || undefined,
     hora_inicio: remoto.hora_inicio || localPrevio?.hora_inicio || null,
     agendado_calendar:
       remoto.agendado_calendar ||
@@ -856,6 +859,7 @@ export function sanitizarGastoPayload(raw: GastoRecord, userId: string = DEFAULT
     id_origen_vinculado: raw.id_origen_vinculado || null,
     categoria_gasto: raw.categoria_gasto || 'General',
     fecha_gasto: sanitizeDate(raw.fecha_gasto) || new Date().toISOString().split('T')[0],
+    fecha_ejecucion_real: sanitizeDate(raw.fecha_ejecucion_real || (raw as any).Fecha_Ejecucion_Real) || null,
     descripcion_gasto: raw.descripcion_gasto?.trim() || 'Gasto sin descripción',
     moneda_original: raw.moneda_original || 'PEN',
     monto_original: Math.max(0, Number(raw.monto_original) || 0),
@@ -882,6 +886,7 @@ export function sanitizarIngresoPayload(raw: IngresoRecord, userId: string = DEF
     tipo_origen: raw.tipo_origen || 'HONORARIO',
     categoria_ingreso: raw.categoria_ingreso || 'General',
     fecha_ingreso: sanitizeDate(raw.fecha_ingreso) || new Date().toISOString().split('T')[0],
+    fecha_ejecucion_real: sanitizeDate(raw.fecha_ejecucion_real || (raw as any).Fecha_Ejecucion_Real) || null,
     descripcion_ingreso: raw.descripcion_ingreso?.trim() || 'Ingreso sin descripción',
     moneda_original: raw.moneda_original || 'PEN',
     monto_original: Math.max(0, Number(raw.monto_original) || 0),
@@ -1030,5 +1035,63 @@ export function sanitizarVinculoPayload(
     meta_volumen_esperada: Math.max(0, Number(raw.meta_volumen_esperada) || 0),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+// ============================================================================
+// 13. SANITIZADOR DE LOGS DE CUMPLIMIENTO DE HÁBITOS
+// ============================================================================
+
+export function sanitizarHabitoLogPayload(raw: HabitoLogRecord, userId: string = DEFAULT_USER_ID) {
+  return {
+    id: isUuid(raw.id) ? raw.id : undefined,
+    user_id: isUuid(raw.user_id) ? raw.user_id : userId,
+    habito_id: isUuid(raw.habito_id) ? raw.habito_id : raw.habito_id,
+    fecha_registro: sanitizeDate(raw.fecha_registro) || new Date().toISOString().split('T')[0],
+    hora_registro: raw.hora_registro?.trim() || null,
+    completado: Boolean(raw.completado),
+    valor_cuantitativo_sumado: Number(raw.valor_cuantitativo_sumado) || 0,
+    es_rescate: Boolean(raw.es_rescate),
+    nota_contexto: raw.nota_contexto?.trim() || null,
+    fecha_programada_original: sanitizeDate(raw.fecha_programada_original) || null,
+    dias_desfase: raw.dias_desfase !== undefined && raw.dias_desfase !== null && !isNaN(Number(raw.dias_desfase))
+      ? Number(raw.dias_desfase)
+      : null,
+    duracion_estimada_horas: raw.duracion_estimada_horas !== undefined && raw.duracion_estimada_horas !== null
+      ? Math.max(0, Number(raw.duracion_estimada_horas) || 0)
+      : null,
+    duracion_real_horas: raw.duracion_real_horas !== undefined && raw.duracion_real_horas !== null
+      ? Math.max(0, Number(raw.duracion_real_horas) || 0)
+      : null,
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
+  };
+}
+
+export function sanitizarHabitoLogInbound(remoto: any, localPrevio?: any): HabitoLogRecord {
+  return {
+    ...localPrevio,
+    ...remoto,
+    id: remoto.id || localPrevio?.id,
+    user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
+    habito_id: remoto.habito_id || localPrevio?.habito_id,
+    fecha_registro: sanitizeDate(remoto.fecha_registro) || sanitizeDate(localPrevio?.fecha_registro) || new Date().toISOString().split('T')[0],
+    hora_registro: remoto.hora_registro?.trim() || localPrevio?.hora_registro || undefined,
+    completado: Boolean(remoto.completado ?? localPrevio?.completado ?? true),
+    valor_cuantitativo_sumado: Number(remoto.valor_cuantitativo_sumado ?? localPrevio?.valor_cuantitativo_sumado ?? 0),
+    es_rescate: Boolean(remoto.es_rescate ?? localPrevio?.es_rescate ?? false),
+    nota_contexto: remoto.nota_contexto?.trim() || localPrevio?.nota_contexto || undefined,
+    fecha_programada_original: sanitizeDate(remoto.fecha_programada_original || localPrevio?.fecha_programada_original) || undefined,
+    dias_desfase: remoto.dias_desfase !== undefined && remoto.dias_desfase !== null
+      ? Number(remoto.dias_desfase)
+      : localPrevio?.dias_desfase,
+    duracion_estimada_horas: remoto.duracion_estimada_horas !== undefined && remoto.duracion_estimada_horas !== null
+      ? Number(remoto.duracion_estimada_horas)
+      : localPrevio?.duracion_estimada_horas,
+    duracion_real_horas: remoto.duracion_real_horas !== undefined && remoto.duracion_real_horas !== null
+      ? Number(remoto.duracion_real_horas)
+      : localPrevio?.duracion_real_horas,
+    sync_status: 'synced',
+    updated_at: sanitizeTimestamp(remoto.updated_at) || sanitizeTimestamp(localPrevio?.updated_at) || new Date().toISOString()
   };
 }

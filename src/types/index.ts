@@ -260,6 +260,10 @@ export interface HabitoLogRecord {
   valor_cuantitativo_sumado?: number;
   es_rescate?: boolean;
   nota_contexto?: string;
+  fecha_programada_original?: string; // YYYY-MM-DD asignada al completar
+  dias_desfase?: number; // >0 mora, <0 adelanto, 0 a tiempo
+  duracion_estimada_horas?: number;
+  duracion_real_horas?: number;
   created_at?: string;
   updated_at: string;
   sync_status: SyncStatus;
@@ -486,6 +490,7 @@ export interface TareaRecord {
   horas_estimadas?: number;
   horas_reales?: number;
   fecha_programada?: string;
+  fecha_completado?: string; // YYYY-MM-DD
   hora_inicio?: string; // HH:mm
   agendado_calendar?: 'Sí' | 'No';
   id_evento_calendar?: string;
@@ -517,6 +522,7 @@ export interface GastoRecord {
   modalidad?: string;
   metodo_pago?: string;
   estado_pago: 'PAGADO' | 'PENDIENTE' | 'PROGRAMADO' | string;
+  fecha_ejecucion_real?: string; // YYYY-MM-DD del pago efectivo
   comprobante_url?: string;
   agendar_calendar?: boolean;
   agendado_calendar?: 'Sí' | 'No' | string;
@@ -540,6 +546,7 @@ export interface IngresoRecord {
   metodo_cobro?: string;
   cuenta_destino?: string;
   estado_cobro: 'COBRADO' | 'PENDIENTE' | string;
+  fecha_ejecucion_real?: string; // YYYY-MM-DD del cobro efectivo
   agendar_calendar?: boolean;
   agendado_calendar?: 'Sí' | 'No' | string;
   id_evento_calendar?: string;

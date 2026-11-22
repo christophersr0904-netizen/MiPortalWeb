@@ -13,11 +13,15 @@ import { syncManager } from './syncManager';
 import { generarCodigoCorrelativoSeguro } from '../utils/entityNormalizer';
 import { generateSafeUUID } from '../utils/uuidGenerator';
 import { sincronizarIngresoCalendar } from './calendarSyncService';
+import { formatFechaIsoLocal } from '../utils/timeFormatters';
 
 export async function crearIngreso(datos: Partial<IngresoRecord>): Promise<IngresoRecord> {
   const nowIso = new Date().toISOString();
   const codigoLegado = datos.codigo_legado || (await generarCodigoCorrelativoSeguro(db.ingresos, 'ING', 3));
   const idFinal = datos.id || generateSafeUUID();
+  const estadoCobroNorm = (datos.estado_cobro || 'COBRADO').toUpperCase();
+  const esCobrado = estadoCobroNorm === 'COBRADO';
+  const fechaReal = datos.fecha_ejecucion_real || (esCobrado ? (datos.fecha_ingreso || formatFechaIsoLocal(new Date())) : undefined);
 
   const payload: IngresoRecord = {
     id: idFinal,
@@ -26,6 +30,7 @@ export async function crearIngreso(datos: Partial<IngresoRecord>): Promise<Ingre
     tipo_origen: datos.tipo_origen || 'Honorario',
     categoria_ingreso: datos.categoria_ingreso || 'Principal',
     fecha_ingreso: datos.fecha_ingreso || nowIso.split('T')[0],
+    fecha_ejecucion_real: fechaReal,
     descripcion_ingreso: (datos.descripcion_ingreso || 'Ingreso').trim(),
     moneda_original: datos.moneda_original || 'PEN',
     monto_original: Math.max(0, Number(datos.monto_original) || 0),
@@ -63,6 +68,14 @@ export async function actualizarIngreso(id: string, cambios: Partial<IngresoReco
     updated_at: nowIso,
     sync_status: 'pending'
   };
+
+  const estadoFinal = (cambios.estado_cobro || actual?.estado_cobro || '').toUpperCase();
+  const esCobrado = estadoFinal === 'COBRADO';
+  if (esCobrado && !cambios.fecha_ejecucion_real && !actual?.fecha_ejecucion_real) {
+    updates.fecha_ejecucion_real = cambios.fecha_ingreso || actual?.fecha_ingreso || formatFechaIsoLocal(new Date());
+  } else if (!esCobrado && cambios.estado_cobro !== undefined && cambios.fecha_ejecucion_real === undefined) {
+    updates.fecha_ejecucion_real = '';
+  }
 
   await db.ingresos.update(id, updates);
 
