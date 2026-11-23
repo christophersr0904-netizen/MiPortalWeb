@@ -52,6 +52,19 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.17 — Refactorización y Desacoplamiento de Lógica en ModalTareaFlow (REQ-REFACTOR-P1-03)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useTareaForm.ts`, `src/components/Modals/ModalTareaFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Creación de `src/hooks/useTareaForm.ts`:**
+    - Custom hook que centraliza los 34 estados del formulario (`useState`), 6 consultas reactivas (`useLiveQuery` de Dexie para `proyectos`, `hitos_wbs`, `tareas`, `subtareas_pasos`, `gastos`), hidratación defensiva y reseteo en modo creación vs edición, persistencia dual atómica (`crearTarea` / `actualizarTarea`), despacho a Google Calendar (`calendarSyncService`), integración embebida de gastos, validaciones secuenciales de subtareas (DoD) y atajos de teclado (`Escape`, `Ctrl/Cmd+Enter`).
+  - **Adelgazamiento de `ModalTareaFlow.tsx`:**
+    - Reducción de 1,436 líneas a 930 líneas (**-506 líneas / -35.2% de reducción**).
+    - El modal queda enfocado exclusivamente en renderizar el Bento Grid, pestañas, selectores interactivos y modales secundarios.
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites).
+    - Compilación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 424.59 kB (< 500 kB).
+
 ### FASE 8.16 — Refactorización y Desacoplamiento de Lógica en ModalActividadFlow (REQ-REFACTOR-P1-02)
 - **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useActividadForm.ts`, `src/components/Modals/ModalActividadFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
