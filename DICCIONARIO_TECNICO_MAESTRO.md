@@ -52,6 +52,29 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.16 — Refactorización y Desacoplamiento de Lógica en ModalActividadFlow (REQ-REFACTOR-P1-02)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useActividadForm.ts`, `src/components/Modals/ModalActividadFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Creación de `src/hooks/useActividadForm.ts`:**
+    - Custom hook que centraliza todos los 43 estados locales (`useState`), sincronización reactiva (`useLiveQuery` de Dexie para `metas_planes` y `gastos`), hidratación y reseteo defensivo, persistencia atómica (`commitGuardado`), borrado optimista (`useUndoDelete`), lápidas (`registrarTombstone`), validaciones y despacho a Google Calendar.
+    - Preservación incondicional de hábitos puntuales con `duracion_horas: 0` y captura segura de lápidas en pasos eliminados.
+  - **Adelgazamiento de `ModalActividadFlow.tsx`:**
+    - Reducción de 2,115 líneas a 1,236 líneas (**-879 líneas / -41.6% de reducción de complejidad**).
+    - El componente queda confinado exclusivamente al renderizado de UI/JSX, respetando la gobernanza de componentes limpios y la suite de tokens Cobalt Aerodynamic (A.2.2).
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites).
+    - Compilación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 424.59 kB (< 500 kB).
+
+### FASE 8.15 — Desacoplamiento Modular de la Pestaña EVM (REQ-REFACTOR-P1-01)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/Views/Detalle360/PanelEVMProyecto.tsx`, `src/components/Views/ViewDetalle360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Creación de `src/components/Views/Detalle360/PanelEVMProyecto.tsx`:**
+    - Componente modular de 327 líneas con tipado estricto (`PanelEVMProyectoProps`), exportación limpia y cero acoplamiento con el estado global de `ViewDetalle360`.
+    - Contiene el Bento Grid completo de 6 tarjetas de métricas maestras EVM (BAC, PV, EV, AC, Cost Control, EAC), la cuadrícula de Varianzas e Índices (CV, SV, CPI, SPI, TCPI, Estimado a Término) y el Gráfico SVG Reactivo de Curvas en S / EVM.
+  - **Adelgazamiento de `ViewDetalle360.tsx`:**
+    - Se redujo el archivo de 2,841 a 2,566 líneas (-275 líneas).
+
 ### FASE 8.10 — Erradicación de Salto Inicial (0,0) en Desplegables con Portal Flotante (REQ-UI-DROPDOWN-01-EXEC)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/UI/SelectIconicoCobalt.tsx`, `src/components/Notas/BadgeNotasVinculadas.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
@@ -11093,3 +11116,30 @@ supabase functions deploy gcal-auth
   - `main-*.js`: 425.24 kB $\rightarrow$ **424.59 kB** (gzip: 116.32 kB).
   - `vendor-react-*.js`: 312.61 kB $\rightarrow$ **311.77 kB** (gzip: 96.14 kB).
   - 137 paquetes superfluos desinstalados de `node_modules`.
+
+
+---
+
+### [REQ-REFACTOR-P1-01: Desacoplamiento Modular de la Pestaña EVM (PanelEVMProyecto) desde ViewDetalle360]
+**Fecha:** Noviembre 2026 | **Fase:** 8.20 (Modularización y Desacoplamiento de Vistas Monolíticas) | **Archivos Creados/Modificados:** `src/components/Views/Detalle360/PanelEVMProyecto.tsx` (Nuevo), `src/components/Views/ViewDetalle360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico y Objetivo de Refactorización
+- `src/components/Views/ViewDetalle360.tsx` era el segundo archivo más extenso del proyecto (2,841 líneas), acumulando en un solo componente el encabezado maestro, la gestión de subpestañas (WBS, EVM, Trade-off, Gobernanza), cálculo de métricas financieras y el renderizado inline de la Curva S vectorial SVG.
+- Se requería extraer de forma 100% pura y sin cambios visuales ni funcionales el bloque correspondiente a `subTabActiva === 'evm'`.
+
+#### 2. Solución de Ingeniería Implementada
+1. **Componente Modular `PanelEVMProyecto.tsx`:**
+   - Ubicación: `src/components/Views/Detalle360/PanelEVMProyecto.tsx`.
+   - Interfaz de props fuertemente tipada (`PanelEVMProyectoProps`), sin ningún uso de `any`, encapsulando:
+     - Métricas base: `bac`, `pv`, `pctTiempo`, `ev`, `ac`, `cc`, `eac`, `cv`, `sv`, `cpi`, `spi`, `vac`.
+     - Varianzas físicas y temporales: `desfasePromedioTareas`, `conteoTareasConDesfase`, `esfuerzoDesviacionProyecto`.
+     - Dictamen ejecutivo: `dictamenPmo`.
+   - Mantiene estrictamente el diseño Bento Grid Cobalt Aerodynamic (A.2.2) y el renderizado SVG reactivo de la Curva S y líneas de corte.
+2. **Integración Limpia en `ViewDetalle360.tsx`:**
+   - Se reemplazó el bloque JSX de 298 líneas por `<PanelEVMProyecto ... />`.
+   - Reducción directa de **275 líneas** en `ViewDetalle360.tsx` (de 2,841 a 2,566 líneas).
+
+#### 3. Certificación QA y Desempeño
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (374/374 tests al 100% verde)**.
+- **Compilador de Producción:** `npx vite build` $\rightarrow$ Exit Code 0 (2,934 módulos transformados en 10.52s, `main-*.js` en 424.59 kB < 500 kB).
