@@ -161,7 +161,9 @@ class SyncManager {
           this.inicializacionPromise,
           new Promise((resolve) => setTimeout(resolve, timeoutMs))
         ]);
-      } catch { }
+      } catch (err) {
+        console.debug('[SyncManager] Timeout o excepción esperando sincronización inicial:', err);
+      }
     }
     while (this.isSyncing && Date.now() - inicio < timeoutMs) {
       await new Promise((resolve) => setTimeout(resolve, 80));
@@ -421,7 +423,9 @@ class SyncManager {
               this.setUserId(session.user.id);
             }
           });
-        } catch { }
+        } catch (err) {
+          console.warn('[SyncManager] Error al suscribir onAuthStateChange:', err);
+        }
       }
     } catch (err) {
       console.warn('[SyncManager] Error al inicializar cliente Supabase:', err);
@@ -687,7 +691,9 @@ class SyncManager {
     if (this.realtimeChannel && typeof this.realtimeChannel.unsubscribe === 'function') {
       try {
         this.realtimeChannel.unsubscribe();
-      } catch { }
+      } catch (err) {
+        console.debug('[SyncManager] Excepción al desuscribir canal Realtime:', err);
+      }
       this.realtimeChannel = null;
     }
   }

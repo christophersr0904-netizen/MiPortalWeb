@@ -140,7 +140,9 @@ export async function eliminarProyecto(
   try {
     const gastosProy = await db.gastos.where('id_proyecto').anyOf(proyRefs).toArray();
     gastosProy.forEach((g) => mapaGastos.set(g.id, g));
-  } catch {}
+  } catch (err) {
+    console.warn('[proyectosService] Error al consultar gastos por id_proyecto en eliminación:', err);
+  }
 
   if (proyRefs.length > 0 || tareaRefs.length > 0 || hitoRefs.length > 0) {
     try {
@@ -149,7 +151,9 @@ export async function eliminarProyecto(
         .anyOf([...proyRefs, ...tareaRefs, ...hitoRefs])
         .toArray();
       gastosOrigen.forEach((g) => mapaGastos.set(g.id, g));
-    } catch {}
+    } catch (err) {
+      console.warn('[proyectosService] Error al consultar gastos por id_origen_vinculado en eliminación:', err);
+    }
   }
   const gastosAEliminar = Array.from(mapaGastos.values());
 

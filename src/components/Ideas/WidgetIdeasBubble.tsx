@@ -1079,7 +1079,9 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       if (posFinal) {
         try {
           localStorage.setItem(STORAGE_KEY_BUBBLE_POS, JSON.stringify(posFinal));
-        } catch {}
+        } catch (err) {
+          console.warn('[WidgetIdeasBubble] Error al persistir posición de burbuja:', err);
+        }
       }
     };
 
@@ -1153,7 +1155,9 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       setPosicionVentana(newPos);
       try {
         localStorage.setItem('pmo_ideas_ventana_pos', JSON.stringify(newPos));
-      } catch {}
+      } catch (err) {
+        console.warn('[WidgetIdeasBubble] Error al persistir posición de ventana:', err);
+      }
     };
 
     const handleMouseUp = () => {
@@ -1201,7 +1205,9 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       setTamanoVentana(newSize);
       try {
         localStorage.setItem('pmo_ideas_ventana_size', JSON.stringify(newSize));
-      } catch {}
+      } catch (err) {
+        console.warn('[WidgetIdeasBubble] Error al persistir tamaño de ventana:', err);
+      }
     };
 
     const handleMouseUp = () => {

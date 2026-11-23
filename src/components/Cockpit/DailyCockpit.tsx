@@ -54,6 +54,10 @@ import { syncManager, esEntornoEscritorioLocal } from '../../services/syncManage
 import { crearTarea } from '../../services/tareasService';
 import { ModalTareaFlow } from '../Modals/ModalTareaFlow';
 import { ModalDecisionMoraHabito } from '../Modals/ModalDecisionMoraHabito';
+import {
+  useCockpitPomodoro,
+  PERFILES_ALARMA
+} from '../../hooks/useCockpitPomodoro';
 import type { ModoResolucionMora } from '../../services/habitosService';
 import type { ActividadPersonal } from '../../types';
 import {
@@ -65,16 +69,6 @@ import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
 const PRESETS_DURACION_FOCO = [10, 15, 25, 45, 60, 90] as const;
 
-type PerfilAlarma = 'zen' | 'digital' | 'cristal' | 'gong' | 'radar' | 'silencio';
-
-const PERFILES_ALARMA: Array<{ id: PerfilAlarma; nombre: string; detalle: string }> = [
-  { id: 'zen', nombre: 'Campana Zen', detalle: 'Armónico cálido suave' },
-  { id: 'digital', nombre: 'Pulso Digital', detalle: 'Doble tono ejecutivo' },
-  { id: 'cristal', nombre: 'Acorde Cristal', detalle: 'Tríada limpia' },
-  { id: 'gong', nombre: 'Gong Profundo', detalle: 'Grave resonante' },
-  { id: 'radar', nombre: 'Alerta Radar', detalle: 'Secuencia técnica breve' },
-  { id: 'silencio', nombre: 'Silencio', detalle: 'Sin sonido' }
-];
 
 const DRAG_REGION_STYLE: React.CSSProperties = { WebkitAppRegion: 'drag' } as unknown as React.CSSProperties;
 const NO_DRAG_REGION_STYLE: React.CSSProperties = { WebkitAppRegion: 'no-drag' } as unknown as React.CSSProperties;
@@ -183,489 +177,6 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
       }
     }
   }, [esWidgetNativo, cockpitAbierto]);
-
-  // Temporizador Pomodoro persistido en localStorage (REQ-UI-33-EXEC)
-  const duracionInicialMin = (() => {
-    if (typeof window !== 'undefined') {
-      const saved = parseInt(localStorage.getItem('pmo_pomodoro_minutos') || '', 10);
-      if (!isNaN(saved) && saved >= 1 && saved <= 180) return saved;
-    }
-    return 25;
-  })();
-  const duracionInicialPomodoro = duracionInicialMin * 60;
-  const [pomodoroSegundos, setPomodoroSegundos] = useState(duracionInicialPomodoro);
-  const [pomodoroCorriendo, setPomodoroCorriendo] = useState(false);
-  const [pomodoroTotal, setPomodoroTotal] = useState(duracionInicialPomodoro);
-  const timerPomodoroRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const targetEndTimestampRef = useRef<number | null>(null);
-  const expiracionNotificadaRef = useRef(false);
-  const activeAudioCtxRef = useRef<AudioContext | null>(null);
-  const audioCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const itemFocoActivoRef = useRef<DailyScheduleItem | null>(null);
-  const pomodoroTotalRef = useRef<number>(duracionInicialPomodoro);
-  pomodoroTotalRef.current = pomodoroTotal;
-
-  // Popover minimalista de duración personalizada (1-180 min) sin spinners (REQ-UI-33-EXEC Paso 2)
-  const [customMinutosAbierto, setCustomMinutosAbierto] = useState(false);
-  const [inputMinutosCustom, setInputMinutosCustom] = useState(String(duracionInicialMin));
-  const customPopoverRef = useRef<HTMLDivElement | null>(null);
-
-  const handleAplicarMinutosCustom = () => {
-    const min = parseInt(inputMinutosCustom, 10);
-    if (!isNaN(min) && min >= 1 && min <= 180) {
-      handleSetPresetPomodoro(min);
-    }
-    setCustomMinutosAbierto(false);
-  };
-
-  // Estado y Sistema de Alerta Multisensorial Pomodoro (REQ-UI-33-EXEC Paso 3 & 4)
-  const [tiempoExpirado, setTiempoExpirado] = useState(false);
-  const [sonidoPopoverAbierto, setSonidoPopoverAbierto] = useState(false);
-  const sonidoPopoverRef = useRef<HTMLDivElement | null>(null);
-
-  // Selector de Perfiles de Alarma Sonora (6 perfiles Web Audio API)
-  const [perfilAlarma, setPerfilAlarma] = useState<PerfilAlarma>(() => {
-    if (typeof window !== 'undefined') {
-      const guardado = localStorage.getItem('pmo_perfil_alarma');
-      if (
-        guardado === 'zen' ||
-        guardado === 'digital' ||
-        guardado === 'cristal' ||
-        guardado === 'gong' ||
-        guardado === 'radar' ||
-        guardado === 'silencio'
-      ) {
-        return guardado;
-      }
-    }
-    return 'zen';
-  });
-  const perfilAlarmaRef = useRef<PerfilAlarma>(perfilAlarma);
-  perfilAlarmaRef.current = perfilAlarma;
-
-  const handleCambiarPerfilAlarma = (perfil: PerfilAlarma) => {
-    setPerfilAlarma(perfil);
-    perfilAlarmaRef.current = perfil;
-    try {
-      localStorage.setItem('pmo_perfil_alarma', perfil);
-    } catch {}
-  };
-
-  // Métrica de Bloques Diarios de Foco (REQ-DESKTOP-17 Paso 3)
-  const obtenerKeyFocoHoy = () => {
-    const hoyStr = formatFechaIsoLocal(new Date());
-    return `pmo_foco_metric_${hoyStr}`;
-  };
-
-  const [metricasFocoHoy, setMetricasFocoHoy] = useState<{ bloques: number; minutos: number }>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem(obtenerKeyFocoHoy());
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          return {
-            bloques: Number(parsed.bloques) || 0,
-            minutos: Number(parsed.minutos) || 0
-          };
-        }
-      } catch {}
-    }
-    return { bloques: 0, minutos: 0 };
-  });
-
-  const registrarBloqueCompletado = (duracionSegundos: number) => {
-    try {
-      const minBloque = Math.max(1, Math.round(duracionSegundos / 60));
-      const key = obtenerKeyFocoHoy();
-      const actual = (() => {
-        try {
-          const raw = localStorage.getItem(key);
-          if (raw) return JSON.parse(raw);
-        } catch {}
-        return { bloques: 0, minutos: 0 };
-      })();
-      const actualizado = {
-        bloques: (Number(actual.bloques) || 0) + 1,
-        minutos: (Number(actual.minutos) || 0) + minBloque
-      };
-      localStorage.setItem(key, JSON.stringify(actualizado));
-      setMetricasFocoHoy(actualizado);
-    } catch (e) {
-      console.warn('[Cockpit FocusMetric] Error al persistir bloque de foco:', e);
-    }
-  };
-
-  const acreditarHorasFocoEnTarea = async (duracionSegundos: number) => {
-    const itemFoco = itemFocoActivoRef.current;
-    if (!itemFoco || itemFoco.tipo !== 'TAREA') return;
-
-    const tareaId = String((itemFoco.raw as any)?.id || itemFoco.id || '').trim();
-    if (!tareaId) return;
-
-    try {
-      const tareaActual = await db.tareas.get(tareaId);
-      if (!tareaActual) return;
-
-      const horasPrevias =
-        Number((tareaActual as any).horas_reales ?? (tareaActual as any).Horas_Reales ?? 0) || 0;
-      const incrementoHoras = Math.round((duracionSegundos / 3600) * 100) / 100;
-      const nuevasHorasReales = Math.round((horasPrevias + incrementoHoras) * 100) / 100;
-      const nowIso = new Date().toISOString();
-
-      await db.tareas.update(tareaId, {
-        horas_reales: nuevasHorasReales,
-        Horas_Reales: nuevasHorasReales,
-        sync_status: 'pending',
-        updated_at: nowIso
-      } as any);
-
-      syncManager.syncPendingRecords().catch(() => {});
-      syncManager.guardarSnapshotEnPuenteLocal().catch(() => {});
-    } catch (err) {
-      console.warn('[Cockpit FocusHours] Error al acreditar horas reales en Dexie:', err);
-    }
-  };
-
-  const cerrarAudioActivo = () => {
-    if (audioCloseTimerRef.current) {
-      clearTimeout(audioCloseTimerRef.current);
-      audioCloseTimerRef.current = null;
-    }
-    if (activeAudioCtxRef.current) {
-      const ctxToClose = activeAudioCtxRef.current;
-      activeAudioCtxRef.current = null;
-      try {
-        if (ctxToClose.state !== 'closed') {
-          ctxToClose.close().catch(() => {});
-        }
-      } catch {}
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      cerrarAudioActivo();
-    };
-  }, []);
-
-  // Motor Web Audio API con 6 perfiles acústicos, refuerzo limpio sin distorsión y cierre seguro (REQ-UI-33-V2 Paso 4)
-  const programarCicloAlarma = (
-    ctx: AudioContext,
-    destino: AudioNode,
-    perfilActivo: Exclude<PerfilAlarma, 'silencio'>,
-    tInicio: number
-  ): number => {
-    if (perfilActivo === 'digital') {
-      [
-        { freq: 1567.98, t: 0, dur: 0.1 },
-        { freq: 2093.0, t: 0.14, dur: 0.14 }
-      ].forEach(({ freq, t, dur }) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, tInicio + t);
-
-        gain.gain.setValueAtTime(0.0001, tInicio + t);
-        gain.gain.linearRampToValueAtTime(0.42, tInicio + t + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, tInicio + t + dur);
-
-        osc.connect(gain);
-        gain.connect(destino);
-        osc.start(tInicio + t);
-        osc.stop(tInicio + t + dur + 0.02);
-      });
-      return 0.3;
-    }
-
-    if (perfilActivo === 'cristal') {
-      [880, 1108.73, 1318.51].forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        const inicio = tInicio + idx * 0.1;
-
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, inicio);
-
-        gain.gain.setValueAtTime(0.0001, inicio);
-        gain.gain.exponentialRampToValueAtTime(0.4, inicio + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.45);
-
-        osc.connect(gain);
-        gain.connect(destino);
-        osc.start(inicio);
-        osc.stop(inicio + 0.48);
-      });
-      return 0.68;
-    }
-
-    if (perfilActivo === 'gong') {
-      [
-        { freq: 130.81, peak: 0.45, dur: 1.15 },
-        { freq: 196.0, peak: 0.18, dur: 0.95 },
-        { freq: 261.63, peak: 0.09, dur: 0.75 }
-      ].forEach(({ freq, peak, dur }) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, tInicio);
-
-        gain.gain.setValueAtTime(0.0001, tInicio);
-        gain.gain.exponentialRampToValueAtTime(peak, tInicio + 0.035);
-        gain.gain.exponentialRampToValueAtTime(0.0001, tInicio + dur);
-
-        osc.connect(gain);
-        gain.connect(destino);
-        osc.start(tInicio);
-        osc.stop(tInicio + dur + 0.04);
-      });
-      return 1.2;
-    }
-
-    if (perfilActivo === 'radar') {
-      [
-        { freq: 620, t: 0 },
-        { freq: 780, t: 0.12 },
-        { freq: 940, t: 0.24 }
-      ].forEach(({ freq, t }) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(freq, tInicio + t);
-
-        gain.gain.setValueAtTime(0.0001, tInicio + t);
-        gain.gain.exponentialRampToValueAtTime(0.38, tInicio + t + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.0001, tInicio + t + 0.11);
-
-        osc.connect(gain);
-        gain.connect(destino);
-        osc.start(tInicio + t);
-        osc.stop(tInicio + t + 0.12);
-      });
-      return 0.38;
-    }
-
-    // Campana Zen (default)
-    [
-      { freq: 528, peak: 0.42, dur: 0.95 },
-      { freq: 792, peak: 0.16, dur: 0.8 }
-    ].forEach(({ freq, peak, dur }) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, tInicio);
-
-      gain.gain.setValueAtTime(0.0001, tInicio);
-      gain.gain.exponentialRampToValueAtTime(peak, tInicio + 0.025);
-      gain.gain.exponentialRampToValueAtTime(0.0001, tInicio + dur);
-
-      osc.connect(gain);
-      gain.connect(destino);
-      osc.start(tInicio);
-      osc.stop(tInicio + dur + 0.04);
-    });
-    return 1.0;
-  };
-
-  const reproducirAlarmaFin = async (perfilOverride?: PerfilAlarma, repeticiones: number = 1) => {
-    const perfilActivo = perfilOverride ?? perfilAlarmaRef.current;
-    if (perfilActivo === 'silencio') {
-      cerrarAudioActivo();
-      return;
-    }
-
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-
-      cerrarAudioActivo();
-      const ctx = new AudioCtx();
-      activeAudioCtxRef.current = ctx;
-
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
-
-      // Limitador suave para mantener ganancia clara (0.38–0.45) sin clipping en armónicos
-      const limiter = ctx.createDynamicsCompressor();
-      limiter.threshold.setValueAtTime(-3, ctx.currentTime);
-      limiter.knee.setValueAtTime(6, ctx.currentTime);
-      limiter.ratio.setValueAtTime(12, ctx.currentTime);
-      limiter.attack.setValueAtTime(0.002, ctx.currentTime);
-      limiter.release.setValueAtTime(0.1, ctx.currentTime);
-      limiter.connect(ctx.destination);
-
-      const ciclos = Math.max(1, repeticiones);
-      const pausaEntreCiclosSec = 0.6;
-      let cursor = ctx.currentTime;
-      let duracionCiclo = 0;
-
-      for (let i = 0; i < ciclos; i++) {
-        duracionCiclo = programarCicloAlarma(ctx, limiter, perfilActivo, cursor);
-        cursor += duracionCiclo + (i < ciclos - 1 ? pausaEntreCiclosSec : 0);
-      }
-
-      const cierreMs = Math.ceil((cursor - ctx.currentTime + 0.35) * 1000);
-      audioCloseTimerRef.current = setTimeout(() => {
-        if (activeAudioCtxRef.current === ctx) {
-          activeAudioCtxRef.current = null;
-        }
-        audioCloseTimerRef.current = null;
-        try {
-          if (ctx.state !== 'closed') {
-            ctx.close().catch(() => {});
-          }
-        } catch {}
-      }, cierreMs);
-    } catch (err) {
-      console.warn('[Cockpit Audio] No se pudo reproducir la alarma:', err);
-    }
-  };
-
-  // Notificación Nativa de Sistema al Finalizar Bloque
-  const lanzarNotificacionExpirado = () => {
-    try {
-      if (typeof Notification === 'undefined') return;
-      if (Notification.permission === 'granted') {
-        new Notification('Cockpit: Tiempo Cumplido', {
-          body: 'Tu bloque de enfoque ha finalizado con éxito.'
-        });
-      } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then((perm) => {
-          if (perm === 'granted') {
-            new Notification('Cockpit: Tiempo Cumplido', {
-              body: 'Tu bloque de enfoque ha finalizado con éxito.'
-            });
-          }
-        });
-      }
-    } catch (e) {
-      console.warn('[Cockpit Notification] Error al emitir notificación:', e);
-    }
-  };
-
-  // Motor Absoluto de Temporizador sin Deriva basado en Date.now() (REQ-UI-33-EXEC Paso 5)
-  useEffect(() => {
-    if (!pomodoroCorriendo) {
-      if (timerPomodoroRef.current) {
-        clearInterval(timerPomodoroRef.current);
-        timerPomodoroRef.current = null;
-      }
-      targetEndTimestampRef.current = null;
-      return;
-    }
-
-    if (targetEndTimestampRef.current === null) {
-      const segundosBase = pomodoroSegundos > 0 ? pomodoroSegundos : pomodoroTotalRef.current;
-      targetEndTimestampRef.current = Date.now() + segundosBase * 1000;
-    }
-
-    const actualizarRestante = () => {
-      if (targetEndTimestampRef.current === null) return;
-      const restante = Math.max(0, Math.ceil((targetEndTimestampRef.current - Date.now()) / 1000));
-      setPomodoroSegundos(restante);
-      if (restante <= 0) {
-        if (timerPomodoroRef.current) {
-          clearInterval(timerPomodoroRef.current);
-          timerPomodoroRef.current = null;
-        }
-        targetEndTimestampRef.current = null;
-        setPomodoroCorriendo(false);
-        setTiempoExpirado(true);
-      }
-    };
-
-    actualizarRestante();
-    timerPomodoroRef.current = setInterval(actualizarRestante, 250);
-    document.addEventListener('visibilitychange', actualizarRestante);
-
-    return () => {
-      if (timerPomodoroRef.current) {
-        clearInterval(timerPomodoroRef.current);
-        timerPomodoroRef.current = null;
-      }
-      document.removeEventListener('visibilitychange', actualizarRestante);
-    };
-  }, [pomodoroCorriendo]);
-
-  // Efecto Único y Determinístico de Expiración (Audio, Notificación, Métrica y Horas Reales en Dexie)
-  useEffect(() => {
-    if (!tiempoExpirado) {
-      expiracionNotificadaRef.current = false;
-      return;
-    }
-    if (expiracionNotificadaRef.current) return;
-    expiracionNotificadaRef.current = true;
-
-    const duracionCompletada = pomodoroTotalRef.current;
-    registrarBloqueCompletado(duracionCompletada);
-    void acreditarHorasFocoEnTarea(duracionCompletada);
-    void reproducirAlarmaFin(undefined, 2);
-    lanzarNotificacionExpirado();
-  }, [tiempoExpirado]);
-
-  const handleTogglePomodoro = () => {
-    if (tiempoExpirado) {
-      handleResetPomodoro();
-      return;
-    }
-    if (pomodoroCorriendo) {
-      const restante = targetEndTimestampRef.current
-        ? Math.max(0, Math.ceil((targetEndTimestampRef.current - Date.now()) / 1000))
-        : pomodoroSegundos;
-      targetEndTimestampRef.current = null;
-      setPomodoroSegundos(restante);
-      setPomodoroCorriendo(false);
-    } else {
-      expiracionNotificadaRef.current = false;
-      const base = pomodoroSegundos > 0 ? pomodoroSegundos : pomodoroTotal;
-      if (pomodoroSegundos <= 0) {
-        setPomodoroSegundos(base);
-      }
-      targetEndTimestampRef.current = Date.now() + base * 1000;
-      setPomodoroCorriendo(true);
-    }
-  };
-
-  const handleResetPomodoro = () => {
-    if (timerPomodoroRef.current) {
-      clearInterval(timerPomodoroRef.current);
-      timerPomodoroRef.current = null;
-    }
-    cerrarAudioActivo();
-    targetEndTimestampRef.current = null;
-    expiracionNotificadaRef.current = false;
-    setPomodoroCorriendo(false);
-    setTiempoExpirado(false);
-    setPomodoroSegundos(pomodoroTotal);
-  };
-
-  const handleSetPresetPomodoro = (minutos: number) => {
-    if (timerPomodoroRef.current) {
-      clearInterval(timerPomodoroRef.current);
-      timerPomodoroRef.current = null;
-    }
-    targetEndTimestampRef.current = null;
-    expiracionNotificadaRef.current = false;
-    const segundos = minutos * 60;
-    setPomodoroTotal(segundos);
-    setPomodoroSegundos(segundos);
-    setInputMinutosCustom(String(minutos));
-    setPomodoroCorriendo(false);
-    setTiempoExpirado(false);
-    try {
-      localStorage.setItem('pmo_pomodoro_minutos', String(minutos));
-    } catch {}
-  };
-
-  const tiempoPomodoroStr = useMemo(() => {
-    const m = Math.floor(pomodoroSegundos / 60);
-    const s = pomodoroSegundos % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }, [pomodoroSegundos]);
-
-  const pctPomodoro = useMemo(() => {
-    return Math.min(100, Math.max(0, ((pomodoroTotal - pomodoroSegundos) / pomodoroTotal) * 100));
-  }, [pomodoroTotal, pomodoroSegundos]);
 
   // Pestaña activa del Dock desplegado: 'BENTO' vs 'AGENDA'
   const [tabDock, setTabDock] = useState<'BENTO' | 'AGENDA'>('BENTO');
@@ -788,32 +299,6 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     }
   };
 
-  // Heartbeat de emisión de presencia si esta ventana es el widget nativo de escritorio
-  useEffect(() => {
-    if (esWidgetNativo) {
-      let channel: BroadcastChannel | null = null;
-      try {
-        channel = new BroadcastChannel('pmo_hud_bus');
-      } catch {}
-
-      const interval = setInterval(() => {
-        if (channel) {
-          try {
-            channel.postMessage({ type: 'DESKTOP_WIDGET_ALIVE', timestamp: Date.now() });
-          } catch {}
-        }
-        try {
-          localStorage.setItem('pmo_desktop_widget_heartbeat', String(Date.now()));
-        } catch {}
-      }, 1000);
-
-      return () => {
-        clearInterval(interval);
-        if (channel) channel.close();
-      };
-    }
-  }, [esWidgetNativo]);
-
   // Detección de coexistencia exclusiva y sincronización de puente local
   const [hayWidgetDeEscritorioActivo, setHayWidgetDeEscritorioActivo] = useState(false);
 
@@ -935,56 +420,37 @@ export const DailyCockpit: React.FC<DailyCockpitProps> = ({
     if (!tareaFocoId) return null;
     return pendientesFoco.find((i) => i.id === tareaFocoId) || null;
   }, [tareaFocoId, pendientesFoco]);
-  itemFocoActivoRef.current = itemFocoActivo;
 
-  // Cierre automático de popovers (duración y sonido) por clic fuera o Escape (incluye ventana PiP)
-  useEffect(() => {
-    if (!customMinutosAbierto && !sonidoPopoverAbierto) return;
-
-    const handlePointerOutside = (e: MouseEvent) => {
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (
-        customMinutosAbierto &&
-        customPopoverRef.current &&
-        !customPopoverRef.current.contains(target)
-      ) {
-        setCustomMinutosAbierto(false);
-      }
-      if (
-        sonidoPopoverAbierto &&
-        sonidoPopoverRef.current &&
-        !sonidoPopoverRef.current.contains(target)
-      ) {
-        setSonidoPopoverAbierto(false);
-      }
-    };
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setCustomMinutosAbierto(false);
-        setSonidoPopoverAbierto(false);
-      }
-    };
-
-    const docs: Document[] = [document];
-    if (pipWindow?.document && pipWindow.document !== document) {
-      docs.push(pipWindow.document);
-    }
-
-    docs.forEach((doc) => {
-      doc.addEventListener('mousedown', handlePointerOutside);
-      doc.addEventListener('keydown', handleEscape);
-    });
-
-    return () => {
-      docs.forEach((doc) => {
-        doc.removeEventListener('mousedown', handlePointerOutside);
-        doc.removeEventListener('keydown', handleEscape);
-      });
-    };
-  }, [customMinutosAbierto, sonidoPopoverAbierto, pipWindow]);
+  // Motor Pomodoro, Web Audio API y Bus HUD desacoplados en hook canónico
+  const {
+    pomodoroSegundos,
+    pomodoroTotal,
+    pomodoroCorriendo,
+    tiempoExpirado,
+    tiempoPomodoroStr,
+    pctPomodoro,
+    perfilAlarma,
+    metricasFocoHoy,
+    customMinutosAbierto,
+    setCustomMinutosAbierto,
+    inputMinutosCustom,
+    setInputMinutosCustom,
+    customPopoverRef,
+    sonidoPopoverAbierto,
+    setSonidoPopoverAbierto,
+    sonidoPopoverRef,
+    handleTogglePomodoro,
+    handleResetPomodoro,
+    handleSetPresetPomodoro,
+    handleAplicarMinutosCustom,
+    handleCambiarPerfilAlarma,
+    reproducirAlarmaFin,
+    cerrarAudioActivo
+  } = useCockpitPomodoro({
+    esWidgetNativo,
+    itemFocoActivo,
+    pipWindow
+  });
 
   const handleVincularTareaFoco = () => {
     const candidata =

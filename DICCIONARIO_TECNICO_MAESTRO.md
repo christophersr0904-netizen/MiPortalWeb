@@ -52,6 +52,36 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.19 — Extracción del Motor Pomodoro, Web Audio API y Bus HUD (REQ-REFACTOR-P1-04)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useCockpitPomodoro.ts`, `src/components/Cockpit/DailyCockpit.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Creación de `src/hooks/useCockpitPomodoro.ts` (646 líneas):**
+    - Custom hook que encapsula el temporizador Pomodoro absoluto sin deriva (`Date.now()`), 6 perfiles sonoros Web Audio API (`zen`, `digital`, `cristal`, `gong`, `radar`, `silencio`), persistencia en `localStorage` (`pmo_pomodoro_minutos`, `pmo_perfil_alarma`, `pmo_foco_metric_*`), heartbeat de coexistencia HUD vía `BroadcastChannel('pmo_hud_bus')`, cierre de popovers por clic exterior/Escape (incluyendo ventana Picture-in-Picture) y acreditación atómica de horas reales en Dexie (`db.tareas.update`).
+  - **Adelgazamiento de `DailyCockpit.tsx`:**
+    - Reducción de 3,076 líneas a 2,520 líneas (**-556 líneas / -18.1% de reducción**).
+    - El cockpit queda libre de lógica de temporizadores, audio y heartbeats, enfocado estrictamente en renderizado de cápsula, dock desplegado, riel horario y modales.
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites).
+    - Compilación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 425.23 kB (< 500 kB).
+
+### FASE 8.18 — Erradicación de Bloques Catch Silenciosos con Observabilidad Contextual (REQ-RESILIENCE-P2-01)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Cockpit/DailyCockpit.tsx`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/components/VoicePill.tsx`, `src/db/db.ts`, `src/services/proyectosService.ts`, `src/services/syncManager.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Erradicación de 20 Bloques `catch {}` Vacíos:**
+    - Se reemplazaron todas las capturas vacías por `catch (err)` estructurados con logging de diagnóstico contextual (`console.warn` y `console.debug` con prefijo del módulo).
+    - `DailyCockpit.tsx`: protección con logging en guardado de perfiles de alarma, métricas de foco en localStorage, cierre de AudioContext y heartbeats de BroadcastChannel.
+    - `WidgetIdeasBubble.tsx`: traza en guardado de coordenadas y dimensiones de la burbuja y ventana de ideas.
+    - `VoicePill.tsx`: captura defensiva de `setPointerCapture` / `releasePointerCapture` cuando la API no está soportada o el puntero expiró.
+    - `db.ts`: logging en purga de `sync_deletions` durante Garbage Collection.
+    - `proyectosService.ts`: traza explícita en consulta de gastos vinculados por `id_proyecto` e `id_origen_vinculado`.
+    - `syncManager.ts`: observabilidad en timeout de inicialización, suscripción a cambios de sesión Supabase y desuscripción de canales Realtime.
+  - **Calidad y Verificación:**
+    - 0 bloques `catch {}` vacíos restantes en todo el árbol de `src/`.
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites).
+    - Compilación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 425.23 kB (< 500 kB).
+
 ### FASE 8.17 — Refactorización y Desacoplamiento de Lógica en ModalTareaFlow (REQ-REFACTOR-P1-03)
 - **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useTareaForm.ts`, `src/components/Modals/ModalTareaFlow.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**

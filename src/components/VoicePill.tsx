@@ -382,7 +382,9 @@ const VoicePill: React.FC<VoicePillProps> = ({
     s.downAt = performance.now();
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {}
+    } catch (err) {
+      console.debug('[VoicePill] setPointerCapture omitido/no soportado:', err);
+    }
     setPressed(true);
     s.ownPress = !s.listening;
     if (!s.listening) begin('pointer');
@@ -396,7 +398,9 @@ const VoicePill: React.FC<VoicePillProps> = ({
     if (s.sliding) settleSlide();
     try {
       if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {}
+    } catch (err) {
+      console.debug('[VoicePill] releasePointerCapture omitido/no soportado:', err);
+    }
     if (!s.listening) return;
     const held = performance.now() - s.downAt;
     const isHold = c.mode === 'hold' || (c.mode === 'auto' && held >= c.holdAfter);

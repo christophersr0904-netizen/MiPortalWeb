@@ -735,15 +735,22 @@ export async function purgarRegistrosLocalesExpirados(diasRetencion: number = 90
 
     try {
       if (db.sync_deletions && typeof db.sync_deletions.toArray === 'function') {
-        const syncDels = (await db.sync_deletions.toArray().catch(() => [])) || [];
+        const syncDels = (await db.sync_deletions.toArray().catch((errDels) => {
+          console.debug('[PMO DB] Fallo al leer sync_deletions en GC:', errDels);
+          return [];
+        })) || [];
         const idsSyncDels = syncDels
           .filter((tb) => tb.sync_status === 'synced' && esExpirado(tb.deleted_at))
           .map((tb) => tb.id);
         if (idsSyncDels.length > 0 && typeof db.sync_deletions.bulkDelete === 'function') {
-          await db.sync_deletions.bulkDelete(idsSyncDels).catch(() => {});
+          await db.sync_deletions.bulkDelete(idsSyncDels).catch((errBulk) => {
+            console.debug('[PMO DB] Fallo en bulkDelete sync_deletions en GC:', errBulk);
+          });
         }
       }
-    } catch {}
+    } catch (err) {
+      console.warn('[PMO DB] Error al purgar sync_deletions en Garbage Collection:', err);
+    }
 
     resultado.totalPurgados =
       resultado.tareasPurgadas +
