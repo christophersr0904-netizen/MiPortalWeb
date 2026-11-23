@@ -217,12 +217,17 @@ export const ViewKanban: React.FC<ViewKanbanProps> = ({
 
   const { programarEliminacion, estaOculto, hiddenIdsSet } = useUndoDelete();
 
-  // Live queries granulares e independientes desde Dexie (REQ-PERF-FLUIDITY-04)
+  // Live queries optimizados con índices Dexie (REQ-PERF-P2-02 / REQ-PERF-FLUIDITY-04)
+  // Gastos acotados a registros vinculados a proyectos/tareas usando el índice id_proyecto
+  // Tareas ordenadas/indexadas por fecha_programada en Dexie para acelerar la hidratación de columnas
   const rawProyectosLive = useLiveQuery(() => db.proyectos.toArray(), []);
-  const rawTareasLive = useLiveQuery(() => db.tareas.toArray(), []);
+  const rawTareasLive = useLiveQuery(() => db.tareas.orderBy('fecha_programada').toArray(), []);
   const rawSubtareasLive = useLiveQuery(() => db.subtareas_pasos.toArray(), []);
   const rawHitosLive = useLiveQuery(() => db.hitos_wbs.toArray(), []);
-  const rawGastosLive = useLiveQuery(() => db.gastos.toArray(), []);
+  const rawGastosLive = useLiveQuery(
+    () => db.gastos.where('id_proyecto').notEqual('').toArray(),
+    []
+  );
 
   const cargandoDatosIniciales =
     rawProyectosLive === undefined ||

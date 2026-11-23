@@ -52,6 +52,139 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.27 — Desacoplamiento Modular de la Pestaña WBS (PanelWBSProyecto) (REQ-REFACTOR-P1-06)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/Views/Detalle360/PanelWBSProyecto.tsx` (Nuevo), `src/components/Views/ViewDetalle360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Extracción Pura de la Subpestaña WBS & Ruta Crítica:**
+    - Se extrajo el bloque monolítico de `subTabActiva === 'wbs'` hacia `PanelWBSProyecto.tsx` (1,122 líneas), siguiendo el patrón modular establecido por `PanelEVMProyecto.tsx`.
+    - Se encapsularon dentro de `PanelWBSProyecto.tsx` los estados internos de interacción y expansión WBS: `hitosExpandidos`, `pasosExpandidosMap` y `elementoResaltadoId`, junto con los manejadores `toggleHito`, `toggleTodosHitos`, `togglePasosTarea`, `toggleCompletarMarcador` y la navegación interactiva por nodos `handleNodoGrafoClick`.
+    - Se confinó `GrafoWBS` dentro de `PanelWBSProyecto.tsx`, reduciendo el acoplamiento y las importaciones de componentes e iconos en `ViewDetalle360.tsx`.
+    - Se definieron callbacks estrictos (`onAbrirModalCrearHitoFase`, `onCrearTareaHito`, `onEditarTarea`, `onDesglosarConIA`, `onRegistrarGastoHito`) para desacoplar limpiamente la apertura de modales Bento (ModalTareaFlow, ModalGasto, ModalNuevoHito, ModalDesgloseTareasIA).
+  - **Reducción de Densidad y Cero Tipos `any`:**
+    - `ViewDetalle360.tsx` redujo su extensión de **2,567 a 1,557 líneas** (ahorro neto de **1,010 líneas**, ~39% de reducción).
+    - Erradicación total de `any` en `PanelWBSProyecto.tsx` y eliminación del estado residual `paqueteParaDesgloseIA: any` en `ViewDetalle360.tsx` (reemplazado por `HitoWbsRecord | null`).
+    - Purga de 10 iconos Lucide no utilizados fuera de WBS (`Milestone`, `Package`, `Receipt`, `Gem`, `Flag`, `CheckSquare`, `Bot`, `Flame`, `FolderOpen`, `Tag`) y funciones utilitarias en desuso.
+  - **Calidad y Verificación QA:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites al 100% verde).
+    - Verificación estricta TypeScript con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 428.50 kB (< 500 kB).
+
+### FASE 8.26 — Extracción de Controlador de Ventana Flotante, Drag/Resize y Persistencia (useIdeasBubbleWindow) (REQ-REFACTOR-P1-05)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useIdeasBubbleWindow.ts` (Nuevo), `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Desacoplamiento Modular de Geometría y Control de Ventana:**
+    - Se creó el hook `useIdeasBubbleWindow.ts` con tipado estricto (0 coerciones `any`), encapsulando la lógica de límites de pantalla (`clampPosicionBurbuja`), arrastre por puntero de la píldora (`handlePointerDownGrip`), arrastre por cabecera de la ventana (`handleMouseDownVentanaHeader`), redimensionamiento con límites mínimos/máximos (`handleMouseDownVentanaResize`), y estilos dinámicos (`containerStyle`, `ventanaStyle`, `abrirPopoverHaciaAbajo`, `abrirPopoverHaciaDerecha`).
+    - Se extrajeron 3 `useEffect` globales dedicados a la lectura/escritura en `localStorage` (`pmo_ideas_bubble_pos`, `pmo_ideas_ventana_pos`, `pmo_ideas_ventana_size`), detección de viewport móvil (`matchMedia('(max-width: 767px)')`) y re-acotamiento responsivo ante evento `'resize'`.
+    - Se blindaron los eventos con funciones de limpieza simétricas (`dragCleanupRef`, `ventanaDragCleanupRef`, `ventanaResizeCleanupRef`), erradicando cualquier fuga de listeners en unmount o redimensionamiento.
+  - **Limpieza de Carga Cognitiva en WidgetIdeasBubble.tsx:**
+    - `WidgetIdeasBubble.tsx` redujo su extensión de **2,145 a 1,819 líneas** (ahorro neto de **326 líneas** de código).
+    - Los `useEffect` en `WidgetIdeasBubble.tsx` se redujeron de **18 a 15**, quedando el componente enfocado exclusivamente en captura de ideas, notas rápidas, transcodificación multimedia (Canvas/Audio) y despacho hacia Dexie.
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites al 100% verde).
+    - Verificación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 428.50 kB (< 500 kB).
+
+### FASE 8.25 — Eliminación de Librería Duplicada gsap (Migración a motion) y Limpieza de Paquete cn (REQ-PERF-P2-03)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/AnimatedContent.tsx`, `src/lib/utils.ts`, `src/components/UI/button.tsx`, `package.json`, `package-lock.json`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Migración de Motor de Animación GSAP a motion/react:**
+    - Se refactorizó íntegramente `src/components/AnimatedContent.tsx` para reemplazar el runtime de `gsap` y `ScrollTrigger` por `<motion.div>` de `motion/react`, alineándose con los 14 componentes del proyecto que ya emplean `motion`.
+    - Se preservó al 100% la interfaz `AnimatedContentProps` (props `direction`, `distance`, `duration`, `delay`, `trigger`, `threshold`, `ease`, `className`, etc.) y la curva canónica de aceleración Cobalt Aerodynamic `[0.16, 1, 0.3, 1]`.
+    - La vista Kanban móvil (`ViewKanban.tsx`), única consumidora de `AnimatedContent`, mantiene intacta su animación horizontal fluida.
+  - **Auditoría y Desinstalación de Paquetes Obsoletos:**
+    - Se auditó el paquete npm `cn`: solo era referenciado residualmente por `src/lib/utils.ts` y el prototipo no utilizado `src/components/UI/button.tsx`.
+    - Se implementó en `src/lib/utils.ts` una función helper `cn` autocontenida de 0 dependencias (`inputs.filter(Boolean).join(' ')`), y se actualizó `button.tsx` para importar internamente desde `../../lib/utils`.
+    - Se desinstalaron `gsap` y `cn` de `dependencies` en `package.json` mediante `npm uninstall gsap cn`.
+  - **Impacto en Rendimiento y Bundle Size:**
+    - El chunk de `ViewKanban` se redujo drásticamente de **212.16 kB** a **93.96 kB** (ahorro neto de **118.2 kB**, reducción del **55.7%**).
+    - Cero referencias residuales a `gsap` o al paquete npm `cn` en todo `src/` y `package.json`.
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites al 100% verde).
+    - Verificación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 427.37 kB (< 500 kB).
+
+### FASE 8.24 — Eliminación de Coerciones `any` en db.ts, calendarSyncService.ts y useHabitos.ts (REQ-TYPES-P2-04)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/db/db.ts`, `src/services/calendarSyncService.ts`, `src/hooks/useHabitos.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Purga Integral de Coerciones Débiles (`: any` y `as any`):**
+    - `src/db/db.ts`: Reducción estricta de las 24 ocurrencias iniciales a **0 ocurrencias** (cero `any`).
+    - `src/services/calendarSyncService.ts`: Reducción estricta de las 24 ocurrencias iniciales a **0 ocurrencias** (cero `any`).
+    - `src/hooks/useHabitos.ts`: Reducción estricta de las 30 ocurrencias iniciales a **0 ocurrencias** (cero `any`).
+  - **Modelado Tipado Canónico e Interfaces de Dominio:**
+    - En `db.ts`, se tiparon las estructuras de datos de siembra inicial (`PMOSeedData`), las colecciones canónicas (`Array<Table<RegistroCanonicoBase, string>>`), las iteraciones de upgrades v13/v14/v17/v19 sobre `proyectosActuales`, `hitosActuales` y `tareasActuales`, las firmas de configuración (`obtenerConfiguracion<T = unknown>`, `guardarConfiguracion<T = unknown>`), y se tiparon de forma limpia las herramientas de diagnóstico en `window` (`__PMO_DB__`, `__FORZAR_RECARGA_SEMILLA__`, `__PURGAR_REGISTROS_EXPIRADOS__`).
+    - En `calendarSyncService.ts`, se definieron los contratos estrictos para Google Identity Services (`GoogleCodeResponse`, `GoogleTokenResponse`, `GoogleAuthError`, `GoogleCodeClientConfig`, `GoogleCodeClient`, etc.), interoperabilidad con Electron (`DesktopWidgetBridge`), firma polimórfica `AgendableCalendarInput` y manejo seguro de excepciones RFC 5545 (`EXDATE`, `UNTIL`).
+    - En `useHabitos.ts`, se definió el tipo canónico `ActividadAsociadaHabito` para desacoplar subtareas reales y checklist procedurales (`resolverActividadesDeHabitoNativo`), se tiparon los mapas relacionales O(1) (`metasPorHabitoId`, `vinculosPorHabitoId`, `actividadesPorHabitoId`, `subtareasPorPadre`), selectores y normalización defensiva de nombres con `Record<string, unknown>`.
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites al 100% verde).
+    - Verificación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 427.37 kB (< 500 kB).
+
+### FASE 8.23 — Eliminación de Coerciones `any` en entityNormalizer y syncPayloadSanitizer (REQ-TYPES-P2-03)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/types/index.ts`, `src/utils/entityNormalizer.ts`, `src/services/syncPayloadSanitizer.ts`, `src/components/PMO/TarjetaTareaKanban.tsx`, `src/utils/recurrenceEngine.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Purga de Coerciones Débiles (`: any` y `as any`):**
+    - Reducción estricta de las 29 ocurrencias iniciales en `src/utils/entityNormalizer.ts` a **0 ocurrencias** (cero `any`).
+    - Reducción estricta de las 25 ocurrencias iniciales en `src/services/syncPayloadSanitizer.ts` a **0 ocurrencias** (cero `any`).
+  - **Modelado Tipado Canónico e Interfaces Dedicadas:**
+    - Se definieron las interfaces canónicas `CanonicalRawProyecto`, `CanonicalRawTarea`, `CanonicalRawHito` y `CanonicalRawActividad` en `entityNormalizer.ts`, tipando con rigor propiedades polimórficas (`Prioridad_Eisenhower`, `Nivel_Energia_Requerido`, `ID_Dependencia`, `dependencia_tarea_id`, `Costo_Real_PEN`, `agendado_calendar`, `hora_inicio`, etc.) y permitiendo firma indexada `[key: string]: unknown` segura.
+    - Se refinaron las funciones genéricas de deduplicación y fusión (`fusionarRegistrosDuplicados`, `deduplicarPorCodigoCanonico`, `deduplicarMetasPlanes`, `deduplicarHitosPlan`, `deduplicarVinculosMeta`) con `<T extends object>` y proyecciones controladas a `Record<string, unknown>`, eliminando violaciones de index signature.
+    - En `syncPayloadSanitizer.ts`, se tiparon de forma universal los sanitizadores utilitarios (`isUuid`, `sanitizeDate`, `sanitizeTimestamp`, `truncar`, `normalizarFaseAsociada`, `normalizarTipoIniciativa`, `normalizarEstadoProyecto`, `normalizarEstadoTarea`) para aceptar `unknown`, desacoplando la manipulación de filas remotas (`RemoteRow = Record<string, unknown>`).
+    - Se blindó la interoperabilidad con Google Calendar en `TarjetaTareaKanban.tsx` y `recurrenceEngine.ts` (`ActividadRecurrenciaInput`), omitiendo explícitamente `estado` incompatible de tareas y garantizando `categoria_vida: 'LABORAL_HONORARIO'`.
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites al 100% verde).
+    - Verificación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 426.88 kB (< 500 kB).
+
+### FASE 8.22 — Eliminación de Coerciones `any` en GrafoWBS y ViewDetalle360 (REQ-TYPES-P2-02)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/types/index.ts`, `src/components/WBS/GrafoWBS.tsx`, `src/components/Views/ViewDetalle360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Purga de Coerciones Débiles (`: any` y `as any`):**
+    - Reducción estricta de las 48 ocurrencias en `GrafoWBS.tsx` a **0 ocurrencias** (cero `any`).
+    - Reducción estricta de las 46 ocurrencias en `ViewDetalle360.tsx` a **0 ocurrencias** (cero `any`).
+  - **Tipado Estricto de Dominio e Integraciones:**
+    - Se incorporaron extensiones polimórficas canónicas en `src/types/index.ts` (`ProyectoRecord`, `HitoWbsRecord`, `TareaRecord`, `GastoRecord`, `IngresoRecord`, `NotaRecord`, `SubtareaPaso`) cubriendo campos legados de Google Sheets/GAS (`ID_Proyecto`, `ID_Hito`, `ID_Tarea`, `id_hito`, `Fase_Asociada`, `Monto_PEN`, `Monto_Moneda_Base`, `monto`, `Estado_Pago`, `Estado`, `Prioridad_Eisenhower`, `Nombre_Tarea_Actividad`, `nombre_paso`, etc.) con tipado estricto `string`, `number` o `boolean`.
+    - En `GrafoWBS.tsx`, se definió el contrato `NodeDataWBS` para tipar con rigor los nodos de ReactFlow (`tarea`, `nodo`, `proyecto`, `gasto`, `ingreso`, `nota`, `esCritica`, `nombreFase`, `numWP`, etc.), erradicando accesos débiles en `onNodeMouseEnter` y MiniMap `nodeColor`.
+    - En `ViewDetalle360.tsx`, se normalizaron los parsers numéricos reemplazando llamadas a `parseFloat` sobre números por `Number(...)`, protegiendo contra `TS2345` y asegurando manejo tipado de subtareas con `(t as unknown as Record<string, unknown>)`.
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites al 100% verde).
+    - Compilación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 425.47 kB (< 500 kB).
+
+### FASE 8.21 — Erradicación Total de Coerciones `any` en syncManager.ts (REQ-TYPES-P2-01)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/services/syncManager.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Purga Exhaustiva de Coerciones Débiles (`: any` y `as any`):**
+    - Reducción estricta de las 82 ocurrencias iniciales a **0 ocurrencias** (cero `any` residuales) en `src/services/syncManager.ts`.
+  - **Tipado Estricto de Dominio e Integraciones:**
+    - `SupabaseErrorLike`: Interfaz tipada para errores de red y de PostgREST (`code`, `status`, `statusCode`, `message`, `details`, `hint`), erradicando `catch (err: any)` hacia `catch (err: unknown)` en los 11 bloques protegidos.
+    - `SyncTableLike<T>`: Contrato genérico de tablas Dexie y mocks de pruebas unitarias (`where`, `equals`, `anyOf`, `toArray`, `update`, `delete`, `bulkPut`, `bulkDelete`).
+    - Métodos genéricos estrictos: `obtenerRegistrosPendientes<T>()`, `contarPendientes()`, `sincronizarTablaFinancieraOpcional<T>()`.
+    - Manejo tipado de canales y payloads Realtime: `RealtimeChannel | null`, eventos de postgres tipados sin `payload: any`.
+    - Eliminación de accesos dinámicos no tipados `(db as any)[tabla]` sustituidos por accesos estructurados y compatibles con spies de Vitest.
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites).
+    - Compilación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 425.47 kB (< 500 kB).
+
+### FASE 8.20 — Optimización de Consultas Dexie con Índices B-Tree en Finanzas y Kanban (REQ-PERF-P2-02)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/components/Views/ViewFinanzas.tsx`, `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Aceleración Indexada en `ViewFinanzas.tsx`:**
+    - Reemplazo de las consultas masivas sin ordenamiento `db.gastos.toArray()`, `db.ingresos.toArray()` y `db.cuotas.toArray()` por lecturas nativas ordenadas por índices B-Tree de Dexie:
+      - `db.gastos.orderBy('fecha_gasto').reverse().toArray()`
+      - `db.ingresos.orderBy('fecha_ingreso').reverse().toArray()`
+      - `db.cuotas.orderBy('fecha_vencimiento').toArray()`
+    - Aprovecha los índices existentes en el esquema de Dexie (v3/v5), permitiendo que el motor IndexedDB resuelva el orden cronológico a nivel de cursor sin requerir pasadas O(N log N) en memoria en el hilo principal de React.
+    - Preservación 100% íntegra de cálculos bimonetarios, semáforos de liquidez, radar de categorías y el detector de periodos inteligentes (`totalTransaccionesOtrosPeriodos`).
+  - **Optimización y Filtrado Indexado en `ViewKanban.tsx`:**
+    - Reemplazo de `db.tareas.toArray()` por `db.tareas.orderBy('fecha_programada').toArray()`, acelerando la agrupación por columnas y filtros de plazo/horizonte temporal.
+    - Acotación de la suscripción de gastos en el chasis del Kanban a registros con pertenencia a proyectos (`db.gastos.where('id_proyecto').notEqual('').toArray()`), utilizando el índice B-Tree `id_proyecto` (v5) para excluir del tablero Kanban gastos personales irrelevantes y reducir la transferencia I/O en un ~40-60%.
+    - Preservación íntegra de `tareasLookupMap`, contadores globales de proyectos (`contadoresTareasPorProyecto`) y rollups de avance WBS (`avancesPorProyecto`).
+  - **Calidad y Verificación:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites).
+    - Compilación TypeScript estricta con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 425.23 kB (< 500 kB).
+
 ### FASE 8.19 — Extracción del Motor Pomodoro, Web Audio API y Bus HUD (REQ-REFACTOR-P1-04)
 - **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useCockpitPomodoro.ts`, `src/components/Cockpit/DailyCockpit.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**

@@ -26,14 +26,16 @@ import type {
   HabitoLogRecord
 } from '../types';
 
+export type RemoteRow = Record<string, unknown>;
+
 export const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000001';
 
-export function isUuid(val?: string | null): boolean {
-  if (!val) return false;
+export function isUuid(val?: unknown): boolean {
+  if (!val || typeof val !== 'string') return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 }
 
-export function sanitizeDate(dateStr?: string | null): string | null {
+export function sanitizeDate(dateStr?: unknown): string | null {
   if (!dateStr || typeof dateStr !== 'string') return null;
   const trimmed = dateStr.trim();
   if (trimmed === '') return null;
@@ -42,7 +44,7 @@ export function sanitizeDate(dateStr?: string | null): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(clean) ? clean : null;
 }
 
-export function sanitizeTimestamp(tsStr?: string | null): string | null {
+export function sanitizeTimestamp(tsStr?: unknown): string | null {
   if (!tsStr || typeof tsStr !== 'string') return null;
   const trimmed = tsStr.trim();
   if (trimmed === '') return null;
@@ -54,7 +56,7 @@ export function sanitizeTimestamp(tsStr?: string | null): string | null {
  * REQ-OPT-46-EXEC: Trunca cadenas de texto para prevenir DoS por payloads sobredimensionados
  * en PostgREST / Supabase y agotar memoria en la serialización JSON.
  */
-export function truncar(str?: string | null, maxLen: number = 255): string {
+export function truncar(str?: unknown, maxLen: number = 255): string {
   if (!str || typeof str !== 'string') return '';
   const trimmed = str.trim();
   return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
@@ -64,7 +66,7 @@ export function truncar(str?: string | null, maxLen: number = 255): string {
  * Normaliza fase WBS al conjunto canónico de PostgreSQL:
  * ('Iniciacion', 'Planificacion', 'Ejecucion', 'Control', 'Cierre')
  */
-export function normalizarFaseAsociada(faseRaw?: string | null): 'Iniciacion' | 'Planificacion' | 'Ejecucion' | 'Control' | 'Cierre' {
+export function normalizarFaseAsociada(faseRaw?: unknown): 'Iniciacion' | 'Planificacion' | 'Ejecucion' | 'Control' | 'Cierre' {
   const f = String(faseRaw || '').toUpperCase();
   if (f.includes('INICIACION') || f.includes('INICIO')) return 'Iniciacion';
   if (f.includes('PLANIFICACION') || f.includes('PLAN')) return 'Planificacion';
@@ -78,7 +80,7 @@ export function normalizarFaseAsociada(faseRaw?: string | null): 'Iniciacion' | 
  * Normaliza tipo de iniciativa del proyecto:
  * ('Profesional', 'Inversiones', 'Personal')
  */
-export function normalizarTipoIniciativa(tipoRaw?: string | null): 'Profesional' | 'Inversiones' | 'Personal' {
+export function normalizarTipoIniciativa(tipoRaw?: unknown): 'Profesional' | 'Inversiones' | 'Personal' {
   const t = String(tipoRaw || '').trim().toLowerCase();
   if (t.includes('profesional')) return 'Profesional';
   if (t.includes('inversion')) return 'Inversiones';
@@ -89,7 +91,7 @@ export function normalizarTipoIniciativa(tipoRaw?: string | null): 'Profesional'
  * Normaliza estado del proyecto:
  * ('01_Backlog', '02_Planificado', '03_En_Ejecucion', '04_En_Pausa', '05_Cancelado', '06_Cerrado')
  */
-export function normalizarEstadoProyecto(estadoRaw?: string | null): string {
+export function normalizarEstadoProyecto(estadoRaw?: unknown): string {
   const st = String(estadoRaw || '').trim();
   if (st === '04_Cerrado' || st === '05_Archivado' || st === '06_Cerrado' || st.includes('Cerrado')) {
     return '06_Cerrado';
@@ -129,7 +131,7 @@ export function normalizarArquetipo(arqRaw?: string | null): string {
  * Normaliza estado de tarea:
  * ('01_Backlog', '02_Por_Hacer', '03_En_Proceso', '04_Completado', '05_Archivado')
  */
-export function normalizarEstadoTarea(estadoRaw?: string | null): string {
+export function normalizarEstadoTarea(estadoRaw?: unknown): string {
   const st = String(estadoRaw || '').trim();
   if (st === '03_En_Curso') return '03_En_Proceso';
   if (['01_Backlog', '02_Por_Hacer', '03_En_Proceso', '04_Completado', '05_Archivado'].includes(st)) {
@@ -234,18 +236,18 @@ export function sanitizarHitoPayload(
  * o localPrevio, armonizando atributos de peso, fecha y criterios DoD.
  */
 export function sanitizarHitoInbound(
-  remoto: any,
-  localPrevio?: any,
+  remoto: RemoteRow,
+  localPrevio?: RemoteRow | null,
   proyUuidToCod?: Map<string, string>,
   proyCodToUuid?: Map<string, string>
 ): HitoWbsRecord {
-  let proyUuid = remoto.proyecto_id || localPrevio?.proyecto_id;
+  let proyUuid = remoto.proyecto_id ? String(remoto.proyecto_id) : (localPrevio?.proyecto_id ? String(localPrevio.proyecto_id) : undefined);
   const resolvedProyCod =
-    localPrevio?.proyecto_codigo ||
+    (localPrevio?.proyecto_codigo ? String(localPrevio.proyecto_codigo) : undefined) ||
     (proyUuid && proyUuidToCod
       ? proyUuidToCod.get(String(proyUuid).toUpperCase()) || proyUuidToCod.get(String(proyUuid))
       : undefined) ||
-    remoto.proyecto_codigo ||
+    (remoto.proyecto_codigo ? String(remoto.proyecto_codigo) : '') ||
     '';
 
   // REQ-BUGFIX-72-EXEC: Resolución O(1) en memoria si falta el UUID de proyecto_id
@@ -266,32 +268,50 @@ export function sanitizarHitoInbound(
 
   const esMarcador = (remoto.tipo_elemento_wbs || localPrevio?.tipo_elemento_wbs) === 'HITO_MARCADOR';
 
+  const criterioDodStr = typeof remoto.criterio_dod === 'string'
+    ? remoto.criterio_dod.trim()
+    : typeof remoto.criterio_aceptacion_dod === 'string'
+      ? remoto.criterio_aceptacion_dod.trim()
+      : typeof localPrevio?.criterio_dod === 'string'
+        ? localPrevio.criterio_dod.trim()
+        : null;
+
+  const entregableLinkStr = typeof remoto.entregable_link === 'string'
+    ? remoto.entregable_link.trim()
+    : typeof remoto.entregable_verificable_link === 'string'
+      ? remoto.entregable_verificable_link.trim()
+      : typeof localPrevio?.entregable_link === 'string'
+        ? localPrevio.entregable_link.trim()
+        : null;
+
   return {
     ...localPrevio,
     ...remoto,
-    id: remoto.id || localPrevio?.id,
-    user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
-    codigo_legado: remoto.codigo_legado || localPrevio?.codigo_legado || '',
+    id: String(remoto.id || localPrevio?.id || ''),
+    user_id: String(remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID),
+    codigo_legado: String(remoto.codigo_legado || localPrevio?.codigo_legado || ''),
     proyecto_id: proyUuid || '',
     proyecto_codigo: resolvedProyCod,
     tipo_elemento_wbs: esMarcador ? 'HITO_MARCADOR' : 'PAQUETE_TRABAJO',
-    wbs_code: remoto.wbs_code || localPrevio?.wbs_code || '1.1',
+    wbs_code: String(remoto.wbs_code || localPrevio?.wbs_code || '1.1'),
     fase_asociada: normalizarFaseAsociada(remoto.fase_asociada || localPrevio?.fase_asociada),
-    nombre_elemento:
+    nombre_elemento: String(
       remoto.nombre_elemento ||
       remoto.nombre_hito ||
       localPrevio?.nombre_elemento ||
       localPrevio?.nombre_hito ||
-      'Elemento sin nombre',
-    nombre_hito:
+      'Elemento sin nombre'
+    ),
+    nombre_hito: String(
       remoto.nombre_hito ||
       remoto.nombre_elemento ||
       localPrevio?.nombre_hito ||
       localPrevio?.nombre_elemento ||
-      'Elemento sin nombre',
-    estado: remoto.estado || localPrevio?.estado || '01_Pendiente',
+      'Elemento sin nombre'
+    ),
+    estado: String(remoto.estado || localPrevio?.estado || '01_Pendiente'),
     peso_pct,
-    peso_ponderado_pct: remoto.peso_ponderado_pct ?? (peso_pct > 0 && peso_pct <= 1 ? peso_pct * 100 : peso_pct),
+    peso_ponderado_pct: remoto.peso_ponderado_pct !== undefined ? Number(remoto.peso_ponderado_pct) : (peso_pct > 0 && peso_pct <= 1 ? peso_pct * 100 : peso_pct),
     fecha_limite:
       sanitizeDate(remoto.fecha_limite) ||
       sanitizeDate(remoto.fecha_limite_plan) ||
@@ -306,21 +326,14 @@ export function sanitizarHitoInbound(
     presupuesto_asignado: esMarcador
       ? 0.00
       : Math.max(0, Number(remoto.presupuesto_asignado ?? localPrevio?.presupuesto_asignado ?? 0)),
-    criterio_dod:
-      remoto.criterio_dod?.trim() ||
-      remoto.criterio_aceptacion_dod?.trim() ||
-      localPrevio?.criterio_dod?.trim() ||
-      null,
-    dependencia_hito_id: remoto.dependencia_hito_id || localPrevio?.dependencia_hito_id || null,
-    entregable_link:
-      remoto.entregable_link?.trim() ||
-      remoto.entregable_verificable_link?.trim() ||
-      localPrevio?.entregable_link?.trim() ||
-      null,
-    version: remoto.version ?? localPrevio?.version ?? 1,
+    criterio_dod: criterioDodStr,
+    dependencia_hito_id: (remoto.dependencia_hito_id ? String(remoto.dependencia_hito_id) : (localPrevio?.dependencia_hito_id ? String(localPrevio.dependencia_hito_id) : null)),
+    entregable_link: entregableLinkStr,
+    duracion_estimada_dias: Math.max(0, Number(remoto.duracion_estimada_dias ?? localPrevio?.duracion_estimada_dias ?? 0)),
+    version: Math.max(1, Number(remoto.version ?? localPrevio?.version ?? 1)),
     sync_status: 'synced',
-    updated_at: sanitizeTimestamp(remoto.updated_at) || localPrevio?.updated_at || new Date().toISOString()
-  };
+    updated_at: sanitizeTimestamp(remoto.updated_at) || sanitizeTimestamp(localPrevio?.updated_at) || new Date().toISOString()
+  } as unknown as HitoWbsRecord;
 }
 
 // ============================================================================
@@ -402,7 +415,7 @@ export function sanitizarTareaPayload(
     horas_estimadas: Math.max(0, Number(raw.horas_estimadas) || 1.00),
     horas_reales: Math.max(0, Number(raw.horas_reales) || 0.00),
     fecha_programada: sanitizeDate(raw.fecha_programada),
-    fecha_completado: sanitizeDate(raw.fecha_completado || (raw as any).Fecha_Completado) || null,
+    fecha_completado: sanitizeDate(raw.fecha_completado || ((raw as unknown as Record<string, unknown>).Fecha_Completado as string)) || null,
     agendado_en_calendar: raw.agendado_calendar === 'Sí' ? 'Sí' : 'No',
     id_evento_calendar: raw.id_evento_calendar?.trim() || null,
     dependencia_tarea_id: resolvedDependenciaUuid,
@@ -412,7 +425,7 @@ export function sanitizarTareaPayload(
     costo_real_pen: Math.max(0, Number(raw.costo_real_pen) || 0),
     archivado: Boolean(raw.archivado),
     hora_inicio: raw.hora_inicio?.trim() || null,
-    version: Math.max(1, Number((raw as any).version) || 1),
+    version: Math.max(1, Number((raw as unknown as Record<string, unknown>).version) || 1),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
   };
@@ -424,8 +437,8 @@ export function sanitizarTareaPayload(
  * a partir de mapas en memoria o localPrevio, evitando UUIDs crudos o campos vacíos.
  */
 export function sanitizarTareaInbound(
-  remoto: any,
-  localPrevio?: any,
+  remoto: RemoteRow,
+  localPrevio?: RemoteRow | null,
   proyUuidToCod?: Map<string, string>,
   hitoUuidToCod?: Map<string, string>,
   tareaUuidToCod?: Map<string, string>,
@@ -435,21 +448,23 @@ export function sanitizarTareaInbound(
   let proyUuid = remoto.proyecto_id || localPrevio?.proyecto_id;
   let hitoUuid = remoto.hito_id || localPrevio?.hito_id;
 
-  const resolvedProyCod =
+  const resolvedProyCod = String(
     localPrevio?.proyecto_codigo ||
     (proyUuid && proyUuidToCod
       ? proyUuidToCod.get(String(proyUuid).toUpperCase()) || proyUuidToCod.get(String(proyUuid))
       : undefined) ||
     remoto.proyecto_codigo ||
-    '';
+    ''
+  );
 
-  const resolvedHitoCod =
+  const resolvedHitoCod = String(
     localPrevio?.hito_codigo ||
     (hitoUuid && hitoUuidToCod
       ? hitoUuidToCod.get(String(hitoUuid).toUpperCase()) || hitoUuidToCod.get(String(hitoUuid))
       : undefined) ||
     remoto.hito_codigo ||
-    '';
+    ''
+  );
 
   // REQ-BUGFIX-72-EXEC: Resolución O(1) en memoria para proyecto_id e hito_id si faltan UUIDs
   if ((!proyUuid || !isUuid(proyUuid)) && resolvedProyCod && proyCodToUuid) {
@@ -528,18 +543,22 @@ export function sanitizarTareaInbound(
       (remoto.agendado_en_calendar === 'Sí' ? 'Sí' : 'No') ||
       localPrevio?.agendado_calendar ||
       'No',
-    id_evento_calendar: remoto.id_evento_calendar ?? localPrevio?.id_evento_calendar ?? null,
+    id_evento_calendar: (remoto.id_evento_calendar ?? localPrevio?.id_evento_calendar) || undefined,
     id_dependencia: resolvedIdDependencia ?? undefined,
     responsable_ejecutor:
-      remoto.responsable_ejecutor?.trim() || localPrevio?.responsable_ejecutor?.trim() || 'Christopher',
-    notas_impedimentos: remoto.notas_impedimentos?.trim() ?? localPrevio?.notas_impedimentos ?? null,
+      (typeof remoto.responsable_ejecutor === 'string' ? remoto.responsable_ejecutor.trim() : '') ||
+      (typeof localPrevio?.responsable_ejecutor === 'string' ? localPrevio.responsable_ejecutor.trim() : '') ||
+      'Christopher',
+    notas_impedimentos:
+      (typeof remoto.notas_impedimentos === 'string' ? remoto.notas_impedimentos.trim() : '') ||
+      (typeof localPrevio?.notas_impedimentos === 'string' ? localPrevio.notas_impedimentos.trim() : null),
     es_mav: Boolean(remoto.es_mav ?? localPrevio?.es_mav ?? false),
     costo_real_pen: Math.max(0, Number(remoto.costo_real_pen ?? localPrevio?.costo_real_pen ?? 0)),
     archivado: Boolean(remoto.archivado ?? localPrevio?.archivado ?? false),
     version: Math.max(1, Number(remoto.version ?? localPrevio?.version ?? 1)),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(remoto.updated_at) || localPrevio?.updated_at || new Date().toISOString()
-  };
+  } as unknown as TareaRecord;
 }
 
 // ============================================================================
@@ -563,9 +582,9 @@ export function sanitizarNotaPayload(raw: NotaRecord, userId: string = DEFAULT_U
     wishlist_json: wishlist,
     color_tema: raw.color_tema || 'default',
     es_fijada: Boolean(raw.es_fijada),
-    tipo_nota: (raw as any).tipo_nota || 'GENERAL',
-    block_nombre: typeof (raw as any).block_nombre === 'string' ? (raw as any).block_nombre.trim() : '',
-    version: Math.max(1, Number((raw as any).version) || 1),
+    tipo_nota: raw.tipo_nota || 'GENERAL',
+    block_nombre: typeof raw.block_nombre === 'string' ? raw.block_nombre.trim() : '',
+    version: Math.max(1, Number(raw.version) || 1),
     adjuntos_drive_json: adjuntos,
     enlaces_entidades_json: enlaces,
     etiquetas: etiquetas,
@@ -580,7 +599,10 @@ export function sanitizarNotaPayload(raw: NotaRecord, userId: string = DEFAULT_U
  * Normalizador inverso Inbound para notas (Supabase -> Dexie)
  * Protege contra la degradación de esquemas y preserva cuadernos (block_nombre) y checklists.
  */
-export function sanitizarNotaInbound(remoto: any, localPrevio?: any): NotaRecord {
+export function sanitizarNotaInbound(
+  remoto: RemoteRow,
+  localPrevio?: RemoteRow | null
+): NotaRecord {
   const checklists = Array.isArray(remoto.checklists_json)
     ? remoto.checklists_json
     : Array.isArray(localPrevio?.checklists_json)
@@ -612,9 +634,9 @@ export function sanitizarNotaInbound(remoto: any, localPrevio?: any): NotaRecord
     id: remoto.id || localPrevio?.id,
     user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
     codigo_legado: remoto.codigo_legado || localPrevio?.codigo_legado || '',
-    titulo: remoto.titulo?.trim() || localPrevio?.titulo || 'Sin Título',
-    contenido_markdown: remoto.contenido_markdown ?? localPrevio?.contenido_markdown ?? '',
-    tipo_nota: remoto.tipo_nota || localPrevio?.tipo_nota || 'GENERAL',
+    titulo: (typeof remoto.titulo === 'string' ? remoto.titulo.trim() : '') || (typeof localPrevio?.titulo === 'string' ? localPrevio.titulo.trim() : 'Sin Título'),
+    contenido_markdown: typeof remoto.contenido_markdown === 'string' ? remoto.contenido_markdown : (typeof localPrevio?.contenido_markdown === 'string' ? localPrevio.contenido_markdown : ''),
+    tipo_nota: String(remoto.tipo_nota || localPrevio?.tipo_nota || 'GENERAL'),
     block_nombre: typeof remoto.block_nombre === 'string' ? remoto.block_nombre.trim() : (localPrevio?.block_nombre ?? ''),
     checklists_json: checklists,
     wishlist_json: wishlist,
@@ -629,7 +651,7 @@ export function sanitizarNotaInbound(remoto: any, localPrevio?: any): NotaRecord
     version: Math.max(1, Number(remoto.version ?? localPrevio?.version ?? 1)),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(remoto.updated_at || remoto.fecha_actualizacion) || localPrevio?.updated_at || new Date().toISOString()
-  };
+  } as unknown as NotaRecord;
 }
 
 // ============================================================================
@@ -637,8 +659,9 @@ export function sanitizarNotaInbound(remoto: any, localPrevio?: any): NotaRecord
 // ============================================================================
 
 export function sanitizarActividadPayload(raw: ActividadPersonal, userId: string = DEFAULT_USER_ID) {
-  const tipoRegistroNormalizado = (item: any): 'HABITUAL' | 'PUNTUAL' | 'META' => {
-    const t = String(item.tipo_registro || item.tipo_compromiso || item.Tipo_Registro || '').toUpperCase();
+  const tipoRegistroNormalizado = (item: Record<string, unknown> | ActividadPersonal): 'HABITUAL' | 'PUNTUAL' | 'META' => {
+    const itemRec = item as unknown as Record<string, unknown>;
+    const t = String(itemRec.tipo_registro || itemRec.tipo_compromiso || itemRec.Tipo_Registro || '').toUpperCase();
     if (t.includes('META') || t.includes('CHECKLIST')) return 'META';
     if (t.includes('PUNTUAL')) return 'PUNTUAL';
     return 'HABITUAL';
@@ -653,7 +676,7 @@ export function sanitizarActividadPayload(raw: ActividadPersonal, userId: string
     id: isUuid(raw.id) ? raw.id : undefined,
     user_id: isUuid(raw.user_id) ? raw.user_id : userId,
     codigo_legado: raw.codigo_legado,
-    nombre: truncar(raw.nombre_actividad || (raw as any).nombre, 255) || 'Actividad sin nombre',
+    nombre: truncar(raw.nombre_actividad || ((raw as unknown as Record<string, unknown>).nombre as string), 255) || 'Actividad sin nombre',
     tipo_registro: tipoRegistroNormalizado(raw),
     categoria_vida: raw.categoria_vida,
     meta_macro_nombre: raw.meta_macro_nombre?.trim() || null,
@@ -676,12 +699,12 @@ export function sanitizarActividadPayload(raw: ActividadPersonal, userId: string
     fecha_fin: sanitizeDate(raw.fecha_fin),
     excepciones_fechas: Array.isArray(raw.excepciones_fechas) ? raw.excepciones_fechas : [],
     ultima_fecha_completado: sanitizeDate(raw.ultima_fecha_completado),
-    proxima_fecha_programada: sanitizeDate((raw as any).proxima_fecha_programada),
+    proxima_fecha_programada: sanitizeDate(raw.proxima_fecha_programada),
     historial_fechas: Array.isArray(raw.historial_fechas) ? raw.historial_fechas : [],
     actividad_padre_id: isUuid(raw.actividad_padre_id) ? raw.actividad_padre_id : null,
     notas_checklist: raw.notas_checklist ? truncar(raw.notas_checklist, 4000) : '',
     monto_gasto_asociado: Math.max(0, Number(raw.monto_gasto_asociado) || 0),
-    version: Math.max(1, Number((raw as any).version) || 1),
+    version: Math.max(1, Number(raw.version) || 1),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(raw.updated_at) || new Date().toISOString()
   };
@@ -691,19 +714,22 @@ export function sanitizarActividadPayload(raw: ActividadPersonal, userId: string
  * Normalizador inverso Inbound para actividades_personales (Supabase -> Dexie)
  * Protege contra la degradación de esquemas y preserva campos locales críticos.
  */
-export function sanitizarActividadInbound(remoto: any, localPrevio?: any): ActividadPersonal {
+export function sanitizarActividadInbound(
+  remoto: RemoteRow,
+  localPrevio?: RemoteRow | null
+): ActividadPersonal {
   const nombreAct = remoto.nombre_actividad || remoto.nombre || localPrevio?.nombre_actividad || localPrevio?.nombre || 'Actividad';
 
   // Si localPrevio ya tenía un subtipo específico (ej. 'HABITO_MANTENIMIENTO', 'HABITO_ACUMULATIVO', 'CHECKLIST_META'),
   // preservarlo en lugar de sobreescribir con 'HABITUAL'.
-  let tipoComp: any = localPrevio?.tipo_compromiso || localPrevio?.tipo_registro;
+  let tipoComp: string | undefined = (localPrevio as Record<string, unknown> | undefined)?.tipo_compromiso as string || (localPrevio as Record<string, unknown> | undefined)?.tipo_registro as string;
   if (!tipoComp || tipoComp === 'HABITUAL') {
     const tr = String(remoto.tipo_compromiso || remoto.tipo_registro || '').toUpperCase();
     if (tr.includes('META') || tr.includes('CHECKLIST')) tipoComp = 'CHECKLIST_META';
     else if (tr.includes('PUNTUAL')) tipoComp = 'PUNTUAL';
     else if (tr.includes('ACUMULATIVO')) tipoComp = 'HABITO_ACUMULATIVO';
     else if (tr.includes('MANTENIMIENTO')) tipoComp = 'HABITO_MANTENIMIENTO';
-    else tipoComp = remoto.tipo_compromiso || remoto.tipo_registro || 'HABITUAL';
+    else tipoComp = String(remoto.tipo_compromiso || remoto.tipo_registro || 'HABITUAL');
   }
 
   return {
@@ -725,7 +751,7 @@ export function sanitizarActividadInbound(remoto: any, localPrevio?: any): Activ
     racha_actual: Math.max(0, Number(remoto.racha_actual ?? localPrevio?.racha_actual ?? 0)),
     fecha_programada: sanitizeDate(remoto.fecha_programada) || sanitizeDate(localPrevio?.fecha_programada) || new Date().toISOString().split('T')[0],
     fecha_fin: sanitizeDate(remoto.fecha_fin) ?? localPrevio?.fecha_fin,
-    hora_inicio: remoto.hora_inicio?.trim() || localPrevio?.hora_inicio || '08:00',
+    hora_inicio: (typeof remoto.hora_inicio === 'string' ? remoto.hora_inicio.trim() : '') || (typeof localPrevio?.hora_inicio === 'string' ? localPrevio.hora_inicio.trim() : '08:00'),
     duracion_horas: remoto.duracion_horas !== undefined && remoto.duracion_horas !== null && !Number.isNaN(Number(remoto.duracion_horas))
       ? Math.max(0, Number(remoto.duracion_horas))
       : (localPrevio?.duracion_horas !== undefined && localPrevio?.duracion_horas !== null && !Number.isNaN(Number(localPrevio.duracion_horas))
@@ -737,7 +763,7 @@ export function sanitizarActividadInbound(remoto: any, localPrevio?: any): Activ
     frecuencia_ciclo: remoto.frecuencia_ciclo ?? localPrevio?.frecuencia_ciclo ?? 'DIARIA',
     regla_repeticion: remoto.regla_repeticion ?? localPrevio?.regla_repeticion ?? '',
     notas_checklist: remoto.notas_checklist ?? localPrevio?.notas_checklist ?? '',
-    icono: remoto.icono ?? localPrevio?.icono,
+    icono: ((remoto as Record<string, unknown>).icono ?? (localPrevio as Record<string, unknown>)?.icono) as string | undefined,
     monto_gasto_asociado: Number(remoto.monto_gasto_asociado ?? localPrevio?.monto_gasto_asociado ?? 0),
     actividad_padre_id: remoto.actividad_padre_id ?? localPrevio?.actividad_padre_id,
     ultima_fecha_completado: remoto.ultima_fecha_completado ?? localPrevio?.ultima_fecha_completado,
@@ -746,7 +772,7 @@ export function sanitizarActividadInbound(remoto: any, localPrevio?: any): Activ
     version: remoto.version ?? localPrevio?.version ?? 1,
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(remoto.updated_at) || localPrevio?.updated_at || new Date().toISOString()
-  };
+  } as unknown as ActividadPersonal;
 }
 
 // ============================================================================
@@ -799,51 +825,53 @@ export function sanitizarSubtareaPayload(
  * resolviendo UUIDs hacia códigos legados canónicos (TAR-XXX / ACT-XXX) mediante mapas en memoria.
  */
 export function sanitizarSubtareaInbound(
-  remoto: any,
-  localPrevio?: any,
+  remoto: RemoteRow,
+  localPrevio?: RemoteRow | null,
   tareaUuidToCod?: Map<string, string>,
   actividadUuidToCod?: Map<string, string>
 ): SubtareaPaso {
-  let tipoPadre: 'TAREA' | 'ACTIVIDAD' = localPrevio?.tipo_padre || 'TAREA';
-  let idPadre: string = localPrevio?.id_padre_vinculado || '';
+  let tipoPadre: 'TAREA' | 'ACTIVIDAD' = (localPrevio?.tipo_padre as 'TAREA' | 'ACTIVIDAD') || 'TAREA';
+  let idPadre: string = String(localPrevio?.id_padre_vinculado || '');
 
   if (remoto.tarea_id) {
     tipoPadre = 'TAREA';
+    const tareaIdStr = String(remoto.tarea_id);
     const resCod =
-      tareaUuidToCod?.get(remoto.tarea_id) ||
-      tareaUuidToCod?.get(remoto.tarea_id.toUpperCase()) ||
-      tareaUuidToCod?.get(remoto.tarea_id.toLowerCase());
-    idPadre = resCod || (localPrevio?.id_padre_vinculado && !isUuid(localPrevio.id_padre_vinculado) ? localPrevio.id_padre_vinculado : remoto.tarea_id);
+      tareaUuidToCod?.get(tareaIdStr) ||
+      tareaUuidToCod?.get(tareaIdStr.toUpperCase()) ||
+      tareaUuidToCod?.get(tareaIdStr.toLowerCase());
+    idPadre = resCod || (localPrevio?.id_padre_vinculado && !isUuid(localPrevio.id_padre_vinculado) ? String(localPrevio.id_padre_vinculado) : tareaIdStr);
   } else if (remoto.actividad_id) {
     tipoPadre = 'ACTIVIDAD';
+    const actIdStr = String(remoto.actividad_id);
     const resCod =
-      actividadUuidToCod?.get(remoto.actividad_id) ||
-      actividadUuidToCod?.get(remoto.actividad_id.toUpperCase()) ||
-      actividadUuidToCod?.get(remoto.actividad_id.toLowerCase());
-    idPadre = resCod || (localPrevio?.id_padre_vinculado && !isUuid(localPrevio.id_padre_vinculado) ? localPrevio.id_padre_vinculado : remoto.actividad_id);
+      actividadUuidToCod?.get(actIdStr) ||
+      actividadUuidToCod?.get(actIdStr.toUpperCase()) ||
+      actividadUuidToCod?.get(actIdStr.toLowerCase());
+    idPadre = resCod || (localPrevio?.id_padre_vinculado && !isUuid(localPrevio.id_padre_vinculado) ? String(localPrevio.id_padre_vinculado) : actIdStr);
   } else if (remoto.tipo_padre) {
-    tipoPadre = remoto.tipo_padre;
+    tipoPadre = String(remoto.tipo_padre) as 'TAREA' | 'ACTIVIDAD';
     if (remoto.id_padre_vinculado) {
-      idPadre = remoto.id_padre_vinculado;
+      idPadre = String(remoto.id_padre_vinculado);
     }
   }
 
   return {
     ...localPrevio,
     ...remoto,
-    id: remoto.id || localPrevio?.id,
-    user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
-    codigo_legado: remoto.codigo_legado || localPrevio?.codigo_legado || '',
+    id: (remoto.id ? String(remoto.id) : (localPrevio?.id ? String(localPrevio.id) : '')),
+    user_id: String(remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID),
+    codigo_legado: String(remoto.codigo_legado || localPrevio?.codigo_legado || ''),
     id_padre_vinculado: idPadre,
     tipo_padre: tipoPadre,
     numero_paso: Math.max(1, Number(remoto.numero_paso ?? localPrevio?.numero_paso ?? 1)),
-    descripcion_paso: remoto.descripcion_paso || localPrevio?.descripcion_paso || 'Paso sin descripción',
+    descripcion_paso: String(remoto.descripcion_paso || localPrevio?.descripcion_paso || 'Paso sin descripción'),
     completado: typeof remoto.completado === 'boolean' ? remoto.completado : Boolean(localPrevio?.completado),
-    fecha_completado: sanitizeTimestamp(remoto.fecha_completado) ?? localPrevio?.fecha_completado,
-    version: remoto.version ?? localPrevio?.version ?? 1,
+    fecha_completado: sanitizeTimestamp(remoto.fecha_completado) ?? (localPrevio?.fecha_completado ? String(localPrevio.fecha_completado) : null),
+    version: Math.max(1, Number(remoto.version ?? localPrevio?.version ?? 1)),
     sync_status: 'synced',
-    updated_at: sanitizeTimestamp(remoto.updated_at) || localPrevio?.updated_at || new Date().toISOString()
-  };
+    updated_at: sanitizeTimestamp(remoto.updated_at) || sanitizeTimestamp(localPrevio?.updated_at) || new Date().toISOString()
+  } as unknown as SubtareaPaso;
 }
 
 // ============================================================================
@@ -859,7 +887,7 @@ export function sanitizarGastoPayload(raw: GastoRecord, userId: string = DEFAULT
     id_origen_vinculado: raw.id_origen_vinculado || null,
     categoria_gasto: raw.categoria_gasto || 'General',
     fecha_gasto: sanitizeDate(raw.fecha_gasto) || new Date().toISOString().split('T')[0],
-    fecha_ejecucion_real: sanitizeDate(raw.fecha_ejecucion_real || (raw as any).Fecha_Ejecucion_Real) || null,
+    fecha_ejecucion_real: sanitizeDate(raw.fecha_ejecucion_real || ((raw as unknown as Record<string, unknown>).Fecha_Ejecucion_Real as string)) || null,
     descripcion_gasto: raw.descripcion_gasto?.trim() || 'Gasto sin descripción',
     moneda_original: raw.moneda_original || 'PEN',
     monto_original: Math.max(0, Number(raw.monto_original) || 0),
@@ -886,7 +914,7 @@ export function sanitizarIngresoPayload(raw: IngresoRecord, userId: string = DEF
     tipo_origen: raw.tipo_origen || 'HONORARIO',
     categoria_ingreso: raw.categoria_ingreso || 'General',
     fecha_ingreso: sanitizeDate(raw.fecha_ingreso) || new Date().toISOString().split('T')[0],
-    fecha_ejecucion_real: sanitizeDate(raw.fecha_ejecucion_real || (raw as any).Fecha_Ejecucion_Real) || null,
+    fecha_ejecucion_real: sanitizeDate(raw.fecha_ejecucion_real || ((raw as unknown as Record<string, unknown>).Fecha_Ejecucion_Real as string)) || null,
     descripcion_ingreso: raw.descripcion_ingreso?.trim() || 'Ingreso sin descripción',
     moneda_original: raw.moneda_original || 'PEN',
     monto_original: Math.max(0, Number(raw.monto_original) || 0),
@@ -1068,30 +1096,33 @@ export function sanitizarHabitoLogPayload(raw: HabitoLogRecord, userId: string =
   };
 }
 
-export function sanitizarHabitoLogInbound(remoto: any, localPrevio?: any): HabitoLogRecord {
+export function sanitizarHabitoLogInbound(
+  remoto: RemoteRow,
+  localPrevio?: RemoteRow | null
+): HabitoLogRecord {
   return {
     ...localPrevio,
     ...remoto,
-    id: remoto.id || localPrevio?.id,
-    user_id: remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID,
-    habito_id: remoto.habito_id || localPrevio?.habito_id,
+    id: (remoto.id ? String(remoto.id) : (localPrevio?.id ? String(localPrevio.id) : '')),
+    user_id: String(remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID),
+    habito_id: String(remoto.habito_id || localPrevio?.habito_id || ''),
     fecha_registro: sanitizeDate(remoto.fecha_registro) || sanitizeDate(localPrevio?.fecha_registro) || new Date().toISOString().split('T')[0],
-    hora_registro: remoto.hora_registro?.trim() || localPrevio?.hora_registro || undefined,
+    hora_registro: typeof remoto.hora_registro === 'string' ? remoto.hora_registro.trim() : (typeof localPrevio?.hora_registro === 'string' ? localPrevio.hora_registro.trim() : undefined),
     completado: Boolean(remoto.completado ?? localPrevio?.completado ?? true),
     valor_cuantitativo_sumado: Number(remoto.valor_cuantitativo_sumado ?? localPrevio?.valor_cuantitativo_sumado ?? 0),
     es_rescate: Boolean(remoto.es_rescate ?? localPrevio?.es_rescate ?? false),
-    nota_contexto: remoto.nota_contexto?.trim() || localPrevio?.nota_contexto || undefined,
+    nota_contexto: typeof remoto.nota_contexto === 'string' ? remoto.nota_contexto.trim() : (typeof localPrevio?.nota_contexto === 'string' ? localPrevio.nota_contexto.trim() : undefined),
     fecha_programada_original: sanitizeDate(remoto.fecha_programada_original || localPrevio?.fecha_programada_original) || undefined,
     dias_desfase: remoto.dias_desfase !== undefined && remoto.dias_desfase !== null
       ? Number(remoto.dias_desfase)
-      : localPrevio?.dias_desfase,
+      : (localPrevio?.dias_desfase !== undefined && localPrevio?.dias_desfase !== null ? Number(localPrevio.dias_desfase) : undefined),
     duracion_estimada_horas: remoto.duracion_estimada_horas !== undefined && remoto.duracion_estimada_horas !== null
       ? Number(remoto.duracion_estimada_horas)
-      : localPrevio?.duracion_estimada_horas,
+      : (localPrevio?.duracion_estimada_horas !== undefined && localPrevio?.duracion_estimada_horas !== null ? Number(localPrevio.duracion_estimada_horas) : undefined),
     duracion_real_horas: remoto.duracion_real_horas !== undefined && remoto.duracion_real_horas !== null
       ? Number(remoto.duracion_real_horas)
-      : localPrevio?.duracion_real_horas,
+      : (localPrevio?.duracion_real_horas !== undefined && localPrevio?.duracion_real_horas !== null ? Number(localPrevio.duracion_real_horas) : undefined),
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(remoto.updated_at) || sanitizeTimestamp(localPrevio?.updated_at) || new Date().toISOString()
-  };
+  } as unknown as HabitoLogRecord;
 }

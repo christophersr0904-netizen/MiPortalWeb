@@ -333,15 +333,16 @@ const TarjetaTareaKanbanComponent: React.FC<TarjetaTareaKanbanProps> = ({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
+                  const { estado: _st, ...rawSinEstado } = (tar.raw || {}) as Record<string, unknown>;
                   abrirGoogleCalendarActividad({
-                    ...tar.raw,
+                    ...rawSinEstado,
                     id: tar.id,
                     codigo_legado: tar.codigo_legado,
                     nombre_actividad: tar.nombre,
                     fecha_programada: tar.fecha_programada,
-                    hora_inicio: tar.raw?.hora_inicio || '09:00',
+                    hora_inicio: (typeof tar.raw?.hora_inicio === 'string' ? tar.raw.hora_inicio : '09:00'),
                     duracion_horas: tar.horas_estimadas || 1,
-                    categoria_vida: 'Profesional',
+                    categoria_vida: 'LABORAL_HONORARIO',
                     tipo_compromiso: 'PUNTUAL'
                   });
                 }}

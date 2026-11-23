@@ -22,7 +22,33 @@ import { extraerCodigoCanonico, fusionarRegistrosDuplicados } from '../utils/ent
 import seedPmo from './seedPmo.json';
 import seedLife from './seedLife.json';
 
-const initialSeed = {
+interface PMOSeedData {
+  actividades_personales?: unknown[];
+  subtareas_pasos?: unknown[];
+  hitos_wbs?: unknown[];
+  notas?: unknown[];
+  proyectos?: unknown[];
+  tareas?: unknown[];
+  gastos?: unknown[];
+  ingresos?: unknown[];
+  ideas?: unknown[];
+  cuotas?: unknown[];
+  metas_planes?: unknown[];
+  planes_accion_hitos?: unknown[];
+  habitos_metas_vinculos?: unknown[];
+  habito_cumplimiento_logs?: unknown[];
+  [key: string]: unknown;
+}
+
+declare global {
+  interface Window {
+    __PMO_DB__?: PMODatabase;
+    __FORZAR_RECARGA_SEMILLA__?: () => Promise<void>;
+    __PURGAR_REGISTROS_EXPIRADOS__?: (diasRetencion?: number) => Promise<ResultadoPurgaLocales>;
+  }
+}
+
+const initialSeed: PMOSeedData = {
   ...seedPmo,
   ...seedLife
 };
@@ -138,7 +164,7 @@ export async function inicializarDatosSemillaSiVacio(_userId: string = '00000000
 
   // Siembras condicionales únicamente cuando la tabla respectiva se encuentra vacía (count === 0),
   // evitando re-inyectar UUIDs sintéticos de semilla sobre bases ya sincronizadas con Supabase.
-  const tareasDeSiembra: Promise<any>[] = [];
+  const tareasDeSiembra: Promise<unknown>[] = [];
 
   if (countAct === 0 && initialSeed.actividades_personales?.length) {
     tareasDeSiembra.push(db.actividades_personales.bulkPut(initialSeed.actividades_personales as ActividadPersonal[]));
@@ -170,17 +196,17 @@ export async function inicializarDatosSemillaSiVacio(_userId: string = '00000000
   if (countCuo === 0 && initialSeed.cuotas?.length) {
     tareasDeSiembra.push(db.cuotas.bulkPut(initialSeed.cuotas as CuotaRecord[]));
   }
-  if (countMetas === 0 && (initialSeed as any).metas_planes?.length) {
-    tareasDeSiembra.push(db.metas_planes.bulkPut((initialSeed as any).metas_planes as MetaPlanRecord[]));
+  if (countMetas === 0 && initialSeed.metas_planes?.length) {
+    tareasDeSiembra.push(db.metas_planes.bulkPut(initialSeed.metas_planes as MetaPlanRecord[]));
   }
-  if (countHitosPln === 0 && (initialSeed as any).planes_accion_hitos?.length) {
-    tareasDeSiembra.push(db.planes_accion_hitos.bulkPut((initialSeed as any).planes_accion_hitos as HitoPlanRecord[]));
+  if (countHitosPln === 0 && initialSeed.planes_accion_hitos?.length) {
+    tareasDeSiembra.push(db.planes_accion_hitos.bulkPut(initialSeed.planes_accion_hitos as HitoPlanRecord[]));
   }
-  if (countVin === 0 && (initialSeed as any).habitos_metas_vinculos?.length) {
-    tareasDeSiembra.push(db.habitos_metas_vinculos.bulkPut((initialSeed as any).habitos_metas_vinculos as HabitoMetaVinculo[]));
+  if (countVin === 0 && initialSeed.habitos_metas_vinculos?.length) {
+    tareasDeSiembra.push(db.habitos_metas_vinculos.bulkPut(initialSeed.habitos_metas_vinculos as HabitoMetaVinculo[]));
   }
-  if (countLogs === 0 && (initialSeed as any).habito_cumplimiento_logs?.length) {
-    tareasDeSiembra.push(db.habito_cumplimiento_logs.bulkPut((initialSeed as any).habito_cumplimiento_logs as HabitoLogRecord[]));
+  if (countLogs === 0 && initialSeed.habito_cumplimiento_logs?.length) {
+    tareasDeSiembra.push(db.habito_cumplimiento_logs.bulkPut(initialSeed.habito_cumplimiento_logs as HabitoLogRecord[]));
   }
 
   if (tareasDeSiembra.length > 0) {
@@ -204,17 +230,18 @@ export async function sanearDuplicadosDexie(): Promise<number> {
   let totalEliminados = 0;
 
   try {
-    const tablasCanonicas: Array<Table<any, string>> = [
-      db.proyectos,
-      db.hitos_wbs,
-      db.tareas,
-      db.subtareas_pasos,
-      db.actividades_personales,
-      db.gastos,
-      db.ingresos,
-      db.notas,
-      db.ideas,
-      db.cuotas
+    type RegistroCanonicoBase = { id?: string; [key: string]: unknown };
+    const tablasCanonicas: Array<Table<RegistroCanonicoBase, string>> = [
+      db.proyectos as unknown as Table<RegistroCanonicoBase, string>,
+      db.hitos_wbs as unknown as Table<RegistroCanonicoBase, string>,
+      db.tareas as unknown as Table<RegistroCanonicoBase, string>,
+      db.subtareas_pasos as unknown as Table<RegistroCanonicoBase, string>,
+      db.actividades_personales as unknown as Table<RegistroCanonicoBase, string>,
+      db.gastos as unknown as Table<RegistroCanonicoBase, string>,
+      db.ingresos as unknown as Table<RegistroCanonicoBase, string>,
+      db.notas as unknown as Table<RegistroCanonicoBase, string>,
+      db.ideas as unknown as Table<RegistroCanonicoBase, string>,
+      db.cuotas as unknown as Table<RegistroCanonicoBase, string>
     ];
 
     // 1. Deduplicación física por clave canónica en cada tabla
@@ -225,7 +252,7 @@ export async function sanearDuplicadosDexie(): Promise<number> {
       const registros = await tabla.toArray();
       if (!registros || registros.length <= 1) continue;
 
-      const grupos = new Map<string, any[]>();
+      const grupos = new Map<string, RegistroCanonicoBase[]>();
       for (const reg of registros) {
         const clave = extraerCodigoCanonico(reg);
         if (!clave) continue;
@@ -236,7 +263,7 @@ export async function sanearDuplicadosDexie(): Promise<number> {
       }
 
       const idsAEliminar: string[] = [];
-      const registrosConsolidados: any[] = [];
+      const registrosConsolidados: RegistroCanonicoBase[] = [];
 
       grupos.forEach((lista) => {
         if (lista.length > 1) {
@@ -420,7 +447,7 @@ export async function sanearDuplicadosDexie(): Promise<number> {
     ]);
 
     const proyUuidToCod = new Map<string, string>();
-    proyectosActuales.forEach((p: any) => {
+    proyectosActuales.forEach((p: ProyectoRecord) => {
       const pId = String(p.id || '').trim().toUpperCase();
       const pCod = String(p.codigo_legado || p.ID_Proyecto || '').trim().toUpperCase();
       if (pId && pCod) {
@@ -432,9 +459,10 @@ export async function sanearDuplicadosDexie(): Promise<number> {
     const hitoUuidToCod = new Map<string, string>();
     const hitosModificados: HitoWbsRecord[] = [];
 
-    hitosActuales.forEach((h: any) => {
+    hitosActuales.forEach((h: HitoWbsRecord) => {
+      const hRec = h as unknown as Record<string, unknown>;
       const hId = String(h.id || '').trim().toUpperCase();
-      const hCod = String(h.codigo_legado || h.ID_Hito || h.ID_Elemento_WBS || '').trim().toUpperCase();
+      const hCod = String(h.codigo_legado || h.ID_Hito || hRec.ID_Elemento_WBS || '').trim().toUpperCase();
       if (hId && hCod) {
         hitoUuidToCod.set(hId, hCod);
         hitoUuidToCod.set(hCod, hCod);
@@ -442,6 +470,7 @@ export async function sanearDuplicadosDexie(): Promise<number> {
 
       let mutado = false;
       const copia = { ...h };
+      const copiaRec = copia as Record<string, unknown>;
       const rawProyRef = String(copia.proyecto_id || copia.ID_Proyecto || '').trim().toUpperCase();
       const resolvedProyCod = proyUuidToCod.get(rawProyRef);
 
@@ -464,8 +493,8 @@ export async function sanearDuplicadosDexie(): Promise<number> {
         copia.criterio_dod = copia.criterio_aceptacion_dod;
         mutado = true;
       }
-      if (!copia.entregable_link && copia.entregable_verificable_link) {
-        copia.entregable_link = copia.entregable_verificable_link;
+      if (!copia.entregable_link && copiaRec.entregable_verificable_link) {
+        copia.entregable_link = String(copiaRec.entregable_verificable_link);
         mutado = true;
       }
 
@@ -479,9 +508,10 @@ export async function sanearDuplicadosDexie(): Promise<number> {
     }
 
     const tareaUuidToCod = new Map<string, string>();
-    tareasActuales.forEach((t: any) => {
+    tareasActuales.forEach((t: TareaRecord) => {
+      const tRec = t as unknown as Record<string, unknown>;
       const tId = String(t.id || '').trim().toUpperCase();
-      const tCod = String(t.codigo_legado || t.ID_Tarea || t.id_tarea || '').trim().toUpperCase();
+      const tCod = String(t.codigo_legado || t.ID_Tarea || tRec.id_tarea || '').trim().toUpperCase();
       if (tId && tCod) {
         tareaUuidToCod.set(tId, tCod);
         tareaUuidToCod.set(tCod, tCod);
@@ -489,9 +519,10 @@ export async function sanearDuplicadosDexie(): Promise<number> {
     });
 
     const tareasModificadas: TareaRecord[] = [];
-    tareasActuales.forEach((t: any) => {
+    tareasActuales.forEach((t: TareaRecord) => {
       let mutado = false;
       const copia = { ...t };
+      const copiaRec = copia as Record<string, unknown>;
 
       const rawProyRef = String(copia.proyecto_codigo || copia.proyecto_id || copia.ID_Proyecto || '').trim().toUpperCase();
       const resolvedProyCod = proyUuidToCod.get(rawProyRef);
@@ -507,7 +538,7 @@ export async function sanearDuplicadosDexie(): Promise<number> {
         mutado = true;
       }
 
-      const rawDepStr = String(copia.id_dependencia || copia.dependencia_tarea_id || copia.ID_Dependencia || '').trim();
+      const rawDepStr = String(copia.id_dependencia || copiaRec.dependencia_tarea_id || copiaRec.ID_Dependencia || '').trim();
       if (rawDepStr) {
         const tokens = rawDepStr.split(/[,;|]+/).map((tok) => tok.trim()).filter(Boolean);
         const resueltos = tokens.map((tok) => tareaUuidToCod.get(tok.toUpperCase()) || tok);
@@ -518,8 +549,8 @@ export async function sanearDuplicadosDexie(): Promise<number> {
         }
       }
 
-      if (!copia.agendado_calendar && copia.agendado_en_calendar) {
-        copia.agendado_calendar = copia.agendado_en_calendar;
+      if (!copia.agendado_calendar && copiaRec.agendado_en_calendar) {
+        copia.agendado_calendar = String(copiaRec.agendado_en_calendar) === 'Sí' ? 'Sí' : 'No';
         mutado = true;
       }
 
@@ -586,17 +617,17 @@ export async function forzarRecargaSemillaCompleta(): Promise<void> {
     if (initialSeed.ingresos) await db.ingresos.bulkPut(initialSeed.ingresos as IngresoRecord[]);
     if (initialSeed.ideas) await db.ideas.bulkPut(initialSeed.ideas as IdeaRecord[]);
     if (initialSeed.cuotas) await db.cuotas.bulkPut(initialSeed.cuotas as CuotaRecord[]);
-    if ((initialSeed as any).metas_planes) await db.metas_planes.bulkPut((initialSeed as any).metas_planes as MetaPlanRecord[]);
-    if ((initialSeed as any).planes_accion_hitos) await db.planes_accion_hitos.bulkPut((initialSeed as any).planes_accion_hitos as HitoPlanRecord[]);
-    if ((initialSeed as any).habitos_metas_vinculos) await db.habitos_metas_vinculos.bulkPut((initialSeed as any).habitos_metas_vinculos as HabitoMetaVinculo[]);
-    if ((initialSeed as any).habito_cumplimiento_logs) await db.habito_cumplimiento_logs.bulkPut((initialSeed as any).habito_cumplimiento_logs as HabitoLogRecord[]);
+    if (initialSeed.metas_planes) await db.metas_planes.bulkPut(initialSeed.metas_planes as MetaPlanRecord[]);
+    if (initialSeed.planes_accion_hitos) await db.planes_accion_hitos.bulkPut(initialSeed.planes_accion_hitos as HitoPlanRecord[]);
+    if (initialSeed.habitos_metas_vinculos) await db.habitos_metas_vinculos.bulkPut(initialSeed.habitos_metas_vinculos as HabitoMetaVinculo[]);
+    if (initialSeed.habito_cumplimiento_logs) await db.habito_cumplimiento_logs.bulkPut(initialSeed.habito_cumplimiento_logs as HabitoLogRecord[]);
   });
 }
 
 // Exposición en runtime para depuración en modo desarrollo
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
-  (window as any).__PMO_DB__ = db;
-  (window as any).__FORZAR_RECARGA_SEMILLA__ = forzarRecargaSemillaCompleta;
+  window.__PMO_DB__ = db;
+  window.__FORZAR_RECARGA_SEMILLA__ = forzarRecargaSemillaCompleta;
 }
 
 /**
@@ -770,13 +801,13 @@ export async function purgarRegistrosLocalesExpirados(diasRetencion: number = 90
 }
 
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
-  (window as any).__PURGAR_REGISTROS_EXPIRADOS__ = purgarRegistrosLocalesExpirados;
+  window.__PURGAR_REGISTROS_EXPIRADOS__ = purgarRegistrosLocalesExpirados;
 }
 
 /**
  * Obtiene un valor de configuración persistido en Dexie (tabla configuracion_usuario).
  */
-export async function obtenerConfiguracion<T = any>(clave: string, fallback: T): Promise<T> {
+export async function obtenerConfiguracion<T = unknown>(clave: string, fallback: T): Promise<T> {
   try {
     if (!db.configuracion_usuario || typeof db.configuracion_usuario.get !== 'function') {
       return fallback;
@@ -795,7 +826,7 @@ export async function obtenerConfiguracion<T = any>(clave: string, fallback: T):
 /**
  * Persiste un valor de configuración en Dexie (tabla configuracion_usuario).
  */
-export async function guardarConfiguracion<T = any>(clave: string, valor: T): Promise<void> {
+export async function guardarConfiguracion<T = unknown>(clave: string, valor: T): Promise<void> {
   try {
     if (!db.configuracion_usuario || typeof db.configuracion_usuario.put !== 'function') {
       return;

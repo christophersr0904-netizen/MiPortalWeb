@@ -27,19 +27,25 @@ let autoHidratacionEjecutadaGlobal = false;
  * FIX-HABITOS-HIERARCHY-DECOUPLING-108: Resuelve exclusivamente subtareas reales o pasos procedurales
  * vinculados a un hábito. NUNCA subyuga ni absorbe otras ActividadPersonal ni tareas principales completas.
  */
+export type ActividadAsociadaHabito = Partial<ActividadPersonal> & {
+  es_paso_subtarea?: boolean;
+  descripcion_paso?: string;
+  [key: string]: unknown;
+};
+
 export function resolverActividadesDeHabitoNativo(
   habito: ActividadPersonal,
   _todasLasTareas: TareaRecord[] = [],
   todasLasSubtareas: SubtareaPaso[] = [],
   _todasLasActividades: ActividadPersonal[] = []
-): Array<SubtareaPaso | any> {
+): Array<ActividadAsociadaHabito> {
   const hId = String(habito.id || '').trim();
   const hCod = String(habito.codigo_legado || '').trim();
 
-  const resultado: Array<any> = [];
+  const resultado: Array<ActividadAsociadaHabito> = [];
   const idsVistos = new Set<string>();
 
-  const agregar = (item: any) => {
+  const agregar = (item: ActividadAsociadaHabito) => {
     if (!item) return;
     const idItem = String(item.id || item.codigo_legado || Math.random());
     if (idItem && !idsVistos.has(idItem) && idItem !== hId && idItem !== hCod) {
@@ -50,7 +56,8 @@ export function resolverActividadesDeHabitoNativo(
 
   // 1. Subtareas reales asociadas en db.subtareas_pasos al ID o código del hábito
   for (const sub of todasLasSubtareas) {
-    const padreId = String(sub.id_padre_vinculado || (sub as any).actividad_id || '').trim();
+    const subRec = sub as unknown as Record<string, unknown>;
+    const padreId = String(sub.id_padre_vinculado || (typeof subRec.actividad_id === 'string' ? subRec.actividad_id : '') || '').trim();
     if ((hId && padreId === hId) || (hCod && padreId === hCod)) {
       agregar({
         id: sub.id,
@@ -170,8 +177,9 @@ export function useHabitos() {
     // 1. Vínculos explícitos desde habitos_metas_vinculos (soporte dual habito_id / habitoId y meta_id / metaId)
     for (const v of vinculos) {
       if (!v) continue;
-      const metaId = String(v.meta_id || (v as any).metaId || '').trim();
-      const habitoId = String(v.habito_id || (v as any).habitoId || '').trim();
+      const vRec = v as unknown as Record<string, unknown>;
+      const metaId = String(v.meta_id || (typeof vRec.metaId === 'string' ? vRec.metaId : '') || '').trim();
+      const habitoId = String(v.habito_id || (typeof vRec.habitoId === 'string' ? vRec.habitoId : '') || '').trim();
       if (!metaId || !habitoId) continue;
 
       const meta = mapaMetas.get(metaId);
@@ -183,11 +191,17 @@ export function useHabitos() {
     // 2. Metas que contengan habitoId / habito_id o lista de hábitos directamente
     for (const m of metasPlanes) {
       if (!m) continue;
-      const hId = String((m as any).habitoId || (m as any).habito_id || (m as any).id_habito || '').trim();
+      const mRec = m as unknown as Record<string, unknown>;
+      const hId = String(
+        (typeof mRec.habitoId === 'string' ? mRec.habitoId : '') ||
+        (typeof mRec.habito_id === 'string' ? mRec.habito_id : '') ||
+        (typeof mRec.id_habito === 'string' ? mRec.id_habito : '') ||
+        ''
+      ).trim();
       if (hId) {
         mapa.set(hId, m);
       }
-      const hIds = (m as any).habitoIds || (m as any).habito_ids;
+      const hIds = (mRec.habitoIds || mRec.habito_ids) as unknown;
       if (Array.isArray(hIds)) {
         for (const item of hIds) {
           if (item) mapa.set(String(item).trim(), m);
@@ -206,7 +220,13 @@ export function useHabitos() {
 
       // Si el hábito tiene metaId o meta_id explícito
       if (!meta) {
-        const directMetaId = String((h as any).metaId || (h as any).meta_id || (h as any).meta_plan_id || '').trim();
+        const hRec = h as unknown as Record<string, unknown>;
+        const directMetaId = String(
+          (typeof hRec.metaId === 'string' ? hRec.metaId : '') ||
+          (typeof hRec.meta_id === 'string' ? hRec.meta_id : '') ||
+          (typeof hRec.meta_plan_id === 'string' ? hRec.meta_plan_id : '') ||
+          ''
+        ).trim();
         if (directMetaId) {
           meta = mapaMetas.get(directMetaId);
         }
@@ -254,7 +274,8 @@ export function useHabitos() {
     const map = new Map<string, typeof vinculos>();
     for (const v of vinculos) {
       if (!v) continue;
-      const hId = String(v.habito_id || (v as any).habitoId || '').trim();
+      const vRec = v as unknown as Record<string, unknown>;
+      const hId = String(v.habito_id || (typeof vRec.habitoId === 'string' ? vRec.habitoId : '') || '').trim();
       if (!hId) continue;
       if (!map.has(hId)) map.set(hId, []);
       map.get(hId)!.push(v);
@@ -264,7 +285,7 @@ export function useHabitos() {
 
   // FIX-HABITOS-HIERARCHY-DECOUPLING-108: Resolución estricta de subtareas reales/checklist por hábito
   const actividadesPorHabitoId = useMemo(() => {
-    const map = new Map<string, Array<SubtareaPaso | any>>();
+    const map = new Map<string, Array<ActividadAsociadaHabito>>();
 
     for (const h of todasLasActividades) {
       const actAsociadas = resolverActividadesDeHabitoNativo(
@@ -285,7 +306,7 @@ export function useHabitos() {
   }, [todasLasActividades, todasLasSubtareas]);
 
   // Selector seguro para obtener actividades vinculadas por ID o código
-  const obtenerActividadesDeHabito = (habitoId: string | number): Array<ActividadPersonal | TareaRecord | any> => {
+  const obtenerActividadesDeHabito = (habitoId: string | number): Array<ActividadAsociadaHabito> => {
     if (!habitoId) return [];
     const key = String(habitoId).trim();
     return actividadesPorHabitoId.get(key) || [];
@@ -295,7 +316,8 @@ export function useHabitos() {
   const subtareasPorPadre = useMemo(() => {
     const mapCrudo = new Map<string, SubtareaPaso[]>();
     for (const sub of todasLasSubtareas) {
-      const padre = String(sub.id_padre_vinculado || (sub as any).actividad_id || '').trim();
+      const subRec = sub as unknown as Record<string, unknown>;
+      const padre = String(sub.id_padre_vinculado || (typeof subRec.actividad_id === 'string' ? subRec.actividad_id : '') || '').trim();
       if (!padre) continue;
       if (!mapCrudo.has(padre)) {
         mapCrudo.set(padre, []);
@@ -340,7 +362,15 @@ export function useHabitos() {
       }
       if (deferredFiltroTexto.trim()) {
         const q = deferredFiltroTexto.toLowerCase().trim();
-        const nom = (a.nombre_actividad || (a as any).nombre || (a as any).Nombre_Actividad || (a as any).Nombre || (a as any).titulo || '').toLowerCase();
+        const aRec = a as unknown as Record<string, unknown>;
+        const nom = (
+          a.nombre_actividad ||
+          (typeof aRec.nombre === 'string' ? aRec.nombre : '') ||
+          (typeof aRec.Nombre_Actividad === 'string' ? aRec.Nombre_Actividad : '') ||
+          (typeof aRec.Nombre === 'string' ? aRec.Nombre : '') ||
+          (typeof aRec.titulo === 'string' ? aRec.titulo : '') ||
+          ''
+        ).toLowerCase();
         const macro = (a.meta_macro_nombre || '').toLowerCase();
         const cod = (a.codigo_legado || '').toLowerCase();
         if (!nom.includes(q) && !macro.includes(q) && !cod.includes(q)) return false;
@@ -451,16 +481,17 @@ export function useHabitos() {
         actVinc = resolverActividadesDeHabitoNativo(a, [], todasLasSubtareas, []);
       }
 
+      const aRec = a as unknown as Record<string, unknown>;
       const nomDefensivo =
         a.nombre_actividad ||
-        (a as any).nombre ||
-        (a as any).Nombre_Actividad ||
-        (a as any).Nombre ||
-        (a as any).titulo ||
-        (a as any).Titulo ||
-        (a as any).actividad ||
-        (a as any).descripcion ||
-        (a as any).nombre_tarea_actividad ||
+        (typeof aRec.nombre === 'string' ? aRec.nombre : '') ||
+        (typeof aRec.Nombre_Actividad === 'string' ? aRec.Nombre_Actividad : '') ||
+        (typeof aRec.Nombre === 'string' ? aRec.Nombre : '') ||
+        (typeof aRec.titulo === 'string' ? aRec.titulo : '') ||
+        (typeof aRec.Titulo === 'string' ? aRec.Titulo : '') ||
+        (typeof aRec.actividad === 'string' ? aRec.actividad : '') ||
+        (typeof aRec.descripcion === 'string' ? aRec.descripcion : '') ||
+        (typeof aRec.nombre_tarea_actividad === 'string' ? aRec.nombre_tarea_actividad : '') ||
         'Hábito sin título';
 
       const metaVinc = (aId ? metasPorHabitoId.get(aId) : undefined) || (aCod ? metasPorHabitoId.get(aCod) : undefined);

@@ -101,10 +101,11 @@ export const ViewFinanzas: React.FC = () => {
     return () => clearTimeout(t);
   }, [toastMsg]);
 
-  // Queries reactivos desde Dexie filtrados con el búfer de deshacer
-  const rawGastosLive = useLiveQuery(() => db.gastos.toArray(), []) ?? [];
-  const rawIngresosLive = useLiveQuery(() => db.ingresos.toArray(), []) ?? [];
-  const rawCuotasLive = useLiveQuery(() => db.cuotas.toArray(), []) ?? [];
+  // Queries reactivos desde Dexie con ordenamiento indexado nativo (REQ-PERF-P2-02)
+  // Utiliza el índice B-Tree 'fecha_gasto' y 'fecha_ingreso' para evitar ordenamientos en memoria
+  const rawGastosLive = useLiveQuery(() => db.gastos.orderBy('fecha_gasto').reverse().toArray(), []) ?? [];
+  const rawIngresosLive = useLiveQuery(() => db.ingresos.orderBy('fecha_ingreso').reverse().toArray(), []) ?? [];
+  const rawCuotasLive = useLiveQuery(() => db.cuotas.orderBy('fecha_vencimiento').toArray(), []) ?? [];
   const rawProyectosLive = useLiveQuery(() => db.proyectos.toArray(), []) ?? [];
   const rawActividadesLive = useLiveQuery(() => db.actividades_personales.toArray(), []) ?? [];
 

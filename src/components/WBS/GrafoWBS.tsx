@@ -47,7 +47,9 @@ import type {
   TareaRecord,
   GastoRecord,
   IngresoRecord,
-  NodoCalculadoCPM
+  NodoCalculadoCPM,
+  ProyectoRecord,
+  NotaRecord
 } from '../../types';
 import { CanaletaEdge } from './CanaletaEdge';
 import { OrtogonalTreeEdge } from './OrtogonalTreeEdge';
@@ -96,14 +98,14 @@ export const Y_LEVELS = {
 export const GAP_X = 52;       // Separación horizontal canónica entre entregables/tareas (52px para pasillos despejados)
 export const GAP_FASE = 72;    // Separación horizontal canónica entre ramas de fases (72px)
 
-export function safeCoord(num: any, fallback = 60): number {
+export function safeCoord(num: unknown, fallback = 60): number {
   if (typeof num === 'number' && Number.isFinite(num)) {
     return Math.round(num);
   }
   return fallback;
 }
 
-function formatFecha(f: any): string {
+function formatFecha(f: unknown): string {
   if (!f) return 'Sin fecha';
   try {
     const s = String(f).split('T')[0];
@@ -111,7 +113,7 @@ function formatFecha(f: any): string {
     if (parts.length === 3) {
       return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
-    const d = new Date(f);
+    const d = new Date(String(f));
     if (isNaN(d.getTime())) return String(f);
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -153,27 +155,27 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
   const rawTodasLasNotas = useLiveQuery(() => db.notas.toArray(), []);
 
   const todosLosProyectos = useMemo(
-    () => deduplicarPorCodigoCanonico((rawTodosLosProyectos ?? []).filter((p: any) => !estaOculto(p.id) && !estaOculto(p.codigo_legado))),
+    () => deduplicarPorCodigoCanonico((rawTodosLosProyectos ?? []).filter((p) => !estaOculto(p.id) && !estaOculto(p.codigo_legado))),
     [rawTodosLosProyectos, estaOculto]
   );
   const todosLosHitos = useMemo(
-    () => deduplicarPorCodigoCanonico((rawTodosLosHitos ?? []).filter((h: any) => !estaOculto(h.id) && !estaOculto(h.codigo_legado) && !estaOculto(h.proyecto_id))),
+    () => deduplicarPorCodigoCanonico((rawTodosLosHitos ?? []).filter((h) => !estaOculto(h.id) && !estaOculto(h.codigo_legado) && !estaOculto(h.proyecto_id))),
     [rawTodosLosHitos, estaOculto]
   );
   const todasLasTareas = useMemo(
-    () => deduplicarPorCodigoCanonico((rawTodasLasTareas ?? []).filter((t: any) => !estaOculto(t.id) && !estaOculto(t.codigo_legado) && !estaOculto(t.proyecto_codigo) && !estaOculto(t.hito_codigo))),
+    () => deduplicarPorCodigoCanonico((rawTodasLasTareas ?? []).filter((t) => !estaOculto(t.id) && !estaOculto(t.codigo_legado) && !estaOculto(t.proyecto_codigo) && !estaOculto(t.hito_codigo))),
     [rawTodasLasTareas, estaOculto]
   );
   const todosLosGastos = useMemo(
-    () => deduplicarPorCodigoCanonico((rawTodosLosGastos ?? []).filter((g: any) => !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto))),
+    () => deduplicarPorCodigoCanonico((rawTodosLosGastos ?? []).filter((g) => !estaOculto(g.id) && !estaOculto(g.codigo_legado) && !estaOculto(g.id_origen_vinculado) && !estaOculto(g.ID_Proyecto))),
     [rawTodosLosGastos, estaOculto]
   );
   const todosLosIngresos = useMemo(
-    () => deduplicarPorCodigoCanonico((rawTodosLosIngresos ?? []).filter((i: any) => !estaOculto(i.id) && !estaOculto(i.codigo_legado))),
+    () => deduplicarPorCodigoCanonico((rawTodosLosIngresos ?? []).filter((i) => !estaOculto(i.id) && !estaOculto(i.codigo_legado))),
     [rawTodosLosIngresos, estaOculto]
   );
   const todasLasNotas = useMemo(
-    () => deduplicarPorCodigoCanonico((rawTodasLasNotas ?? []).filter((n: any) => !estaOculto(n.id) && !estaOculto(n.codigo_legado))),
+    () => deduplicarPorCodigoCanonico((rawTodasLasNotas ?? []).filter((n) => !estaOculto(n.id) && !estaOculto(n.codigo_legado))),
     [rawTodasLasNotas, estaOculto]
   );
 
@@ -205,7 +207,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
       return deduplicarPorCodigoCanonico(hitosExternos);
     }
     if (!todosLosHitos || !proyCod) return [];
-    const filtrados = todosLosHitos.filter((h: any) => {
+    const filtrados = todosLosHitos.filter((h) => {
       const hProyId = String(h.proyecto_id || h.ID_Proyecto || '').trim().toUpperCase();
       const hProyCod = String(h.proyecto_codigo || '').trim().toUpperCase();
       const hCod = String(h.codigo_legado || h.id || '').trim().toUpperCase();
@@ -231,7 +233,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
   // Filtrar tareas por proyecto activo o hitos asociados
   const tareas = useMemo(() => {
     if (!todasLasTareas || !proyCod) return [];
-    const filtradas = todasLasTareas.filter((t: any) => {
+    const filtradas = todasLasTareas.filter((t) => {
       const tProy = String(t.proyecto_codigo || t.ID_Proyecto || t.proyecto_id || '').trim().toUpperCase();
       const tHito = String(t.hito_codigo || t.hito_id || t.ID_Hito || t.id_hito || '').trim().toUpperCase();
       return (
@@ -255,7 +257,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
   // Filtrar gastos asociados al proyecto, hitos o tareas
   const gastos = useMemo(() => {
     if (!todosLosGastos || !proyCod) return [];
-    return todosLosGastos.filter((g: any) => {
+    return todosLosGastos.filter((g) => {
       const gProy = String(g.id_origen_vinculado || g.ID_Proyecto || '').trim().toUpperCase();
       const gHito = String(g.ID_Hito || g.id_hito || '').trim().toUpperCase();
       const gTarea = String(g.ID_Tarea || g.id_tarea || '').trim().toUpperCase();
@@ -270,7 +272,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
   // Filtrar ingresos del proyecto activo
   const ingresos = useMemo(() => {
     if (!todosLosIngresos || !proyCod) return [];
-    return todosLosIngresos.filter((ing: any) => {
+    return todosLosIngresos.filter((ing) => {
       const orig = String(ing.id_origen_vinculado || ing.ID_Origen_Vinculado || '').trim().toUpperCase();
       const tipo = String(ing.tipo_origen || ing.Tipo_Origen || '').trim().toUpperCase();
       return orig === proyCod || (tipo === 'PROYECTO' && (orig === proyCod || proyCod.startsWith(orig)));
@@ -282,11 +284,12 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
     const m = new Map<string, number>();
     if (!todasLasNotas) return m;
 
-    todasLasNotas.forEach((n: any) => {
+    todasLasNotas.forEach((n) => {
       const vinculos = n.enlaces_entidades_json || n.Vinculos;
       if (Array.isArray(vinculos)) {
-        vinculos.forEach((v: any) => {
-          const cod = String(v.codigo || v.id || '').trim().toUpperCase();
+        vinculos.forEach((v: unknown) => {
+          const vObj = v as { codigo?: string; id?: string; entidad_id?: string };
+          const cod = String(vObj.codigo || vObj.id || vObj.entidad_id || '').trim().toUpperCase();
           if (cod) m.set(cod, (m.get(cod) || 0) + 1);
         });
       }
@@ -324,9 +327,9 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
     tareas.forEach((t) => {
       const rawKey = String(
         t.hito_codigo ||
-        (t as any).id_hito ||
-        (t as any).ID_Hito ||
-        (t as any).hito_id ||
+        t.hito_id ||
+        (t as { id_hito?: string; ID_Hito?: string }).id_hito ||
+        (t as { id_hito?: string; ID_Hito?: string }).ID_Hito ||
         ''
       ).trim().toUpperCase();
       const canonicalKey = hitoCodeMap.get(rawKey) || rawKey;
@@ -337,9 +340,10 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
     });
 
     gastos.forEach((g) => {
-      const rawHKey = String((g as any).ID_Hito || (g as any).id_hito || '').trim().toUpperCase();
+      const gWithExtras = g as GastoRecord & { ID_Hito?: string; id_hito?: string; ID_Tarea?: string };
+      const rawHKey = String(gWithExtras.ID_Hito || gWithExtras.id_hito || '').trim().toUpperCase();
       const canonicalHKey = hitoCodeMap.get(rawHKey) || rawHKey;
-      const tKey = String((g as any).ID_Tarea || (g as any).id_tarea || '').trim().toUpperCase();
+      const tKey = String(gWithExtras.ID_Tarea || gWithExtras.id_tarea || '').trim().toUpperCase();
 
       if (tKey) {
         if (!gTareaMap.has(tKey)) gTareaMap.set(tKey, []);
@@ -372,20 +376,21 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
 
     // 2. Tareas evaluadas con float <= 0.05 o esCritico
     tareas.forEach((t) => {
-      const idUpper = String(t.codigo_legado || t.id || (t as any).ID_Tarea || '').trim().toUpperCase();
+      const tWithExtras = t as TareaRecord & { ID_Tarea?: string; es_critica?: boolean; esCritica?: boolean };
+      const idUpper = String(t.codigo_legado || t.id || tWithExtras.ID_Tarea || '').trim().toUpperCase();
       const cpmNode = cpmTareas.mapaCPM.get(idUpper) || cpmTareas.mapaCPM.get(String(t.id)) || cpmTareas.mapaCPM.get(String(t.codigo_legado));
 
       const esCrit = Boolean(
         cpmNode?.esCritico ||
         (typeof cpmNode?.holguraTotal === 'number' && cpmNode.holguraTotal <= 0.05) ||
-        (t as any).es_critica === true ||
-        (t as any).esCritica === true
+        tWithExtras.es_critica === true ||
+        tWithExtras.esCritica === true
       );
 
       if (esCrit) {
         if (t.codigo_legado) s.add(String(t.codigo_legado).trim().toUpperCase());
         if (t.id) s.add(String(t.id).trim().toUpperCase());
-        if ((t as any).ID_Tarea) s.add(String((t as any).ID_Tarea).trim().toUpperCase());
+        if (tWithExtras.ID_Tarea) s.add(String(tWithExtras.ID_Tarea).trim().toUpperCase());
       }
     });
 
@@ -399,7 +404,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
 
   const tareasCriticasCount = useMemo(() => {
     return tareas.filter((t) =>
-      setCriticos.has(String(t.codigo_legado || t.id || (t as any).ID_Tarea || '').trim().toUpperCase())
+      setCriticos.has(String(t.codigo_legado || t.id || (t as { ID_Tarea?: string }).ID_Tarea || '').trim().toUpperCase())
     ).length;
   }, [tareas, setCriticos]);
 
@@ -433,7 +438,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
     >();
 
     hitos.forEach((h) => {
-      const fRaw = String(h.fase_asociada || (h as any).Fase_Asociada || '').trim();
+      const fRaw = String(h.fase_asociada || (h as { Fase_Asociada?: string }).Fase_Asociada || '').trim();
       const fNombre = fRaw || 'Fase General';
       const fId = `FASE-${fNombre.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
 
@@ -547,8 +552,8 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
           const esTareaCritica = Boolean(
             setCriticos.has(tCodUpper) ||
             (t.id && setCriticos.has(String(t.id).trim().toUpperCase())) ||
-            (t as any).es_critica === true ||
-            (t as any).esCritica === true
+            (t as { es_critica?: boolean; esCritica?: boolean }).es_critica === true ||
+            (t as { es_critica?: boolean; esCritica?: boolean }).esCritica === true
           );
           const notasTCount = notasPorEntidadMap.get(tCod.toUpperCase()) || 0;
           const gTareaList = verGastos ? (gastosPorTarea.get(tCod.toUpperCase()) || []) : [];
@@ -1149,18 +1154,19 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
     const styledNodes = rawNodes.map((n) => {
       const isTaskNode = n.type === 'tareaNode';
       const nIdUpper = String(n.id).trim().toUpperCase();
-      const tId = (n.data as any)?.tarea?.id ? String((n.data as any).tarea.id).trim().toUpperCase() : '';
-      const tCodLeg = (n.data as any)?.tarea?.codigo_legado ? String((n.data as any).tarea.codigo_legado).trim().toUpperCase() : '';
+      const d = (n.data || {}) as { tarea?: TareaRecord; esCritica?: boolean; isCriticalFocused?: boolean; [key: string]: unknown };
+      const tId = d?.tarea?.id ? String(d.tarea.id).trim().toUpperCase() : '';
+      const tCodLeg = d?.tarea?.codigo_legado ? String(d.tarea.codigo_legado).trim().toUpperCase() : '';
 
       const esCritico = isTaskNode && (
         setCriticos.has(nIdUpper) ||
         (tId && setCriticos.has(tId)) ||
         (tCodLeg && setCriticos.has(tCodLeg)) ||
-        Boolean((n.data as any)?.esCritica)
+        Boolean(d?.esCritica)
       );
 
       const nodeStyle: React.CSSProperties = { ...(n.style || {}) };
-      const nodeData = { ...(n.data as any) };
+      const nodeData = { ...d };
       let nodeClass = '';
 
       if (soloRutaCritica) {
@@ -1206,8 +1212,9 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
       const targetUpper = String(e.target).trim().toUpperCase();
       const sourceIsCrit = setCriticos.has(sourceUpper);
       const targetIsCrit = setCriticos.has(targetUpper);
-      const esArbolSup = Boolean((e.data as any)?.esArbolSuperior);
-      const esEnlaceCrit = Boolean((e.data as any)?.esEnlaceCritico);
+      const edgeData = (e.data || {}) as { esArbolSuperior?: boolean; esEnlaceCritico?: boolean; isAdjacente?: boolean };
+      const esArbolSup = Boolean(edgeData.esArbolSuperior);
+      const esEnlaceCrit = Boolean(edgeData.esEnlaceCritico);
       const isCriticalEdge = (sourceIsCrit && targetIsCrit && !esArbolSup) || esEnlaceCrit;
 
       const edgeStyle: React.CSSProperties = { ...(e.style || {}) };
@@ -1240,7 +1247,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
         edgeStyle.filter = 'none';
         animated = false;
         edgeClass = '';
-        markerColor = (e.data as any)?.isAdjacente ? '#6366f1' : ((e.style as any)?.stroke || '#94a3b8');
+        markerColor = edgeData.isAdjacente ? '#6366f1' : (String(e.style?.stroke || '#94a3b8'));
       }
 
       return {
@@ -1288,8 +1295,8 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
   }, [layoutedNodes, layoutedEdges, setNodes, setEdges]);
 
   // Protección inmutable de posiciones: filtrar cualquier intento de cambio de posición
-  const handleNodesChange = (changes: any) => {
-    const nonPositional = changes.filter((c: any) => c.type !== 'position');
+  const handleNodesChange = (changes: Parameters<typeof onNodesChange>[0]) => {
+    const nonPositional = changes.filter((c) => c.type !== 'position');
     if (nonPositional.length > 0) {
       onNodesChange(nonPositional);
     }
@@ -1498,7 +1505,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
           zoomOnScroll={true}
           onInit={(instance) => setRfInstance(instance)}
           onNodeClick={(_, node) => {
-            const d = node.data as any;
+            const d = node.data as { hitoPadreId?: string; tarea?: TareaRecord & { id_hito?: string } } | undefined;
             const hitoPadre = d?.hitoPadreId || (d?.tarea ? (d.tarea.hito_codigo || d.tarea.id_hito) : undefined);
             onNodoClick?.(node.type || '', node.id, hitoPadre);
           }}
@@ -1514,11 +1521,30 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
             const posX = containerRect ? mouseX - containerRect.left : mouseX;
             const posY = containerRect ? mouseY - containerRect.top : mouseY;
 
-            const d = node.data as any;
+            interface NodeDataWBS {
+              tarea?: TareaRecord;
+              nodo?: NodoCalculadoCPM;
+              proyecto?: ProyectoRecord;
+              gasto?: GastoRecord;
+              ingreso?: IngresoRecord;
+              nota?: NotaRecord;
+              esCritica?: boolean;
+              nombreFase?: string;
+              numWP?: number;
+              numTareasTotal?: number;
+              pesoPct?: number;
+              numMarcadores?: number;
+              pctAvance?: number;
+              ingresosTotal?: number;
+              label?: string;
+              [key: string]: unknown;
+            }
+
+            const d = (node.data || {}) as NodeDataWBS;
 
             if (node.type === 'tareaNode') {
               const t = d?.tarea as TareaRecord;
-              const esCrit = d?.esCritica || false;
+              const esCrit = Boolean(d?.esCritica);
 
               let salud = { texto: 'A tiempo', esOk: true, esVencida: false };
               if (t?.estado_tarea === '04_Completado') {
@@ -1632,7 +1658,7 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
                   { label: 'Monto PEN', valor: `PEN ${(ing?.monto_pen || ing?.monto_original || 0).toLocaleString()}`, icono: '💰' },
                   { label: 'Categoría', valor: ing?.categoria_ingreso || 'Honorarios', icono: '🏷️' },
                   { label: 'Estado Cobro', valor: ing?.estado_cobro || 'Pendiente', icono: '🧾' },
-                  { label: 'Fecha Cobro', valor: formatFecha((ing as any)?.fecha_cobro || (ing as any)?.fecha_emision), icono: '📅' }
+                  { label: 'Fecha Cobro', valor: formatFecha((ing as IngresoRecord & { fecha_cobro?: string; fecha_emision?: string })?.fecha_cobro || (ing as IngresoRecord & { fecha_cobro?: string; fecha_emision?: string })?.fecha_emision), icono: '📅' }
                 ]
               });
             }
@@ -1661,13 +1687,13 @@ export const GrafoWBS: React.FC<GrafoWBSProps> = ({ proyectoId, hitosExternos, o
                 case 'faseNode':
                   return '#8b5cf6';
                 case 'wbsNode': {
-                  const data = n.data as any;
+                  const data = n.data as { nodo?: NodoCalculadoCPM } | undefined;
                   if (data?.nodo?.esCritico) return '#f43f5e';
                   if (data?.nodo?.tipo === 'HITO_MARCADOR') return '#a855f7';
                   return '#0ea5e9';
                 }
                 case 'tareaNode': {
-                  const data = n.data as any;
+                  const data = n.data as { esCritica?: boolean } | undefined;
                   return data?.esCritica ? '#f59e0b' : '#64748b';
                 }
                 case 'gastoNode':

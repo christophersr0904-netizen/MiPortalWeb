@@ -108,11 +108,12 @@ function obtenerLunesSemana(fecha: Date): Date {
 
 export type ActividadRecurrenciaInput =
   | Partial<ActividadPersonal>
-  | (Partial<Omit<ActividadPersonal, 'tipo_compromiso' | 'frecuencia_ciclo' | 'categoria_vida'>> & {
+  | (Partial<Omit<ActividadPersonal, 'tipo_compromiso' | 'frecuencia_ciclo' | 'categoria_vida' | 'estado'>> & {
       tipo_compromiso?: string;
       frecuencia_ciclo?: string;
       categoria_vida?: string;
-      [key: string]: any;
+      estado?: string;
+      [key: string]: unknown;
     });
 
 function resolverCampo(obj: ActividadRecurrenciaInput | undefined | null, ...keys: string[]): any {

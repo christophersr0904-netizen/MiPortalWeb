@@ -8,26 +8,74 @@
  * ============================================================================
  */
 
-import type { NotaRecord, ChecklistItem, WishlistMeta, AdjuntoDrive, VinculoEntidad } from '../types';
+import type { NotaRecord, ChecklistItem, WishlistMeta, AdjuntoDrive, VinculoEntidad, SyncStatus, TipoEntidadVinculable } from '../types';
 import { formatFechaIsoLocal } from './timeFormatters';
 import { generateSafeUUID } from './uuidGenerator';
 
 /**
  * Extractor tolerante a fallos multillave
  */
-export function getProp<T = any>(obj: any, ...keys: string[]): T {
-  if (!obj || typeof obj !== 'object') return undefined as any;
+export function getProp<T = unknown>(obj: unknown, ...keys: string[]): T {
+  if (!obj || typeof obj !== 'object') return undefined as unknown as T;
+  const rec = obj as Record<string, unknown>;
   for (const k of keys) {
-    if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
-      return obj[k] as T;
+    if (rec[k] !== undefined && rec[k] !== null && rec[k] !== '') {
+      return rec[k] as T;
     }
   }
-  return undefined as any;
+  return undefined as unknown as T;
 }
 
 // ============================================================================
 // CONTRATOS E INTERFACES CANÓNICAS
 // ============================================================================
+
+export interface CanonicalRawProyecto {
+  id?: string;
+  ID_Proyecto?: string;
+  codigo_legado?: string;
+  nombre_proyecto?: string;
+  health_status?: string;
+  Health_Status?: string;
+  [key: string]: unknown;
+}
+
+export interface CanonicalRawTarea {
+  id?: string;
+  proyecto_id?: string;
+  hito_id?: string;
+  Prioridad_Eisenhower?: string;
+  Nivel_Energia_Requerido?: string;
+  id_dependencia?: string;
+  ID_Dependencia?: string;
+  dependencia_tarea_id?: string;
+  costo_real_pen?: number;
+  Costo_Real_PEN?: number;
+  tipo_tarea?: string;
+  Tipo_Tarea?: string;
+  agendado_calendar?: string;
+  id_evento_calendar?: string;
+  hora_inicio?: string;
+  fecha_programada?: string;
+  [key: string]: unknown;
+}
+
+export interface CanonicalRawHito {
+  id?: string;
+  ID_Hito?: string;
+  codigo_legado?: string;
+  nombre_hito?: string;
+  nombre_elemento?: string;
+  [key: string]: unknown;
+}
+
+export interface CanonicalRawActividad {
+  id?: string;
+  ID_Actividad?: string;
+  codigo_legado?: string;
+  nombre_actividad?: string;
+  [key: string]: unknown;
+}
 
 export interface CanonicalProyecto {
   id: string;
@@ -49,7 +97,7 @@ export interface CanonicalProyecto {
   ultima_revision?: string;
   north_star_okr?: string;
   criterios_dod?: string;
-  raw: any;
+  raw: CanonicalRawProyecto;
 }
 
 export interface CanonicalTarea {
@@ -70,7 +118,7 @@ export interface CanonicalTarea {
   responsable?: string;
   notas?: string;
   id_dependencia?: string;
-  raw: any;
+  raw: CanonicalRawTarea;
 }
 
 export interface CanonicalHito {
@@ -90,7 +138,7 @@ export interface CanonicalHito {
   criterio_dod?: string;
   dependencia_hito_id?: string;
   entregable_link?: string;
-  raw: any;
+  raw: CanonicalRawHito;
 }
 
 export interface CanonicalActividad {
@@ -110,7 +158,7 @@ export interface CanonicalActividad {
   duracion_horas: number;
   agendado_calendar: string;
   monto_gasto: number;
-  raw: any;
+  raw: CanonicalRawActividad;
 }
 
 // ============================================================================
@@ -120,7 +168,7 @@ export interface CanonicalActividad {
 /**
  * Normaliza cualquier objeto de Proyecto (legacy Sheets o IndexedDB snake_case)
  */
-export function normalizeProyecto(raw: any): CanonicalProyecto {
+export function normalizeProyecto(raw: unknown): CanonicalProyecto {
   if (!raw) {
     return {
       id: '',
@@ -136,7 +184,7 @@ export function normalizeProyecto(raw: any): CanonicalProyecto {
       health_status: 'Saludable',
       spi: 1.0,
       cpi: 1.0,
-      raw: {}
+      raw: (raw && typeof raw === "object" ? raw : {}) as CanonicalRawProyecto
     };
   }
 
@@ -164,14 +212,14 @@ export function normalizeProyecto(raw: any): CanonicalProyecto {
     ultima_revision: getProp(raw, 'ultima_revision', 'Ultima_Revision'),
     north_star_okr: getProp(raw, 'north_star_okr', 'North_Star_OKR'),
     criterios_dod: getProp(raw, 'criterios_aceptacion_dod', 'Criterios_Aceptacion_DoD', 'Criterios_DoD'),
-    raw
+    raw: (raw && typeof raw === "object" ? raw : {}) as CanonicalRawProyecto
   };
 }
 
 /**
  * Normaliza cualquier objeto de Tarea (legacy Sheets o IndexedDB snake_case)
  */
-export function normalizeTarea(raw: any): CanonicalTarea {
+export function normalizeTarea(raw: unknown): CanonicalTarea {
   if (!raw) {
     return {
       id: '',
@@ -185,7 +233,7 @@ export function normalizeTarea(raw: any): CanonicalTarea {
       horas_reales: 0,
       es_mav: false,
       costo_real: 0,
-      raw: {}
+      raw: {} as CanonicalRawTarea
     };
   }
 
@@ -225,14 +273,14 @@ export function normalizeTarea(raw: any): CanonicalTarea {
     responsable: getProp(raw, 'responsable_ejecutor', 'Responsable_Ejecutor'),
     notas: getProp(raw, 'notas_impedimentos', 'Notas_Impedimentos'),
     id_dependencia: sanitizarDependenciaRaw(getProp(raw, 'id_dependencia', 'ID_Dependencia', 'dependencia_tarea_id')),
-    raw
+    raw: (raw && typeof raw === "object" ? raw : {}) as CanonicalRawTarea
   };
 }
 
 /**
  * Normaliza cualquier objeto de Hito/WBS (legacy Sheets o IndexedDB snake_case)
  */
-export function normalizeHito(raw: any): CanonicalHito {
+export function normalizeHito(raw: unknown): CanonicalHito {
   if (!raw) {
     return {
       id: '',
@@ -247,7 +295,7 @@ export function normalizeHito(raw: any): CanonicalHito {
       fecha_limite: '',
       presupuesto: 0,
       duracion_dias: 0,
-      raw: {}
+      raw: {} as CanonicalRawHito
     };
   }
 
@@ -271,14 +319,14 @@ export function normalizeHito(raw: any): CanonicalHito {
     criterio_dod: getProp(raw, 'criterio_dod', 'Criterio_Aceptacion_DoD', 'Criterios_DoD', 'criterioDod'),
     dependencia_hito_id: getProp(raw, 'dependencia_hito_id', 'Dependencia_Predecesora', 'Dependencia_ID_Hito'),
     entregable_link: getProp(raw, 'entregable_link', 'Entregable_Link', 'Entregable_Verificable_Link'),
-    raw
+    raw: (raw && typeof raw === "object" ? raw : {}) as CanonicalRawHito
   };
 }
 
 /**
  * Normaliza cualquier objeto de Actividad / Hábito (legacy Sheets o IndexedDB snake_case)
  */
-export function normalizeActividad(raw: any): CanonicalActividad {
+export function normalizeActividad(raw: unknown): CanonicalActividad {
   if (!raw) {
     return {
       id: '',
@@ -296,7 +344,7 @@ export function normalizeActividad(raw: any): CanonicalActividad {
       duracion_horas: 1,
       agendado_calendar: 'No',
       monto_gasto: 0,
-      raw: {}
+      raw: {} as CanonicalRawActividad
     };
   }
 
@@ -317,7 +365,7 @@ export function normalizeActividad(raw: any): CanonicalActividad {
     duracion_horas: Number(getProp(raw, 'duracion_horas', 'Duracion_Horas') ?? 1),
     agendado_calendar: String(getProp(raw, 'agendado_calendar', 'Agendado_Calendar') ?? 'No'),
     monto_gasto: Number(getProp(raw, 'monto_gasto_asociado', 'Monto_Gasto_Asociado') ?? 0),
-    raw
+    raw: (raw && typeof raw === "object" ? raw : {}) as CanonicalRawActividad
   };
 }
 
@@ -329,12 +377,12 @@ export function normalizeActividad(raw: any): CanonicalActividad {
  * Calcula la antigüedad en días transcurridos desde la fecha del evento terminal
  * hasta la fecha de referencia (por defecto: medianoche de hoy).
  */
-export function calcularDiasArchivado(param: any, fechaReferencia?: Date): number {
+export function calcularDiasArchivado(param: unknown, fechaReferencia?: Date): number {
   if (!param) return 0;
-  if (typeof param === 'object' && param._desarchivado === true) return 0;
+  if (param && typeof param === 'object' && (param as Record<string, unknown>)._desarchivado === true) return 0;
 
   try {
-    let fVal: any = null;
+    let fVal: unknown = null;
     if (typeof param === 'string' || param instanceof Date) {
       fVal = param;
     } else if (typeof param === 'object') {
@@ -373,7 +421,7 @@ export function calcularDiasArchivado(param: any, fechaReferencia?: Date): numbe
       if (parts.length === 3) {
         d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
       } else {
-        d = new Date(fVal);
+        d = new Date(String(fVal));
         d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       }
     }
@@ -397,23 +445,24 @@ export function calcularDiasArchivado(param: any, fechaReferencia?: Date): numbe
  * 3. No haber sido reactivada en caliente mediante la bandera _desarchivado === true.
  */
 export function esElementoArchivado(
-  item: any,
+  item: unknown,
   coleccion?: 'tareas' | 'proyectos' | 'actividades' | 'gastos' | 'ingresos' | 'ideas' | string,
   fechaReferencia?: Date
 ): boolean {
   if (!item || typeof item !== 'object') return false;
-  if (item._desarchivado === true) return false;
+  const itemRec = item as Record<string, unknown>;
+  if (itemRec._desarchivado === true) return false;
 
   let esTerminal = false;
 
   // Detección automática de colección si no viene explícita
   const col = coleccion?.toLowerCase() || (
-    item.estado_tarea !== undefined || item.ID_Tarea !== undefined ? 'tareas' :
-    item.estado_proyecto !== undefined || item.ID_Proyecto !== undefined ? 'proyectos' :
-    item.tipo_compromiso !== undefined || item.ID_Actividad !== undefined ? 'actividades' :
-    item.estado_pago !== undefined || item.ID_Gasto !== undefined ? 'gastos' :
-    item.estado_cobro !== undefined || item.ID_Ingreso !== undefined ? 'ingresos' :
-    item.ID_Idea !== undefined ? 'ideas' : 'desconocido'
+    itemRec.estado_tarea !== undefined || itemRec.ID_Tarea !== undefined ? 'tareas' :
+    itemRec.estado_proyecto !== undefined || itemRec.ID_Proyecto !== undefined ? 'proyectos' :
+    itemRec.tipo_compromiso !== undefined || itemRec.ID_Actividad !== undefined ? 'actividades' :
+    itemRec.estado_pago !== undefined || itemRec.ID_Gasto !== undefined ? 'gastos' :
+    itemRec.estado_cobro !== undefined || itemRec.ID_Ingreso !== undefined ? 'ingresos' :
+    itemRec.ID_Idea !== undefined ? 'ideas' : 'desconocido'
   );
 
   switch (col) {
@@ -424,8 +473,8 @@ export function esElementoArchivado(
         est === '05_Archivado' ||
         est === '04_Hecho' ||
         est.includes('04_Completad') ||
-        item.completado === true ||
-        item.Completado === true;
+        itemRec.completado === true ||
+        itemRec.Completado === true;
       break;
     }
 
@@ -478,7 +527,7 @@ export function esElementoArchivado(
         estGen === '04_Completado' ||
         estGen === '05_Archivado' ||
         estGen === '04_Cerrado' ||
-        item.completado === true;
+        itemRec.completado === true;
     }
   }
 
@@ -494,7 +543,7 @@ export function esElementoArchivado(
  */
 export function validarDoDSubtareas(
   idPadre: string,
-  subtareas: any[]
+  subtareas: unknown[]
 ): { valido: boolean; total: number; completadas: number; pendientes: number } {
   if (!idPadre || !Array.isArray(subtareas)) return { valido: true, total: 0, completadas: 0, pendientes: 0 };
   const idNorm = String(idPadre).trim().toUpperCase();
@@ -637,16 +686,17 @@ export function evaluarFiltroPlazo(
  * o esfuerzo (horas estimadas) o cronograma planificado (Fecha_Inicio_Plan a Fecha_Fin_Plan).
  */
 export function calcularAvancesProyectoCanonica(
-  proyecto: CanonicalProyecto | any,
-  hitos: any[] = [],
-  tareas: any[] = []
+  proyecto: CanonicalProyecto | unknown,
+  hitos: unknown[] = [],
+  tareas: unknown[] = []
 ): { avanceReal: number; avanceTotalProyectado: number } {
   if (!proyecto) return { avanceReal: 0, avanceTotalProyectado: 0 };
-  const proyCode = String(proyecto.codigo_legado || proyecto.id || proyecto.ID_Proyecto || '').trim().toUpperCase();
-  const proyId = String(proyecto.id || '').trim().toUpperCase();
+  const proyRec = (typeof proyecto === 'object' && proyecto !== null) ? (proyecto as Record<string, unknown>) : {};
+  const proyCode = String(proyRec.codigo_legado || proyRec.id || proyRec.ID_Proyecto || '').trim().toUpperCase();
+  const proyId = String(proyRec.id || '').trim().toUpperCase();
 
   // Filtrar hitos del proyecto (resolución biunívoca código legado + UUID)
-  const hitosProy = hitos.filter((h) => {
+  const hitosProy = hitos.map((h) => (typeof h === 'object' && h !== null ? (h as Record<string, unknown>) : {})).filter((h) => {
     const pCode = String(h.proyecto_codigo || h.proyecto_id || h.id_proyecto || h.ID_Proyecto || '').trim().toUpperCase();
     return pCode === proyCode || (proyId !== '' && pCode === proyId);
   });
@@ -654,7 +704,7 @@ export function calcularAvancesProyectoCanonica(
   const hitosIds = new Set(hitosProy.map((h) => String(h.codigo_legado || h.id || h.ID_Hito || '').trim().toUpperCase()));
 
   // Filtrar tareas del proyecto (resolución biunívoca código legado + UUID + hitos asociados)
-  const tareasProy = tareas.filter((t) => {
+  const tareasProy = tareas.map((t) => (typeof t === 'object' && t !== null ? (t as Record<string, unknown>) : {})).filter((t) => {
     const tProy = String(t.proyecto_codigo || t.proyecto_id || t.id_proyecto || t.ID_Proyecto || '').trim().toUpperCase();
     const tHito = String(t.hito_codigo || t.id_hito || t.ID_Hito || '').trim().toUpperCase();
     return tProy === proyCode || (proyId !== '' && tProy === proyId) || hitosIds.has(tHito) || (tHito && tHito.startsWith(proyCode));
@@ -669,7 +719,7 @@ export function calcularAvancesProyectoCanonica(
 
     hitosProy.forEach((h) => {
       const hId = String(h.codigo_legado || h.id || h.ID_Hito || '').trim();
-      const val = parseFloat(h.peso_pct || h.peso_ponderado_pct || h.Peso_Ponderado_Pct || 0);
+      const val = parseFloat(String(h.peso_pct || h.peso_ponderado_pct || h.Peso_Ponderado_Pct || 0));
       if (!isNaN(val) && val > 0) {
         manualWeights[hId] = val;
         totalManual += val;
@@ -696,7 +746,7 @@ export function calcularAvancesProyectoCanonica(
           return tH === hId;
         });
         const sumHoras = tareasHito.reduce((acc, t) => {
-          const hEst = parseFloat(t.horas_estimadas || t.Horas_Estimadas || 0);
+          const hEst = parseFloat(String(t.horas_estimadas || t.Horas_Estimadas || 0));
           return acc + (!isNaN(hEst) && hEst > 0 ? hEst : 0);
         }, 0);
         horasPorHito[hId] = sumHoras;
@@ -720,7 +770,7 @@ export function calcularAvancesProyectoCanonica(
 
     let avanceRealSuma = 0;
     let pesoCompletados = 0;
-    let hitoActivo: { hito: any; peso: number; avance: number } | null = null;
+    let hitoActivo: { hito: Record<string, unknown>; peso: number; avance: number } | null = null;
 
     hitosProy.forEach((h) => {
       const hId = String(h.codigo_legado || h.id || h.ID_Hito || '').trim();
@@ -742,7 +792,7 @@ export function calcularAvancesProyectoCanonica(
         }, 0);
         avH = Math.round(sumTar / tareasHito.length);
       } else {
-        avH = parseFloat(h.avance_real_pct || h.Avance_Real_Pct || 0);
+        avH = parseFloat(String(h.avance_real_pct || h.Avance_Real_Pct || 0));
         if (avH > 0 && avH <= 1) avH *= 100;
       }
 
@@ -756,11 +806,11 @@ export function calcularAvancesProyectoCanonica(
     });
 
     let metaCalculada = 0;
-    const activeHito = hitoActivo as { hito: any; peso: number; avance: number } | null;
-    if (!activeHito) {
-      metaCalculada = 100;
+    if (hitoActivo !== null) {
+      const hActivo: { hito: Record<string, unknown>; peso: number; avance: number } = hitoActivo;
+      metaCalculada = pesoCompletados + (hActivo.peso * 100);
     } else {
-      metaCalculada = pesoCompletados + (activeHito.peso * 100);
+      metaCalculada = 100;
     }
 
     const avRealFinal = Math.min(Math.max(Math.round(avanceRealSuma), 0), 100);
@@ -792,8 +842,8 @@ export function calcularAvancesProyectoCanonica(
   }
 
   // Caso 3: Sin hitos ni tareas - Proyección según cronograma planificado (Fecha_Inicio_Plan a Fecha_Fin_Plan)
-  const fIni = proyecto.fecha_inicio || proyecto.Fecha_Inicio_Plan;
-  const fFin = proyecto.fecha_fin || proyecto.Fecha_Fin_Plan;
+  const fIni = String(proyRec.fecha_inicio || proyRec.Fecha_Inicio_Plan || '');
+  const fFin = String(proyRec.fecha_fin || proyRec.Fecha_Fin_Plan || '');
   let metaCronograma = 0;
   if (fIni && fFin) {
     const tIni = new Date(fIni).getTime();
@@ -806,7 +856,7 @@ export function calcularAvancesProyectoCanonica(
     }
   }
 
-  const rawAvance = parseFloat(proyecto.avance_pct || proyecto.Avance_Real_Pct || 0);
+  const rawAvance = parseFloat(String(proyRec.avance_pct || proyRec.Avance_Real_Pct || 0));
   const avDirecto = Math.min(Math.max(Math.round(rawAvance > 1 ? rawAvance : rawAvance * 100), 0), 100);
   const metaFinal = Math.min(Math.max(metaCronograma || avDirecto, avDirecto), 100);
 
@@ -821,7 +871,7 @@ export function calcularAvancesProyectoCanonica(
  * Garantiza nota modular compuesta (texto + checklist + wishlist simultáneos),
  * soporte de blocks dinámicos y tolerancia a fallos en strings JSON.
  */
-export function normalizeNota(raw: any): NotaRecord {
+export function normalizeNota(raw: unknown): NotaRecord {
   if (!raw || typeof raw !== 'object') {
     const now = new Date().toISOString();
     return {
@@ -846,7 +896,7 @@ export function normalizeNota(raw: any): NotaRecord {
   }
 
   // Deserializador seguro de arrays
-  const parseArray = <T>(val: any): T[] => {
+  const parseArray = <T>(val: unknown): T[] => {
     if (Array.isArray(val)) return val;
     if (typeof val === 'string' && val.trim().startsWith('[')) {
       try {
@@ -860,7 +910,7 @@ export function normalizeNota(raw: any): NotaRecord {
   };
 
   // Checklists
-  const rawChecklists = parseArray<any>(
+  const rawChecklists = parseArray<Record<string, unknown>>(
     getProp(raw, 'checklists_json', 'Checklists_JSON', 'checklistsJson', 'Checklist', 'checklist')
   );
   const checklists_json: ChecklistItem[] = rawChecklists.map((c, idx) => ({
@@ -881,35 +931,36 @@ export function normalizeNota(raw: any): NotaRecord {
 
   let wishlist_json: WishlistMeta | undefined = undefined;
   if (rawWishlist && typeof rawWishlist === 'object') {
+    const rw = rawWishlist as Record<string, unknown>;
     const costoEstimado = Number(
-      rawWishlist.costoEstimado ?? rawWishlist.costo_estimado ?? rawWishlist.Costo_Estimado ?? 0
+      rw.costoEstimado ?? rw.costo_estimado ?? rw.Costo_Estimado ?? 0
     );
     const montoRealGastado = Number(
-      rawWishlist.montoRealGastado ?? rawWishlist.monto_real_gastado ?? rawWishlist.Monto_Real_Gastado ?? 0
+      rw.montoRealGastado ?? rw.monto_real_gastado ?? rw.Monto_Real_Gastado ?? 0
     );
     const tienePropiedadesRelevantes =
       costoEstimado > 0 ||
       montoRealGastado > 0 ||
-      Boolean(rawWishlist.urlReferencia || rawWishlist.enlaceReferencia) ||
-      Boolean(rawWishlist.estado || rawWishlist.estadoDeseo);
+      Boolean(rw.urlReferencia || rw.enlaceReferencia) ||
+      Boolean(rw.estado || rw.estadoDeseo);
 
     if (tienePropiedadesRelevantes) {
       wishlist_json = {
         costoEstimado: isNaN(costoEstimado) ? 0 : costoEstimado,
         montoRealGastado: isNaN(montoRealGastado) ? 0 : montoRealGastado,
-        moneda: (rawWishlist.moneda === 'USD' ? 'USD' : 'PEN') as 'PEN' | 'USD',
-        prioridad: String(rawWishlist.prioridad || rawWishlist.nivelDeseo || 'MEDIA').toUpperCase() as any,
-        comprado: Boolean(rawWishlist.comprado || rawWishlist.comprada || (montoRealGastado > 0 && montoRealGastado >= costoEstimado)),
-        urlReferencia: rawWishlist.urlReferencia || rawWishlist.enlaceReferencia || rawWishlist.url_referencia || '',
-        tienda: rawWishlist.tienda || '',
-        estado: rawWishlist.estado || rawWishlist.estadoDeseo || 'DESEADO',
-        estadoDeseo: rawWishlist.estadoDeseo || rawWishlist.estado || 'DESEADO'
+        moneda: (rw.moneda === 'USD' ? 'USD' : 'PEN') as 'PEN' | 'USD',
+        prioridad: String(rw.prioridad || rw.nivelDeseo || 'MEDIA').toUpperCase() as WishlistMeta['prioridad'],
+        comprado: Boolean(rw.comprado || rw.comprada || (montoRealGastado > 0 && montoRealGastado >= costoEstimado)),
+        urlReferencia: String(rw.urlReferencia || rw.enlaceReferencia || rw.url_referencia || ''),
+        tienda: String(rw.tienda || ''),
+        estado: String(rw.estado || rw.estadoDeseo || 'DESEADO'),
+        estadoDeseo: String(rw.estadoDeseo || rw.estado || 'DESEADO')
       };
     }
   }
 
   // Adjuntos Drive
-  const rawAdjuntos = parseArray<any>(
+  const rawAdjuntos = parseArray<Record<string, unknown>>(
     getProp(raw, 'adjuntos_drive_json', 'Adjuntos_Drive_JSON', 'adjuntosDriveJson', 'Adjuntos', 'adjuntos')
   );
   const adjuntos_drive_json: AdjuntoDrive[] = rawAdjuntos.map((a, idx) => ({
@@ -920,7 +971,7 @@ export function normalizeNota(raw: any): NotaRecord {
   }));
 
   // Enlaces a entidades
-  const rawEnlaces = parseArray<any>(
+  const rawEnlaces = parseArray<Record<string, unknown>>(
     getProp(raw, 'enlaces_entidades_json', 'Enlaces_Entidades_JSON', 'enlacesEntidadesJson', 'Vinculos_JSON', 'Vinculos', 'vinculos')
   );
   const enlaces_entidades_json: VinculoEntidad[] = rawEnlaces
@@ -929,7 +980,7 @@ export function normalizeNota(raw: any): NotaRecord {
       const rawTipo = String(e.tipo || 'PROYECTO').toUpperCase();
       const tipo = (['PROYECTO', 'HITO', 'TAREA', 'ACTIVIDAD', 'HABITO', 'GASTO', 'INGRESO', 'IDEA', 'FINANZAS'].includes(rawTipo)
         ? rawTipo
-        : 'PROYECTO') as any;
+        : 'PROYECTO') as TipoEntidadVinculable;
       const codigo = String(e.codigo || e.code || '').trim();
       const titulo = String(e.titulo || e.title || e.nombre || codigo || 'Sin Título').trim();
       const id_entidad = e.id_entidad ? String(e.id_entidad) : undefined;
@@ -938,16 +989,19 @@ export function normalizeNota(raw: any): NotaRecord {
     .filter((e): e is VinculoEntidad => e !== null);
 
   // Etiquetas
-  let rawEtiquetas = getProp(raw, 'etiquetas', 'Etiquetas', 'etiquetasJson', 'Etiquetas_JSON', 'tags', 'Tags');
+  let rawEtiquetas = getProp<unknown>(raw, 'etiquetas', 'Etiquetas', 'etiquetasJson', 'Etiquetas_JSON', 'tags', 'Tags');
+  let etiquetasArr: unknown[] = [];
   if (typeof rawEtiquetas === 'string') {
     try {
       const parsed = JSON.parse(rawEtiquetas);
-      rawEtiquetas = Array.isArray(parsed) ? parsed : rawEtiquetas.split(',');
+      etiquetasArr = Array.isArray(parsed) ? parsed : rawEtiquetas.split(',');
     } catch {
-      rawEtiquetas = rawEtiquetas.split(',');
+      etiquetasArr = rawEtiquetas.split(',');
     }
+  } else if (Array.isArray(rawEtiquetas)) {
+    etiquetasArr = rawEtiquetas;
   }
-  const etiquetas: string[] = parseArray<string>(rawEtiquetas)
+  const etiquetas: string[] = etiquetasArr
     .map((t) => String(t).trim().toLowerCase().replace(/^#+/, ''))
     .filter((t) => t.length > 0);
 
@@ -969,7 +1023,7 @@ export function normalizeNota(raw: any): NotaRecord {
   const created_at = String(getProp(raw, 'created_at', 'Fecha_Creacion', 'fecha_creacion') ?? nowIso);
   const updated_at = String(getProp(raw, 'updated_at', 'Fecha_Actualizacion', 'fecha_actualizacion') ?? nowIso);
   const version = Number(getProp(raw, 'version', 'Version') ?? 1);
-  const sync_status = (getProp(raw, 'sync_status', 'Sync_Status') ?? 'synced') as any;
+  const sync_status = (getProp(raw, 'sync_status', 'Sync_Status') ?? 'synced') as SyncStatus;
 
   return {
     id,
@@ -1013,7 +1067,7 @@ export function esUuidSemilla(id: unknown): boolean {
  * priorizando `codigo_legado` o los identificadores semánticos (`ID_Proyecto`, `ID_Hito`,
  * `ID_Elemento_WBS`, `ID_Tarea`, etc.) sobre el UUID técnico (`id`).
  */
-export function extraerCodigoCanonico(entidad: any): string {
+export function extraerCodigoCanonico(entidad: unknown): string {
   if (!entidad || typeof entidad !== 'object') return '';
   const rawCode = getProp<string>(
     entidad,
@@ -1042,15 +1096,18 @@ export function extraerCodigoCanonico(entidad: any): string {
  * de Supabase frente a UUIDs sintéticos de semilla, y enriqueciendo códigos relacionales
  * (`proyecto_codigo`, `hito_codigo`, `fase_asociada`, `wbs_code`) para evitar pérdida de vínculos.
  */
-export function fusionarRegistrosDuplicados<T extends Record<string, any>>(a: T, b: T): T {
+export function fusionarRegistrosDuplicados<T extends object>(a: T, b: T): T {
   if (!a) return b;
   if (!b) return a;
 
-  const aPending = a.sync_status === 'pending';
-  const bPending = b.sync_status === 'pending';
+  const aRec = a as Record<string, unknown>;
+  const bRec = b as Record<string, unknown>;
 
-  const aEsSemilla = esUuidSemilla(a.id);
-  const bEsSemilla = esUuidSemilla(b.id);
+  const aPending = aRec.sync_status === 'pending';
+  const bPending = bRec.sync_status === 'pending';
+
+  const aEsSemilla = esUuidSemilla(String(aRec.id || ''));
+  const bEsSemilla = esUuidSemilla(String(bRec.id || ''));
 
   let ganador: T = b;
   let secundario: T = a;
@@ -1068,20 +1125,27 @@ export function fusionarRegistrosDuplicados<T extends Record<string, any>>(a: T,
     ganador = b;
     secundario = a;
   } else {
-    const tA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-    const tB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+    const aRec = a as Record<string, unknown>;
+    const bRec = b as Record<string, unknown>;
+    const tA = aRec.updated_at ? new Date(String(aRec.updated_at)).getTime() : 0;
+    const tB = bRec.updated_at ? new Date(String(bRec.updated_at)).getTime() : 0;
     if (tA > tB) {
       ganador = a;
       secundario = b;
     }
   }
 
-  const resultado: Record<string, any> = { ...secundario, ...ganador };
+  const resultado: Record<string, unknown> = {
+    ...(secundario as unknown as Record<string, unknown>),
+    ...(ganador as unknown as Record<string, unknown>)
+  };
 
   // Conservar propiedades no vacías del registro secundario cuando en el ganador vienen nulas o vacías
+  const ganadorRec = ganador as Record<string, unknown>;
+  const secundarioRec = secundario as Record<string, unknown>;
   for (const key of Object.keys(secundario)) {
-    const valGanador = ganador[key];
-    const valSecundario = secundario[key];
+    const valGanador = ganadorRec[key];
+    const valSecundario = secundarioRec[key];
     if (
       (valGanador === undefined || valGanador === null || valGanador === '') &&
       valSecundario !== undefined &&
@@ -1093,9 +1157,9 @@ export function fusionarRegistrosDuplicados<T extends Record<string, any>>(a: T,
   }
 
   // Asegurar que prevalezca el UUID real de servidor sobre el UUID placeholder de semilla
-  if (esUuidSemilla(resultado.id)) {
-    if (!aEsSemilla && a.id) resultado.id = a.id;
-    else if (!bEsSemilla && b.id) resultado.id = b.id;
+  if (esUuidSemilla(String(resultado.id || ''))) {
+    if (!aEsSemilla && aRec.id) resultado.id = aRec.id;
+    else if (!bEsSemilla && bRec.id) resultado.id = bRec.id;
   }
 
   return resultado as T;
@@ -1105,7 +1169,7 @@ export function fusionarRegistrosDuplicados<T extends Record<string, any>>(a: T,
  * Deduplica una colección de entidades por su código canónico (`codigo_legado` / `ID_*` / `id`),
  * fusionando de forma determinista cualquier par de registros con distinto UUID pero igual código.
  */
-export function deduplicarPorCodigoCanonico<T extends Record<string, any>>(items: T[] | undefined | null): T[] {
+export function deduplicarPorCodigoCanonico<T extends object>(items: T[] | undefined | null): T[] {
   if (!Array.isArray(items) || items.length === 0) return [];
   const mapa = new Map<string, T>();
 
@@ -1133,29 +1197,31 @@ export function deduplicarPorCodigoCanonico<T extends Record<string, any>>(items
  * como por `nombre_meta` normalizado, evitando duplicaciones generadas por autopromoción
  * concurrente o sincronización con Supabase.
  */
-export function deduplicarMetasPlanes<T extends Record<string, any>>(metas: T[] | undefined | null): T[] {
+export function deduplicarMetasPlanes<T extends object>(metas: T[] | undefined | null): T[] {
   if (!Array.isArray(metas) || metas.length === 0) return [];
   const porCodigo = deduplicarPorCodigoCanonico(metas);
   const porNombre = new Map<string, T>();
 
   for (const meta of porCodigo) {
-    const rawNombre = String(meta.nombre_meta || meta.nombre || '').trim().toUpperCase();
-    const clave = rawNombre || extraerCodigoCanonico(meta) || String(meta.id || '');
+    const metaRec = meta as Record<string, unknown>;
+    const rawNombre = String(metaRec.nombre_meta || metaRec.nombre || '').trim().toUpperCase();
+    const clave = rawNombre || extraerCodigoCanonico(meta) || String(metaRec.id || '');
     if (!clave) continue;
 
     if (porNombre.has(clave)) {
       const previo = porNombre.get(clave)!;
+      const previoRec = previo as Record<string, unknown>;
       const fusionado = fusionarRegistrosDuplicados(previo, meta);
       // Preservar el código correlativo menor (ej. MET-001 frente a MET-015) y el mayor acumulado
-      const codPrev = String(previo.codigo_legado || '').trim();
-      const codAct = String(meta.codigo_legado || '').trim();
+      const codPrev = String(previoRec.codigo_legado || '').trim();
+      const codAct = String(metaRec.codigo_legado || '').trim();
       if (codPrev && codAct && codPrev.localeCompare(codAct, undefined, { numeric: true }) < 0) {
-        (fusionado as any).codigo_legado = codPrev;
+        (fusionado as Record<string, unknown>).codigo_legado = codPrev;
       }
-      const acumPrev = Number(previo.valor_acumulado_actual || 0);
-      const acumAct = Number(meta.valor_acumulado_actual || 0);
+      const acumPrev = Number(previoRec.valor_acumulado_actual || 0);
+      const acumAct = Number(metaRec.valor_acumulado_actual || 0);
       if (Math.max(acumPrev, acumAct) > 0) {
-        (fusionado as any).valor_acumulado_actual = Math.max(acumPrev, acumAct);
+        (fusionado as Record<string, unknown>).valor_acumulado_actual = Math.max(acumPrev, acumAct);
       }
       porNombre.set(clave, fusionado);
     } else {
@@ -1170,14 +1236,15 @@ export function deduplicarMetasPlanes<T extends Record<string, any>>(metas: T[] 
  * Deduplica hitos de planes de acción (`planes_accion_hitos`) por clave compuesta
  * `meta_id::(titulo_hito || codigo_legado)`, ya que distintos planes pueden compartir `HIT-PLN-001`.
  */
-export function deduplicarHitosPlan<T extends Record<string, any>>(hitos: T[] | undefined | null): T[] {
+export function deduplicarHitosPlan<T extends object>(hitos: T[] | undefined | null): T[] {
   if (!Array.isArray(hitos) || hitos.length === 0) return [];
   const mapa = new Map<string, T>();
 
   for (const h of hitos) {
     if (!h || typeof h !== 'object') continue;
-    const metaId = String(h.meta_id || '').trim().toUpperCase();
-    const subKey = String(h.titulo_hito || h.codigo_legado || h.id || '').trim().toUpperCase();
+    const hRec = h as Record<string, unknown>;
+    const metaId = String(hRec.meta_id || '').trim().toUpperCase();
+    const subKey = String(hRec.titulo_hito || hRec.codigo_legado || hRec.id || '').trim().toUpperCase();
     const clave = `${metaId}::${subKey}`;
     if (mapa.has(clave)) {
       mapa.set(clave, fusionarRegistrosDuplicados(mapa.get(clave)!, h));
@@ -1192,14 +1259,15 @@ export function deduplicarHitosPlan<T extends Record<string, any>>(hitos: T[] | 
 /**
  * Deduplica vínculos N:M (`habitos_metas_vinculos`) por par único `meta_id::habito_id`.
  */
-export function deduplicarVinculosMeta<T extends Record<string, any>>(vinculos: T[] | undefined | null): T[] {
+export function deduplicarVinculosMeta<T extends object>(vinculos: T[] | undefined | null): T[] {
   if (!Array.isArray(vinculos) || vinculos.length === 0) return [];
   const mapa = new Map<string, T>();
 
   for (const v of vinculos) {
     if (!v || typeof v !== 'object') continue;
-    const metaId = String(v.meta_id || '').trim().toUpperCase();
-    const habitoId = String(v.habito_id || '').trim().toUpperCase();
+    const vRec = v as Record<string, unknown>;
+    const metaId = String(vRec.meta_id || '').trim().toUpperCase();
+    const habitoId = String(vRec.habito_id || '').trim().toUpperCase();
     if (!metaId || !habitoId) continue;
     const clave = `${metaId}::${habitoId}`;
     if (mapa.has(clave)) {
@@ -1217,16 +1285,18 @@ export function deduplicarVinculosMeta<T extends Record<string, any>>(vinculos: 
  * Excluye IDs técnicos, UUIDs y metadatos de sincronización.
  * Parsea título, wishlist formateada, checklist como [x] / [ ], contenido Markdown y etiquetas como #tags.
  */
-export function serializarNotaATextoPlano(nota: any): string {
+export function serializarNotaATextoPlano(nota: unknown): string {
+  if (!nota || typeof nota !== 'object') return '';
+  const notaRec = nota as Record<string, unknown>;
   if (!nota || typeof nota !== 'object') return '';
   const bloques: string[] = [];
 
   // 1. Título de la nota
-  const titulo = String(nota.titulo || nota.Titulo || '').trim();
+  const titulo = String(notaRec.titulo || notaRec.Titulo || '').trim();
   if (titulo) bloques.push(titulo);
 
   // 2. Metadatos de Wishlist si existen
-  const wish = nota.wishlist_json || nota.WishlistMeta;
+  const wish = (notaRec.wishlist_json || notaRec.WishlistMeta) as Record<string, unknown> | undefined;
   if (wish && typeof wish === 'object' && Number(wish.costoEstimado || 0) > 0) {
     const moneda = wish.moneda || 'PEN';
     const costo = Number(wish.costoEstimado || 0).toFixed(2);
@@ -1240,10 +1310,10 @@ export function serializarNotaATextoPlano(nota: any): string {
   }
 
   // 3. Ítems de Checklist marcados y pendientes
-  const chks: Array<{ texto?: string; completado?: boolean }> = Array.isArray(nota.checklists_json)
-    ? nota.checklists_json
-    : Array.isArray(nota.Checklist)
-    ? nota.Checklist
+  const chks: Array<{ texto?: string; completado?: boolean }> = Array.isArray(notaRec.checklists_json)
+    ? (notaRec.checklists_json as Array<{ texto?: string; completado?: boolean }>)
+    : Array.isArray(notaRec.Checklist)
+    ? (notaRec.Checklist as Array<{ texto?: string; completado?: boolean }>)
     : [];
   if (chks.length > 0) {
     const itemsList = chks
@@ -1255,7 +1325,7 @@ export function serializarNotaATextoPlano(nota: any): string {
   }
 
   // 4. Contenido Markdown o Texto Libre (omitiendo estructuras JSON internas)
-  const contenido = String(nota.contenido_markdown || nota.Contenido || '').trim();
+  const contenido = String(notaRec.contenido_markdown || notaRec.Contenido || '').trim();
   if (contenido) {
     if (!contenido.startsWith('{') || !contenido.includes('"tipoEstructura"')) {
       bloques.push(contenido);
@@ -1263,10 +1333,10 @@ export function serializarNotaATextoPlano(nota: any): string {
   }
 
   // 5. Etiquetas formateadas con hashtag
-  const tags: string[] = Array.isArray(nota.etiquetas)
-    ? nota.etiquetas
-    : Array.isArray(nota.Etiquetas)
-    ? nota.Etiquetas
+  const tags: string[] = Array.isArray(notaRec.etiquetas)
+    ? (notaRec.etiquetas as string[])
+    : Array.isArray(notaRec.Etiquetas)
+    ? (notaRec.Etiquetas as string[])
     : [];
   if (tags.length > 0) {
     const tagsLimpios = tags
@@ -1335,7 +1405,7 @@ function sanitizarDependenciaRaw(rawDep?: unknown): string | undefined {
  * canónicos { codigo, nombre }, filtrando ruido y suprimiendo UUIDs huérfanos.
  */
 export function resolverDependenciasTarea(
-  rawDep?: string | null,
+  rawDep?: unknown,
   tareasLookupMap?: Map<string, { codigo: string; nombre: string }>
 ): DependenciaResuelta[] {
   const tokens = limpiarTokensDependencia(rawDep);
@@ -1384,16 +1454,17 @@ export function resolverDependenciasTarea(
  * Evita colisiones por conteos reducidos tras borrados o desfasajes entre múltiples dispositivos.
  */
 export async function generarCodigoCorrelativoSeguro(
-  tableRef: any,
+  tableRef: { toArray?: () => Promise<Array<Record<string, unknown>>>; count?: () => Promise<number> } | unknown,
   prefijo: string,
   padding: number = 3
 ): Promise<string> {
   try {
-    if (!tableRef || typeof tableRef.toArray !== 'function') {
-      const cnt = (await tableRef?.count?.().catch(() => 0)) || 0;
+    const tRef = tableRef as { toArray?: () => Promise<Array<Record<string, unknown>>>; count?: () => Promise<number> } | null | undefined;
+    if (!tRef || typeof tRef.toArray !== 'function') {
+      const cnt = (await tRef?.count?.().catch(() => 0)) || 0;
       return `${prefijo}-${String(cnt + 1).padStart(padding, '0')}`;
     }
-    const items = await tableRef.toArray();
+    const items = await tRef.toArray();
     let maxNum = 0;
     const regex = new RegExp(`^${prefijo}-(\\d+)`, 'i');
     for (const item of items) {
@@ -1406,7 +1477,7 @@ export async function generarCodigoCorrelativoSeguro(
     }
     return `${prefijo}-${String(maxNum + 1).padStart(padding, '0')}`;
   } catch {
-    const cnt = (await tableRef?.count?.().catch(() => 0)) || 0;
+    const cnt = (await (tableRef as { count?: () => Promise<number> })?.count?.().catch(() => 0)) || 0;
     return `${prefijo}-${String(cnt + 1).padStart(padding, '0')}`;
   }
 }

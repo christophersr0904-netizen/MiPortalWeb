@@ -1,4 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
+import type { Table } from 'dexie';
 import { getSupabase } from './supabaseClient';
 import { db, sanearDuplicadosDexie } from '../db/db';
 import { extraerCodigoCanonico, fusionarRegistrosDuplicados } from '../utils/entityNormalizer';
@@ -23,7 +24,7 @@ import {
   sanitizarTareaInbound,
   sanitizarNotaInbound
 } from './syncPayloadSanitizer';
-import type { TombstoneRecord } from '../types';
+import type { TombstoneRecord, DesktopWidgetBridge } from '../types';
 
 export type SyncState = 'synced' | 'syncing' | 'offline' | 'error' | 'reconnecting';
 
@@ -32,21 +33,40 @@ export interface SyncResult {
   failed: number;
 }
 
+export interface SupabaseErrorLike {
+  code?: string;
+  status?: number;
+  statusCode?: number;
+  message?: string;
+  details?: string;
+  hint?: string;
+}
+
+interface WindowWithDesktopFlags extends Window {
+  IS_DESKTOP_WIDGET?: boolean;
+  IS_ELECTRON_COCKPIT?: boolean;
+  desktopWidget?: DesktopWidgetBridge;
+  electronAPI?: unknown;
+}
+
 /**
  * Diffing en memoria para sincronización silenciosa (REQ-FIX-10).
  * Compara un registro inbound ya sanitizado contra el registro local previo en Dexie.
  * Retorna true si ambos registros son idénticos en valores significativos,
  * evitando escrituras redundantes en Dexie que despierten useLiveQuery innecesariamente.
  */
-function sonRegistrosIdenticos(remoto: any, local: any): boolean {
+function sonRegistrosIdenticos(
+  remoto: Record<string, unknown> | null | undefined,
+  local: Record<string, unknown> | null | undefined
+): boolean {
   if (!local || !remoto) return false;
   if (String(remoto.id) !== String(local.id)) return false;
 
   // Si ambos tienen updated_at, comparar timestamp ISO con tolerancia de 2s (REQ-FIX-SYNC-CALENDAR-02)
   // para absorber el redondeo de microsegundos de PostgreSQL frente a milisegundos de JS/Dexie
   if (remoto.updated_at && local.updated_at) {
-    const tRemoto = new Date(remoto.updated_at).getTime();
-    const tLocal = new Date(local.updated_at).getTime();
+    const tRemoto = new Date(String(remoto.updated_at)).getTime();
+    const tLocal = new Date(String(local.updated_at)).getTime();
     if (!isNaN(tRemoto) && !isNaN(tLocal) && Math.abs(tRemoto - tLocal) > 2000) {
       return false;
     }
@@ -87,11 +107,12 @@ export function esEntornoEscritorioLocal(): boolean {
   try {
     const hostname = window.location?.hostname || '';
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const w = window as unknown as WindowWithDesktopFlags;
     const isElectron = Boolean(
-      (window as any).IS_DESKTOP_WIDGET === true ||
-      (window as any).IS_ELECTRON_COCKPIT === true ||
-      (window as any).desktopWidget ||
-      (window as any).electronAPI
+      w.IS_DESKTOP_WIDGET === true ||
+      w.IS_ELECTRON_COCKPIT === true ||
+      w.desktopWidget ||
+      w.electronAPI
     );
     return isLocalhost || isElectron;
   } catch {
@@ -112,8 +133,8 @@ class SyncManager {
 
   // Realtime & Anti-Eco (TTL 10s & Debounce 800ms)
   private recentlyPushedIds = new Map<string, number>();
-  private realtimeChannel: any = null;
-  private realtimeDebounceTimer: any = null;
+  private realtimeChannel: RealtimeChannel | null = null;
+  private realtimeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private tablasPendientesRealtime = new Set<string>();
 
   // Cuarentena en memoria para registros con fallos irrecuperables de Foreign Key (23503 / 409 / user_id ausente)
@@ -210,13 +231,14 @@ class SyncManager {
   /**
    * Evalúa si un error retornado por Supabase corresponde a una violación de Foreign Key no recuperable (código 23503 o 409)
    */
-  public esErrorFkNoRecuperable(error: any): boolean {
+  public esErrorFkNoRecuperable(error: unknown): boolean {
     if (!error) return false;
-    const code = String(error.code || '');
-    const status = Number(error.status || error.statusCode || 0);
-    const msg = String(error.message || '').toLowerCase();
-    const details = String(error.details || '').toLowerCase();
-    const hint = String(error.hint || '').toLowerCase();
+    const err = error as SupabaseErrorLike;
+    const code = String(err.code || '');
+    const status = Number(err.status || err.statusCode || 0);
+    const msg = String(err.message || '').toLowerCase();
+    const details = String(err.details || '').toLowerCase();
+    const hint = String(err.hint || '').toLowerCase();
     return (
       code === '23503' ||
       code === '409' ||
@@ -245,14 +267,15 @@ class SyncManager {
     tabla: string,
     registroId: string,
     codigoLegado: string,
-    error: any
+    error: unknown
   ): Promise<void> {
-    const errorStr = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+    const err = error as SupabaseErrorLike | null | undefined;
+    const errorStr = `${err?.code || ''} ${err?.message || ''} ${err?.details || ''} ${err?.hint || ''}`.toLowerCase();
     const esHuerfano = !errorStr.includes('user_id_fkey') && errorStr.includes('_id_fkey');
 
     if (esHuerfano) {
       console.warn(`[SyncManager] Registro huérfano purgado automáticamente en tabla ${tabla}`);
-      const tableRef = (db as any)[tabla];
+      const tableRef = (db as unknown as Record<string, { delete?: (id: string) => Promise<unknown> }>)[tabla];
       if (tableRef && typeof tableRef.delete === 'function') {
         try {
           await tableRef.delete(registroId);
@@ -262,9 +285,9 @@ class SyncManager {
       }
       this.registrosFkCuarentena.delete(registroId);
     } else {
-      console.warn(`[SyncManager] Violación FK/409 en ${tabla} ${codigoLegado}. Cuarentena definitiva en Dexie:`, error?.message || error);
+      console.warn(`[SyncManager] Violación FK/409 en ${tabla} ${codigoLegado}. Cuarentena definitiva en Dexie:`, err?.message || err);
       this.registrosFkCuarentena.add(registroId);
-      const tableRef = (db as any)[tabla];
+      const tableRef = (db as unknown as Record<string, { update?: (id: string, changes: Record<string, unknown>) => Promise<unknown> }>)[tabla];
       if (tableRef && typeof tableRef.update === 'function') {
         try {
           await tableRef.update(registroId, { sync_status: 'quarantined' });
@@ -300,12 +323,13 @@ class SyncManager {
   /**
    * Detecta errores 404 / PGRST205 de PostgREST cuando una tabla no está desplegada en el schema remoto.
    */
-  public esErrorTablaInexistente(error: any): boolean {
+  public esErrorTablaInexistente(error: unknown): boolean {
     if (!error) return false;
-    const status = Number(error.status || error.statusCode || 0);
-    const code = String(error.code || '').toUpperCase();
-    const msg = String(error.message || '').toLowerCase();
-    const details = String(error.details || '').toLowerCase();
+    const err = error as SupabaseErrorLike;
+    const status = Number(err.status || err.statusCode || 0);
+    const code = String(err.code || '').toUpperCase();
+    const msg = String(err.message || '').toLowerCase();
+    const details = String(err.details || '').toLowerCase();
     return (
       status === 404 ||
       code === 'PGRST205' ||
@@ -371,9 +395,9 @@ class SyncManager {
       'configuracion_usuario'
     ];
     for (const t of tablas) {
-      const tableRef = (db as any)[t];
-      if (tableRef && typeof tableRef.where === 'function') {
-        try {
+      try {
+        const tableRef = (db as unknown as Record<string, { where?: (idx: string) => { equals?: (val: string) => { modify?: (c: Record<string, unknown>) => Promise<number> } } }>)[t];
+        if (tableRef && typeof tableRef.where === 'function') {
           const query = tableRef.where('sync_status');
           if (query && typeof query.equals === 'function') {
             const eq = query.equals('quarantined');
@@ -381,9 +405,9 @@ class SyncManager {
               await eq.modify({ sync_status: 'pending' });
             }
           }
-        } catch {
-          // Ignorar si la tabla o índice no está listo en el entorno
         }
+      } catch {
+        // Ignorar si la tabla o índice no está listo en el entorno
       }
     }
     this.registrosFkCuarentena.clear();
@@ -396,11 +420,12 @@ class SyncManager {
   /**
    * REQ-ARCH-75-EXEC: Detecta fallos de conectividad, caída de sockets o timeouts de red
    */
-  public esErrorDeRed(error: any): boolean {
+  public esErrorDeRed(error: unknown): boolean {
     if (!error) return false;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
-    const msg = String(error.message || error || '').toLowerCase();
-    const details = String(error.details || '').toLowerCase();
+    const err = error as SupabaseErrorLike | Error | string;
+    const msg = String((err as Error)?.message || err || '').toLowerCase();
+    const details = String((err as SupabaseErrorLike)?.details || '').toLowerCase();
     return (
       msg.includes('network') ||
       msg.includes('failed to fetch') ||
@@ -533,13 +558,13 @@ class SyncManager {
         'cuotas',
         'configuracion_usuario'
       ];
-      let channel: any = this.supabase.channel('pmo-realtime-channel');
+      let channel = this.supabase.channel('pmo-realtime-channel');
 
       tablasMonitoreadas.forEach((tabla) => {
         channel = channel.on(
           'postgres_changes',
           { event: '*', schema: 'public', table: tabla },
-          (payload: any) => {
+          (payload: { eventType?: string; event?: string; new?: Record<string, unknown>; old?: Record<string, unknown>; table?: string }) => {
             this.handleRealtimeChange(tabla, payload);
           }
         );
@@ -559,8 +584,11 @@ class SyncManager {
    * Manejador de eventos entrantes de Realtime con Filtro Anti-Eco, Inyección Inmediata Zero-Delay (REQ-SYNC-PROD-11-FIX),
    * Borrado Físico Propagado y Trailing-Edge Debounce secundario para integridad relacional.
    */
-  public handleRealtimeChange(tabla: string, payload: any) {
-    const recordId = payload?.new?.id || payload?.old?.id;
+  public handleRealtimeChange(
+    tabla: string,
+    payload: { eventType?: string; event?: string; new?: Record<string, unknown>; old?: Record<string, unknown>; table?: string }
+  ) {
+    const recordId = String(payload?.new?.id || payload?.old?.id || '');
 
     // 1. Filtro Anti-Eco: si el registro fue empujado recientemente por este cliente, se ignora
     if (this.esEcoLocal(recordId)) {
@@ -572,10 +600,11 @@ class SyncManager {
 
     // REQ-SYNC-41-EXEC / REQ-SYNC-PROD-11-FIX: Propagación inmediata de DELETE para erradicar registros fantasma en todos los nodos
     if (eventType === 'DELETE') {
-      const delId = payload?.old?.id || payload?.new?.id;
+      const delId = String(payload?.old?.id || payload?.new?.id || '');
       if (delId) {
-        if ((db as any)[targetTable] && typeof (db as any)[targetTable].delete === 'function') {
-          (db as any)[targetTable].delete(delId).catch(() => { });
+        const tblDelete = (db as unknown as Record<string, { delete?: (id: string) => Promise<unknown> }>)[targetTable];
+        if (tblDelete && typeof tblDelete.delete === 'function') {
+          tblDelete.delete(delId).catch(() => { });
         }
         const nowIso = new Date().toISOString();
         if (db.tombstones && typeof db.tombstones.put === 'function') {
@@ -586,7 +615,7 @@ class SyncManager {
             deleted_at: nowIso,
             fecha_eliminacion: nowIso,
             sync_status: 'synced'
-          } as any).catch(() => { });
+          } as unknown as TombstoneRecord).catch(() => { });
         }
         if (db.sync_deletions && typeof db.sync_deletions.put === 'function') {
           db.sync_deletions.put({
@@ -594,7 +623,7 @@ class SyncManager {
             tabla: targetTable,
             deleted_at: nowIso,
             sync_status: 'synced'
-          } as any).catch(() => { });
+          } as unknown as TombstoneRecord).catch(() => { });
         }
       }
       return;
@@ -603,10 +632,10 @@ class SyncManager {
     // PASO 1 - Inyección Inmediata en Dexie (Zero-Delay) ante INSERT o UPDATE
     if (payload?.new && (eventType === 'INSERT' || eventType === 'UPDATE')) {
       const rawNew = payload.new;
-      const refDexie = (db as any)[targetTable];
+      const refDexie = (db as unknown as Record<string, { put?: (record: unknown) => Promise<unknown> }>)[targetTable];
       if (refDexie && typeof refDexie.put === 'function') {
         try {
-          let registroSanitizado: any = {
+          let registroSanitizado: unknown = {
             ...rawNew,
             sync_status: 'synced' as const
           };
@@ -632,7 +661,7 @@ class SyncManager {
           }
 
           // Ejecución inmediata en Dexie para despertar useLiveQuery sin latencia (0ms)
-          refDexie.put(registroSanitizado).catch((putErr: any) => {
+          refDexie.put(registroSanitizado as Parameters<typeof refDexie.put>[0]).catch((putErr: unknown) => {
             console.warn(`[SyncManager] Aviso al inyectar realtime ${targetTable}:`, putErr);
           });
         } catch (prepErr) {
@@ -757,7 +786,7 @@ class SyncManager {
    * Registra un fallo de sincronización por registro e incrementa su contador de reintentos.
    * Si alcanza MAX_RETRY_COUNT (3), activa el circuit breaker y loguea una advertencia.
    */
-  public registrarFalloRegistro(id: string, tabla?: string, _err?: any): void {
+  public registrarFalloRegistro(id: string, tabla?: string, _err?: unknown): void {
     if (!id) return;
     const key = String(id);
     const count = (this.recordRetryCount.get(key) || 0) + 1;
@@ -784,7 +813,15 @@ class SyncManager {
    * Descarta permanentemente registros en estado 'quarantined' (REQ-WEB-01), en registrosFkCuarentena
    * o que hayan alcanzado el umbral MAX_RETRY_COUNT (3) del Circuit Breaker (REQ-HARDENING-P0-01).
    */
-  public async obtenerRegistrosPendientes<T>(tableRef: any): Promise<T[]> {
+  public async obtenerRegistrosPendientes<T extends { id?: string; sync_status?: string } = { id?: string; sync_status?: string }>(
+    tableRef: Table<T, string> | {
+      where: (col: string) => {
+        anyOf?: (values: string[]) => { toArray: () => Promise<T[]> };
+        equals?: (value: string) => { toArray: () => Promise<T[]> };
+      };
+      toArray?: () => Promise<T[]>;
+    }
+  ): Promise<T[]> {
     let records: T[] = [];
     try {
       const w = tableRef.where('sync_status');
@@ -792,20 +829,23 @@ class SyncManager {
         records = await w.anyOf(['pending', 'error']).toArray();
       } else if (typeof w.equals === 'function') {
         records = await w.equals('pending').toArray();
-      } else {
+      } else if (typeof tableRef.toArray === 'function') {
         records = (await tableRef.toArray()).filter(
-          (r: any) => r.sync_status === 'pending' || r.sync_status === 'error'
+          (r: T) => r.sync_status === 'pending' || r.sync_status === 'error'
         );
       }
     } catch {
       try {
-        records = await tableRef.where('sync_status').equals('pending').toArray();
+        const w = tableRef.where('sync_status');
+        if (w && typeof w.equals === 'function') {
+          records = await w.equals('pending').toArray();
+        }
       } catch {
         records = [];
       }
     }
 
-    return records.filter((r: any) => {
+    return records.filter((r: T) => {
       if (!r) return false;
       if (r.sync_status === 'quarantined' || r.sync_status === 'synced') return false;
       if (r.id && this.registrosFkCuarentena.has(String(r.id))) return false;
@@ -819,7 +859,15 @@ class SyncManager {
   /**
    * Conteo seguro de registros pendientes o en error (excluye registros en cuarentena)
    */
-  public async contarPendientes(tableRef: any): Promise<number> {
+  public async contarPendientes(
+    tableRef: Table<{ id?: string; sync_status?: string }, string> | {
+      where: (col: string) => {
+        anyOf?: (values: string[]) => { toArray: () => Promise<{ id?: string; sync_status?: string }[]> };
+        equals?: (value: string) => { toArray: () => Promise<{ id?: string; sync_status?: string }[]> };
+      };
+      toArray?: () => Promise<{ id?: string; sync_status?: string }[]>;
+    }
+  ): Promise<number> {
     try {
       const pending = await this.obtenerRegistrosPendientes(tableRef);
       return pending.length;
@@ -1015,7 +1063,7 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorFkNoRecuperable(err)) {
           await this.gestionarFkError('proyectos', proy.id, proy.codigo_legado, err);
         } else {
@@ -1084,7 +1132,7 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorFkNoRecuperable(err)) {
           await this.gestionarFkError('hitos_wbs', hito.id, hito.codigo_legado, err);
         } else {
@@ -1158,7 +1206,7 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorFkNoRecuperable(err)) {
           await this.gestionarFkError('tareas', tarea.id, tarea.codigo_legado, err);
         } else {
@@ -1217,7 +1265,7 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorFkNoRecuperable(err)) {
           await this.gestionarFkError('actividades_personales', act.id, act.codigo_legado, err);
         } else {
@@ -1290,7 +1338,7 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorFkNoRecuperable(err)) {
           await this.gestionarFkError('subtareas_pasos', sub.id, sub.codigo_legado, err);
         } else {
@@ -1349,7 +1397,7 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorFkNoRecuperable(err)) {
           await this.gestionarFkError('metas_planes', meta.id, meta.codigo_legado, err);
         } else {
@@ -1418,7 +1466,7 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorFkNoRecuperable(err)) {
           await this.gestionarFkError('planes_accion_hitos', hito.id, hito.codigo_legado, err);
         } else {
@@ -1489,7 +1537,7 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorFkNoRecuperable(err)) {
           await this.gestionarFkError('habitos_metas_vinculos', vinculo.id, vinculo.id, err);
         } else {
@@ -1508,18 +1556,22 @@ class SyncManager {
    * Helper compartido para tablas financieras opcionales ('gastos', 'ingresos', 'cuotas')
    * con aislamiento automático ante 404 / PGRST205 y preservación local-first en Dexie.
    */
-  private async sincronizarTablaFinancieraOpcional(
+  private async sincronizarTablaFinancieraOpcional<T extends { id: string; codigo_legado?: string; sync_status?: string }>(
     tabla: 'gastos' | 'ingresos' | 'cuotas',
     etiquetaSingular: string,
-    refDexie: any,
-    sanitizar: (item: any, userId: string) => any
+    refDexie: {
+      update: (id: string, changes: Record<string, unknown>) => Promise<number>;
+      where: (col: string) => { anyOf?: (v: string[]) => { toArray: () => Promise<T[]> }; equals?: (v: string) => { toArray: () => Promise<T[]> } };
+      toArray?: () => Promise<T[]>;
+    },
+    sanitizar: (item: T, userId: string) => Record<string, unknown>
   ): Promise<SyncResult> {
     const result: SyncResult = { success: 0, failed: 0 };
     if (this.debeOmitirTablaRemota(tabla)) {
       return result;
     }
 
-    const pending = await this.obtenerRegistrosPendientes<any>(refDexie);
+    const pending = await this.obtenerRegistrosPendientes<T>(refDexie);
     if (pending.length === 0) return result;
 
     if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
@@ -1536,7 +1588,7 @@ class SyncManager {
         const rawPayload = sanitizar(item, this.currentUserId);
         const payload = await this.reconciliarPayloadIdRemoto(tabla, rawPayload);
         this.registrarPushedId(item.id);
-        if (payload.id) this.registrarPushedId(payload.id);
+        if (payload?.id) this.registrarPushedId(String(payload.id));
         const { error } = await this.supabase
           .from(tabla)
           .upsert(payload, { onConflict: 'codigo_legado' });
@@ -1547,9 +1599,9 @@ class SyncManager {
             break;
           }
           if (this.esErrorFkNoRecuperable(error)) {
-            await this.gestionarFkError(tabla, item.id, item.codigo_legado, error);
+            await this.gestionarFkError(tabla, item.id, item.codigo_legado || item.id, error);
           } else {
-            console.error(`[SyncManager] Error al sincronizar ${etiquetaSingular}:`, item.codigo_legado, error);
+            console.error(`[SyncManager] Error al sincronizar ${etiquetaSingular}:`, item.codigo_legado || item.id, error);
             await refDexie.update(item.id, { sync_status: 'error' });
           }
           this.registrarFalloRegistro(item.id, tabla, error);
@@ -1562,15 +1614,15 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorTablaInexistente(err)) {
           this.registrarTablaInexistente(tabla);
           break;
         }
         if (this.esErrorFkNoRecuperable(err)) {
-          await this.gestionarFkError(tabla, item.id, item.codigo_legado, err);
+          await this.gestionarFkError(tabla, item.id, item.codigo_legado || item.id, err);
         } else {
-          console.error(`[SyncManager] Excepción al sincronizar ${etiquetaSingular}:`, item.codigo_legado, err);
+          console.error(`[SyncManager] Excepción al sincronizar ${etiquetaSingular}:`, item.codigo_legado || item.id, err);
           await refDexie.update(item.id, { sync_status: 'error' });
         }
         this.registrarFalloRegistro(item.id, tabla, err);
@@ -1646,7 +1698,7 @@ class SyncManager {
           });
           result.success++;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (this.esErrorFkNoRecuperable(err)) {
           await this.gestionarFkError('notas', nota.id, nota.codigo_legado, err);
         } else {
@@ -1699,7 +1751,8 @@ class SyncManager {
         .upsert(payloads, { onConflict: 'id' });
 
       if (error) {
-        console.error('Error 400 Supabase (Config):', error.message, (error as any).details, (error as any).hint);
+        const errCfg = error as SupabaseErrorLike;
+        console.error('Error 400 Supabase (Config):', error.message, errCfg.details, errCfg.hint);
         if (this.esErrorTablaInexistente(error)) {
           this.registrarTablaInexistente('configuracion_usuario');
           return result;
@@ -1725,7 +1778,7 @@ class SyncManager {
         }
         result.success += pendientes.length;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (this.esErrorTablaInexistente(err)) {
         this.registrarTablaInexistente('configuracion_usuario');
         return result;
@@ -1829,7 +1882,7 @@ class SyncManager {
       const todasTareas = await db.tareas.toArray().catch(() => []);
       if (!Array.isArray(todasTareas) || todasTareas.length === 0) return 0;
 
-      const tareasResueltas: any[] = [];
+      const tareasResueltas: (typeof todasTareas)[number][] = [];
 
       for (const t of todasTareas) {
         if (!t) continue;
@@ -1867,7 +1920,7 @@ class SyncManager {
             ...t,
             proyecto_id: proyId,
             hito_id: hitoId,
-            sync_status: (t.sync_status === 'quarantined' ? 'pending' : t.sync_status) as any
+            sync_status: (t.sync_status === 'quarantined' ? 'pending' : t.sync_status) as 'pending' | 'synced' | 'error' | 'quarantined'
           };
           this.registrosFkCuarentena.delete(String(t.id));
           tareasResueltas.push(resuelto);
@@ -1909,7 +1962,7 @@ class SyncManager {
       const todosHitos = await db.hitos_wbs.toArray().catch(() => []);
       if (!Array.isArray(todosHitos) || todosHitos.length === 0) return 0;
 
-      const hitosResueltos: any[] = [];
+      const hitosResueltos: (typeof todosHitos)[number][] = [];
 
       for (const h of todosHitos) {
         if (!h) continue;
@@ -1930,7 +1983,7 @@ class SyncManager {
           hitosResueltos.push({
             ...h,
             proyecto_id: proyId,
-            sync_status: (h.sync_status === 'quarantined' ? 'pending' : h.sync_status) as any
+            sync_status: (h.sync_status === 'quarantined' ? 'pending' : h.sync_status) as 'pending' | 'synced' | 'error' | 'quarantined'
           });
           this.registrosFkCuarentena.delete(String(h.id));
         }
@@ -1974,9 +2027,10 @@ class SyncManager {
    * Protegido por Web Lock API (miportalweb_sync_mutex) para evitar colisiones entre múltiples pestañas.
    */
   public async syncPendingRecords(): Promise<void> {
-    if (typeof navigator !== 'undefined' && 'locks' in navigator && typeof (navigator as any).locks?.request === 'function') {
+    const nav = typeof navigator !== 'undefined' ? (navigator as unknown as { locks?: { request: (name: string, opt: { ifAvailable?: boolean }, cb: (lock: unknown) => Promise<void>) => Promise<void> } }) : undefined;
+    if (nav?.locks && typeof nav.locks.request === 'function') {
       try {
-        await (navigator as any).locks.request('miportalweb_sync_mutex', { ifAvailable: true }, async (lock: any) => {
+        await nav.locks.request('miportalweb_sync_mutex', { ifAvailable: true }, async (lock: unknown) => {
           if (!lock) {
             console.info('[SyncManager] Otra pestaña está ejecutando la sincronización activa (Web Lock adquirido). Omitiendo ciclo duplicado.');
             return;
@@ -2184,10 +2238,10 @@ class SyncManager {
     const proyCodToUuid = new Map<string, string>();
     const hitoCodToUuid = new Map<string, string>();
     try {
-      if (db.proyectos && typeof (db.proyectos as any).toArray === 'function') {
-        const locProys = (await (db.proyectos as any).toArray().catch(() => [])) || [];
+      if (db.proyectos && typeof db.proyectos.toArray === 'function') {
+        const locProys = (await db.proyectos.toArray().catch(() => [])) || [];
         if (Array.isArray(locProys)) {
-          locProys.forEach((p: any) => {
+          locProys.forEach((p) => {
             const cod = extraerCodigoCanonico(p);
             if (cod) {
               if (p.id) {
@@ -2204,10 +2258,10 @@ class SyncManager {
           });
         }
       }
-      if (db.hitos_wbs && typeof (db.hitos_wbs as any).toArray === 'function') {
-        const locHitos = (await (db.hitos_wbs as any).toArray().catch(() => [])) || [];
+      if (db.hitos_wbs && typeof db.hitos_wbs.toArray === 'function') {
+        const locHitos = (await db.hitos_wbs.toArray().catch(() => [])) || [];
         if (Array.isArray(locHitos)) {
-          locHitos.forEach((h: any) => {
+          locHitos.forEach((h) => {
             const cod = extraerCodigoCanonico(h);
             if (cod) {
               if (h.id) {
@@ -2224,10 +2278,10 @@ class SyncManager {
           });
         }
       }
-      if (db.tareas && typeof (db.tareas as any).toArray === 'function') {
-        const locTareas = (await (db.tareas as any).toArray().catch(() => [])) || [];
+      if (db.tareas && typeof db.tareas.toArray === 'function') {
+        const locTareas = (await db.tareas.toArray().catch(() => [])) || [];
         if (Array.isArray(locTareas)) {
-          locTareas.forEach((t: any) => {
+          locTareas.forEach((t) => {
             const cod = extraerCodigoCanonico(t);
             if (cod) {
               if (t.id) {
@@ -2239,10 +2293,10 @@ class SyncManager {
           });
         }
       }
-      if (db.actividades_personales && typeof (db.actividades_personales as any).toArray === 'function') {
-        const locActs = (await (db.actividades_personales as any).toArray().catch(() => [])) || [];
+      if (db.actividades_personales && typeof db.actividades_personales.toArray === 'function') {
+        const locActs = (await db.actividades_personales.toArray().catch(() => [])) || [];
         if (Array.isArray(locActs)) {
-          locActs.forEach((a: any) => {
+          locActs.forEach((a) => {
             const cod = extraerCodigoCanonico(a);
             if (cod) {
               if (a.id) {
@@ -2295,14 +2349,14 @@ class SyncManager {
         const PAGE_SIZE = 250;
         let offset = 0;
         let hasMore = true;
-        let data: any[] = [];
+        let data: (Record<string, unknown> & { id?: string; codigo_legado?: string; created_at?: string; fecha_gasto?: string; fecha_ingreso?: string; updated_at?: string })[] = [];
         let descargaCompleta = true;
 
         const tablasAltoVolumen = ['gastos', 'ingresos', 'habitos_registros', 'habito_cumplimiento_logs'];
         const cutoffIso = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
 
         while (hasMore) {
-          let query: any = this.supabase.from(tabla).select('*');
+          let query = this.supabase.from(tabla).select('*');
           if (tablasAltoVolumen.includes(tabla) && typeof query?.gte === 'function') {
             query = query.gte('created_at', cutoffIso);
           }
@@ -2393,26 +2447,27 @@ class SyncManager {
         }
 
         // Recuperar IDs pendientes en local para proteger cambios sin sincronizar (permitir que la nube reconcilie 'error')
+        const tableCast = refDexie as unknown as Table<Record<string, unknown>, string>;
         const idsPendientesLocales = new Set<string>();
         try {
-          const w = (refDexie as any).where('sync_status');
+          const w = tableCast.where('sync_status');
           const keys = typeof w.equals === 'function'
             ? await w.equals('pending').primaryKeys()
             : typeof w.anyOf === 'function'
               ? await w.anyOf(['pending']).primaryKeys()
               : [];
-          keys.forEach((k: any) => idsPendientesLocales.add(String(k)));
+          keys.forEach((k: unknown) => idsPendientesLocales.add(String(k)));
         } catch {
           // Fallback defensivo
         }
 
         // Indexar registros locales actuales por código canónico (codigo_legado) y por ID para evitar duplicar semillas
-        const mapaLocalPorCodigo = new Map<string, any>();
-        const mapaLocalPorId = new Map<string, any>();
-        let actuales: any[] = [];
+        const mapaLocalPorCodigo = new Map<string, Record<string, unknown>>();
+        const mapaLocalPorId = new Map<string, Record<string, unknown>>();
+        let actuales: Record<string, unknown>[] = [];
         try {
-          if (typeof (refDexie as any).toArray === 'function') {
-            actuales = (await (refDexie as any).toArray()) || [];
+          if (typeof tableCast.toArray === 'function') {
+            actuales = (await tableCast.toArray()) || [];
             if (Array.isArray(actuales)) {
               for (const loc of actuales) {
                 if (loc.id) mapaLocalPorId.set(String(loc.id), loc);
@@ -2426,7 +2481,7 @@ class SyncManager {
         }
 
         const idsObsoletosAEliminar: string[] = [];
-        const registrosParaActualizar: any[] = [];
+        const registrosParaActualizar: Record<string, unknown>[] = [];
 
         // REQ-BUGFIX-74-EXEC: Diffing de eliminaciones remotas (Hard-Deletes en Dispositivo B - Sprint 1)
         // Si un registro local está 'synced' pero ya no existe en el catálogo remoto de Supabase,
@@ -2458,7 +2513,7 @@ class SyncManager {
 
             // Para tablas con límite de ventana de fecha (90 días), sólo comparar si el registro está dentro de la ventana
             if (tablasAltoVolumen.includes(tabla)) {
-              const fRef = loc.created_at || loc.fecha_gasto || loc.fecha_ingreso || loc.updated_at;
+              const fRef = String(loc.created_at || loc.fecha_gasto || loc.fecha_ingreso || loc.updated_at || '');
               if (fRef && new Date(fRef).getTime() < new Date(cutoffIso).getTime()) {
                 continue;
               }
@@ -2501,7 +2556,7 @@ class SyncManager {
             continue;
           }
 
-          let registroFinal = {
+          let registroFinal: unknown = {
             ...item,
             sync_status: 'synced' as const
           };
@@ -2518,7 +2573,7 @@ class SyncManager {
             registroFinal = sanitizarNotaInbound(item, localPrevio);
           } else if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
             registroFinal = {
-              ...fusionarRegistrosDuplicados(existentePorCodigo, registroFinal),
+              ...fusionarRegistrosDuplicados(existentePorCodigo, registroFinal as Record<string, unknown>),
               id: item.id,
               sync_status: 'synced' as const
             };
@@ -2532,30 +2587,30 @@ class SyncManager {
           // prevalece sobre registros locales ('synced' / 'error') siempre que difiera en valores (!sonRegistrosIdenticos),
           // sin descartarse por desfase de reloj (clock skew) entre dispositivos.
           if (localPrevio && !idsObsoletosAEliminar.includes(String(localPrevio.id))) {
-            if (sonRegistrosIdenticos(registroFinal, localPrevio)) {
+            if (sonRegistrosIdenticos(registroFinal as Record<string, unknown>, localPrevio)) {
               continue;
             }
           }
 
-          registrosParaActualizar.push(registroFinal);
+          registrosParaActualizar.push(registroFinal as Record<string, unknown>);
         }
 
         if (idsObsoletosAEliminar.length > 0 || registrosParaActualizar.length > 0) {
           this.setSyncState('syncing');
 
           const persistirTablaLocal = async () => {
-            if (idsObsoletosAEliminar.length > 0 && typeof (refDexie as any)?.bulkDelete === 'function') {
-              await (refDexie as any).bulkDelete(idsObsoletosAEliminar);
+            if (idsObsoletosAEliminar.length > 0 && typeof tableCast?.bulkDelete === 'function') {
+              await tableCast.bulkDelete(idsObsoletosAEliminar);
             }
-            if (registrosParaActualizar.length > 0 && typeof (refDexie as any)?.bulkPut === 'function') {
-              await (refDexie as any).bulkPut(registrosParaActualizar);
+            if (registrosParaActualizar.length > 0 && typeof tableCast?.bulkPut === 'function') {
+              await tableCast.bulkPut(registrosParaActualizar);
               summary.descargados += registrosParaActualizar.length;
             }
           };
 
           try {
-            if (typeof (db as any).transaction === 'function' && refDexie && typeof (refDexie as any).bulkPut === 'function') {
-              await (db as any).transaction('rw', [refDexie], persistirTablaLocal);
+            if (typeof db.transaction === 'function' && tableCast && typeof tableCast.bulkPut === 'function') {
+              await db.transaction('rw', [tableCast], persistirTablaLocal);
             } else {
               await persistirTablaLocal();
             }
@@ -2699,13 +2754,13 @@ class SyncManager {
 
       const { tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos, metas, hitosPlan, vinculosMeta } = json.data;
 
-      const obtenerKeysPendientes = async (table: any) => {
+      const obtenerKeysPendientes = async (table: Table<unknown, string> | { where: (col: string) => { anyOf?: (v: string[]) => { primaryKeys: () => Promise<unknown[]> }; equals?: (v: string) => { primaryKeys: () => Promise<unknown[]> } } }) => {
         try {
           const w = table.where('sync_status');
           const keys = typeof w.anyOf === 'function'
             ? await w.anyOf(['pending', 'error']).primaryKeys()
-            : await w.equals('pending').primaryKeys();
-          return new Set(keys.map((k: any) => String(k)));
+            : (typeof w.equals === 'function' ? await w.equals('pending').primaryKeys() : []);
+          return new Set((keys || []).map((k: unknown) => String(k)));
         } catch {
           return new Set<string>();
         }

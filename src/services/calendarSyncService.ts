@@ -10,7 +10,7 @@
  */
 
 import { db } from '../db/db';
-import type { ActividadPersonal, AlcanceRecurrencia, TareaRecord } from '../types';
+import type { ActividadPersonal, AlcanceRecurrencia, TareaRecord, GastoRecord, IngresoRecord, DesktopWidgetBridge } from '../types';
 import { syncManager } from './syncManager';
 import {
   construirEventoGoogleCalendarV3,
@@ -61,10 +61,67 @@ export interface EntidadAgendable {
   regla_repeticion?: string;
   tipo_compromiso?: string;
   excepciones_fechas?: string[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
-export type AgendableCalendarInput = EntidadAgendable | ActividadPersonal | TareaRecord | any;
+export type AgendableCalendarInput = EntidadAgendable | ActividadPersonal | TareaRecord | Record<string, unknown>;
+
+interface GoogleCodeResponse {
+  code?: string;
+  error?: string;
+  error_description?: string;
+}
+
+interface GoogleTokenResponse {
+  access_token?: string;
+  expires_in?: number | string;
+  error?: string;
+  error_description?: string;
+}
+
+interface GoogleAuthError {
+  message?: string;
+  error?: string;
+}
+
+interface GoogleCodeClientConfig {
+  client_id: string;
+  scope: string;
+  ux_mode?: 'popup' | 'redirect';
+  callback: (resp: GoogleCodeResponse) => Promise<void> | void;
+  error_callback?: (err: GoogleAuthError) => void;
+}
+
+interface GoogleCodeClient {
+  requestCode: () => void;
+}
+
+interface GoogleTokenClientConfig {
+  client_id: string;
+  scope: string;
+  hint?: string;
+  callback: (resp: GoogleTokenResponse) => void;
+  error_callback?: (err: GoogleAuthError) => void;
+}
+
+interface GoogleTokenClient {
+  requestAccessToken: (overrideConfig?: { prompt?: string; hint?: string }) => void;
+}
+
+declare global {
+  interface Window {
+    IS_DESKTOP_WIDGET?: boolean;
+    desktopWidget?: DesktopWidgetBridge;
+    google?: {
+      accounts?: {
+        oauth2?: {
+          initCodeClient?: (config: GoogleCodeClientConfig) => GoogleCodeClient;
+          initTokenClient?: (config: GoogleTokenClientConfig) => GoogleTokenClient;
+        };
+      };
+    };
+  }
+}
 
 export interface OpcionesAlcanceCalendar {
   alcance?: AlcanceRecurrencia | string;
@@ -297,7 +354,7 @@ export async function desconectarGoogleCalendar(): Promise<{ success: boolean; e
  * REQ-ELECTRON-COCKPIT-02: Determina si el entorno actual corresponde al widget nativo de escritorio de Electron.
  */
 export function esWidgetElectron(): boolean {
-  return typeof window !== 'undefined' && Boolean((window as any).IS_DESKTOP_WIDGET || (window as any).desktopWidget?.isNative);
+  return typeof window !== 'undefined' && Boolean(window.IS_DESKTOP_WIDGET || window.desktopWidget?.isNative);
 }
 
 /**
@@ -367,7 +424,8 @@ export async function obtenerTokenGoogleCalendar(): Promise<string | null> {
     const supabase = syncManager.getSupabaseClient();
     if (supabase?.auth && typeof supabase.auth.getSession === 'function') {
       const { data } = await supabase.auth.getSession();
-      const providerToken = (data?.session as any)?.provider_token;
+      const sessionObj = data?.session as { provider_token?: string } | null;
+      const providerToken = sessionObj?.provider_token;
       if (providerToken && typeof providerToken === 'string') {
         setGoogleCalendarAccessToken(providerToken, 3000);
         return providerToken;
@@ -388,8 +446,7 @@ async function cargarScriptGIS(): Promise<void> {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw new Error('Entorno sin navegador para Google Identity Services');
   }
-  const win = window as any;
-  if (win.google?.accounts?.oauth2) return;
+  if (window.google?.accounts?.oauth2) return;
 
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -479,7 +536,7 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
 
     try {
       await cargarScriptGIS();
-      const win = window as any;
+      const win = window;
       const gcalAuthUrl = obtenerUrlGcalAuth();
 
       // Camino 1: Edge Function + initCodeClient para OAuth offline persistente
@@ -490,11 +547,11 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
           requiereConfigClientId?: boolean;
           error?: string;
         }>((resolve) => {
-          const codeClient = win.google.accounts.oauth2.initCodeClient({
+          const codeClient = win.google!.accounts!.oauth2!.initCodeClient!({
             client_id: clientId,
             scope: GCAL_SCOPE,
             ux_mode: 'popup',
-            callback: async (resp: any) => {
+            callback: async (resp: GoogleCodeResponse) => {
               if (resp?.error || !resp?.code) {
                 resolve({
                   success: false,
@@ -535,14 +592,14 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
                     error: data?.error || 'No se recibió access_token del backend.'
                   });
                 }
-              } catch (exchangeErr: any) {
+              } catch (exchangeErr: unknown) {
                 resolve({
                   success: false,
-                  error: exchangeErr?.message || 'Error de conexión al intercambiar código OAuth.'
+                  error: (exchangeErr as Error)?.message || 'Error de conexión al intercambiar código OAuth.'
                 });
               }
             },
-            error_callback: (err: any) => {
+            error_callback: (err: GoogleAuthError) => {
               resolve({
                 success: false,
                 error: err?.message || 'Ventana de autorización Google cerrada o bloqueada.'
@@ -569,11 +626,11 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
         requiereConfigClientId?: boolean;
         error?: string;
       }>((resolve) => {
-        const tokenClient = win.google.accounts.oauth2.initTokenClient({
+        const tokenClient = win.google!.accounts!.oauth2!.initTokenClient!({
           client_id: clientId,
           scope: GCAL_SCOPE,
           ...(hint ? { hint } : {}),
-          callback: (resp: any) => {
+          callback: (resp: GoogleTokenResponse) => {
             if (resp?.error || !resp?.access_token) {
               resolve({
                 success: false,
@@ -586,7 +643,7 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
             void resolverYGuardarHint(resp.access_token);
             resolve({ success: true, token: resp.access_token });
           },
-          error_callback: (err: any) => {
+          error_callback: (err: GoogleAuthError) => {
             resolve({
               success: false,
               error: err?.message || 'Ventana de autorización Google cerrada o bloqueada.'
@@ -598,10 +655,10 @@ export async function autorizarGoogleCalendarOAuth(silencioso = false): Promise<
           ...(hint ? { hint } : {})
         });
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
         success: false,
-        error: err?.message || 'Error al iniciar autorización OAuth con Google Calendar.'
+        error: (err as Error)?.message || 'Error al iniciar autorización OAuth con Google Calendar.'
       };
     }
   };
@@ -647,49 +704,53 @@ function guardarMapaEventosGoogleCalendar(mapa: Record<string, string>): void {
  * Prioriza estrictamente la columna canónica `id_evento_calendar` de la base de datos.
  * El mapa local en localStorage queda deprecado únicamente como fallback de lectura retrocompatible.
  */
-export function obtenerGoogleEventId(actividad: Partial<EntidadAgendable>): string | undefined {
-  if (actividad.id_evento_calendar && String(actividad.id_evento_calendar).trim()) {
-    return String(actividad.id_evento_calendar).trim();
+export function obtenerGoogleEventId(actividad: AgendableCalendarInput): string | undefined {
+  const act = actividad as unknown as EntidadAgendable;
+  if (act.id_evento_calendar && String(act.id_evento_calendar).trim()) {
+    return String(act.id_evento_calendar).trim();
   }
   const mapa = obtenerMapaEventosGoogleCalendar();
-  if (actividad.id && mapa[actividad.id]) return mapa[actividad.id];
-  if (actividad.codigo_legado && mapa[actividad.codigo_legado]) return mapa[actividad.codigo_legado];
+  if (act.id && mapa[act.id]) return mapa[act.id];
+  if (act.codigo_legado && mapa[act.codigo_legado]) return mapa[act.codigo_legado];
   return undefined;
 }
 
-export function guardarGoogleEventId(actividad: Partial<EntidadAgendable>, eventId: string): void {
+export function guardarGoogleEventId(actividad: AgendableCalendarInput, eventId: string): void {
   if (!eventId) return;
+  const act = actividad as unknown as EntidadAgendable;
   const mapa = obtenerMapaEventosGoogleCalendar();
-  if (actividad.id) mapa[actividad.id] = eventId;
-  if (actividad.codigo_legado) mapa[actividad.codigo_legado] = eventId;
+  if (act.id) mapa[act.id] = eventId;
+  if (act.codigo_legado) mapa[act.codigo_legado] = eventId;
   guardarMapaEventosGoogleCalendar(mapa);
 }
 
-export function eliminarGoogleEventId(actividad: Partial<EntidadAgendable>): void {
+export function eliminarGoogleEventId(actividad: AgendableCalendarInput): void {
+  const act = actividad as unknown as EntidadAgendable;
   const mapa = obtenerMapaEventosGoogleCalendar();
   let changed = false;
-  if (actividad.id && actividad.id in mapa) {
-    delete mapa[actividad.id];
+  if (act.id && act.id in mapa) {
+    delete mapa[act.id];
     changed = true;
   }
-  if (actividad.codigo_legado && actividad.codigo_legado in mapa) {
-    delete mapa[actividad.codigo_legado];
+  if (act.codigo_legado && act.codigo_legado in mapa) {
+    delete mapa[act.codigo_legado];
     changed = true;
   }
   if (changed) guardarMapaEventosGoogleCalendar(mapa);
 }
 
 async function persistirEventIdEnDexie(actividad: AgendableCalendarInput, eventId: string | null): Promise<void> {
-  const actividadId = actividad?.id;
+  const act = actividad as unknown as EntidadAgendable;
+  const actividadId = act?.id;
   if (!actividadId) return;
   try {
     const eid = eventId ?? undefined;
     const now = new Date().toISOString();
     const isTarea = Boolean(
-      actividad.nombre_tarea_actividad ||
-      actividad.proyecto_codigo ||
-      actividad.hito_codigo ||
-      String(actividad.codigo_legado || '').startsWith('TAR')
+      act.nombre_tarea_actividad ||
+      act.proyecto_codigo ||
+      act.hito_codigo ||
+      String(act.codigo_legado || '').startsWith('TAR')
     );
 
     if (isTarea && db.tareas && typeof db.tareas.update === 'function') {
@@ -697,22 +758,22 @@ async function persistirEventIdEnDexie(actividad: AgendableCalendarInput, eventI
         id_evento_calendar: eid,
         agendado_calendar: eventId ? 'Sí' : 'No',
         updated_at: now
-      } as any);
+      });
     } else if (db.actividades_personales && typeof db.actividades_personales.update === 'function') {
       await db.actividades_personales.update(actividadId, {
         id_evento_calendar: eid,
         updated_at: now
       });
-    } else if (actividad.tipo_entidad === 'GASTO' && db.gastos && typeof db.gastos.update === 'function') {
+    } else if (act.tipo_entidad === 'GASTO' && db.gastos && typeof db.gastos.update === 'function') {
       await db.gastos.update(actividadId, {
         id_evento_calendar: eid,
         updated_at: now
-      } as any);
-    } else if (actividad.tipo_entidad === 'INGRESO' && db.ingresos && typeof db.ingresos.update === 'function') {
+      } as unknown as Partial<GastoRecord>);
+    } else if (act.tipo_entidad === 'INGRESO' && db.ingresos && typeof db.ingresos.update === 'function') {
       await db.ingresos.update(actividadId, {
         id_evento_calendar: eid,
         updated_at: now
-      } as any);
+      } as unknown as Partial<IngresoRecord>);
     }
   } catch {
     // Tolerar entorno de test donde IndexedDB no está disponible
@@ -724,6 +785,7 @@ function construirResultadoAuthRequerida(
   rrule: string | null,
   eventoV3: EventoGoogleCalendarV3
 ): ResultadoCalendarSync {
+  const act = actividad as unknown as EntidadAgendable;
   const tieneClientId = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
   return {
     success: false,
@@ -732,8 +794,8 @@ function construirResultadoAuthRequerida(
     mode: 'AUTH_REQUIRED',
     rrule,
     eventoV3,
-    googleCalendarUrl: construirUrlGoogleCalendar(actividad),
-    icsContent: generarArchivoICS(actividad),
+    googleCalendarUrl: construirUrlGoogleCalendar(act as unknown as ActividadRecurrenciaInput),
+    icsContent: generarArchivoICS(act as unknown as ActividadRecurrenciaInput),
     message: tieneClientId
       ? 'Conecta tu cuenta Google Calendar para sincronizar automáticamente'
       : 'Google Calendar no configurado en este entorno (falta VITE_GOOGLE_CLIENT_ID)',
@@ -745,10 +807,11 @@ function construirResultadoAuthRequerida(
 // OPERACIONES REALES CONTRA GOOGLE CALENDAR REST API V3 (ROUTER DINÁMICO)
 // ============================================================================
 
-export async function obtenerIdCalendarioParaEntidad(entidad: any, token: string): Promise<string> {
+export async function obtenerIdCalendarioParaEntidad(entidad: AgendableCalendarInput, token: string): Promise<string> {
   let nombreEsperado = 'primary';
-  const tipoEntidad = (entidad?.tipo_entidad || '').toUpperCase();
-  const tipoCompromiso = (entidad?.tipo_compromiso || '').toUpperCase();
+  const entRec = entidad as unknown as Record<string, unknown>;
+  const tipoEntidad = (String(entRec?.tipo_entidad || '')).toUpperCase();
+  const tipoCompromiso = (String(entRec?.tipo_compromiso || '')).toUpperCase();
 
   if (
     tipoEntidad === 'HABITO' ||
@@ -774,8 +837,8 @@ export async function obtenerIdCalendarioParaEntidad(entidad: any, token: string
       headers: { Authorization: `Bearer ${token}` }
     });
     if (listRes.ok) {
-      const listData = await listRes.json();
-      const calEncontrado = listData.items?.find((c: any) => c.summary === nombreEsperado);
+      const listData = (await listRes.json()) as { items?: Array<{ id?: string; summary?: string }> };
+      const calEncontrado = listData.items?.find((c) => c.summary === nombreEsperado);
       if (calEncontrado?.id) {
         if (typeof localStorage !== 'undefined') localStorage.setItem(cacheKey, calEncontrado.id);
         return calEncontrado.id;
@@ -806,15 +869,17 @@ export async function obtenerIdCalendarioParaEntidad(entidad: any, token: string
 export async function sincronizarCreacionCalendar(
   actividad: AgendableCalendarInput
 ): Promise<ResultadoCalendarSync> {
-  const agendadoVal = actividad.agendado_calendar || actividad.agendado_en_calendar;
+  const act = actividad as unknown as EntidadAgendable;
+  const agendadoVal = act.agendado_calendar || act.agendado_en_calendar;
   if (agendadoVal !== 'Sí') {
     return { success: true, mode: 'SKIPPED' };
   }
 
-  const eventoV3 = construirEventoGoogleCalendarV3(actividad);
-  const rrule = construirRRuleRFC5545(actividad);
-  const googleCalendarUrl = construirUrlGoogleCalendar(actividad);
-  const icsContent = generarArchivoICS(actividad);
+  const recInput = actividad as unknown as ActividadRecurrenciaInput;
+  const eventoV3 = construirEventoGoogleCalendarV3(recInput);
+  const rrule = construirRRuleRFC5545(recInput);
+  const googleCalendarUrl = construirUrlGoogleCalendar(recInput);
+  const icsContent = generarArchivoICS(recInput);
 
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return {
@@ -884,7 +949,7 @@ export async function sincronizarCreacionCalendar(
       icsContent,
       message: 'Sincronizado en Google Calendar'
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       success: false,
       mode: 'API_V3',
@@ -892,7 +957,7 @@ export async function sincronizarCreacionCalendar(
       eventoV3,
       googleCalendarUrl,
       icsContent,
-      error: err?.message || 'Error de red al crear evento en Google Calendar'
+      error: err instanceof Error ? err.message : String(err || 'Error de red al crear evento en Google Calendar')
     };
   }
 }
@@ -903,8 +968,9 @@ export async function sincronizarCreacionCalendar(
 export async function sincronizarActualizacionCalendar(
   actividad: AgendableCalendarInput
 ): Promise<ResultadoCalendarSync> {
+  const act = actividad as unknown as EntidadAgendable;
   const eventId = obtenerGoogleEventId(actividad);
-  const agendadoVal = actividad.agendado_calendar || actividad.agendado_en_calendar;
+  const agendadoVal = act.agendado_calendar || act.agendado_en_calendar;
 
   if (agendadoVal !== 'Sí') {
     if (eventId) {
@@ -917,10 +983,11 @@ export async function sincronizarActualizacionCalendar(
     return sincronizarCreacionCalendar(actividad);
   }
 
-  const eventoV3 = construirEventoGoogleCalendarV3(actividad);
-  const rrule = construirRRuleRFC5545(actividad);
-  const googleCalendarUrl = construirUrlGoogleCalendar(actividad);
-  const icsContent = generarArchivoICS(actividad);
+  const recInput = actividad as unknown as ActividadRecurrenciaInput;
+  const eventoV3 = construirEventoGoogleCalendarV3(recInput);
+  const rrule = construirRRuleRFC5545(recInput);
+  const googleCalendarUrl = construirUrlGoogleCalendar(recInput);
+  const icsContent = generarArchivoICS(recInput);
 
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return {
@@ -995,7 +1062,7 @@ export async function sincronizarActualizacionCalendar(
       icsContent,
       message: 'Actualizado en Google Calendar'
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       success: false,
       mode: 'API_V3',
@@ -1004,7 +1071,7 @@ export async function sincronizarActualizacionCalendar(
       eventoV3,
       googleCalendarUrl,
       icsContent,
-      error: err?.message || 'Error de red al actualizar Google Calendar'
+      error: err instanceof Error ? err.message : String(err || 'Error de red al actualizar Google Calendar')
     };
   }
 }
@@ -1037,9 +1104,10 @@ export async function sincronizarEliminacionCalendar(
 
   const token = await obtenerTokenGoogleCalendar();
   if (!token) {
-    const eventoFallback = construirEventoGoogleCalendarV3(actividad);
+    const recInput = actividad as unknown as ActividadRecurrenciaInput;
+    const eventoFallback = construirEventoGoogleCalendarV3(recInput);
     return {
-      ...construirResultadoAuthRequerida(actividad, construirRRuleRFC5545(actividad), eventoFallback),
+      ...construirResultadoAuthRequerida(recInput, construirRRuleRFC5545(recInput), eventoFallback),
       eventId
     };
   }
@@ -1049,16 +1117,17 @@ export async function sincronizarEliminacionCalendar(
 
   // Eliminación de una única instancia ('SINGLE'): actualizar recurrence con EXDATE
   if (alcanceNorm === 'SINGLE') {
-    const fechaExc = normalizarFechaIso(fechaReferencia || actividad.fecha_programada);
-    const prevExcepciones = Array.isArray(actividad.excepciones_fechas) ? [...actividad.excepciones_fechas] : [];
+    const act = actividad as unknown as EntidadAgendable;
+    const fechaExc = normalizarFechaIso(fechaReferencia || (typeof act.fecha_programada === 'string' ? act.fecha_programada : undefined));
+    const prevExcepciones = Array.isArray(act.excepciones_fechas) ? [...act.excepciones_fechas] : [];
     if (fechaExc && !prevExcepciones.some((f) => normalizarFechaIso(f) === fechaExc)) {
       prevExcepciones.push(fechaExc);
     }
 
-    const actConExcepcion: ActividadPersonal = {
-      ...actividad,
+    const actConExcepcion = {
+      ...act,
       excepciones_fechas: prevExcepciones
-    };
+    } as unknown as ActividadRecurrenciaInput;
     const eventoConExdate = construirEventoGoogleCalendarV3(actConExcepcion);
     const rrule = construirRRuleRFC5545(actConExcepcion);
 
@@ -1106,19 +1175,20 @@ export async function sincronizarEliminacionCalendar(
         eventoV3: eventoConExdate,
         message: 'Ocurrencia excluida en Google Calendar'
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
         success: false,
         mode: 'API_V3',
         eventId,
-        error: err?.message || 'Error de red al excluir ocurrencia en Google Calendar'
+        error: err instanceof Error ? err.message : String(err || 'Error de red al excluir ocurrencia en Google Calendar')
       };
     }
   }
 
   // Corte de serie desde fechaReferencia ('FUTURE'): actualizar UNTIL en Google Calendar
   if (alcanceNorm === 'FUTURE') {
-    let fechaFinCorte = normalizarFechaIso(actividad.fecha_fin);
+    const act = actividad as unknown as EntidadAgendable;
+    let fechaFinCorte = normalizarFechaIso(typeof act.fecha_fin === 'string' ? act.fecha_fin : undefined);
     const fRefNorm = normalizarFechaIso(fechaReferencia || formatFechaIsoLocal());
     if (!fechaFinCorte && fRefNorm) {
       const dAnterior = new Date(`${fRefNorm}T12:00:00`);
@@ -1126,10 +1196,10 @@ export async function sincronizarEliminacionCalendar(
       fechaFinCorte = formatFechaIsoLocal(dAnterior);
     }
 
-    const actRecortada: ActividadPersonal = {
-      ...actividad,
+    const actRecortada = {
+      ...act,
       fecha_fin: fechaFinCorte || undefined
-    };
+    } as unknown as ActividadRecurrenciaInput;
     const eventoRecortado = construirEventoGoogleCalendarV3(actRecortada);
     const rrule = construirRRuleRFC5545(actRecortada);
 
@@ -1168,12 +1238,12 @@ export async function sincronizarEliminacionCalendar(
         eventoV3: eventoRecortado,
         message: 'Serie recortada en Google Calendar'
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
         success: false,
         mode: 'API_V3',
         eventId,
-        error: err?.message || 'Error de red al recortar serie en Google Calendar'
+        error: err instanceof Error ? err.message : String(err || 'Error de red al recortar serie en Google Calendar')
       };
     }
   }
@@ -1189,9 +1259,10 @@ export async function sincronizarEliminacionCalendar(
 
     if (response.status === 401) {
       limpiarTokenGoogleCalendar();
-      const eventoFallback = construirEventoGoogleCalendarV3(actividad);
+      const recInput = actividad as unknown as ActividadRecurrenciaInput;
+      const eventoFallback = construirEventoGoogleCalendarV3(recInput);
       return {
-        ...construirResultadoAuthRequerida(actividad, construirRRuleRFC5545(actividad), eventoFallback),
+        ...construirResultadoAuthRequerida(recInput, construirRRuleRFC5545(recInput), eventoFallback),
         eventId,
         error: 'Sesión de Google Calendar expirada. Vuelve a conectar.'
       };
@@ -1216,12 +1287,12 @@ export async function sincronizarEliminacionCalendar(
       eventId,
       error: `Google Calendar HTTP ${response.status}${errBody ? `: ${errBody.slice(0, 140)}` : ''}`
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     return {
       success: false,
       mode: 'API_V3',
       eventId,
-      error: err?.message || 'Error de red al eliminar de Google Calendar'
+      error: err instanceof Error ? err.message : String(err || 'Error de red al eliminar de Google Calendar')
     };
   }
 }
@@ -1259,16 +1330,17 @@ export async function sincronizarTareaCalendar(
  * Facade polimórfico universal para despachar Gastos hacia Google Calendar API v3.
  */
 export async function sincronizarGastoCalendar(
-  gasto: any,
+  gasto: (Record<string, unknown> & { id?: string; agendar_calendar?: boolean; agendado_calendar?: string; nombre?: string; descripcion_gasto?: string; fecha_programada?: string; fecha_gasto?: string }) | GastoRecord,
   accion: 'UPSERT' | 'DELETE' = 'UPSERT'
 ): Promise<ResultadoCalendarSync> {
-  const agendado = gasto.agendar_calendar !== false && gasto.agendado_calendar !== 'No' ? 'Sí' : 'No';
+  const gRec = gasto as Record<string, unknown>;
+  const agendado = gRec.agendar_calendar !== false && gRec.agendado_calendar !== 'No' ? 'Sí' : 'No';
   return sincronizarActividadCalendar(
     {
-      ...gasto,
+      ...gRec,
       tipo_entidad: 'GASTO',
-      nombre: gasto.nombre || gasto.descripcion_gasto,
-      fecha_programada: gasto.fecha_programada || gasto.fecha_gasto,
+      nombre: String(gRec.nombre || gRec.descripcion_gasto || ''),
+      fecha_programada: String(gRec.fecha_programada || gRec.fecha_gasto || ''),
       agendado_calendar: agendado
     },
     accion
@@ -1279,16 +1351,17 @@ export async function sincronizarGastoCalendar(
  * Facade polimórfico universal para despachar Ingresos hacia Google Calendar API v3.
  */
 export async function sincronizarIngresoCalendar(
-  ingreso: any,
+  ingreso: (Record<string, unknown> & { id?: string; agendar_calendar?: boolean; agendado_calendar?: string; nombre?: string; descripcion_ingreso?: string; fecha_programada?: string; fecha_ingreso?: string }) | IngresoRecord,
   accion: 'UPSERT' | 'DELETE' = 'UPSERT'
 ): Promise<ResultadoCalendarSync> {
-  const agendado = ingreso.agendar_calendar !== false && ingreso.agendado_calendar !== 'No' ? 'Sí' : 'No';
+  const iRec = ingreso as Record<string, unknown>;
+  const agendado = iRec.agendar_calendar !== false && iRec.agendado_calendar !== 'No' ? 'Sí' : 'No';
   return sincronizarActividadCalendar(
     {
-      ...ingreso,
+      ...iRec,
       tipo_entidad: 'INGRESO',
-      nombre: ingreso.nombre || ingreso.descripcion_ingreso,
-      fecha_programada: ingreso.fecha_programada || ingreso.fecha_ingreso,
+      nombre: String(iRec.nombre || iRec.descripcion_ingreso || ''),
+      fecha_programada: String(iRec.fecha_programada || iRec.fecha_ingreso || ''),
       agendado_calendar: agendado
     },
     accion

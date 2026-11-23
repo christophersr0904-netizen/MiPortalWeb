@@ -88,12 +88,15 @@ export interface SubtareaPaso {
   tipo_padre: 'TAREA' | 'ACTIVIDAD';
   numero_paso: number;
   descripcion_paso: string;
+  nombre_paso?: string;
   completado: boolean;
   fecha_completado?: string;
   created_at?: string;
   updated_at: string;
   version: number;
   sync_status: SyncStatus;
+  tarea_id?: string;
+  actividad_id?: string;
 }
 
 export interface CuadernoMeta {
@@ -302,6 +305,21 @@ export interface HitoWbsRecord {
   updated_at: string;
   version: number;
   sync_status: SyncStatus;
+  // Compatibilidad polimórfica heredada (GAS / Sheets / Vistas Legacy)
+  ID_Proyecto?: string;
+  ID_Hito?: string;
+  Fase_Asociada?: string;
+  fase?: string;
+  Peso_Ponderado_Pct?: number | string;
+  Tipo_Elemento_WBS?: string;
+  Nombre_Elemento?: string;
+  Nombre_Hito?: string;
+  nombre?: string;
+  Estado?: string;
+  Fecha_Limite_Plan?: string;
+  Presupuesto_Asignado?: number | string;
+  Criterio_Aceptacion_DoD?: string;
+  criterio_aceptacion_dod?: string;
 }
 
 export interface CuadernoMeta {
@@ -382,6 +400,8 @@ export interface NotaRecord {
   updated_at: string;
   version: number;
   sync_status: SyncStatus;
+  // Compatibilidad polimórfica heredada (GAS / Sheets / Vistas Legacy)
+  Vinculos?: VinculoEntidad[];
 }
 
 export interface CuadernoMeta {
@@ -473,6 +493,12 @@ export interface ProyectoRecord {
   alcance_detallado_url_drive?: string;
   updated_at: string;
   sync_status: SyncStatus;
+  // Compatibilidad polimórfica heredada (GAS / Sheets / Vistas Legacy)
+  ID_Proyecto?: string;
+  descripcion?: string;
+  presupuesto?: number | string;
+  Avance_Real_Pct?: number;
+  Ultima_Revision?: string;
 }
 
 export interface TareaRecord {
@@ -502,6 +528,20 @@ export interface TareaRecord {
   archivado?: boolean;
   updated_at: string;
   sync_status: SyncStatus;
+  // Compatibilidad polimórfica heredada (GAS / Sheets / Vistas Legacy)
+  ID_Proyecto?: string;
+  ID_Hito?: string;
+  id_hito?: string;
+  ID_Tarea?: string;
+  Estado_Tarea?: string;
+  Fecha_Programada?: string;
+  Fecha_Completado?: string;
+  Horas_Estimadas?: number | string;
+  Horas_Reales?: number | string;
+  Prioridad_Eisenhower?: string;
+  Nombre_Tarea_Actividad?: string;
+  estado?: string;
+  Estado?: string;
 }
 
 export interface GastoRecord {
@@ -529,6 +569,33 @@ export interface GastoRecord {
   id_evento_calendar?: string;
   updated_at: string;
   sync_status: SyncStatus;
+  // Compatibilidad polimórfica heredada (GAS / Sheets / Vistas Legacy)
+  ID_Proyecto?: string;
+  proyecto_id?: string;
+  ID_Hito?: string;
+  id_hito?: string;
+  hito_id?: string;
+  ID_Tarea?: string;
+  tarea_id?: string;
+  ID_Entidad_Vinculada?: string;
+  Monto_PEN?: number;
+  Monto_Moneda_Base?: number;
+  monto?: number;
+  Estado_Pago?: string;
+  Estado?: string;
+  conciliado?: boolean;
+  desvio?: boolean;
+  es_sobrecosto?: boolean;
+  Descripcion_Gasto?: string;
+  concepto?: string;
+  Fecha_Gasto?: string;
+  fecha?: string;
+  Categoria_Gasto?: string;
+  categoria?: string;
+  tipo?: string;
+  tarea_nombre?: string;
+  Tarea_Asociada?: string;
+  descripcion?: string;
 }
 
 export interface IngresoRecord {
@@ -552,6 +619,10 @@ export interface IngresoRecord {
   id_evento_calendar?: string;
   updated_at: string;
   sync_status: SyncStatus;
+  // Compatibilidad polimórfica heredada (GAS / Sheets / Vistas Legacy)
+  id_origen_vinculado?: string;
+  ID_Origen_Vinculado?: string;
+  Tipo_Origen?: string;
 }
 
 export interface IdeaRecord {
