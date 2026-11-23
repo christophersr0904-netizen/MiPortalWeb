@@ -146,7 +146,16 @@ export const TableroHabitos: React.FC<TableroHabitosProps> = ({ ocultarHeader = 
 
   const hitosRaw = useLiveQuery(() => db.planes_accion_hitos.toArray(), []) || [];
   const hitosPlan = useMemo(() => deduplicarHitosPlan(hitosRaw), [hitosRaw]);
-  const logsCumplimiento = useLiveQuery(() => db.habito_cumplimiento_logs.toArray(), []) || [];
+
+  // Ventana móvil de los últimos 120 días indexada por fecha_registro (REQ-PERF-P2-01)
+  const fechaCorteLogs = useMemo(
+    () => formatFechaIsoLocal(new Date(Date.now() - 120 * 24 * 60 * 60 * 1000)),
+    []
+  );
+  const logsCumplimiento = useLiveQuery(
+    () => db.habito_cumplimiento_logs.where('fecha_registro').aboveOrEqual(fechaCorteLogs).toArray(),
+    [fechaCorteLogs]
+  ) || [];
 
   const metaActiva360: MetaConDetalle | null = useMemo(() => {
     if (!meta360Id) return null;

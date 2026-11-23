@@ -36,6 +36,7 @@ vi.mock('../../db/db', () => ({
       })
     },
     hitos_wbs: {
+      get: vi.fn(async (id: string) => memoryHitos.get(id)),
       where: vi.fn((field: string) => ({
         anyOf: vi.fn((refs: string[]) => ({
           toArray: vi.fn(async () =>
@@ -48,6 +49,11 @@ vi.mock('../../db/db', () => ({
       })
     },
     tareas: {
+      toArray: vi.fn(async () => Array.from(memoryTareas.values())),
+      update: vi.fn(async (id: string, ch: any) => {
+        const ex = memoryTareas.get(id);
+        if (ex) memoryTareas.set(id, { ...ex, ...ch });
+      }),
       where: vi.fn((field: string) => ({
         anyOf: vi.fn((refs: string[]) => ({
           toArray: vi.fn(async () =>
@@ -107,7 +113,7 @@ vi.mock('../syncManager', () => ({
   }
 }));
 
-import { eliminarProyecto } from '../proyectosService';
+import { eliminarProyecto, eliminarHitoWBS } from '../proyectosService';
 import { syncManager } from '../syncManager';
 
 describe('REQ-SYNC-AUDIT-03-FIX: proyectosService.eliminarProyecto', () => {
@@ -281,5 +287,77 @@ describe('REQ-SYNC-AUDIT-03-FIX: proyectosService.eliminarProyecto', () => {
 
     // Verificar que se disparó la sincronización con Supabase
     expect(syncManager.syncPendingRecords).toHaveBeenCalled();
+  });
+
+  describe('REQ-HARDENING-P0-01: proyectosService.eliminarHitoWBS', () => {
+    it('elimina el hito WBS, registra tombstone y desvincula las tareas hijas sin dejarlas huérfanas', async () => {
+      const hitoId = 'hito-target-123';
+      const hitoCod = 'HIT-123';
+
+      // 1. Sembrar hito
+      memoryHitos.set(hitoId, {
+        id: hitoId,
+        user_id: '00000000-0000-0000-0000-000000000001',
+        codigo_legado: hitoCod,
+        proyecto_id: 'PRO-001',
+        nombre_elemento: 'Paquete de Arquitectura',
+        tipo_elemento_wbs: 'PAQUETE_TRABAJO',
+        avance_entregable_pct: 0,
+        presupuesto_asignado_pen: 2000,
+        updated_at: new Date().toISOString(),
+        sync_status: 'synced'
+      } as unknown as HitoWbsRecord);
+
+      // 2. Sembrar tareas vinculadas
+      memoryTareas.set('tar-vinculada-1', {
+        id: 'tar-vinculada-1',
+        user_id: '00000000-0000-0000-0000-000000000001',
+        codigo_legado: 'TAR-001',
+        proyecto_codigo: 'PRO-001',
+        hito_id: hitoId,
+        hito_codigo: hitoCod,
+        nombre_tarea_actividad: 'Diseñar Diagrama C4',
+        estado_tarea: '02_Por_Hacer',
+        updated_at: new Date().toISOString(),
+        sync_status: 'synced'
+      } as TareaRecord);
+
+      memoryTareas.set('tar-otra', {
+        id: 'tar-otra',
+        user_id: '00000000-0000-0000-0000-000000000001',
+        codigo_legado: 'TAR-002',
+        proyecto_codigo: 'PRO-001',
+        hito_id: 'otro-hito',
+        nombre_tarea_actividad: 'Otra tarea ajena',
+        estado_tarea: '02_Por_Hacer',
+        updated_at: new Date().toISOString(),
+        sync_status: 'synced'
+      } as TareaRecord);
+
+      const res = await eliminarHitoWBS(hitoId);
+
+      expect(res.success).toBe(true);
+      expect(res.hitoId).toBe(hitoId);
+      expect(res.tareasDesvinculadas).toBe(1);
+
+      // Hito eliminado
+      expect(memoryHitos.has(hitoId)).toBe(false);
+
+      // Tarea desvinculada
+      const tareaActualizada = memoryTareas.get('tar-vinculada-1');
+      expect(tareaActualizada?.hito_id).toBeUndefined();
+      expect(tareaActualizada?.hito_codigo).toBeUndefined();
+      expect(tareaActualizada?.sync_status).toBe('pending');
+
+      // Tarea ajena intacta
+      const tareaAjena = memoryTareas.get('tar-otra');
+      expect(tareaAjena?.hito_id).toBe('otro-hito');
+
+      // Tombstone registrado
+      expect(memoryTombstones).toContainEqual({ tabla: 'hitos_wbs', id: hitoId });
+
+      // Sincronización disparada
+      expect(syncManager.syncPendingRecords).toHaveBeenCalled();
+    });
   });
 });

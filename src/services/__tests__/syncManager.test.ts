@@ -1747,4 +1747,83 @@ describe('REQ-SYNC-02: SyncManager (Replicación y Despacho Topológico)', () =>
       consoleWarnSpy.mockRestore();
     });
   });
+
+  describe('REQ-HARDENING-P0-01: Circuit Breaker de Reintentos y Web Lock Fallback en syncManager', () => {
+    it('omite del ciclo automático registros que alcancen 3 fallos consecutivos y reinicia el conteo al tener éxito', async () => {
+      syncManager.resetRecordRetryCount();
+
+      const tableMock = {
+        where: () => ({
+          anyOf: () => ({
+            toArray: async () => [
+              { id: 'rec-fallido-1', sync_status: 'error' },
+              { id: 'rec-sano-2', sync_status: 'pending' }
+            ]
+          })
+        })
+      };
+
+      // Inicialmente ambos registros están incluidos
+      let pendientes = await syncManager.obtenerRegistrosPendientes<any>(tableMock);
+      expect(pendientes.map((r) => r.id)).toEqual(['rec-fallido-1', 'rec-sano-2']);
+
+      // Simular 2 fallos consecutivos para rec-fallido-1
+      syncManager.registrarFalloRegistro('rec-fallido-1', 'tareas', new Error('Fail 1'));
+      syncManager.registrarFalloRegistro('rec-fallido-1', 'tareas', new Error('Fail 2'));
+      expect(syncManager.getRecordRetryCount('rec-fallido-1')).toBe(2);
+
+      // Aún no alcanza el umbral de 3, debe seguir incluido
+      pendientes = await syncManager.obtenerRegistrosPendientes<any>(tableMock);
+      expect(pendientes.map((r) => r.id)).toContain('rec-fallido-1');
+
+      // 3er fallo consecutivo -> Circuit Breaker se activa
+      syncManager.registrarFalloRegistro('rec-fallido-1', 'tareas', new Error('Fail 3'));
+      expect(syncManager.getRecordRetryCount('rec-fallido-1')).toBe(3);
+
+      // Ahora rec-fallido-1 debe ser excluido automáticamente de la cola
+      pendientes = await syncManager.obtenerRegistrosPendientes<any>(tableMock);
+      expect(pendientes.map((r) => r.id)).toEqual(['rec-sano-2']);
+
+      // Al registrar éxito en rec-fallido-1, el contador se resetea y vuelve a ser elegible
+      syncManager.registrarExitoRegistro('rec-fallido-1');
+      expect(syncManager.getRecordRetryCount('rec-fallido-1')).toBe(0);
+      pendientes = await syncManager.obtenerRegistrosPendientes<any>(tableMock);
+      expect(pendientes.map((r) => r.id)).toContain('rec-fallido-1');
+    });
+
+    it('syncPendingRecords adquiere el mutex a través de navigator.locks si está disponible', async () => {
+      let lockRequested = false;
+      const originalDesc = Object.getOwnPropertyDescriptor(globalThis.navigator, 'locks') ||
+        Object.getOwnPropertyDescriptor(Object.getPrototypeOf(globalThis.navigator), 'locks');
+
+      try {
+        Object.defineProperty(globalThis.navigator, 'locks', {
+          configurable: true,
+          enumerable: true,
+          writable: true,
+          value: {
+            request: vi.fn(async (name: string, _opts: any, callback: (lock: any) => Promise<void>) => {
+              if (name === 'miportalweb_sync_mutex') {
+                lockRequested = true;
+                await callback({ name });
+              }
+            })
+          }
+        });
+
+        await syncManager.syncPendingRecords();
+        expect(lockRequested).toBe(true);
+      } finally {
+        if (originalDesc) {
+          Object.defineProperty(globalThis.navigator, 'locks', originalDesc);
+        } else {
+          try {
+            delete (globalThis.navigator as any).locks;
+          } catch {
+            // No-op si no es eliminable
+          }
+        }
+      }
+    });
+  });
 });

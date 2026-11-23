@@ -11023,3 +11023,73 @@ supabase functions deploy gcal-auth
 
 
 
+
+
+---
+
+### [REQ-HARDENING-P0-01: Blindaje P0 - Seguridad en .gitignore, Tombstones/Cascada, Web Lock Mutex y Error Boundaries]
+**Fecha:** Noviembre 2026 | **Fase:** 8.18 (Hardening de Seguridad, Integridad Relacional y Resiliencia) | **Archivos Modificados:** `.gitignore`, `.env.example`, `src/services/proyectosService.ts`, `src/components/Views/ViewDetalle360.tsx`, `src/components/Habitos/Metas/ModalDetalleMeta360.tsx`, `src/components/Modals/ModalActividadFlow.tsx`, `src/services/syncManager.ts`, `src/App.tsx`, `src/services/__tests__/proyectosService.test.ts`, `src/services/__tests__/syncManager.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Forense y Vulnerabilidades Erradicadas
+- **Seguridad y Control de Versiones:** `.gitignore` únicamente excluía 2 entradas (`node_modules`, `release`), permitiendo el rastreo no intencional de variables locales (`.env`), artefactos compilados (`dist/`) y logs en el repositorio.
+- **Integridad Referencial y Pérdida de Lápidas (Tombstones):**
+  - En `ViewDetalle360.tsx:1407`, la eliminación de hitos WBS ejecutaba un borrado directo `await db.hitos_wbs.delete(targetHitoId)` sin registrar lápida en `db.tombstones` / `db.sync_deletions` y dejando las tareas hijas con punteros huérfanos.
+  - En `ModalDetalleMeta360.tsx:246`, `db.planes_accion_hitos.delete(hitoId)` omitía el registro de tombstone.
+  - En `ModalActividadFlow.tsx:777`, las subtareas previas eran eliminadas en bloque sin rescatar lápidas de los pasos eliminados.
+- **Concurrencia Multi-Pestaña y Saturación de Red en syncManager:**
+  - El flag `isSyncing` en memoria no protegía contra sincronizaciones simultáneas si el usuario abría múltiples pestañas en el navegador.
+  - No existía límite de reintentos consecutivos (Circuit Breaker) para registros con errores de esquema o validación en Supabase.
+- **Resiliencia de Renderizado:** La aplicación dependía de un único `CockpitErrorBoundary` raíz; cualquier error imprevisto en una vista subordinada provocaba el colapso total de la aplicación.
+
+#### 2. Solución de Ingeniería Implementada
+1. **Higiene de `.gitignore` y Plantilla Segura:**
+   - `.gitignore` robustecido con exclusión de `node_modules/`, `dist/`, `release/`, `.vite/`, `.env`, `.env.local`, `.env.*.local`, `*.log` y archivos de OS.
+   - Creación de `.env.example` canónico sin secretos reales.
+2. **Eliminación Atómica de Hitos WBS (`eliminarHitoWBS`):**
+   - Implementación de `eliminarHitoWBS(hitoId)` en `src/services/proyectosService.ts`:
+     - Resuelve tareas asignadas y desvincula `hito_id` y `hito_codigo`, marcándolas con `sync_status: 'pending'`.
+     - Registra la lápida (`registrarTombstone('hitos_wbs', hitoId)`) y elimina el hito dentro de una transacción `db.transaction('rw', ...)`.
+     - Dispara la sincronización inmediata con Supabase.
+   - Integración directa en el commit de descarte diferido en `ViewDetalle360.tsx`.
+   - Adición de `registrarTombstone` en `ModalDetalleMeta360.tsx` (`planes_accion_hitos`) y captura de lápidas en `ModalActividadFlow.tsx` para subtareas previas descartadas.
+3. **Web Lock API y Circuit Breaker en `syncManager.ts`:**
+   - Envolvimiento de `syncPendingRecords()` con `navigator.locks.request('miportalweb_sync_mutex', { ifAvailable: true }, ...)` con fallback seguro en entornos sin soporte (Node, Vitest, JSDOM).
+   - Circuit Breaker en memoria (`MAX_RETRY_COUNT = 3`, `recordRetryCount: Map<string, number>`). Omisión automática de registros con 3 fallos consecutivos en `obtenerRegistrosPendientes`, con reseteo de contador tras sincronización exitosa.
+4. **Error Boundaries Granulares por Vista (`ViewErrorBoundary`):**
+   - Creación de `ViewErrorBoundary` en `src/App.tsx` con diseño Cobalt Aerodynamic (`#0D1526`, borde `border-rose-500/40`, tipografía monospace).
+   - Botón *"Reintentar vista"* que limpia `hasError` localmente sin recargar la página ni perder el estado del HeaderMaestro o de las demás vistas.
+   - Envoltorio individual para `DailyCockpit`, `ViewKanban`, `ViewPortafolio`, `ViewHabitos`, `ViewFinanzas`, `ViewDetalle360` y `ViewNotas`.
+
+#### 3. Certificación QA
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (374/374 tests al 100% verde, +3 nuevos tests de blindaje)**.
+- **Compilador de Producción:** `npx vite build` $\rightarrow$ Exit Code 0 (8,995 módulos transformados en 15.44s, `main-*.js` 425.24 kB < 500 kB).
+
+
+---
+
+### [REQ-PERF-P2-01: Limpieza de Dependencias Inactivas y Optimización Indexada en TableroHabitos]
+**Fecha:** Noviembre 2026 | **Fase:** 8.19 (Higiene de Dependencias y Optimización de Consultas Dexie) | **Archivos Modificados:** `package.json`, `package-lock.json`, `src/components/VoicePill.tsx`, `src/components/Habitos/TableroHabitos.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico Técnico y Eliminación de Código Muerto
+- **Dependencias Fantasma:** `sweetalert2`, `canvas-confetti`, `@types/canvas-confetti` y `shadcn` permanecían en `package.json` con 0 importaciones reales en `src/`.
+- **Iconografía Heterogénea:** `@hugeicons/react` y `@hugeicons/core-free-icons` estaban instaladas únicamente por dos iconos en `src/components/VoicePill.tsx` (`ArrowLeft01Icon` y `Mic01Icon`), violando la directriz Cobalt Aerodynamic (A.2.2) que exige `lucide-react` con `strokeWidth={1.75-2}`.
+- **Consulta No Acotada en Dexie:** `src/components/Habitos/TableroHabitos.tsx` ejecutaba `useLiveQuery(() => db.habito_cumplimiento_logs.toArray(), [])` descargando en memoria el historial completo de la tabla sin restricción temporal.
+
+#### 2. Solución de Ingeniería Implementada
+1. **Unificación a `lucide-react` en `VoicePill.tsx`:**
+   - Se reemplazaron `HugeiconsIcon`, `ArrowLeft01Icon` y `Mic01Icon` por `<ArrowLeft size={12} strokeWidth={2.2} />` y `<Mic size={Math.round(size * 0.54)} strokeWidth={2} />`.
+2. **Purga de Dependencias:**
+   - Se ejecutó `npm uninstall sweetalert2 canvas-confetti @types/canvas-confetti shadcn @hugeicons/react @hugeicons/core-free-icons`, eliminando 137 paquetes del árbol de dependencias.
+3. **Consulta Indexada por Ventana Móvil (120 Días):**
+   - En `TableroHabitos.tsx`, se delimitó la consulta reactiva con `db.habito_cumplimiento_logs.where('fecha_registro').aboveOrEqual(fechaCorteLogs).toArray()` utilizando la columna indexada `fecha_registro` y una ventana de 120 días calculada con `formatFechaIsoLocal`.
+   - Garantiza cobertura total para el heatmap de 16 semanas ($16 \times 7 = 112$ días), el histograma mensual (30 días) y el `GraficoDesfaseEsfuerzo` sin degradación por volumen histórico.
+
+#### 3. Certificación QA y Desempeño
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (374/374 tests al 100% verde)**.
+- **Compilador de Producción:** `npx vite build` $\rightarrow$ Exit Code 0 (8,995 módulos transformados en 8.63s).
+- **Optimización de Bundle:**
+  - `main-*.js`: 425.24 kB $\rightarrow$ **424.59 kB** (gzip: 116.32 kB).
+  - `vendor-react-*.js`: 312.61 kB $\rightarrow$ **311.77 kB** (gzip: 96.14 kB).
+  - 137 paquetes superfluos desinstalados de `node_modules`.

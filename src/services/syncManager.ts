@@ -120,6 +120,11 @@ class SyncManager {
   // Impide bucles infinitos de reintento que saturen la red y congelen el event loop de React (REQ-DESKTOP-11)
   private registrosFkCuarentena = new Set<string>();
 
+  // Circuit Breaker de Reintentos en Memoria (REQ-HARDENING-P0-01)
+  // Limita a 3 reintentos consecutivos los fallos individuales por registro para evitar bucles infinitos de red
+  public static readonly MAX_RETRY_COUNT = 3;
+  private recordRetryCount = new Map<string, number>();
+
   // Cooldown de sincronización por ciclo de vida (focus / visibilitychange) para erradicar micro-parpadeos (REQ-FIX-SYNC-CALENDAR-02)
   private ultimaSyncPorFocoMs = 0;
   private readonly COOLDOWN_FOCO_MS = 60_000;
@@ -725,9 +730,53 @@ class SyncManager {
   // ============================================================================
 
   /**
+   * Obtiene la cantidad de reintentos consecutivos acumulados por un registro en la sesión.
+   */
+  public getRecordRetryCount(id: string): number {
+    return this.recordRetryCount.get(String(id)) || 0;
+  }
+
+  /**
+   * Reinicia el conteo de reintentos de un registro (o de todos si no se pasa id).
+   */
+  public resetRecordRetryCount(id?: string): void {
+    if (id) {
+      this.recordRetryCount.delete(String(id));
+    } else {
+      this.recordRetryCount.clear();
+    }
+  }
+
+  /**
+   * Registra un fallo de sincronización por registro e incrementa su contador de reintentos.
+   * Si alcanza MAX_RETRY_COUNT (3), activa el circuit breaker y loguea una advertencia.
+   */
+  public registrarFalloRegistro(id: string, tabla?: string, _err?: any): void {
+    if (!id) return;
+    const key = String(id);
+    const count = (this.recordRetryCount.get(key) || 0) + 1;
+    this.recordRetryCount.set(key, count);
+    if (count >= SyncManager.MAX_RETRY_COUNT) {
+      console.warn(
+        `[SyncManager] Circuit Breaker: El registro ${tabla || 'entidad'} (${key}) alcanzó ` +
+        `${count} reintentos fallidos consecutivos. Se omite temporalmente del ciclo automático.`
+      );
+    }
+  }
+
+  /**
+   * Limpia el contador de reintentos al tener éxito la sincronización de un registro.
+   */
+  public registrarExitoRegistro(id: string): void {
+    if (!id) return;
+    this.recordRetryCount.delete(String(id));
+  }
+
+  /**
    * Resuelve registros en cola de sincronización ('pending' o 'error' para reintentos con backoff).
    * Compatible con mocks de pruebas unitarias que sólo implementen .equals().
-   * Descarta permanentemente registros en estado 'quarantined' (REQ-WEB-01) o en registrosFkCuarentena.
+   * Descarta permanentemente registros en estado 'quarantined' (REQ-WEB-01), en registrosFkCuarentena
+   * o que hayan alcanzado el umbral MAX_RETRY_COUNT (3) del Circuit Breaker (REQ-HARDENING-P0-01).
    */
   public async obtenerRegistrosPendientes<T>(tableRef: any): Promise<T[]> {
     let records: T[] = [];
@@ -754,6 +803,9 @@ class SyncManager {
       if (!r) return false;
       if (r.sync_status === 'quarantined' || r.sync_status === 'synced') return false;
       if (r.id && this.registrosFkCuarentena.has(String(r.id))) return false;
+      if (r.id && (this.recordRetryCount.get(String(r.id)) || 0) >= SyncManager.MAX_RETRY_COUNT) {
+        return false;
+      }
       return true;
     });
   }
@@ -883,9 +935,11 @@ class SyncManager {
               error
             );
             if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'error' }).catch(() => { });
+            this.registrarFalloRegistro(tombstone.id, 'tombstones', error);
             result.failed++;
           }
         } else {
+          this.registrarExitoRegistro(tombstone.id);
           if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'synced' }).catch(() => { });
           await limpiarColaLocal(tombstone.id);
           result.success++;
@@ -902,6 +956,7 @@ class SyncManager {
             err
           );
           if (db.tombstones && typeof db.tombstones.update === 'function') await db.tombstones.update(tombstone.id, { sync_status: 'error' }).catch(() => { });
+          this.registrarFalloRegistro(tombstone.id, 'tombstones', err);
           result.failed++;
         }
       }
@@ -944,8 +999,10 @@ class SyncManager {
             console.error('[SyncManager] Error al sincronizar proyecto:', proy.codigo_legado, error);
             await db.proyectos.update(proy.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(proy.id, 'proyectos', error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(proy.id);
           await db.proyectos.update(proy.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -959,6 +1016,7 @@ class SyncManager {
           console.error('[SyncManager] Excepción al sincronizar proyecto:', proy.codigo_legado, err);
           await db.proyectos.update(proy.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(proy.id, 'proyectos', err);
         result.failed++;
       }
     }
@@ -1010,8 +1068,10 @@ class SyncManager {
             console.error('[SyncManager] Error al sincronizar hito:', hito.codigo_legado, error);
             await db.hitos_wbs.update(hito.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(hito.id, 'hitos_wbs', error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(hito.id);
           await db.hitos_wbs.update(hito.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -1025,6 +1085,7 @@ class SyncManager {
           console.error('[SyncManager] Excepción al sincronizar hito:', hito.codigo_legado, err);
           await db.hitos_wbs.update(hito.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(hito.id, 'hitos_wbs', err);
         result.failed++;
       }
     }
@@ -1081,8 +1142,10 @@ class SyncManager {
             console.error('[SyncManager] Error al sincronizar tarea:', tarea.codigo_legado, error);
             await db.tareas.update(tarea.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(tarea.id, 'tareas', error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(tarea.id);
           await db.tareas.update(tarea.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -1096,6 +1159,7 @@ class SyncManager {
           console.error('[SyncManager] Excepción al sincronizar tarea:', tarea.codigo_legado, err);
           await db.tareas.update(tarea.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(tarea.id, 'tareas', err);
         result.failed++;
       }
     }
@@ -1137,8 +1201,10 @@ class SyncManager {
             console.error('[SyncManager] Error al sincronizar actividad:', act.codigo_legado, error);
             await db.actividades_personales.update(act.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(act.id, 'actividades_personales', error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(act.id);
           await db.actividades_personales.update(act.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -1152,6 +1218,7 @@ class SyncManager {
           console.error('[SyncManager] Excepción al sincronizar actividad:', act.codigo_legado, err);
           await db.actividades_personales.update(act.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(act.id, 'actividades_personales', err);
         result.failed++;
       }
     }
@@ -1207,8 +1274,10 @@ class SyncManager {
             console.error('[SyncManager] Error al sincronizar subtarea:', sub.codigo_legado, error);
             await db.subtareas_pasos.update(sub.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(sub.id, 'subtareas_pasos', error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(sub.id);
           await db.subtareas_pasos.update(sub.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -1222,6 +1291,7 @@ class SyncManager {
           console.error('[SyncManager] Excepción al sincronizar subtarea:', sub.codigo_legado, err);
           await db.subtareas_pasos.update(sub.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(sub.id, 'subtareas_pasos', err);
         result.failed++;
       }
     }
@@ -1263,8 +1333,10 @@ class SyncManager {
             console.error('[SyncManager] Error al sincronizar meta:', meta.codigo_legado, error);
             await db.metas_planes.update(meta.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(meta.id, 'metas_planes', error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(meta.id);
           await db.metas_planes.update(meta.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -1278,6 +1350,7 @@ class SyncManager {
           console.error('[SyncManager] Excepción al sincronizar meta:', meta.codigo_legado, err);
           await db.metas_planes.update(meta.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(meta.id, 'metas_planes', err);
         result.failed++;
       }
     }
@@ -1329,8 +1402,10 @@ class SyncManager {
             console.error('[SyncManager] Error al sincronizar hito de plan:', hito.codigo_legado, error);
             await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(hito.id, 'planes_accion_hitos', error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(hito.id);
           await db.planes_accion_hitos.update(hito.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -1344,6 +1419,7 @@ class SyncManager {
           console.error('[SyncManager] Excepción al sincronizar hito de plan:', hito.codigo_legado, err);
           await db.planes_accion_hitos.update(hito.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(hito.id, 'planes_accion_hitos', err);
         result.failed++;
       }
     }
@@ -1397,8 +1473,10 @@ class SyncManager {
             console.error('[SyncManager] Error al sincronizar vínculo hábito-meta:', vinculo.id, error);
             await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(vinculo.id, 'habitos_metas_vinculos', error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(vinculo.id);
           await db.habitos_metas_vinculos.update(vinculo.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -1412,6 +1490,7 @@ class SyncManager {
           console.error('[SyncManager] Excepción al sincronizar vínculo hábito-meta:', vinculo.id, err);
           await db.habitos_metas_vinculos.update(vinculo.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(vinculo.id, 'habitos_metas_vinculos', err);
         result.failed++;
       }
     }
@@ -1467,8 +1546,10 @@ class SyncManager {
             console.error(`[SyncManager] Error al sincronizar ${etiquetaSingular}:`, item.codigo_legado, error);
             await refDexie.update(item.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(item.id, tabla, error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(item.id);
           await refDexie.update(item.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -1486,6 +1567,7 @@ class SyncManager {
           console.error(`[SyncManager] Excepción al sincronizar ${etiquetaSingular}:`, item.codigo_legado, err);
           await refDexie.update(item.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(item.id, tabla, err);
         result.failed++;
       }
     }
@@ -1548,8 +1630,10 @@ class SyncManager {
             console.error('[SyncManager] Error al sincronizar nota:', nota.codigo_legado, error);
             await db.notas.update(nota.id, { sync_status: 'error' });
           }
+          this.registrarFalloRegistro(nota.id, 'notas', error);
           result.failed++;
         } else {
+          this.registrarExitoRegistro(nota.id);
           await db.notas.update(nota.id, {
             sync_status: 'synced',
             updated_at: new Date().toISOString()
@@ -1563,6 +1647,7 @@ class SyncManager {
           console.error('[SyncManager] Excepción al sincronizar nota:', nota.codigo_legado, err);
           await db.notas.update(nota.id, { sync_status: 'error' });
         }
+        this.registrarFalloRegistro(nota.id, 'notas', err);
         result.failed++;
       }
     }
@@ -1878,7 +1963,31 @@ class SyncManager {
    * 10. Cuotas Bancarias
    * 11. Notas (Bóveda híbrida desacoplada)
    */
+  /**
+   * Orquestador maestro de sincronización Outbound (Push local -> remoto)
+   * Protegido por Web Lock API (miportalweb_sync_mutex) para evitar colisiones entre múltiples pestañas.
+   */
   public async syncPendingRecords(): Promise<void> {
+    if (typeof navigator !== 'undefined' && 'locks' in navigator && typeof (navigator as any).locks?.request === 'function') {
+      try {
+        await (navigator as any).locks.request('miportalweb_sync_mutex', { ifAvailable: true }, async (lock: any) => {
+          if (!lock) {
+            console.info('[SyncManager] Otra pestaña está ejecutando la sincronización activa (Web Lock adquirido). Omitiendo ciclo duplicado.');
+            return;
+          }
+          await this.ejecutarSyncPendingRecords();
+        });
+        return;
+      } catch (lockErr) {
+        console.warn('[SyncManager] Web Lock no disponible o falló; recurriendo a lock en memoria:', lockErr);
+      }
+    }
+
+    // Fallback estándar en entornos sin Web Locks (Vitest, JSDOM, Node o navegadores legacy)
+    await this.ejecutarSyncPendingRecords();
+  }
+
+  private async ejecutarSyncPendingRecords(): Promise<void> {
     if (this.isSyncing) {
       this.syncRequestedWhileRunning = true;
       return;

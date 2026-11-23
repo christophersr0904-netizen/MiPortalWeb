@@ -56,7 +56,7 @@ import { mostrarToastCobalt } from '../../utils/toastCobalt';
 import { deduplicarPorCodigoCanonico, sanitizarUrlExterna } from '../../utils/entityNormalizer';
 import { generateSafeUUID } from '../../utils/uuidGenerator';
 import { useUndoDelete } from '../../hooks/useUndoDelete';
-import { eliminarProyecto } from '../../services/proyectosService';
+import { eliminarProyecto, eliminarHitoWBS } from '../../services/proyectosService';
 import { calcularDesfaseDias, clasificarDesfase, calcularDesviacionEsfuerzo } from '../../utils/metricasEjecucionHelpers';
 import type { GastoRecord, TareaRecord, HitoWbsRecord, SubtareaPaso } from '../../types';
 
@@ -1404,7 +1404,7 @@ export const ViewDetalle360: React.FC<ViewDetalle360Props> = ({
                                             etiqueta,
                                             tipo: 'HITO',
                                             commit: async () => {
-                                              await db.hitos_wbs.delete(targetHitoId);
+                                              await eliminarHitoWBS(targetHitoId);
                                             }
                                           });
                                         }}

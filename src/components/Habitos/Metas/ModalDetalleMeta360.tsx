@@ -41,7 +41,7 @@ import {
   registrarAvanceCuantitativoLocal,
   formatFechaIsoLocal
 } from '../../../services/habitosService';
-import { db } from '../../../db/db';
+import { db, registrarTombstone } from '../../../db/db';
 import { syncManager } from '../../../services/syncManager';
 import { mostrarToastCobalt } from '../../../utils/toastCobalt';
 import { HistogramaSeguimientoTemporal } from '../HistogramaSeguimientoTemporal';
@@ -243,8 +243,12 @@ export const ModalDetalleMeta360: React.FC<ModalDetalleMeta360Props> = ({
   };
 
   const handleEliminarHitoPlan = async (hitoId: string) => {
+    await registrarTombstone('planes_accion_hitos', hitoId);
     await db.planes_accion_hitos.delete(hitoId);
     await recalcularProgresoMetaLocal(meta.id);
+    syncManager.syncPendingRecords().catch((err) => {
+      console.warn('[ModalDetalleMeta360] Error sincronizando tras eliminar hito plan:', err);
+    });
     mostrarToastCobalt('Hito eliminado del plan', 'info');
   };
 

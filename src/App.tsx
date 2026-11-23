@@ -20,6 +20,73 @@ interface ErrorBoundaryState {
   error?: Error;
 }
 
+// ErrorBoundary granular por vista para aislar fallos de renderizado y permitir recuperación sin recargar la app (REQ-HARDENING-P0-01)
+interface ViewErrorBoundaryProps {
+  children: React.ReactNode;
+  vistaNombre: string;
+  onReset?: () => void;
+}
+
+export class ViewErrorBoundary extends React.Component<
+  ViewErrorBoundaryProps,
+  ErrorBoundaryState
+> {
+  constructor(props: ViewErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(`[ViewErrorBoundary:${this.props.vistaNombre}] Fallo de renderizado:`, error, info);
+  }
+
+  handleRetry = () => {
+    this.setState({ hasError: false, error: undefined });
+    this.props.onReset?.();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full min-h-[380px] flex flex-col items-center justify-center p-6 bg-[#040711] text-slate-200 select-none">
+          <div className="max-w-md w-full p-6 rounded-2xl bg-[#0D1526] border border-rose-500/40 shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8),0_8px_10px_-6px_rgba(244,63,94,0.18)] space-y-4 text-center">
+            <div className="w-10 h-10 mx-auto rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+              <span className="font-mono font-bold text-base">!</span>
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-slate-200">
+                Error en la vista {this.props.vistaNombre}
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                La vista encontró un error inesperado al renderizarse. El resto del portal sigue funcionando con normalidad.
+              </p>
+            </div>
+            {this.state.error && (
+              <pre className="p-3 rounded-lg bg-[#020617] border border-rose-500/20 text-[10px] font-mono text-rose-300 text-left max-h-32 overflow-auto whitespace-pre-wrap break-words">
+                {this.state.error.message}
+              </pre>
+            )}
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={this.handleRetry}
+                className="px-4 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 text-xs font-bold transition-colors cursor-pointer active:scale-95"
+              >
+                Reintentar vista
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 class CockpitErrorBoundary extends React.Component<
   { children: React.ReactNode; scope?: 'Cockpit' | 'Portal' },
   ErrorBoundaryState
@@ -530,16 +597,18 @@ export const App: React.FC = () => {
       <CockpitErrorBoundary>
         <div className="w-full h-full bg-transparent p-0 overflow-hidden flex flex-col font-sans select-none">
           <Suspense fallback={null}>
-            <DailyCockpit
-              modoForzadoDesacoplado={true}
-              onCerrarDesacoplado={() => {
-                if (esWidgetNativo && window.desktopWidget?.close) {
-                  window.desktopWidget.close();
-                } else {
-                  setEsModoHud(false);
-                }
-              }}
-            />
+            <ViewErrorBoundary vistaNombre="Cockpit Diario">
+              <DailyCockpit
+                modoForzadoDesacoplado={true}
+                onCerrarDesacoplado={() => {
+                  if (esWidgetNativo && window.desktopWidget?.close) {
+                    window.desktopWidget.close();
+                  } else {
+                    setEsModoHud(false);
+                  }
+                }}
+              />
+            </ViewErrorBoundary>
           </Suspense>
           {asistenteAbierto && (
             <Suspense fallback={null}>
@@ -583,39 +652,57 @@ export const App: React.FC = () => {
                     className="h-full w-full"
                   >
                     {vistaActiva === 'kanban' && (
-                      <ViewKanban
-                        onSeleccionarProyecto={(id) => {
-                          setProyectoSeleccionadoId(id);
-                          handleCambiarVista('detalle');
-                        }}
-                        onVerDetalle360={(id) => {
-                          setProyectoSeleccionadoId(id);
-                          handleCambiarVista('detalle');
-                        }}
-                      />
+                      <ViewErrorBoundary vistaNombre="Tablero Kanban">
+                        <ViewKanban
+                          onSeleccionarProyecto={(id) => {
+                            setProyectoSeleccionadoId(id);
+                            handleCambiarVista('detalle');
+                          }}
+                          onVerDetalle360={(id) => {
+                            setProyectoSeleccionadoId(id);
+                            handleCambiarVista('detalle');
+                          }}
+                        />
+                      </ViewErrorBoundary>
                     )}
 
                     {vistaActiva === 'portafolio' && (
-                      <ViewPortafolio
-                        onSeleccionarProyecto={(id) => {
-                          setProyectoSeleccionadoId(id);
-                          handleCambiarVista('detalle');
-                        }}
-                      />
+                      <ViewErrorBoundary vistaNombre="Portafolio de Proyectos">
+                        <ViewPortafolio
+                          onSeleccionarProyecto={(id) => {
+                            setProyectoSeleccionadoId(id);
+                            handleCambiarVista('detalle');
+                          }}
+                        />
+                      </ViewErrorBoundary>
                     )}
 
-                    {vistaActiva === 'habitos' && <ViewHabitos />}
+                    {vistaActiva === 'habitos' && (
+                      <ViewErrorBoundary vistaNombre="Hábitos y Rutinas">
+                        <ViewHabitos />
+                      </ViewErrorBoundary>
+                    )}
 
-                    {vistaActiva === 'financiero' && <ViewFinanzas />}
+                    {vistaActiva === 'financiero' && (
+                      <ViewErrorBoundary vistaNombre="Finanzas & Cashflow">
+                        <ViewFinanzas />
+                      </ViewErrorBoundary>
+                    )}
 
                     {vistaActiva === 'detalle' && (
-                      <ViewDetalle360
-                        proyectoIdSeleccionado={proyectoSeleccionadoId}
-                        onVolverAlPortafolio={() => handleCambiarVista('portafolio')}
-                      />
+                      <ViewErrorBoundary vistaNombre="Detalle 360 del Proyecto">
+                        <ViewDetalle360
+                          proyectoIdSeleccionado={proyectoSeleccionadoId}
+                          onVolverAlPortafolio={() => handleCambiarVista('portafolio')}
+                        />
+                      </ViewErrorBoundary>
                     )}
 
-                    {vistaActiva === 'notas' && <ViewNotas />}
+                    {vistaActiva === 'notas' && (
+                      <ViewErrorBoundary vistaNombre="Bóveda de Notas">
+                        <ViewNotas />
+                      </ViewErrorBoundary>
+                    )}
                   </motion.div>
                 </AnimatePresence>
               </Suspense>

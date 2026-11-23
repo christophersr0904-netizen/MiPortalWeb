@@ -13,7 +13,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db/db';
+import { db, registrarTombstone } from '../../db/db';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { SelectIconicoCobalt } from '../UI/SelectIconicoCobalt';
 import {
@@ -774,6 +774,20 @@ export const ModalActividadFlow: React.FC<ModalActividadFlowProps> = ({
 
     // Persistir subtareas asociadas en db.subtareas_pasos
     if (codigoLegado) {
+      try {
+        const subtareasPrevias = await db.subtareas_pasos
+          .where('id_padre_vinculado')
+          .equals(codigoLegado)
+          .toArray();
+        const idsNuevos = new Set(pasosLocales.map((p) => p.id));
+        for (const sub of subtareasPrevias) {
+          if (!idsNuevos.has(sub.id)) {
+            await registrarTombstone('subtareas_pasos', sub.id);
+          }
+        }
+      } catch (errSub) {
+        console.warn('[ModalActividadFlow] Error al resolver lápidas de subtareas previas:', errSub);
+      }
       await db.subtareas_pasos.where('id_padre_vinculado').equals(codigoLegado).delete();
       if (pasosLocales.length > 0) {
         const subtareasPayload: SubtareaPaso[] = pasosLocales.map((p, idx) => ({

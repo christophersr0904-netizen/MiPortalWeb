@@ -215,3 +215,79 @@ export async function eliminarProyecto(
     }
   };
 }
+
+export interface ResultadoEliminacionHitoWBS {
+  success: boolean;
+  hitoId: string;
+  tareasDesvinculadas: number;
+}
+
+/**
+ * Elimina un paquete de trabajo (Hito WBS) de forma atómica y segura:
+ * 1. Resuelve las tareas asignadas a este hito y las desvincula (limpiando hito_id / hito_codigo)
+ *    para evitar registros huérfanos.
+ * 2. Registra la lápida (tombstone) del hito en IndexedDB para propagar el DELETE a Supabase.
+ * 3. Elimina el hito de db.hitos_wbs dentro de una transacción Dexie.
+ * 4. Dispara la sincronización inmediata con Supabase.
+ */
+export async function eliminarHitoWBS(hitoId: string): Promise<ResultadoEliminacionHitoWBS> {
+  const hitoActual = await db.hitos_wbs.get(hitoId);
+  const codLegado = hitoActual?.codigo_legado;
+  const hitoRefs = Array.from(new Set([hitoId, codLegado].filter(Boolean) as string[]));
+
+  // 1. Obtener tareas vinculadas a este hito
+  let tareasAsociadas: TareaRecord[] = [];
+  try {
+    const allTareas = await db.tareas.toArray();
+    tareasAsociadas = allTareas.filter((t: any) => {
+      const hRef = t.hito_codigo || t.hito_id || t.ID_Hito || t.id_hito;
+      return hRef && hitoRefs.includes(hRef);
+    });
+  } catch {
+    tareasAsociadas = [];
+  }
+
+  // 2. Transacción atómica
+  const tablasTransaccion = [
+    db.hitos_wbs,
+    db.tareas,
+    db.tombstones
+  ];
+  if (db.sync_deletions) tablasTransaccion.push(db.sync_deletions);
+
+  const nowIso = new Date().toISOString();
+
+  await db.transaction('rw', tablasTransaccion, async () => {
+    // 2.1 Desvincular tareas asociadas para evitar referencias huérfanas
+    for (const tarea of tareasAsociadas) {
+      await db.tareas.update(tarea.id, {
+        hito_codigo: undefined,
+        hito_id: undefined,
+        updated_at: nowIso,
+        sync_status: 'pending'
+      });
+    }
+
+    // 2.2 Registrar lápida (tombstone) del hito
+    await registrarTombstone('hitos_wbs', hitoId);
+
+    // 2.3 Eliminar hito de Dexie
+    await db.hitos_wbs.delete(hitoId);
+  });
+
+  console.info(
+    `[proyectosService] Hito WBS ${hitoId} eliminado: ` +
+    `${tareasAsociadas.length} tareas desvinculadas. Lápida registrada.`
+  );
+
+  // 3. Propagar inmediatamente hacia Supabase
+  syncManager.syncPendingRecords().catch((err) => {
+    console.warn('[proyectosService] Error en syncPendingRecords tras eliminar hito WBS:', err);
+  });
+
+  return {
+    success: true,
+    hitoId,
+    tareasDesvinculadas: tareasAsociadas.length
+  };
+}
