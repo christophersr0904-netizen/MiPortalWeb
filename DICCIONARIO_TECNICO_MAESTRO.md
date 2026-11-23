@@ -52,6 +52,23 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.28 — Extracción de Motor de Estado, Filtros, Agrupación y Handlers (useKanbanBoard) (REQ-REFACTOR-P1-07)
+- **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useKanbanBoard.ts` (Nuevo), `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Desacoplamiento Completo del Motor Kanban (`useKanbanBoard.ts`):**
+    - Se creó el hook `useKanbanBoard.ts` (1,141 líneas) con tipado 100% estricto (**0 ocurrencias de `any`**), desacoplando toda la lógica de negocio, consultas y estado reactivo de `ViewKanban.tsx`.
+    - Se preservaron íntegramente las optimizaciones de consultas Dexie B-Tree (`rawTareasLive` indexado por `fecha_programada`, `rawGastosLive` acotado por `where('id_proyecto').notEqual('')`).
+    - Se extrajeron los filtros multidimensionales (Tiempo, Hito, Prioridad Eisenhower, Nivel de Energía, Plazo/Vencimiento, Dependencias, Búsqueda diferida con `useDeferredValue`), ordenamiento de 5 vías y los dropdowns/popovers con retardo calibrado a 140ms.
+    - Se encapsuló el cálculo de grafo de dependencias reactivas (cadenas recursivas de predecesoras y sucesoras, junto con detección de tareas ocultas por filtros activos).
+    - Se encapsularon los estados optimistas para transición zero-latency en Drag-and-Drop y los flujos de validación Definition of Done (DoD) con `ModalDoDAdvertencia`.
+  - **Limpieza Estructural en ViewKanban.tsx:**
+    - `ViewKanban.tsx` redujo su extensión de **2,483 a 1,684 líneas** (ahorro neto de **799 líneas**, ~32% de reducción), quedando enfocado exclusivamente en el renderizado de la UI de escritorio y móvil.
+    - Se eliminaron las importaciones directas de `db`, `useLiveQuery`, `useUndoDelete`, `actualizarTarea`, `eliminarTarea` y funciones del normalizador, erradicando más de 14 coerciones `any` residuales en el componente de vista.
+  - **Calidad y Verificación QA:**
+    - 374/374 pruebas unitarias pasando en Vitest (36 suites al 100% verde).
+    - Verificación estricta TypeScript con 0 errores (`npx tsc --noEmit`).
+    - Build de producción Vite completado exitosamente con `main-*.js` en 428.50 kB (< 500 kB) y `ViewKanban-*.js` en 98.26 kB.
+
 ### FASE 8.27 — Desacoplamiento Modular de la Pestaña WBS (PanelWBSProyecto) (REQ-REFACTOR-P1-06)
 - **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/components/Views/Detalle360/PanelWBSProyecto.tsx` (Nuevo), `src/components/Views/ViewDetalle360.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
