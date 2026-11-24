@@ -52,6 +52,23 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.30 — Edición Inline de Ideas en Lista/Repositorio con Sincronización Multi-Dispositivo (REQ-FEAT-IDEAS-EDIT-01)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/types/index.ts`, `src/services/syncPayloadSanitizer.ts`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Ampliación de Contrato y Persistencia de Etiquetas (`src/types/index.ts` & `src/services/syncPayloadSanitizer.ts`):**
+    - Se incorporó `etiquetas?: string[]` a la interfaz `IdeaRecord` con tipado 100% estricto (0 coerciones `any`).
+    - En `sanitizarIdeaPayload`, las etiquetas se serializan dentro de `clarificacion_ia.etiquetas` para persistencia multi-dispositivo en PostgreSQL sin alterar el esquema relacional rígido.
+    - En `sanitizarIdeaInbound`, se deserializan y normalizan las etiquetas hacia el registro local de Dexie.
+  - **Estado y Controles de Edición Inline (`src/components/Ideas/WidgetIdeasBubble.tsx`):**
+    - Se incorporó el estado reactivo `ideaEditandoId`, `draftTitulo`, `draftContenido`, `draftEtiquetas` y `guardandoEdicion`.
+    - Se añadió un botón discreto con icono `Pencil` (`lucide-react`, `strokeWidth={1.75}`) en la cabecera de cada tarjeta de idea y en la barra de acciones inferior.
+    - Al activar el modo edición, la tarjeta conmuta in-situ a un contenedor Bento Cobalt Aerodynamic (`#0D1526`, borde `border-sky-500/40`, microindicador de edición) con inputs de alto contraste para título, detalle y etiquetas.
+  - **Atajos de Teclado y Persistencia Reactiva:**
+    - Atajos integrados en los campos de edición: `Ctrl + Enter` (o `Cmd + Enter`) para guardar inmediatamente; `Escape` para cancelar la edición sin propagar el evento (`e.stopPropagation()`) para no cerrar la ventana flotante ni el popover.
+    - Validación de contenido no vacío antes de persistir.
+    - Persistencia en Dexie con `updated_at: new Date().toISOString()` y `sync_status: 'pending'`, disparando `syncManager.sincronizarTodo()` en segundo plano para replicación zero-delay en PC, laptop y móvil.
+    - Búsqueda en el drawer enriquecida para filtrar reactivamente también por etiquetas (`i.etiquetas`).
+
 ### FASE 8.29 — Sincronización Bidireccional Multi-Dispositivo y Códigos Offline-First en Módulo Ideas (REQ-FIX-IDEAS-SYNC-01)
 - **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/db/db.ts`, `src/services/syncPayloadSanitizer.ts`, `src/services/syncManager.ts`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/services/__tests__/syncManager.test.ts`, `src/services/__tests__/syncManagerRealtime.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**

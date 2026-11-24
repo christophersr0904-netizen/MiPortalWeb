@@ -21,7 +21,9 @@ import {
   ArrowRight,
   GripVertical,
   Image as ImageIcon,
-  Mic
+  Mic,
+  Pencil,
+  Check
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
@@ -504,6 +506,13 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const [tabVentana, setTabVentana] = useState<TabIdeasVentana>('inbox');
   const [busquedaDrawer, setBusquedaDrawer] = useState('');
 
+  // Estados para Edición Inline de Ideas (REQ-FEAT-IDEAS-EDIT-01)
+  const [ideaEditandoId, setIdeaEditandoId] = useState<string | null>(null);
+  const [draftTitulo, setDraftTitulo] = useState('');
+  const [draftContenido, setDraftContenido] = useState('');
+  const [draftEtiquetas, setDraftEtiquetas] = useState('');
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+
   // Atajos globales ejecutivos Ctrl+I / Alt+I para captura rápida (REQ-UI-31-HOTFIX)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -553,7 +562,8 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       lista = lista.filter((i: IdeaRecord) => {
         const enun = (i.enunciado_idea || '').toLowerCase();
         const det = (i.detalle_contexto || '').toLowerCase();
-        return enun.includes(q) || det.includes(q);
+        const tags = Array.isArray(i.etiquetas) ? i.etiquetas.join(' ').toLowerCase() : '';
+        return enun.includes(q) || det.includes(q) || tags.includes(q);
       });
     }
 
@@ -883,6 +893,71 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       sync_status: 'pending'
     });
     syncManager.sincronizarTodo().catch(() => { });
+  };
+
+  // Handlers para Edición Inline de Ideas (REQ-FEAT-IDEAS-EDIT-01)
+  const handleIniciarEdicion = (idea: IdeaRecord) => {
+    setIdeaEditandoId(idea.id);
+    setDraftTitulo(idea.enunciado_idea || '');
+    setDraftContenido(idea.detalle_contexto || '');
+    const tagsArray = Array.isArray(idea.etiquetas) && idea.etiquetas.length > 0
+      ? idea.etiquetas
+      : ((idea.enunciado_idea || '').match(/#[\w-]+/g) || []).map((t) => t.replace(/^#/, ''));
+    setDraftEtiquetas(tagsArray.join(', '));
+  };
+
+  const handleCancelarEdicion = useCallback(() => {
+    setIdeaEditandoId(null);
+    setDraftTitulo('');
+    setDraftContenido('');
+    setDraftEtiquetas('');
+  }, []);
+
+  const handleGuardarEdicion = async (idea: IdeaRecord) => {
+    const tituloLimpio = draftTitulo.trim();
+    if (!tituloLimpio) {
+      mostrarToastCobalt('El título de la idea no puede estar vacío', 'warning');
+      return;
+    }
+
+    setGuardandoEdicion(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const etiquetasParsed = draftEtiquetas
+        .split(/[, ]+/)
+        .map((t) => t.trim().replace(/^#/, ''))
+        .filter(Boolean);
+
+      await db.ideas.update(idea.id, {
+        enunciado_idea: tituloLimpio,
+        detalle_contexto: draftContenido.trim(),
+        etiquetas: etiquetasParsed,
+        updated_at: nowIso,
+        sync_status: 'pending'
+      });
+
+      mostrarToastCobalt('Idea actualizada correctamente', 'success');
+      handleCancelarEdicion();
+
+      // Sincronización multi-dispositivo en segundo plano
+      syncManager.sincronizarTodo().catch(() => { });
+    } catch (err) {
+      console.error('[WidgetIdeasBubble] Error al actualizar idea:', err);
+      mostrarToastCobalt('Error al actualizar la idea', 'error');
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  };
+
+  const handleKeyDownEdicion = (e: React.KeyboardEvent, idea: IdeaRecord) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      e.preventDefault();
+      handleCancelarEdicion();
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      void handleGuardarEdicion(idea);
+    }
   };
 
   const procesarArchivoSeleccionado = async (file: File) => {
@@ -1668,14 +1743,114 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                     </div>
                   ) : (
                     ideasFiltradasCanvas.map((idea: IdeaRecord) => {
-                      const tagsIdea = (idea.enunciado_idea || '').match(/#[\w-]+/g) || [];
+                      const tagsIdea = Array.isArray(idea.etiquetas) && idea.etiquetas.length > 0
+                        ? idea.etiquetas.map((t) => (t.startsWith('#') ? t : `#${t}`))
+                        : ((idea.enunciado_idea || '').match(/#[\w-]+/g) || []);
+                      const estaEditando = ideaEditandoId === idea.id;
+
+                      if (estaEditando) {
+                        return (
+                          <div
+                            key={idea.id}
+                            className="p-3.5 rounded-2xl bg-[#0D1526] border border-sky-500/40 shadow-lg flex flex-col gap-2.5"
+                            onKeyDown={(e) => handleKeyDownEdicion(e, idea)}
+                          >
+                            {/* Cabecera de edición */}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-5 h-5 rounded-md bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                                  <Pencil className="w-3 h-3" strokeWidth={1.75} />
+                                </span>
+                                <span className="font-mono text-[10px] font-bold text-sky-400 tracking-wider">
+                                  {idea.codigo_legado}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-medium ml-1">
+                                  • Editando idea
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleCancelarEdicion}
+                                className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-white/5 transition cursor-pointer"
+                                title="Cancelar edición (Esc)"
+                              >
+                                <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+                              </button>
+                            </div>
+
+                            {/* Input Enunciado / Título */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-mono text-slate-400">Título / Enunciado</label>
+                              <input
+                                type="text"
+                                value={draftTitulo}
+                                onChange={(e) => setDraftTitulo(e.target.value)}
+                                placeholder="Título de la idea..."
+                                autoFocus
+                                className="w-full bg-[#040711] border border-slate-700/60 focus:border-sky-500/80 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-100 placeholder-slate-500 focus:outline-hidden transition"
+                              />
+                            </div>
+
+                            {/* Textarea Detalle / Contexto */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-mono text-slate-400">Detalle o contexto</label>
+                              <textarea
+                                value={draftContenido}
+                                onChange={(e) => setDraftContenido(e.target.value)}
+                                placeholder="Detalle o contexto adicional (opcional)..."
+                                rows={2}
+                                className="w-full bg-[#040711] border border-slate-700/60 focus:border-sky-500/80 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300 placeholder-slate-500 focus:outline-hidden resize-none transition custom-scrollbar"
+                              />
+                            </div>
+
+                            {/* Input Etiquetas */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-mono text-slate-400">Etiquetas (separadas por coma o #tags)</label>
+                              <input
+                                type="text"
+                                value={draftEtiquetas}
+                                onChange={(e) => setDraftEtiquetas(e.target.value)}
+                                placeholder="ej: urgente, finanzas, #diseño"
+                                className="w-full bg-[#040711] border border-slate-700/60 focus:border-sky-500/80 rounded-xl px-2.5 py-1 text-[10px] font-mono text-sky-300 placeholder-slate-500 focus:outline-hidden transition"
+                              />
+                            </div>
+
+                            {/* Barra de botones de acción */}
+                            <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
+                              <span className="text-[9px] font-mono text-slate-500 hidden sm:inline">
+                                Ctrl+Enter guardar • Esc cancelar
+                              </span>
+                              <div className="flex items-center gap-1.5 ml-auto">
+                                <button
+                                  type="button"
+                                  onClick={handleCancelarEdicion}
+                                  disabled={guardandoEdicion}
+                                  className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 border border-white/5 flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
+                                >
+                                  <X className="w-3 h-3" strokeWidth={1.75} />
+                                  <span>Cancelar</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleGuardarEdicion(idea)}
+                                  disabled={guardandoEdicion}
+                                  className="px-3 py-1 rounded-lg text-[10px] font-bold text-white bg-sky-600 hover:bg-sky-500 border border-sky-400/40 flex items-center gap-1 transition cursor-pointer shadow-xs disabled:opacity-50"
+                                >
+                                  <Check className="w-3 h-3" strokeWidth={2} />
+                                  <span>{guardandoEdicion ? 'Guardando...' : 'Guardar'}</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
 
                       return (
                         <div
                           key={idea.id}
                           className="p-3.5 rounded-2xl bg-[#040711]/40 hover:bg-[#040711]/70 border border-slate-800/60 hover:border-sky-500/30 transition-colors duration-150 flex flex-col gap-2.5 group shadow-xs"
                         >
-                          {/* Fila 1: ID, Tipo y Fecha */}
+                          {/* Fila 1: ID, Tipo y Fecha con botón Editar */}
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <span className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center shrink-0 border border-white/5 text-sky-300">
@@ -1689,6 +1864,14 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                               <span className="font-mono tabular-nums text-[10px] text-slate-500">
                                 {new Date(idea.fecha_captura).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => handleIniciarEdicion(idea)}
+                                className="p-1 rounded-md text-slate-400 hover:text-sky-300 hover:bg-white/5 transition cursor-pointer opacity-70 group-hover:opacity-100"
+                                title="Editar idea"
+                              >
+                                <Pencil className="w-3 h-3" strokeWidth={1.75} />
+                              </button>
                             </div>
                           </div>
 
@@ -1740,8 +1923,8 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                             </div>
                           )}
 
-                          {/* 4 BOTONES CANÓNICOS DE CONVERSIÓN DIRECTA */}
-                          {tabVentana !== 'procesadas' && (
+                          {/* 4 BOTONES CANÓNICOS DE CONVERSIÓN DIRECTA + ACCIONES */}
+                          {tabVentana !== 'procesadas' ? (
                             <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-1 flex-wrap">
                               <div className="flex items-center gap-1">
                                 {/* Botón 1: -> Tarea */}
@@ -1793,14 +1976,39 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                                 </button>
                               </div>
 
-                              {/* Toggle Incubación */}
+                              <div className="flex items-center gap-1">
+                                {/* Botón Editar en barra de acciones */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleIniciarEdicion(idea)}
+                                  className="px-2 py-1 rounded-lg text-[10px] text-slate-400 hover:text-sky-300 hover:bg-white/5 flex items-center gap-1 transition cursor-pointer"
+                                  title="Editar idea"
+                                >
+                                  <Pencil className="w-3 h-3 text-sky-400" strokeWidth={1.75} />
+                                  <span>Editar</span>
+                                </button>
+
+                                {/* Toggle Incubación */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleIncubacion(idea)}
+                                  className="px-2 py-1 rounded-lg text-[10px] text-slate-400 hover:text-slate-200 hover:bg-white/5 transition cursor-pointer"
+                                  title={idea.estado === 'INCUBANDO' ? 'Regresar a Inbox' : 'Mover a Incubación'}
+                                >
+                                  {idea.estado === 'INCUBANDO' ? 'A Inbox' : 'Incubar'}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="pt-2 border-t border-white/5 flex items-center justify-end gap-1">
                               <button
                                 type="button"
-                                onClick={() => handleToggleIncubacion(idea)}
-                                className="px-2 py-1 rounded-lg text-[10px] text-slate-400 hover:text-slate-200 hover:bg-white/5 transition cursor-pointer"
-                                title={idea.estado === 'INCUBANDO' ? 'Regresar a Inbox' : 'Mover a Incubación'}
+                                onClick={() => handleIniciarEdicion(idea)}
+                                className="px-2 py-1 rounded-lg text-[10px] text-slate-400 hover:text-sky-300 hover:bg-white/5 flex items-center gap-1 transition cursor-pointer"
+                                title="Editar idea"
                               >
-                                {idea.estado === 'INCUBANDO' ? 'A Inbox' : 'Incubar'}
+                                <Pencil className="w-3 h-3 text-sky-400" strokeWidth={1.75} />
+                                <span>Editar</span>
                               </button>
                             </div>
                           )}

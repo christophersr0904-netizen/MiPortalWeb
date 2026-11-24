@@ -1173,6 +1173,10 @@ export function sanitizarIdeaPayload(idea: IdeaRecord, fallbackUserId?: string):
     }
   }
 
+  if (Array.isArray(idea.etiquetas) && idea.etiquetas.length > 0) {
+    clarifObj = { ...clarifObj, etiquetas: idea.etiquetas };
+  }
+
   let entidadConvertida: string | null = null;
   if (idea.entidad_convertida) {
     const ecUpper = idea.entidad_convertida.trim().toUpperCase();
@@ -1237,6 +1241,18 @@ export function sanitizarIdeaInbound(
       : JSON.stringify(localPrevio.clarificacion_ia);
   }
 
+  let etiquetas: string[] | undefined = undefined;
+  if (Array.isArray(remoto.etiquetas)) {
+    etiquetas = (remoto.etiquetas as unknown[]).map((t) => String(t));
+  } else if (remoto.clarificacion_ia && typeof remoto.clarificacion_ia === 'object') {
+    const cia = remoto.clarificacion_ia as Record<string, unknown>;
+    if (Array.isArray(cia.etiquetas)) {
+      etiquetas = (cia.etiquetas as unknown[]).map((t) => String(t));
+    }
+  } else if (localPrevio && Array.isArray((localPrevio as unknown as IdeaRecord).etiquetas)) {
+    etiquetas = (localPrevio as unknown as IdeaRecord).etiquetas;
+  }
+
   const nowIso = new Date().toISOString();
   return {
     ...localPrevio,
@@ -1254,6 +1270,7 @@ export function sanitizarIdeaInbound(
       ? remoto.transcripcion_texto
       : (typeof localPrevio?.transcripcion_texto === 'string' ? localPrevio.transcripcion_texto : undefined),
     clarificacion_ia: clarifStr || undefined,
+    etiquetas,
     estado,
     entidad_convertida: typeof remoto.entidad_convertida === 'string'
       ? remoto.entidad_convertida

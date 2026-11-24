@@ -641,6 +641,7 @@ export interface IdeaRecord {
   fecha_captura: string;
   updated_at: string;
   sync_status: SyncStatus;
+  etiquetas?: string[];
 }
 
 export interface CuotaRecord {
