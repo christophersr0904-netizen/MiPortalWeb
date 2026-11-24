@@ -22,9 +22,11 @@ import {
   sanitizarSubtareaInbound,
   sanitizarHitoInbound,
   sanitizarTareaInbound,
-  sanitizarNotaInbound
+  sanitizarNotaInbound,
+  sanitizarIdeaPayload,
+  sanitizarIdeaInbound
 } from './syncPayloadSanitizer';
-import type { TombstoneRecord, DesktopWidgetBridge } from '../types';
+import type { TombstoneRecord, DesktopWidgetBridge, IdeaRecord } from '../types';
 
 export type SyncState = 'synced' | 'syncing' | 'offline' | 'error' | 'reconnecting';
 
@@ -154,7 +156,37 @@ class SyncManager {
     this.initSupabaseClient();
     this.setupNetworkListeners();
     this.setupRealtimeSubscriptions();
-    this.inicializacionPromise = this.resolverUsuarioActivo().then(() => { }).catch(() => { });
+    this.inicializacionPromise = this.resolverUsuarioActivo()
+      .then(() => this.migrarIdeasLocalesAPending())
+      .catch(() => { });
+  }
+
+  /**
+   * REQ-FIX-IDEAS-SYNC-01: Migración defensiva única para marcar ideas locales existentes como 'pending'
+   * evitando que se queden en silencio como 'synced' sin haberse enviado a Supabase.
+   */
+  private async migrarIdeasLocalesAPending(): Promise<void> {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const key = 'pmo_ideas_sync_migrated_v1';
+    if (window.localStorage.getItem(key)) return;
+    try {
+      if (!db.ideas || typeof db.ideas.toArray !== 'function') return;
+      const ideas = await db.ideas.toArray();
+      const updates: IdeaRecord[] = [];
+      for (const i of ideas) {
+        if (i.codigo_legado && i.codigo_legado.startsWith('IDE-20261015-')) continue;
+        if (i.sync_status !== 'pending') {
+          updates.push({ ...i, sync_status: 'pending' });
+        }
+      }
+      if (updates.length > 0) {
+        await db.ideas.bulkPut(updates);
+        console.info(`[SyncManager] Migración v1: ${updates.length} ideas locales marcadas como 'pending' para sincronización`);
+      }
+      window.localStorage.setItem(key, 'true');
+    } catch (err) {
+      console.warn('[SyncManager] Error defensivo en migrarIdeasLocalesAPending:', err);
+    }
   }
 
   /**
@@ -556,6 +588,7 @@ class SyncManager {
         'gastos',
         'ingresos',
         'cuotas',
+        'ideas',
         'configuracion_usuario'
       ];
       let channel = this.supabase.channel('pmo-realtime-channel');
@@ -650,6 +683,8 @@ class SyncManager {
             registroSanitizado = sanitizarHitoInbound(rawNew);
           } else if (targetTable === 'tareas') {
             registroSanitizado = sanitizarTareaInbound(rawNew);
+          } else if (targetTable === 'ideas') {
+            registroSanitizado = sanitizarIdeaInbound(rawNew);
           } else if (targetTable === 'configuracion_usuario') {
             registroSanitizado = {
               id: String(rawNew.id),
@@ -1714,6 +1749,82 @@ class SyncManager {
   }
 
   /**
+   * 12b. Sincroniza ideas pendientes con Supabase y auto-rescata colisiones de código legado (23505)
+   */
+  public async sincronizarIdeas(): Promise<SyncResult> {
+    const result: SyncResult = { success: 0, failed: 0 };
+    if (!db.ideas) return result;
+
+    const pending = await this.obtenerRegistrosPendientes<IdeaRecord>(db.ideas);
+    if (pending.length === 0) return result;
+
+    if (!this.supabase || import.meta.env.VITE_SUPABASE_URL?.includes('mock')) {
+      await Promise.all(pending.map((i) => db.ideas.update(i.id, { sync_status: 'synced' })));
+      result.success = pending.length;
+      return result;
+    }
+
+    for (const idea of pending) {
+      if (this.registrosFkCuarentena.has(idea.id)) {
+        continue;
+      }
+      try {
+        let currentIdea = idea;
+        let payload = sanitizarIdeaPayload(currentIdea, this.currentUserId);
+        this.registrarPushedId(currentIdea.id);
+
+        let { error } = await this.supabase
+          .from('ideas')
+          .upsert(payload, { onConflict: 'id' });
+
+        // Auto-rescate si hay colisión de código legado único (PostgreSQL error 23505)
+        if (error && (error as SupabaseErrorLike).code === '23505') {
+          console.warn(`[SyncManager] Colisión de código único detectada en idea ${currentIdea.codigo_legado}. Auto-rescatando con código anti-colisión...`);
+          const now = new Date();
+          const yy = String(now.getFullYear()).slice(-2);
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const dd = String(now.getDate()).padStart(2, '0');
+          const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+          const nuevoCodigo = `IDE-${yy}${mm}${dd}-${rand}`;
+
+          await db.ideas.update(currentIdea.id, {
+            codigo_legado: nuevoCodigo,
+            updated_at: new Date().toISOString()
+          });
+          currentIdea = { ...currentIdea, codigo_legado: nuevoCodigo };
+          payload = sanitizarIdeaPayload(currentIdea, this.currentUserId);
+
+          const retryRes = await this.supabase
+            .from('ideas')
+            .upsert(payload, { onConflict: 'id' });
+          error = retryRes.error;
+        }
+
+        if (error) {
+          console.error('[SyncManager] Error al sincronizar idea:', currentIdea.codigo_legado, error);
+          await db.ideas.update(currentIdea.id, { sync_status: 'error' });
+          this.registrarFalloRegistro(currentIdea.id, 'ideas', error);
+          result.failed++;
+        } else {
+          this.registrarExitoRegistro(currentIdea.id);
+          await db.ideas.update(currentIdea.id, {
+            sync_status: 'synced',
+            updated_at: new Date().toISOString()
+          });
+          result.success++;
+        }
+      } catch (err: unknown) {
+        console.error('[SyncManager] Excepción al sincronizar idea:', idea.codigo_legado, err);
+        await db.ideas.update(idea.id, { sync_status: 'error' });
+        this.registrarFalloRegistro(idea.id, 'ideas', err);
+        result.failed++;
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * 13. Sincroniza configuración de usuario (cuadernos, metadatos, techos) hacia Supabase
    */
   public async sincronizarConfiguracion(): Promise<SyncResult> {
@@ -2081,6 +2192,7 @@ class SyncManager {
         this.debeOmitirTablaRemota('ingresos') ? Promise.resolve(0) : this.contarPendientes(db.ingresos),
         this.debeOmitirTablaRemota('cuotas') ? Promise.resolve(0) : this.contarPendientes(db.cuotas),
         this.contarPendientes(db.notas),
+        db.ideas ? this.contarPendientes(db.ideas) : Promise.resolve(0),
         db.configuracion_usuario && !this.debeOmitirTablaRemota('configuracion_usuario')
           ? this.contarPendientes(db.configuracion_usuario)
           : Promise.resolve(0)
@@ -2146,6 +2258,7 @@ class SyncManager {
       const resIng = await this.sincronizarIngresos();
       const resCuo = await this.sincronizarCuotas();
       const resNot = await this.sincronizarNotas();
+      const resIde = await this.sincronizarIdeas();
       const resCfg = await this.sincronizarConfiguracion();
 
       // PASO 4: Subir Lápidas (sync_deletions / Tombstones) - REQ-ARCH-75-EXEC
@@ -2165,6 +2278,7 @@ class SyncManager {
         resIng.failed +
         resCuo.failed +
         resNot.failed +
+        resIde.failed +
         resCfg.failed;
 
       if (totalFallidos > 0) {
@@ -2325,6 +2439,7 @@ class SyncManager {
       { tabla: 'ingresos', refDexie: db.ingresos },
       { tabla: 'cuotas', refDexie: db.cuotas },
       { tabla: 'notas', refDexie: db.notas },
+      { tabla: 'ideas', refDexie: db.ideas },
       ...(db.configuracion_usuario
         ? [{ tabla: 'configuracion_usuario', refDexie: db.configuracion_usuario }]
         : [])
@@ -2548,7 +2663,7 @@ class SyncManager {
 
           if (idsPendientesLocales.has(idStr)) continue;
 
-          const existentePorCodigo = codRemoto ? mapaLocalPorCodigo.get(codRemoto) : undefined;
+          const existentePorCodigo = (tabla !== 'ideas' && codRemoto) ? mapaLocalPorCodigo.get(codRemoto) : undefined;
           const existentePorId = mapaLocalPorId.get(idStr);
           const localPrevio = existentePorCodigo || existentePorId;
 
@@ -2571,6 +2686,8 @@ class SyncManager {
             registroFinal = sanitizarTareaInbound(item, localPrevio, proyUuidToCod, hitoUuidToCod, tareaUuidToCod, proyCodToUuid, hitoCodToUuid);
           } else if (tabla === 'notas') {
             registroFinal = sanitizarNotaInbound(item, localPrevio);
+          } else if (tabla === 'ideas') {
+            registroFinal = sanitizarIdeaInbound(item, localPrevio);
           } else if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
             registroFinal = {
               ...fusionarRegistrosDuplicados(existentePorCodigo, registroFinal as Record<string, unknown>),
@@ -2579,7 +2696,7 @@ class SyncManager {
             };
           }
 
-          if (existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
+          if (tabla !== 'ideas' && existentePorCodigo && existentePorCodigo.id && existentePorCodigo.id !== item.id) {
             idsObsoletosAEliminar.push(String(existentePorCodigo.id));
           }
 
@@ -2681,7 +2798,7 @@ class SyncManager {
     if (typeof fetch === 'undefined') return false;
 
     try {
-      const [tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos, metas, hitosPlan, vinculosMeta] = await Promise.all([
+      const [tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos, metas, hitosPlan, vinculosMeta, ideas] = await Promise.all([
         db.tareas.toArray(),
         db.actividades_personales.toArray(),
         db.gastos.toArray(),
@@ -2691,7 +2808,8 @@ class SyncManager {
         db.hitos_wbs.toArray(),
         db.metas_planes.toArray(),
         db.planes_accion_hitos.toArray(),
-        db.habitos_metas_vinculos.toArray()
+        db.habitos_metas_vinculos.toArray(),
+        db.ideas.toArray()
       ]);
 
       const payload = {
@@ -2707,7 +2825,8 @@ class SyncManager {
           hitos,
           metas,
           hitosPlan,
-          vinculosMeta
+          vinculosMeta,
+          ideas
         }
       };
 
@@ -2752,7 +2871,7 @@ class SyncManager {
       const json = await res.json();
       if (!json || !json.data) return false;
 
-      const { tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos, metas, hitosPlan, vinculosMeta } = json.data;
+      const { tareas, actividades, gastos, ingresos, cuotas, proyectos, hitos, metas, hitosPlan, vinculosMeta, ideas } = json.data;
 
       const obtenerKeysPendientes = async (table: Table<unknown, string> | { where: (col: string) => { anyOf?: (v: string[]) => { primaryKeys: () => Promise<unknown[]> }; equals?: (v: string) => { primaryKeys: () => Promise<unknown[]> } } }) => {
         try {
@@ -2776,7 +2895,8 @@ class SyncManager {
         db.hitos_wbs,
         db.metas_planes,
         db.planes_accion_hitos,
-        db.habitos_metas_vinculos
+        db.habitos_metas_vinculos,
+        db.ideas
       ], async () => {
         if (Array.isArray(tareas) && tareas.length > 0) {
           const pendingIds = await obtenerKeysPendientes(db.tareas);
@@ -2827,6 +2947,11 @@ class SyncManager {
           const pendingIds = await obtenerKeysPendientes(db.habitos_metas_vinculos);
           const toPut = vinculosMeta.filter((vm) => vm.id && !pendingIds.has(String(vm.id)));
           if (toPut.length > 0) await db.habitos_metas_vinculos.bulkPut(toPut);
+        }
+        if (Array.isArray(ideas) && ideas.length > 0) {
+          const pendingIds = await obtenerKeysPendientes(db.ideas);
+          const toPut = ideas.filter((i) => i.id && !pendingIds.has(String(i.id)));
+          if (toPut.length > 0) await db.ideas.bulkPut(toPut);
         }
       });
 

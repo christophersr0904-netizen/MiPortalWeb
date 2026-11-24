@@ -23,7 +23,8 @@ import type {
   MetaPlanRecord,
   HitoPlanRecord,
   HabitoMetaVinculo,
-  HabitoLogRecord
+  HabitoLogRecord,
+  IdeaRecord
 } from '../types';
 
 export type RemoteRow = Record<string, unknown>;
@@ -1125,4 +1126,143 @@ export function sanitizarHabitoLogInbound(
     sync_status: 'synced',
     updated_at: sanitizeTimestamp(remoto.updated_at) || sanitizeTimestamp(localPrevio?.updated_at) || new Date().toISOString()
   } as unknown as HabitoLogRecord;
+}
+
+/**
+ * ============================================================================
+ * SANITIZADORES PARA TABLA: IDEAS (BBDD_Ideas)
+ * ============================================================================
+ */
+
+export function sanitizarIdeaPayload(idea: IdeaRecord, fallbackUserId?: string): RemoteRow {
+  let tipoCaptura = 'TEXTO';
+  const tc = String(idea.tipo_captura || '').toUpperCase();
+  if (tc === 'AUDIO' || tc === 'VOZ') {
+    tipoCaptura = 'AUDIO';
+  } else if (tc === 'FOTO') {
+    tipoCaptura = 'FOTO';
+  }
+
+  let estado = 'Inbox';
+  const est = String(idea.estado || '').toUpperCase();
+  if (est === 'INCUBACION' || est === 'INCUBANDO') {
+    estado = 'Incubacion';
+  } else if (est === 'PROCESADA' || est === 'CONVERTIDA') {
+    estado = 'Procesada';
+  } else if (est === 'ARCHIVADA') {
+    estado = 'Archivada';
+  }
+
+  let urlAdjunto: string | null = idea.url_adjunto_drive || null;
+  if (urlAdjunto && urlAdjunto.startsWith('data:') && urlAdjunto.length > 500 * 1024) {
+    console.warn(`[SyncSanitizer] url_adjunto_drive en idea ${idea.codigo_legado} supera 500KB; omitido de sync remoto para prevenir 413 Payload Too Large`);
+    urlAdjunto = null;
+  }
+
+  let clarifObj: Record<string, unknown> = {};
+  if (idea.clarificacion_ia) {
+    if (typeof idea.clarificacion_ia === 'object') {
+      clarifObj = idea.clarificacion_ia as Record<string, unknown>;
+    } else {
+      try {
+        const parsed = JSON.parse(idea.clarificacion_ia);
+        clarifObj = typeof parsed === 'object' && parsed !== null ? parsed : { raw: idea.clarificacion_ia };
+      } catch {
+        clarifObj = { raw: idea.clarificacion_ia };
+      }
+    }
+  }
+
+  let entidadConvertida: string | null = null;
+  if (idea.entidad_convertida) {
+    const ecUpper = idea.entidad_convertida.trim().toUpperCase();
+    if (ecUpper === 'TAREA') entidadConvertida = 'TAREA';
+    else if (ecUpper === 'PROYECTO') entidadConvertida = 'PROYECTO';
+    else if (ecUpper === 'HABITO' || ecUpper === 'HÁBITO') entidadConvertida = 'HABITO';
+    else if (ecUpper === 'NOTA') entidadConvertida = 'NOTA';
+  }
+
+  const nowIso = new Date().toISOString();
+  const fechaCaptura = sanitizeTimestamp(idea.fecha_captura) || nowIso;
+  const updatedAt = sanitizeTimestamp(idea.updated_at) || nowIso;
+
+  return {
+    id: idea.id,
+    user_id: isUuid(idea.user_id) ? idea.user_id : (fallbackUserId && isUuid(fallbackUserId) ? fallbackUserId : DEFAULT_USER_ID),
+    codigo_legado: idea.codigo_legado,
+    enunciado_idea: idea.enunciado_idea || 'Idea sin título',
+    detalle_contexto: idea.detalle_contexto || '',
+    tipo_captura: tipoCaptura,
+    url_adjunto_drive: urlAdjunto,
+    transcripcion_texto: idea.transcripcion_texto || null,
+    clarificacion_ia: clarifObj,
+    estado,
+    entidad_convertida: entidadConvertida,
+    id_entidad_destino_legado: idea.id_entidad_destino || null,
+    fecha_captura: fechaCaptura,
+    fecha_procesada: estado === 'Procesada' ? updatedAt : null,
+    fecha_archivado: estado === 'Archivada' ? updatedAt : null,
+    sync_status: 'synced',
+    updated_at: updatedAt
+  };
+}
+
+export const sanitizarIdeaOutbound = sanitizarIdeaPayload;
+
+export function sanitizarIdeaInbound(
+  remoto: RemoteRow,
+  localPrevio?: RemoteRow | null
+): IdeaRecord {
+  const tcRaw = String(remoto.tipo_captura || localPrevio?.tipo_captura || 'TEXTO').toUpperCase();
+  const tipoCaptura = tcRaw === 'AUDIO' ? 'VOZ' : tcRaw;
+
+  const estRaw = String(remoto.estado || localPrevio?.estado || 'Inbox');
+  let estado = 'CAPTURA';
+  if (estRaw === 'Incubacion' || estRaw === 'INCUBANDO') {
+    estado = 'INCUBANDO';
+  } else if (estRaw === 'Procesada' || estRaw === 'CONVERTIDA') {
+    estado = 'CONVERTIDA';
+  } else if (estRaw === 'Archivada' || estRaw === 'ARCHIVADA') {
+    estado = 'ARCHIVADA';
+  }
+
+  let clarifStr = '';
+  if (remoto.clarificacion_ia !== undefined && remoto.clarificacion_ia !== null) {
+    clarifStr = typeof remoto.clarificacion_ia === 'string'
+      ? remoto.clarificacion_ia
+      : JSON.stringify(remoto.clarificacion_ia);
+  } else if (localPrevio?.clarificacion_ia) {
+    clarifStr = typeof localPrevio.clarificacion_ia === 'string'
+      ? localPrevio.clarificacion_ia
+      : JSON.stringify(localPrevio.clarificacion_ia);
+  }
+
+  const nowIso = new Date().toISOString();
+  return {
+    ...localPrevio,
+    ...remoto,
+    id: (remoto.id ? String(remoto.id) : (localPrevio?.id ? String(localPrevio.id) : '')),
+    user_id: String(remoto.user_id || localPrevio?.user_id || DEFAULT_USER_ID),
+    codigo_legado: String(remoto.codigo_legado || localPrevio?.codigo_legado || ''),
+    enunciado_idea: String(remoto.enunciado_idea || localPrevio?.enunciado_idea || 'Idea sin título'),
+    detalle_contexto: String(remoto.detalle_contexto ?? localPrevio?.detalle_contexto ?? ''),
+    tipo_captura: tipoCaptura,
+    url_adjunto_drive: typeof remoto.url_adjunto_drive === 'string'
+      ? remoto.url_adjunto_drive
+      : (typeof localPrevio?.url_adjunto_drive === 'string' ? localPrevio.url_adjunto_drive : undefined),
+    transcripcion_texto: typeof remoto.transcripcion_texto === 'string'
+      ? remoto.transcripcion_texto
+      : (typeof localPrevio?.transcripcion_texto === 'string' ? localPrevio.transcripcion_texto : undefined),
+    clarificacion_ia: clarifStr || undefined,
+    estado,
+    entidad_convertida: typeof remoto.entidad_convertida === 'string'
+      ? remoto.entidad_convertida
+      : (typeof localPrevio?.entidad_convertida === 'string' ? localPrevio.entidad_convertida : undefined),
+    id_entidad_destino: typeof remoto.id_entidad_destino_legado === 'string'
+      ? remoto.id_entidad_destino_legado
+      : (typeof localPrevio?.id_entidad_destino === 'string' ? localPrevio.id_entidad_destino : undefined),
+    fecha_captura: String(remoto.fecha_captura || localPrevio?.fecha_captura || nowIso),
+    updated_at: sanitizeTimestamp(remoto.updated_at) || sanitizeTimestamp(localPrevio?.updated_at) || nowIso,
+    sync_status: 'synced'
+  } as unknown as IdeaRecord;
 }

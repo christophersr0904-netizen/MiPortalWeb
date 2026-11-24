@@ -248,8 +248,8 @@ describe('REQ-SYS-010-REALTIME: Supabase Realtime, Filtro Anti-Eco y Debounce', 
       syncManager.setupRealtimeSubscriptions();
 
       expect(channelMock).toHaveBeenCalledWith('pmo-realtime-channel');
-      // REQ-SYNC-41-EXEC / REQ-SYNC-PROD-07-FIX: Debe suscribirse a las 13 tablas operativas en Realtime (incluyendo configuracion_usuario)
-      expect(onMock).toHaveBeenCalledTimes(13);
+      // REQ-SYNC-41-EXEC / REQ-SYNC-PROD-07-FIX / REQ-FIX-IDEAS-SYNC-01: Debe suscribirse a las 14 tablas operativas en Realtime (incluyendo configuracion_usuario e ideas)
+      expect(onMock).toHaveBeenCalledTimes(14);
       expect(onMock).toHaveBeenCalledWith(
         'postgres_changes',
         expect.objectContaining({ table: 'tareas' }),
@@ -258,6 +258,11 @@ describe('REQ-SYS-010-REALTIME: Supabase Realtime, Filtro Anti-Eco y Debounce', 
       expect(onMock).toHaveBeenCalledWith(
         'postgres_changes',
         expect.objectContaining({ table: 'proyectos' }),
+        expect.any(Function)
+      );
+      expect(onMock).toHaveBeenCalledWith(
+        'postgres_changes',
+        expect.objectContaining({ table: 'ideas' }),
         expect.any(Function)
       );
       expect(onMock).toHaveBeenCalledWith(

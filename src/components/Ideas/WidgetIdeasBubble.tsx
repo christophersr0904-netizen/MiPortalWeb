@@ -70,6 +70,19 @@ function acortarNombreArchivo(nombre: string, maxLen: number = 22): string {
   return `${nombre.slice(0, maxLen - 3)}...`;
 }
 
+/**
+ * REQ-FIX-IDEAS-SYNC-01: Generador Offline-First sin colisión para códigos de ideas.
+ * Formato canónico: IDE-YYMMDD-XXXX (6 dígitos fecha + 4 alfanuméricos aleatorios)
+ */
+function generarCodigoIdeaOffline(): string {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `IDE-${yy}${mm}${dd}-${rand}`;
+}
+
 function calcularBytesDataUri(dataUri: string): number {
   const commaIdx = dataUri.indexOf(',');
   const base64 = commaIdx >= 0 ? dataUri.slice(commaIdx + 1) : dataUri;
@@ -562,8 +575,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     setGuardando(true);
     try {
       const nowIso = new Date().toISOString();
-      const count = await db.ideas.count();
-      const codigoLegado = `IDE-${String(count + 1).padStart(3, '0')}`;
+      const codigoLegado = generarCodigoIdeaOffline();
 
       // Desglose: primera línea para Enunciado, resto para Detalle
       const lineas = textoLimpio ? textoLimpio.split(/\r?\n/) : [];
@@ -588,8 +600,11 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
         estado: 'CAPTURA',
         fecha_captura: nowIso,
         updated_at: nowIso,
-        sync_status: 'synced'
+        sync_status: 'pending'
       });
+
+      // Disparar sincronización bidireccional en segundo plano
+      syncManager.sincronizarTodo().catch(() => { });
 
       resetFormulario();
       setPopoverAbierto(false);
@@ -731,6 +746,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     }
 
     mostrarToastCobalt('Idea convertida en Tarea', 'success');
+    syncManager.sincronizarTodo().catch(() => { });
   };
 
   // Convertir idea a Proyecto
@@ -770,6 +786,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     }
 
     mostrarToastCobalt('Idea convertida en Proyecto', 'success');
+    syncManager.sincronizarTodo().catch(() => { });
   };
 
   // Convertir idea a Hábito
@@ -811,6 +828,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     }
 
     mostrarToastCobalt('Idea convertida en Hábito', 'success');
+    syncManager.sincronizarTodo().catch(() => { });
   };
 
   // Convertir idea a Nota
@@ -853,6 +871,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     }
 
     mostrarToastCobalt('Idea convertida en Nota', 'success');
+    syncManager.sincronizarTodo().catch(() => { });
   };
 
   // Alternar Incubación
@@ -863,6 +882,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
       updated_at: new Date().toISOString(),
       sync_status: 'pending'
     });
+    syncManager.sincronizarTodo().catch(() => { });
   };
 
   const procesarArchivoSeleccionado = async (file: File) => {

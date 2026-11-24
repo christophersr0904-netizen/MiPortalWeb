@@ -12,6 +12,8 @@ import {
   sanitizarSubtareaInbound,
   sanitizarHitoInbound,
   sanitizarTareaInbound,
+  sanitizarIdeaPayload,
+  sanitizarIdeaInbound,
   sanitizeDate,
   isUuid,
   DEFAULT_USER_ID,
@@ -23,7 +25,8 @@ import type {
   TareaRecord,
   NotaRecord,
   ActividadPersonal,
-  SubtareaPaso
+  SubtareaPaso,
+  IdeaRecord
 } from '../../types';
 
 describe('REQ-SYNC-02: syncPayloadSanitizer (Sanitización Pura de Payloads)', () => {
@@ -273,6 +276,55 @@ describe('REQ-SYNC-02: syncPayloadSanitizer (Sanitización Pura de Payloads)', (
       expect(Array.isArray(payload.adjuntos_drive_json)).toBe(true);
       expect(Array.isArray(payload.enlaces_entidades_json)).toBe(true);
       expect(Array.isArray(payload.etiquetas)).toBe(true);
+    });
+  });
+
+  describe('5b. Sanitización de Ideas (sanitizarIdeaPayload y sanitizarIdeaInbound)', () => {
+    const ideaBase: IdeaRecord = {
+      id: '550e8400-e29b-41d4-a716-446655440099',
+      user_id: dummyUser,
+      codigo_legado: 'IDE-261124-ABCD',
+      enunciado_idea: 'Rediseñar el módulo de finanzas con Tailwind',
+      detalle_contexto: 'Usar componentes Bento con estética Cobalt A.2.2',
+      tipo_captura: 'VOZ',
+      estado: 'INCUBANDO',
+      fecha_captura: '2026-11-24T10:00:00Z',
+      updated_at: '2026-11-24T10:00:00Z',
+      sync_status: 'pending'
+    };
+
+    it('mapea tipo_captura VOZ a AUDIO y estado INCUBANDO a Incubacion en outbound', () => {
+      const payload = sanitizarIdeaPayload(ideaBase, dummyUser);
+      expect(payload.tipo_captura).toBe('AUDIO');
+      expect(payload.estado).toBe('Incubacion');
+      expect(payload.sync_status).toBe('synced');
+    });
+
+    it('omite url_adjunto_drive superior a 500KB para evitar HTTP 413 Payload Too Large', () => {
+      const ideaPesada: IdeaRecord = {
+        ...ideaBase,
+        url_adjunto_drive: 'data:image/png;base64,' + 'A'.repeat(600 * 1024)
+      };
+      const payload = sanitizarIdeaPayload(ideaPesada, dummyUser);
+      expect(payload.url_adjunto_drive).toBeNull();
+    });
+
+    it('sanitizarIdeaInbound normaliza tipos remotos de regreso al modelo local', () => {
+      const remoto = {
+        id: '550e8400-e29b-41d4-a716-446655440099',
+        user_id: dummyUser,
+        codigo_legado: 'IDE-261124-ABCD',
+        enunciado_idea: 'Rediseñar el módulo de finanzas',
+        tipo_captura: 'AUDIO',
+        estado: 'Incubacion',
+        clarificacion_ia: { sugerencia: 'Crear hito' },
+        updated_at: '2026-11-24T12:00:00Z'
+      };
+      const local = sanitizarIdeaInbound(remoto);
+      expect(local.tipo_captura).toBe('VOZ');
+      expect(local.estado).toBe('INCUBANDO');
+      expect(local.clarificacion_ia).toContain('sugerencia');
+      expect(local.sync_status).toBe('synced');
     });
   });
 

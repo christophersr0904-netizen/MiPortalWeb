@@ -240,7 +240,6 @@ export async function sanearDuplicadosDexie(): Promise<number> {
       db.gastos as unknown as Table<RegistroCanonicoBase, string>,
       db.ingresos as unknown as Table<RegistroCanonicoBase, string>,
       db.notas as unknown as Table<RegistroCanonicoBase, string>,
-      db.ideas as unknown as Table<RegistroCanonicoBase, string>,
       db.cuotas as unknown as Table<RegistroCanonicoBase, string>
     ];
 

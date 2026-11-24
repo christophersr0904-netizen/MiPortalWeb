@@ -52,6 +52,30 @@ Esta sección define las directrices y contratos defensivos inviolables del sist
 
 ## CHANGELOG DE ARQUITECTURA
 
+### FASE 8.29 — Sincronización Bidireccional Multi-Dispositivo y Códigos Offline-First en Módulo Ideas (REQ-FIX-IDEAS-SYNC-01)
+- **Fecha:** Noviembre 2026 | **Archivos modificados:** `src/db/db.ts`, `src/services/syncPayloadSanitizer.ts`, `src/services/syncManager.ts`, `src/components/Ideas/WidgetIdeasBubble.tsx`, `src/services/__tests__/syncManager.test.ts`, `src/services/__tests__/syncManagerRealtime.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+- **Descripción:**
+  - **Blindaje Anti-Pérdida en Dexie (`src/db/db.ts`):**
+    - Se retiró `db.ideas` del arreglo `tablasCanonicas` en `sanearDuplicadosDexie()`, erradicando la eliminación silenciosa de ideas independientes que compartían accidentalmente código correlativo `IDE-009` entre diferentes dispositivos. Las ideas se diferencian estrictamente por UUID (`id`).
+  - **Sanitización Bidireccional y Mapeo de Enums (`src/services/syncPayloadSanitizer.ts`):**
+    - Se implementaron y exportaron `sanitizarIdeaPayload` (outbound) y `sanitizarIdeaInbound` (inbound) con contratos estrictos (0 coerciones `any`).
+    - Mapeo bidireccional estricto con las restricciones PostgreSQL:
+      - `tipo_captura`: `'VOZ'` / `'AUDIO'` ↔ `'AUDIO'`; `'ARCHIVO'` ↔ `'TEXTO'`; `'FOTO'` ↔ `'FOTO'`.
+      - `estado`: `'CAPTURA'` / `'REVISADA'` ↔ `'Inbox'`; `'INCUBANDO'` ↔ `'Incubacion'`; `'CONVERTIDA'` ↔ `'Procesada'`; `'ARCHIVADA'` ↔ `'Archivada'`.
+      - `clarificacion_ia`: serialización a objeto JSONB válido `{}` o `{ raw: ... }` para satisfacer la restricción NOT NULL de PostgreSQL.
+      - `url_adjunto_drive`: omisión remota automática si excede 500 KB (previene fallos HTTP 413 Payload Too Large) preservando la imagen completa en el Dexie local.
+  - **Cableado Completo del Pipeline de Sincronización (`src/services/syncManager.ts`):**
+    - **Migración local `pmo_ideas_sync_migrated_v1`:** Al inicializar, busca ideas locales no sembradas y las marca como `sync_status: 'pending'`, asegurando que ideas creadas previamente en el dispositivo se suban a Supabase sin requerir edición manual.
+    - **Método `sincronizarIdeas()` con Auto-Rescate de Colisiones:** Despacha con `onConflict: 'id'` y, ante violaciones de unicidad de PostgreSQL (`code === '23505'` en `codigo_legado`), genera automáticamente un nuevo código único `IDE-YYMMDD-XXXX`, actualiza Dexie y reintenta el upsert inmediatamente sin pérdida de datos.
+    - **Integración Topológica Push/Pull:** Integrada la cuenta de pendientes en `syncPendingRecords()`, la descarga paginada en `descargarDatosDescendientes()`, la suscripción a eventos PostgreSQL Realtime (`tablasMonitoreadas` ampliada a 14 entidades) y el puente loopback HUD de escritorio (`guardarSnapshotEnPuenteLocal` y `cargarSnapshotDesdePuenteLocal`).
+  - **Generador de Códigos Offline-First (`src/components/Ideas/WidgetIdeasBubble.tsx`):**
+    - Se reemplazó el generador basado en recuento lineal (`count + 1`) por `generarCodigoIdeaOffline()`, que genera códigos deterministas y libres de colisión `IDE-YYMMDD-XXXX` (fecha + 4 caracteres alfanuméricos aleatorios).
+    - Las nuevas ideas ahora nacen con `sync_status: 'pending'` (en lugar del erróneo `'synced'`) y disparan sincronización en segundo plano automáticamente.
+    - Las conversiones a Tarea, Proyecto, Hábito y Nota, así como el toggle de incubación, disparan sincronización inmediata.
+  - **Garantía de Calidad y Validación:**
+    - Se agregaron pruebas unitarias para `sanitizarIdeaPayload` y `sanitizarIdeaInbound` en `syncManager.test.ts` y se actualizó la aserción de Realtime a 14 tablas en `syncManagerRealtime.test.ts`.
+    - Resultado: 36 suites y 377 pruebas en verde en Vitest, `npx tsc --noEmit` exit code 0, y build de producción de 435 kB (< 500 kB).
+
 ### FASE 8.28 — Extracción de Motor de Estado, Filtros, Agrupación y Handlers (useKanbanBoard) (REQ-REFACTOR-P1-07)
 - **Fecha:** Noviembre 2026 | **Archivos creados/modificados:** `src/hooks/useKanbanBoard.ts` (Nuevo), `src/components/Views/ViewKanban.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
 - **Descripción:**
