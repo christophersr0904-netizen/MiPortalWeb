@@ -40,6 +40,13 @@ export interface EventoGoogleCalendarV3 {
   extendedProperties?: {
     private: Record<string, string>;
   };
+  reminders?: {
+    useDefault: boolean;
+    overrides?: Array<{
+      method: 'popup' | 'email';
+      minutes: number;
+    }>;
+  };
 }
 
 /**
@@ -454,6 +461,17 @@ export function construirEventoGoogleCalendarV3(
     }
   }
 
+  const recordatorioRaw = resolverCampo(
+    actividad,
+    'recordatorio_minutos',
+    'recordatorioMinutos',
+    'minutos_recordatorio'
+  );
+  const minutosRecordatorio =
+    typeof recordatorioRaw === 'number' && !isNaN(recordatorioRaw) && recordatorioRaw >= 0
+      ? Math.round(recordatorioRaw)
+      : 10;
+
   return {
     summary,
     description: construirDescripcionCalendar(actividad),
@@ -473,6 +491,15 @@ export function construirEventoGoogleCalendarV3(
         categoriaVida: String(actividad.categoria_vida || ''),
         tipoCompromiso: String(actividad.tipo_compromiso || 'HABITUAL')
       }
+    },
+    reminders: {
+      useDefault: false,
+      overrides: [
+        {
+          method: 'popup',
+          minutes: minutosRecordatorio
+        }
+      ]
     }
   };
 }
@@ -608,6 +635,25 @@ export function generarArchivoICS(
       }
     }
   }
+
+  const recordatorioRaw = resolverCampo(
+    actividad,
+    'recordatorio_minutos',
+    'recordatorioMinutos',
+    'minutos_recordatorio'
+  );
+  const minutosRecordatorio =
+    typeof recordatorioRaw === 'number' && !isNaN(recordatorioRaw) && recordatorioRaw >= 0
+      ? Math.round(recordatorioRaw)
+      : 10;
+
+  lineas.push(
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    'DESCRIPTION:Recordatorio MiPortalWeb',
+    `TRIGGER:-PT${minutosRecordatorio}M`,
+    'END:VALARM'
+  );
 
   lineas.push('END:VEVENT', 'END:VCALENDAR');
   return lineas.join('\r\n');

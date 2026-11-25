@@ -11377,3 +11377,50 @@ supabase functions deploy gcal-auth
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (374/374 tests al 100% verde)**.
 - **Compilador de Producción:** `npx vite build` $\rightarrow$ Exit Code 0 (2,934 módulos transformados en 10.52s, `main-*.js` en 424.59 kB < 500 kB).
+
+---
+
+### [REQ-FIX-GCAL-REMINDERS-01: Inyección de Recordatorios Explícitos (10 min popup) en Google Calendar v3 y VALARM en ICS]
+**Fecha:** Noviembre 2026 | **Fase:** 8.31 (Notificaciones y Alarmas en Agendamiento y Exportación Calendario) | **Archivos Modificados:** `src/utils/recurrenceEngine.ts`, `src/utils/__tests__/recurrenceEngine.test.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico y Causa Raíz
+- **Comportamiento de Google Calendar API v3:** En calendarios secundarios (`MiPortalWeb - Hábitos`, `MiPortalWeb - Proyectos`, `MiPortalWeb - Finanzas`), la configuración por defecto de recordatorios (`defaultReminders`) es un array vacío `[]`. A diferencia del calendario principal (`primary`), la API no hereda notificaciones del usuario a menos que se especifique explícitamente `reminders: { useDefault: false, overrides: [...] }`.
+- **Ausencia en el Contrato del Engine:** La interfaz `EventoGoogleCalendarV3` carecía del campo tipado `reminders`, y tanto `construirEventoGoogleCalendarV3` como `generarArchivoICS` omitían la inyección de notificaciones emergentes y componentes de alarma estándar RFC-5545 (`VALARM`).
+
+#### 2. Solución de Ingeniería Implementada
+1. **Ampliación de Interfaz `EventoGoogleCalendarV3`:**
+   - Se añadió el contrato tipado estricto (0 `any`):
+     ```ts
+     reminders?: {
+       useDefault: boolean;
+       overrides?: Array<{
+         method: 'popup' | 'email';
+         minutes: number;
+       }>;
+     };
+     ```
+2. **Inyección de Recordatorio Explícito en `construirEventoGoogleCalendarV3`:**
+   - Resolución defensiva de minutos mediante `resolverCampo(actividad, 'recordatorio_minutos', 'recordatorioMinutos', 'minutos_recordatorio')`. Si no está definido o no es número válido, se establece el estándar canónico de **10 minutos**.
+   - Se inyecta en el objeto retornado:
+     ```ts
+     reminders: {
+       useDefault: false,
+       overrides: [{ method: 'popup', minutes: minutosRecordatorio }]
+     }
+     ```
+   - Dado que `calendarSyncService.ts` serializa directamente `eventoV3` en los payloads `POST` y `PATCH` de Google Calendar API v3, todas las entidades agendadas (Actividades, Hábitos, Tareas, Gastos, Ingresos) reciben de inmediato el override de notificación push/popup en celular y escritorio.
+3. **Inyección de Componente `VALARM` en `generarArchivoICS`:**
+   - Antes de `END:VEVENT`, se incluye el bloque canónico RFC-5545:
+     ```ics
+     BEGIN:VALARM
+     ACTION:DISPLAY
+     DESCRIPTION:Recordatorio MiPortalWeb
+     TRIGGER:-PT10M
+     END:VALARM
+     ```
+   - Compatible con Apple Calendar, Microsoft Outlook y Google Calendar al importar archivos `.ics`.
+
+#### 3. Certificación QA y Desempeño
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores de tipado).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (377/377 tests al 100% verde)**, incorporando aserciones de `reminders` por defecto (10 min), override personalizado (15 min) y presencia de `VALARM` con `TRIGGER:-PT10M`.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,935 módulos transformados, `main-*.js` en 441.77 kB < 500 kB).

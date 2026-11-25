@@ -161,6 +161,21 @@ describe('Motor Unificado de Recurrencias y Estándar RFC-5545 [REQ-UI-38-EXEC]'
         'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
         'EXDATE;TZID=America/Lima:20261118T063000'
       ]);
+      expect(ev.reminders).toEqual({
+        useDefault: false,
+        overrides: [{ method: 'popup', minutes: 10 }]
+      });
+
+      // Override de minutos de recordatorio explícito
+      const evCustom = construirEventoGoogleCalendarV3({
+        nombre_actividad: 'Reunión Estratégica',
+        fecha_programada: '2026-11-12',
+        recordatorio_minutos: 15
+      });
+      expect(evCustom.reminders).toEqual({
+        useDefault: false,
+        overrides: [{ method: 'popup', minutes: 15 }]
+      });
     });
 
     it('construye URL estándar Google Calendar TEMPLATE y archivo .ics válidos', () => {
@@ -187,6 +202,10 @@ describe('Motor Unificado de Recurrencias y Estándar RFC-5545 [REQ-UI-38-EXEC]'
       expect(ics).toContain('DTSTART;TZID=America/Lima:20261112T200000');
       expect(ics).toContain('DTEND;TZID=America/Lima:20261112T210000');
       expect(ics).toContain('RRULE:FREQ=DAILY');
+      expect(ics).toContain('BEGIN:VALARM');
+      expect(ics).toContain('ACTION:DISPLAY');
+      expect(ics).toContain('TRIGGER:-PT10M');
+      expect(ics).toContain('END:VALARM');
       expect(ics).toContain('END:VCALENDAR');
     });
   });
