@@ -11424,3 +11424,36 @@ supabase functions deploy gcal-auth
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores de tipado).
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (377/377 tests al 100% verde)**, incorporando aserciones de `reminders` por defecto (10 min), override personalizado (15 min) y presencia de `VALARM` con `TRIGGER:-PT10M`.
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,935 módulos transformados, `main-*.js` en 441.77 kB < 500 kB).
+
+---
+
+### [REQ-UX-IDEAS-EDIT-02: Refinamiento de Tarjetas en Repositorio de Ideas (Click-to-Edit, Cuadro Unificado, Borrado Seguro e Iconos Ghost)]
+**Fecha:** Noviembre 2026 | **Fase:** 8.32 (Ergonomía de Interacción, Click-to-Edit y Borrado Seguro en Repositorio de Ideas) | **Archivos Modificados:** `src/components/Ideas/WidgetIdeasBubble.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Diagnóstico y Necesidad de Refactorización UI/UX
+- **Saturación Visual:** Las tarjetas de ideas en `WidgetIdeasBubble.tsx` contenían 2 botones explícitos de `Pencil` (en la cabecera y en la barra de acciones) junto a botones de conversión con etiquetas de texto redundantes (`Tarea`, `Proyecto`, `Hábito`, `Nota`, `Editar`, `Incubar`), ocupando espacio horizontal excesivo.
+- **Formulario Rígido de Edición:** El modo inline previo apilaba 3 inputs separados (Título, Detalle, Etiquetas), rompiendo la agilidad de la captura rápida original.
+- **Carencia de Borrado Seguro:** No existía opción directa de eliminación para descartar ideas descartadas u obsoletas con soporte de lápidas (`tombstones`) en `sync_deletions`.
+
+#### 2. Solución de Ingeniería Implementada
+1. **Click-to-Edit Directo y Ergonómico:**
+   - Se removieron los botones `Pencil` de la cabecera y barra de acciones.
+   - El bloque textual (enunciado + detalle) se convirtió en disparador directo de edición (`onClick={() => handleIniciarEdicion(idea)}`), estilizado con `cursor-text`, `title="Clic para editar"`, `hover:bg-white/[0.03]` y microtransición suave de color en hover (`group-hover/texto:text-sky-200`).
+2. **Cuadro de Edición Unificado (Paridad con Captura Inicial):**
+   - Chasis limpio Cobalt (`bg-[#0B1221]`, `border-sky-500/40`, `ring-1 ring-sky-500/20`).
+   - Campo de texto unificado fluido donde la primera línea actúa como enunciado y el resto como detalle, extrayendo automáticamente `#etiquetas` inline vía regex (`/#([\w-]+)/g`).
+   - Barra inferior minimalista con atajos (`Ctrl+Enter` para guardar, `Escape` para cancelar) y botones compactos Cancelar (ghost) y Guardar (Cobalt).
+3. **Eliminación Segura con Tombstone Multi-Dispositivo:**
+   - Función `handleEliminarIdea`:
+     - Borrado físico en Dexie (`db.ideas.delete(idea.id)`).
+     - Registro mandatorio de tombstone vía `registrarTombstone('ideas', idea.id)` en `db.sync_deletions` y `db.tombstones` con `sync_status: 'pending'`.
+     - Sincronización en segundo plano con `syncManager.sincronizarTodo()`, impidiendo que la idea eliminada reviva en otros dispositivos (celular, laptop, PC).
+     - Confirmación inline de 2 clics (`¿Eliminar?` con icono `Trash2` + botón `X` de cancelación) sin recurrir a diálogos bloqueantes de navegador.
+4. **Iconografía Ghost y Pulido Cobalt Aerodynamic (A.2.2):**
+   - Barra de acciones convertida a iconos Ghost (`bg-transparent border-transparent`, Lucide `strokeWidth={1.75}`, `opacity-70 group-hover:opacity-100`).
+   - Hover táctil `hover:bg-white/[0.06]` con acentos semánticos cromáticos (`hover:text-indigo-400` para Tarea, `hover:text-purple-400` para Proyecto, `hover:text-emerald-400` para Hábito, `hover:text-amber-400` para Nota, `hover:text-sky-300`/`hover:text-amber-400` para Incubación/Inbox, `hover:text-rose-400` para Eliminar).
+
+#### 3. Certificación QA y Desempeño
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores, 0 `any` nuevos).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (377/377 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,935 módulos transformados en 7.97s, `main-*.js` en 442.77 kB < 500 kB).

@@ -22,11 +22,13 @@ import {
   GripVertical,
   Image as ImageIcon,
   Mic,
-  Pencil,
-  Check
+  Check,
+  Trash2,
+  Archive,
+  Inbox
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db/db';
+import { db, registrarTombstone } from '../../db/db';
 import type { IdeaRecord, NotaRecord } from '../../types';
 import { syncManager } from '../../services/syncManager';
 import { generarCodigoCorrelativoSeguro } from '../../utils/entityNormalizer';
@@ -506,12 +508,11 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
   const [tabVentana, setTabVentana] = useState<TabIdeasVentana>('inbox');
   const [busquedaDrawer, setBusquedaDrawer] = useState('');
 
-  // Estados para Edición Inline de Ideas (REQ-FEAT-IDEAS-EDIT-01)
+  // Estados para Edición Inline y Eliminación de Ideas (REQ-UX-IDEAS-EDIT-02)
   const [ideaEditandoId, setIdeaEditandoId] = useState<string | null>(null);
-  const [draftTitulo, setDraftTitulo] = useState('');
-  const [draftContenido, setDraftContenido] = useState('');
-  const [draftEtiquetas, setDraftEtiquetas] = useState('');
+  const [draftTexto, setDraftTexto] = useState('');
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+  const [confirmandoEliminarId, setConfirmandoEliminarId] = useState<string | null>(null);
 
   // Atajos globales ejecutivos Ctrl+I / Alt+I para captura rápida (REQ-UI-31-HOTFIX)
   useEffect(() => {
@@ -895,43 +896,60 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     syncManager.sincronizarTodo().catch(() => { });
   };
 
-  // Handlers para Edición Inline de Ideas (REQ-FEAT-IDEAS-EDIT-01)
+  // Handlers para Edición Inline y Eliminación de Ideas (REQ-UX-IDEAS-EDIT-02)
   const handleIniciarEdicion = (idea: IdeaRecord) => {
     setIdeaEditandoId(idea.id);
-    setDraftTitulo(idea.enunciado_idea || '');
-    setDraftContenido(idea.detalle_contexto || '');
-    const tagsArray = Array.isArray(idea.etiquetas) && idea.etiquetas.length > 0
-      ? idea.etiquetas
-      : ((idea.enunciado_idea || '').match(/#[\w-]+/g) || []).map((t) => t.replace(/^#/, ''));
-    setDraftEtiquetas(tagsArray.join(', '));
+    let textoCompleto = (idea.enunciado_idea || '').trim();
+    if (idea.detalle_contexto && idea.detalle_contexto.trim()) {
+      textoCompleto += '\n' + idea.detalle_contexto.trim();
+    }
+    if (Array.isArray(idea.etiquetas) && idea.etiquetas.length > 0) {
+      const tagsFaltantes = idea.etiquetas.filter(
+        (t) => !textoCompleto.toLowerCase().includes(`#${t.toLowerCase()}`)
+      );
+      if (tagsFaltantes.length > 0) {
+        textoCompleto += '\n' + tagsFaltantes.map((t) => `#${t}`).join(' ');
+      }
+    }
+    setDraftTexto(textoCompleto);
   };
 
   const handleCancelarEdicion = useCallback(() => {
     setIdeaEditandoId(null);
-    setDraftTitulo('');
-    setDraftContenido('');
-    setDraftEtiquetas('');
+    setDraftTexto('');
   }, []);
 
   const handleGuardarEdicion = async (idea: IdeaRecord) => {
-    const tituloLimpio = draftTitulo.trim();
-    if (!tituloLimpio) {
+    const textoLimpio = draftTexto.trim();
+    if (!textoLimpio) {
+      mostrarToastCobalt('El texto de la idea no puede estar vacío', 'warning');
+      return;
+    }
+
+    const lineas = textoLimpio.split(/\r?\n/);
+    const primeraLinea = lineas[0].trim();
+    if (!primeraLinea) {
       mostrarToastCobalt('El título de la idea no puede estar vacío', 'warning');
       return;
+    }
+
+    const detalleFinal = lineas.slice(1).join('\n').trim();
+
+    // Extraer #etiquetas del texto completo
+    const tagsRegex = /#([\w-]+)/g;
+    const tagsEncontradas = new Set<string>();
+    let match;
+    while ((match = tagsRegex.exec(textoLimpio)) !== null) {
+      if (match[1]) tagsEncontradas.add(match[1].toLowerCase());
     }
 
     setGuardandoEdicion(true);
     try {
       const nowIso = new Date().toISOString();
-      const etiquetasParsed = draftEtiquetas
-        .split(/[, ]+/)
-        .map((t) => t.trim().replace(/^#/, ''))
-        .filter(Boolean);
-
       await db.ideas.update(idea.id, {
-        enunciado_idea: tituloLimpio,
-        detalle_contexto: draftContenido.trim(),
-        etiquetas: etiquetasParsed,
+        enunciado_idea: primeraLinea,
+        detalle_contexto: detalleFinal,
+        etiquetas: Array.from(tagsEncontradas),
         updated_at: nowIso,
         sync_status: 'pending'
       });
@@ -957,6 +975,20 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
     } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       void handleGuardarEdicion(idea);
+    }
+  };
+
+  // Eliminación Segura con Tombstone Multi-Dispositivo (REQ-UX-IDEAS-EDIT-02)
+  const handleEliminarIdea = async (idea: IdeaRecord) => {
+    try {
+      await db.ideas.delete(idea.id);
+      await registrarTombstone('ideas', idea.id);
+      syncManager.sincronizarTodo().catch(() => { });
+      mostrarToastCobalt('Idea eliminada', 'info');
+      setConfirmandoEliminarId(null);
+    } catch (err) {
+      console.error('[WidgetIdeasBubble] Error al eliminar idea:', err);
+      mostrarToastCobalt('Error al eliminar la idea', 'error');
     }
   };
 
@@ -1752,14 +1784,14 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                         return (
                           <div
                             key={idea.id}
-                            className="p-3.5 rounded-2xl bg-[#0D1526] border border-sky-500/40 shadow-lg flex flex-col gap-2.5"
+                            className="p-3 rounded-2xl bg-[#0B1221] border border-sky-500/40 ring-1 ring-sky-500/20 shadow-lg flex flex-col gap-2 transition-all"
                             onKeyDown={(e) => handleKeyDownEdicion(e, idea)}
                           >
-                            {/* Cabecera de edición */}
+                            {/* Cabecera de edición limpia */}
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-1.5">
                                 <span className="w-5 h-5 rounded-md bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
-                                  <Pencil className="w-3 h-3" strokeWidth={1.75} />
+                                  <Lightbulb className="w-3 h-3" strokeWidth={1.75} />
                                 </span>
                                 <span className="font-mono text-[10px] font-bold text-sky-400 tracking-wider">
                                   {idea.codigo_legado}
@@ -1778,46 +1810,22 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                               </button>
                             </div>
 
-                            {/* Input Enunciado / Título */}
-                            <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-mono text-slate-400">Título / Enunciado</label>
-                              <input
-                                type="text"
-                                value={draftTitulo}
-                                onChange={(e) => setDraftTitulo(e.target.value)}
-                                placeholder="Título de la idea..."
-                                autoFocus
-                                className="w-full bg-[#040711] border border-slate-700/60 focus:border-sky-500/80 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-100 placeholder-slate-500 focus:outline-hidden transition"
-                              />
-                            </div>
-
-                            {/* Textarea Detalle / Contexto */}
-                            <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-mono text-slate-400">Detalle o contexto</label>
+                            {/* Textarea unificado (paridad con compositor de captura inicial) */}
+                            <div className="flex flex-col">
                               <textarea
-                                value={draftContenido}
-                                onChange={(e) => setDraftContenido(e.target.value)}
-                                placeholder="Detalle o contexto adicional (opcional)..."
-                                rows={2}
-                                className="w-full bg-[#040711] border border-slate-700/60 focus:border-sky-500/80 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300 placeholder-slate-500 focus:outline-hidden resize-none transition custom-scrollbar"
+                                autoFocus
+                                rows={3}
+                                value={draftTexto}
+                                onChange={(e) => setDraftTexto(e.target.value)}
+                                placeholder="Primera línea: título de la idea. Siguientes: detalle y #etiquetas..."
+                                className="w-full bg-transparent border-0 p-1 text-xs leading-relaxed text-slate-100 placeholder-slate-500 focus:outline-none resize-none font-sans custom-scrollbar min-h-[72px]"
+                                onKeyDown={(e) => handleKeyDownEdicion(e, idea)}
                               />
                             </div>
 
-                            {/* Input Etiquetas */}
-                            <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-mono text-slate-400">Etiquetas (separadas por coma o #tags)</label>
-                              <input
-                                type="text"
-                                value={draftEtiquetas}
-                                onChange={(e) => setDraftEtiquetas(e.target.value)}
-                                placeholder="ej: urgente, finanzas, #diseño"
-                                className="w-full bg-[#040711] border border-slate-700/60 focus:border-sky-500/80 rounded-xl px-2.5 py-1 text-[10px] font-mono text-sky-300 placeholder-slate-500 focus:outline-hidden transition"
-                              />
-                            </div>
-
-                            {/* Barra de botones de acción */}
-                            <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
-                              <span className="text-[9px] font-mono text-slate-500 hidden sm:inline">
+                            {/* Barra inferior minimalista */}
+                            <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-mono text-slate-500 hidden sm:inline">
                                 Ctrl+Enter guardar • Esc cancelar
                               </span>
                               <div className="flex items-center gap-1.5 ml-auto">
@@ -1825,16 +1833,15 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                                   type="button"
                                   onClick={handleCancelarEdicion}
                                   disabled={guardandoEdicion}
-                                  className="px-2.5 py-1 rounded-lg text-[10px] font-medium text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 border border-white/5 flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
+                                  className="px-2.5 py-1 rounded-md text-[11px] font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition cursor-pointer disabled:opacity-50"
                                 >
-                                  <X className="w-3 h-3" strokeWidth={1.75} />
-                                  <span>Cancelar</span>
+                                  Cancelar
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => void handleGuardarEdicion(idea)}
                                   disabled={guardandoEdicion}
-                                  className="px-3 py-1 rounded-lg text-[10px] font-bold text-white bg-sky-600 hover:bg-sky-500 border border-sky-400/40 flex items-center gap-1 transition cursor-pointer shadow-xs disabled:opacity-50"
+                                  className="px-3 py-1 rounded-md text-[11px] font-semibold text-white bg-sky-600 hover:bg-sky-500 border border-sky-400/30 transition cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Check className="w-3 h-3" strokeWidth={2} />
                                   <span>{guardandoEdicion ? 'Guardando...' : 'Guardar'}</span>
@@ -1850,7 +1857,7 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                           key={idea.id}
                           className="p-3.5 rounded-2xl bg-[#040711]/40 hover:bg-[#040711]/70 border border-slate-800/60 hover:border-sky-500/30 transition-colors duration-150 flex flex-col gap-2.5 group shadow-xs"
                         >
-                          {/* Fila 1: ID, Tipo y Fecha con botón Editar */}
+                          {/* Fila 1: ID, Tipo y Fecha (sin botones superfluos de editar) */}
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <span className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center shrink-0 border border-white/5 text-sky-300">
@@ -1860,32 +1867,26 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                                 {idea.codigo_legado}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-mono tabular-nums text-[10px] text-slate-500">
-                                {new Date(idea.fecha_captura).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleIniciarEdicion(idea)}
-                                className="p-1 rounded-md text-slate-400 hover:text-sky-300 hover:bg-white/5 transition cursor-pointer opacity-70 group-hover:opacity-100"
-                                title="Editar idea"
-                              >
-                                <Pencil className="w-3 h-3" strokeWidth={1.75} />
-                              </button>
-                            </div>
+                            <span className="font-mono tabular-nums text-[10px] text-slate-500">
+                              {new Date(idea.fecha_captura).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })}
+                            </span>
                           </div>
 
-                          {/* Enunciado */}
-                          <p className="text-xs font-bold text-slate-200 line-clamp-2 leading-relaxed group-hover:text-sky-200 transition-colors">
-                            {idea.enunciado_idea}
-                          </p>
-
-                          {/* Detalle si existe */}
-                          {idea.detalle_contexto && (
-                            <p className="text-[11px] text-slate-400 line-clamp-2 leading-normal">
-                              {idea.detalle_contexto}
+                          {/* Bloque Textual con Click-to-Edit (REQ-UX-IDEAS-EDIT-02) */}
+                          <div
+                            onClick={() => handleIniciarEdicion(idea)}
+                            className="cursor-text group/texto rounded-lg p-1.5 -m-1.5 hover:bg-white/[0.03] transition-colors select-text"
+                            title="Clic para editar"
+                          >
+                            <p className="text-xs font-bold text-slate-200 line-clamp-2 leading-relaxed group-hover/texto:text-sky-200 transition-colors">
+                              {idea.enunciado_idea}
                             </p>
-                          )}
+                            {idea.detalle_contexto && (
+                              <p className="text-[11px] text-slate-400 line-clamp-2 leading-normal mt-1">
+                                {idea.detalle_contexto}
+                              </p>
+                            )}
+                          </div>
 
                           {/* Tags compactos */}
                           {tagsIdea.length > 0 && (
@@ -1923,93 +1924,146 @@ export const WidgetIdeasBubble: React.FC<WidgetIdeasBubbleProps> = ({
                             </div>
                           )}
 
-                          {/* 4 BOTONES CANÓNICOS DE CONVERSIÓN DIRECTA + ACCIONES */}
+                          {/* BARRA DE ACCIONES GHOST (REQ-UX-IDEAS-EDIT-02) */}
                           {tabVentana !== 'procesadas' ? (
                             <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-1 flex-wrap">
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-0.5">
                                 {/* Botón 1: -> Tarea */}
                                 <button
                                   type="button"
                                   id="btn-convertir-tarea"
-                                  onClick={() => handleConvertirATarea(idea)}
-                                  className="px-2 py-1 rounded-lg text-[10px] font-bold bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 border border-indigo-500/30 flex items-center gap-1 transition cursor-pointer"
+                                  onClick={(e) => { e.stopPropagation(); handleConvertirATarea(idea); }}
+                                  className="p-1.5 rounded-md text-slate-400/70 hover:text-indigo-400 hover:bg-white/[0.06] transition-all duration-150 cursor-pointer opacity-70 group-hover:opacity-100"
                                   title="Convertir en Tarea del Kanban"
+                                  aria-label="Convertir en Tarea del Kanban"
                                 >
-                                  <CheckSquare className="w-3 h-3 text-indigo-400" strokeWidth={1.75} />
-                                  <span>Tarea</span>
+                                  <CheckSquare className="w-3.5 h-3.5" strokeWidth={1.75} />
                                 </button>
 
                                 {/* Botón 2: -> Proyecto */}
                                 <button
                                   type="button"
                                   id="btn-convertir-proyecto"
-                                  onClick={() => handleConvertirAProyecto(idea)}
-                                  className="px-2 py-1 rounded-lg text-[10px] font-bold bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/30 flex items-center gap-1 transition cursor-pointer"
+                                  onClick={(e) => { e.stopPropagation(); handleConvertirAProyecto(idea); }}
+                                  className="p-1.5 rounded-md text-slate-400/70 hover:text-purple-400 hover:bg-white/[0.06] transition-all duration-150 cursor-pointer opacity-70 group-hover:opacity-100"
                                   title="Convertir en Nuevo Proyecto"
+                                  aria-label="Convertir en Nuevo Proyecto"
                                 >
-                                  <FolderPlus className="w-3 h-3 text-purple-400" strokeWidth={1.75} />
-                                  <span>Proyecto</span>
+                                  <FolderPlus className="w-3.5 h-3.5" strokeWidth={1.75} />
                                 </button>
 
                                 {/* Botón 3: -> Hábito */}
                                 <button
                                   type="button"
                                   id="btn-convertir-habito"
-                                  onClick={() => handleConvertirAHabito(idea)}
-                                  className="px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/30 flex items-center gap-1 transition cursor-pointer"
+                                  onClick={(e) => { e.stopPropagation(); handleConvertirAHabito(idea); }}
+                                  className="p-1.5 rounded-md text-slate-400/70 hover:text-emerald-400 hover:bg-white/[0.06] transition-all duration-150 cursor-pointer opacity-70 group-hover:opacity-100"
                                   title="Convertir en Hábito / Rutina"
+                                  aria-label="Convertir en Hábito / Rutina"
                                 >
-                                  <Activity className="w-3 h-3 text-emerald-400" strokeWidth={1.75} />
-                                  <span>Hábito</span>
+                                  <Activity className="w-3.5 h-3.5" strokeWidth={1.75} />
                                 </button>
 
                                 {/* Botón 4: -> Nota */}
                                 <button
                                   type="button"
                                   id="btn-convertir-nota"
-                                  onClick={() => handleConvertirANota(idea)}
-                                  className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-600/20 text-amber-300 hover:bg-amber-600/30 border border-amber-500/30 flex items-center gap-1 transition cursor-pointer"
+                                  onClick={(e) => { e.stopPropagation(); handleConvertirANota(idea); }}
+                                  className="p-1.5 rounded-md text-slate-400/70 hover:text-amber-400 hover:bg-white/[0.06] transition-all duration-150 cursor-pointer opacity-70 group-hover:opacity-100"
                                   title="Generar Nota en Módulo de Notas"
+                                  aria-label="Generar Nota en Módulo de Notas"
                                 >
-                                  <FileText className="w-3 h-3 text-amber-400" strokeWidth={1.75} />
-                                  <span>Nota</span>
+                                  <FileText className="w-3.5 h-3.5" strokeWidth={1.75} />
                                 </button>
                               </div>
 
-                              <div className="flex items-center gap-1">
-                                {/* Botón Editar en barra de acciones */}
+                              <div className="flex items-center gap-0.5 ml-auto">
+                                {/* Toggle Incubación (Ghost) */}
                                 <button
                                   type="button"
-                                  onClick={() => handleIniciarEdicion(idea)}
-                                  className="px-2 py-1 rounded-lg text-[10px] text-slate-400 hover:text-sky-300 hover:bg-white/5 flex items-center gap-1 transition cursor-pointer"
-                                  title="Editar idea"
+                                  onClick={(e) => { e.stopPropagation(); handleToggleIncubacion(idea); }}
+                                  className={`p-1.5 rounded-md transition-all duration-150 cursor-pointer opacity-70 group-hover:opacity-100 ${
+                                    idea.estado === 'INCUBANDO'
+                                      ? 'text-amber-400 hover:text-sky-300 hover:bg-white/[0.06]'
+                                      : 'text-slate-400/70 hover:text-amber-400 hover:bg-white/[0.06]'
+                                  }`}
+                                  title={idea.estado === 'INCUBANDO' ? 'Regresar a Inbox' : 'Mover a Incubación'}
+                                  aria-label={idea.estado === 'INCUBANDO' ? 'Regresar a Inbox' : 'Mover a Incubación'}
                                 >
-                                  <Pencil className="w-3 h-3 text-sky-400" strokeWidth={1.75} />
-                                  <span>Editar</span>
+                                  {idea.estado === 'INCUBANDO' ? (
+                                    <Inbox className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                  ) : (
+                                    <Archive className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                  )}
                                 </button>
 
-                                {/* Toggle Incubación */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleIncubacion(idea)}
-                                  className="px-2 py-1 rounded-lg text-[10px] text-slate-400 hover:text-slate-200 hover:bg-white/5 transition cursor-pointer"
-                                  title={idea.estado === 'INCUBANDO' ? 'Regresar a Inbox' : 'Mover a Incubación'}
-                                >
-                                  {idea.estado === 'INCUBANDO' ? 'A Inbox' : 'Incubar'}
-                                </button>
+                                {/* Eliminar Idea (Ghost con confirmación de 2 clics) */}
+                                {confirmandoEliminarId === idea.id ? (
+                                  <div className="flex items-center gap-1 bg-rose-950/40 border border-rose-500/30 rounded-md px-1.5 py-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); void handleEliminarIdea(idea); }}
+                                      className="text-[10px] font-bold text-rose-300 hover:text-rose-200 flex items-center gap-1 cursor-pointer"
+                                      title="Confirmar eliminación permanente"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-rose-400" strokeWidth={1.75} />
+                                      <span>¿Eliminar?</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); setConfirmandoEliminarId(null); }}
+                                      className="text-slate-400 hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                                      title="Cancelar"
+                                    >
+                                      <X className="w-3 h-3" strokeWidth={1.75} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setConfirmandoEliminarId(idea.id); }}
+                                    className="p-1.5 rounded-md text-slate-400/70 hover:text-rose-400 hover:bg-white/[0.06] transition-all duration-150 cursor-pointer opacity-70 group-hover:opacity-100"
+                                    title="Eliminar idea"
+                                    aria-label="Eliminar idea"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ) : (
-                            <div className="pt-2 border-t border-white/5 flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleIniciarEdicion(idea)}
-                                className="px-2 py-1 rounded-lg text-[10px] text-slate-400 hover:text-sky-300 hover:bg-white/5 flex items-center gap-1 transition cursor-pointer"
-                                title="Editar idea"
-                              >
-                                <Pencil className="w-3 h-3 text-sky-400" strokeWidth={1.75} />
-                                <span>Editar</span>
-                              </button>
+                            <div className="pt-2 border-t border-white/5 flex items-center justify-end gap-0.5">
+                              {confirmandoEliminarId === idea.id ? (
+                                <div className="flex items-center gap-1 bg-rose-950/40 border border-rose-500/30 rounded-md px-1.5 py-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); void handleEliminarIdea(idea); }}
+                                    className="text-[10px] font-bold text-rose-300 hover:text-rose-200 flex items-center gap-1 cursor-pointer"
+                                    title="Confirmar eliminación permanente"
+                                  >
+                                    <Trash2 className="w-3 h-3 text-rose-400" strokeWidth={1.75} />
+                                    <span>¿Eliminar?</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setConfirmandoEliminarId(null); }}
+                                    className="text-slate-400 hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                                    title="Cancelar"
+                                  >
+                                    <X className="w-3 h-3" strokeWidth={1.75} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setConfirmandoEliminarId(idea.id); }}
+                                  className="p-1.5 rounded-md text-slate-400/70 hover:text-rose-400 hover:bg-white/[0.06] transition-all duration-150 cursor-pointer opacity-70 group-hover:opacity-100"
+                                  title="Eliminar idea"
+                                  aria-label="Eliminar idea"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
