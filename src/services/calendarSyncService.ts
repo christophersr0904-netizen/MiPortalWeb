@@ -1395,3 +1395,184 @@ export function descargarICSActividad(actividad: ActividadRecurrenciaInput): voi
   document.body.removeChild(link);
   URL.revokeObjectURL(blobUrl);
 }
+
+// ============================================================================
+// LECTURA DE EVENTOS EXTERNOS GOOGLE CALENDAR (REQ-FEAT-CAL-03)
+// ============================================================================
+
+export interface GoogleCalendarApiEventItem {
+  id?: string;
+  status?: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  htmlLink?: string;
+  hangoutLink?: string;
+  start?: {
+    dateTime?: string;
+    date?: string;
+    timeZone?: string;
+  };
+  end?: {
+    dateTime?: string;
+    date?: string;
+    timeZone?: string;
+  };
+  extendedProperties?: {
+    private?: Record<string, string>;
+    shared?: Record<string, string>;
+  };
+}
+
+export interface GoogleCalendarExternalEvent {
+  id: string;
+  summary: string;
+  description?: string;
+  location?: string;
+  htmlLink?: string;
+  hangoutLink?: string;
+  fecha: string; // YYYY-MM-DD local
+  horaInicio?: string; // HH:mm local
+  horaFin?: string; // HH:mm local
+  duracionMinutos?: number;
+  allDay: boolean;
+  status?: string;
+}
+
+function formatearFechaHoraLocalDesdeDate(d: Date): { fecha: string; hora: string } {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return {
+    fecha: `${y}-${m}-${day}`,
+    hora: `${h}:${min}`
+  };
+}
+
+/**
+ * Normaliza y deduplica eventos crudos de Google Calendar API v3:
+ * - Excluye eventos cancelados (`status === 'cancelled'`).
+ * - Excluye eventos que ya pertenecen a MiPortalWeb (`extendedProperties.private.pmoId`).
+ * - Normaliza eventos `dateTime` (a fecha/hora local) y eventos `allDay` (`start.date`).
+ */
+export function normalizarEventosExternosGoogleCalendar(
+  items: GoogleCalendarApiEventItem[]
+): GoogleCalendarExternalEvent[] {
+  const resultado: GoogleCalendarExternalEvent[] = [];
+
+  for (const item of items) {
+    if (!item || !item.id || !item.start) continue;
+    if (item.status === 'cancelled') continue;
+
+    // Deduplicación estricta contra entidades gestionadas por MiPortalWeb
+    const pmoId = item.extendedProperties?.private?.pmoId;
+    if (pmoId && String(pmoId).trim() !== '') continue;
+
+    const summary = (item.summary || 'Evento sin título').trim();
+
+    if (item.start.dateTime) {
+      const dInicio = new Date(item.start.dateTime);
+      if (isNaN(dInicio.getTime())) continue;
+      const inicioLocal = formatearFechaHoraLocalDesdeDate(dInicio);
+
+      let duracionMinutos = 60;
+      let horaFin: string | undefined;
+
+      if (item.end?.dateTime) {
+        const dFin = new Date(item.end.dateTime);
+        if (!isNaN(dFin.getTime())) {
+          const diffMin = Math.round((dFin.getTime() - dInicio.getTime()) / 60000);
+          duracionMinutos = Math.max(15, diffMin > 0 ? diffMin : 60);
+          horaFin = formatearFechaHoraLocalDesdeDate(dFin).hora;
+        }
+      }
+
+      if (!horaFin) {
+        const dFinFallback = new Date(dInicio.getTime() + duracionMinutos * 60000);
+        horaFin = formatearFechaHoraLocalDesdeDate(dFinFallback).hora;
+      }
+
+      resultado.push({
+        id: item.id,
+        summary,
+        description: item.description,
+        location: item.location,
+        htmlLink: item.htmlLink,
+        hangoutLink: item.hangoutLink,
+        fecha: inicioLocal.fecha,
+        horaInicio: inicioLocal.hora,
+        horaFin,
+        duracionMinutos,
+        allDay: false,
+        status: item.status
+      });
+    } else if (item.start.date) {
+      const fechaSolo = String(item.start.date).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaSolo)) continue;
+
+      resultado.push({
+        id: item.id,
+        summary,
+        description: item.description,
+        location: item.location,
+        htmlLink: item.htmlLink,
+        hangoutLink: item.hangoutLink,
+        fecha: fechaSolo,
+        allDay: true,
+        status: item.status
+      });
+    }
+  }
+
+  return resultado;
+}
+
+/**
+ * Consulta eventos externos de Google Calendar (`primary`) dentro del rango visible
+ * sin disparar popups intrusivos de login. Degrada silenciosamente a `[]` si está
+ * offline o sin token activo.
+ */
+export async function listarEventosExternosGoogleCalendar(
+  fechaInicioIso: string,
+  fechaFinIso: string
+): Promise<GoogleCalendarExternalEvent[]> {
+  if (!fechaInicioIso || !fechaFinIso) return [];
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return [];
+
+  try {
+    const token = await obtenerTokenGoogleCalendar();
+    if (!token) return [];
+
+    const timeMinDate = new Date(`${fechaInicioIso}T00:00:00`);
+    const timeMaxDate = new Date(`${fechaFinIso}T23:59:59`);
+    if (isNaN(timeMinDate.getTime()) || isNaN(timeMaxDate.getTime())) return [];
+
+    const params = new URLSearchParams({
+      timeMin: timeMinDate.toISOString(),
+      timeMax: timeMaxDate.toISOString(),
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      maxResults: '250'
+    });
+
+    const endpoint = `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`;
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = (await response.json()) as { items?: GoogleCalendarApiEventItem[] };
+    return normalizarEventosExternosGoogleCalendar(Array.isArray(data.items) ? data.items : []);
+  } catch {
+    return [];
+  }
+}

@@ -10,7 +10,7 @@ import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useUndoDelete } from './hooks/useUndoDelete';
 import { db, inicializarDatosSemillaSiVacio } from './db/db';
 import { syncManager } from './services/syncManager';
-import type { ActividadPersonal, VinculoEntidad } from './types';
+import type { ActividadPersonal, GastoRecord, VinculoEntidad } from './types';
 import { UndoDeleteProvider } from './context/UndoDeleteContext';
 import { UndoToastContainer } from './components/UI/UndoToastContainer';
 
@@ -155,6 +155,9 @@ class CockpitErrorBoundary extends React.Component<
 const ViewKanban = lazy(() =>
   import('./components/Views/ViewKanban').then((m) => ({ default: m.ViewKanban }))
 );
+const ViewCalendario = lazy(() =>
+  import('./components/Views/ViewCalendario').then((m) => ({ default: m.ViewCalendario }))
+);
 const ViewPortafolio = lazy(() =>
   import('./components/Views/ViewPortafolio').then((m) => ({ default: m.ViewPortafolio }))
 );
@@ -200,7 +203,7 @@ const ModalAtajosTeclado = lazy(() =>
 const getVistaDesdeHash = (): VistaGlobal => {
   if (typeof window === 'undefined') return 'kanban';
   const rawHash = window.location.hash.replace(/^#/, '').toLowerCase().trim();
-  const vistasValidas: VistaGlobal[] = ['kanban', 'portafolio', 'habitos', 'financiero', 'detalle', 'notas'];
+  const vistasValidas: VistaGlobal[] = ['kanban', 'calendario', 'portafolio', 'habitos', 'financiero', 'detalle', 'notas'];
   if (vistasValidas.includes(rawHash as VistaGlobal)) {
     return rawHash as VistaGlobal;
   }
@@ -358,6 +361,7 @@ export const App: React.FC = () => {
   const [modalHabitoGlobalAbierto, setModalHabitoGlobalAbierto] = useState(false);
   const [actividadEditarGlobal, setActividadEditarGlobal] = useState<ActividadPersonal | null>(null);
   const [modalGastoGlobalAbierto, setModalGastoGlobalAbierto] = useState(false);
+  const [gastoEditarGlobal, setGastoEditarGlobal] = useState<GastoRecord | null>(null);
   const [modalNotaGlobalAbierto, setModalNotaGlobalAbierto] = useState(false);
   const [modalTareaProps, setModalTareaProps] = useState<{
     isOpen: boolean;
@@ -666,6 +670,28 @@ export const App: React.FC = () => {
                       </ViewErrorBoundary>
                     )}
 
+                    {vistaActiva === 'calendario' && (
+                      <ViewErrorBoundary vistaNombre="Calendario Maestro">
+                        <ViewCalendario
+                          onAbrirTarea={(tareaId) => {
+                            setModalTareaProps({
+                              isOpen: true,
+                              tareaId
+                            });
+                          }}
+                          onAbrirActividad={(actividad) => {
+                            setActividadEditarGlobal(actividad);
+                            setModalHabitoGlobalAbierto(true);
+                          }}
+                          onAbrirGasto={(gasto) => {
+                            setGastoEditarGlobal(gasto);
+                            setModalGastoGlobalAbierto(true);
+                          }}
+                          onNavegarVista={handleCambiarVista}
+                        />
+                      </ViewErrorBoundary>
+                    )}
+
                     {vistaActiva === 'portafolio' && (
                       <ViewErrorBoundary vistaNombre="Portafolio de Proyectos">
                         <ViewPortafolio
@@ -791,7 +817,11 @@ export const App: React.FC = () => {
         <Suspense fallback={null}>
           <ModalGasto
             isOpen={modalGastoGlobalAbierto}
-            onClose={() => setModalGastoGlobalAbierto(false)}
+            gastoEditar={gastoEditarGlobal}
+            onClose={() => {
+              setModalGastoGlobalAbierto(false);
+              setGastoEditarGlobal(null);
+            }}
           />
         </Suspense>
       )}
@@ -823,7 +853,15 @@ export const App: React.FC = () => {
           <ModalAtajosTeclado
             isOpen={modalAtajosAbierto}
             onClose={() => setModalAtajosAbierto(false)}
-            scopeInicial={vistaActiva === 'financiero' ? 'finanzas' : vistaActiva === 'detalle' ? 'portafolio' : vistaActiva}
+            scopeInicial={
+              vistaActiva === 'financiero'
+                ? 'finanzas'
+                : vistaActiva === 'detalle'
+                ? 'portafolio'
+                : vistaActiva === 'calendario'
+                ? 'global'
+                : vistaActiva
+            }
           />
         </Suspense>
       )}

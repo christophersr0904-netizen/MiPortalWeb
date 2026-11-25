@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Calendar,
+  CalendarDays,
   Archive,
   RotateCw,
   Columns,
@@ -33,7 +34,7 @@ import {
 } from '../../services/calendarSyncService';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
 
-export type VistaGlobal = 'kanban' | 'portafolio' | 'habitos' | 'financiero' | 'detalle' | 'notas';
+export type VistaGlobal = 'kanban' | 'calendario' | 'portafolio' | 'habitos' | 'financiero' | 'detalle' | 'notas';
 
 interface HeaderMaestroProps {
   vistaActiva: VistaGlobal;
@@ -391,6 +392,22 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
                 {totalKanban}
               </span>
             )}
+          </button>
+
+          {/* 1b. Calendario Maestro */}
+          <button
+            type="button"
+            onClick={() => onCambiarVista('calendario')}
+            id="tab-nav-calendario"
+            className={`px-3 py-1.5 rounded-xl font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out transform-gpu will-change-transform flex items-center gap-2 cursor-pointer active:scale-95 ${
+              vistaActiva === 'calendario'
+                ? 'text-sky-300 bg-sky-950/30 border border-sky-800/40 shadow-xs'
+                : 'text-slate-400 hover:text-sky-300 hover:bg-slate-800/40 border border-transparent'
+            }`}
+            title="Calendario Maestro Unificado"
+          >
+            <CalendarDays className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+            <span className="hidden lg:inline">Calendario</span>
           </button>
 
           {/* 2. Portafolio */}

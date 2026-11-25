@@ -11457,3 +11457,91 @@ supabase functions deploy gcal-auth
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores, 0 `any` nuevos).
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **36/36 suites aprobadas (377/377 tests al 100% verde)**.
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (2,935 módulos transformados en 7.97s, `main-*.js` en 442.77 kB < 500 kB).
+
+---
+
+### [REQ-FEAT-CAL-01: Vista Dedicada ViewCalendario, Motor Unificado useCalendarEngine y Popover con Acción Pomodoro]
+**Fecha:** Noviembre 2026 | **Fase:** 8.33 (Calendario Maestro Unificado, Vistas Semana/Día/Mes/Agenda y Motor Pomodoro Integrado) | **Archivos Creados/Modificados:** `src/hooks/useCalendarEngine.ts` (Nuevo), `src/hooks/__tests__/useCalendarEngine.test.ts` (Nuevo), `src/components/Views/ViewCalendario.tsx` (Nuevo), `src/components/Calendario/calendarStyles.ts` (Nuevo), `src/components/Calendario/CalendarEventPopover.tsx` (Nuevo), `src/components/Calendario/CalendarTimeGrid.tsx` (Nuevo), `src/components/Calendario/CalendarMonthGrid.tsx` (Nuevo), `src/components/Calendario/CalendarMobileAgenda.tsx` (Nuevo), `src/App.tsx`, `src/components/Layout/HeaderMaestro.tsx`, `src/components/Layout/BottomNavMobile.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Arquitectura del Motor Unificado (`useCalendarEngine.ts`)
+- **Contrato Estricto `CalendarEventItem` (0 `any`):** Unifica con discriminación tipada (`CalendarRawRef`) todas las entidades operativas y financieras: `tarea`, `actividad`, `habito`, `hito`, `gasto`, `ingreso` y `externo_gcal`.
+- **Consultas Dexie Acotadas al Rango Visible:**
+  - `db.tareas`, `db.hitos_wbs`, `db.gastos`, `db.ingresos` y `db.habito_cumplimiento_logs` consultados con `.where(...).between(inicioIso, finIso + '\uffff', true, true)`.
+  - `db.actividades_personales` no archivadas proyectadas dinámicamente sobre `rango.fechas` mediante `evaluarOcurrenciaEnFecha` (motor RFC-5545).
+- **Resolución Determinista de Solapamientos:** `calcularLayoutSolapados()` agrupa eventos horarios por clusters conectados de superposición y asigna `columnIndex` y `totalColumns` para evitar colisiones visuales.
+- **Acción Rápida de Completado:** `toggleCompletarEvento()` actualiza Dexie con `sync_status: 'pending'` (incluyendo `completarActividadPersonalLocal` para hábitos/actividades) y dispara `syncManager.sincronizarTodo()`.
+
+#### 2. Chasis Visual Cobalt Aerodynamic (A.2.2) y Navegación
+- **Ruta Lazy y Aislamiento:** `ViewCalendario` registrado con `React.lazy` en `App.tsx`, envuelto en `<ViewErrorBoundary vistaNombre="Calendario Maestro">`.
+- **Navegación Prioritaria:** Botón `Calendario` (`CalendarDays`, `strokeWidth={1.75}`) ubicado junto a *Tablero (Kanban)* tanto en `HeaderMaestro.tsx` (escritorio) como en `BottomNavMobile.tsx` (móvil, preservando *Notas* en el sheet *Más*).
+- **Vistas y Ergonomía:**
+  - **Semana (default escritorio) y Día (`CalendarTimeGrid.tsx`):** Franja superior colapsable *All-Day / Hitos / Finanzas*, grilla horaria `05:00`–`23:00` con tipografía `font-mono tabular-nums`, línea de hora actual en vivo y scroll automático a la hora actual.
+  - **Mes (`CalendarMonthGrid.tsx`):** Matriz mensual de 7 columnas con pills compactas y botón `+N más` que conmuta al detalle del día.
+  - **Móvil (`< 768px`, `CalendarMobileAgenda.tsx`):** Conmutación automática a lista cronológica *Agenda* con tira semanal táctil superior.
+  - **Atajos Contextuales:** `D` (Día), `W` (Semana), `M` (Mes) y `T` (Hoy), blindados contra inputs y modales activos.
+
+#### 3. Código de Color y Popover Ligero con Pomodoro
+- **Codificación Cromática + Borde Estado 3px:** Tareas (`sky-500`), Actividades (`indigo-400`), Hábitos (`emerald-500`), Hitos WBS (`purple-400`), Finanzas (`amber-400`); opacidad reducida y tachado sutil si `completado === true`.
+- **Popover `CalendarEventPopover.tsx`:** Muestra título, horario, tipo y estado; acción **"Iniciar Pomodoro"** (solo en Tareas, Actividades y Hábitos) conectada a `useCockpitPomodoro` con cápsula flotante en vivo y notificación por `BroadcastChannel('pmo_hud_bus')`; botón **"Completar / Reabrir"** y **"Ver / Editar"** que abre el modal canónico correspondiente (`ModalTareaFlow`, `ModalActividadFlow`, `ModalGasto`).
+
+#### 4. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado en todos los archivos nuevos del módulo Calendario.
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (380/380 tests al 100% verde)**, incluyendo 3 nuevos tests para `useCalendarEngine`.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` emitido como chunk lazy de **41.13 kB** gzip 11.56 kB; `main-*.js` en **444.90 kB** < 500 kB).
+
+---
+
+### [REQ-FEAT-CAL-02: Interactividad Time-Blocking en ViewCalendario (Panel Backlog, Drag & Drop, Resize y Click-and-Drag)]
+**Fecha:** Noviembre 2026 | **Fase:** 8.34 (Time-Blocking Pro estándar Akiflow/Sunsama en Calendario Maestro) | **Archivos Creados/Modificados:** `src/components/Calendario/CalendarBacklogPanel.tsx` (Nuevo), `src/hooks/useCalendarEngine.ts`, `src/hooks/__tests__/useCalendarEngine.test.ts`, `src/components/Calendario/CalendarTimeGrid.tsx`, `src/components/Views/ViewCalendario.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Mutaciones Optimistas y Helpers de Snap 15m (`useCalendarEngine.ts`)
+- **Helpers Puros:** `snapMinutos15()`, `minutosAHoraStr()`, `calcularRangoReprogramado()` (snap 15m, duración mínima 15m, tope 24h) y `pesoPrioridadTarea()`.
+- **Consulta `tareasPorAgendar`:** `useLiveQuery` sobre `db.tareas` para tareas pendientes/en proceso sin `hora_inicio`, ordenadas por prioridad Eisenhower y fecha programada.
+- **Mutaciones con Sincronización Automática:**
+  - `reprogramarEvento()`: actualiza fecha, `hora_inicio` y duración (`horas_estimadas` en `db.tareas` o `duracion_horas` en `db.actividades_personales`) con `sync_status: 'pending'` y `syncManager.sincronizarTodo()`.
+  - `agendarTareaDesdeBacklog()`: asigna fecha/hora/duración a una tarea arrastrada desde el panel lateral hacia Dexie + sync.
+  - `crearEventoRapido()`: crea una **Tarea** (vía `crearTarea`) o **Actividad** puntual al vuelo en Dexie + sync.
+
+#### 2. Panel Lateral "Por Agendar" (`CalendarBacklogPanel.tsx`)
+- Chasis Cobalt Aerodynamic (~280px en escritorio), colapsable desde botón Ghost con contador reactivo en la cabecera de `ViewCalendario`.
+- Tarjetas compactas arrastrables (`draggable`) con código legado, prioridad (borde izquierdo 3px), duración estimada (`font-mono tabular-nums`), fecha y filtro rápido de texto.
+
+#### 3. Drag & Drop, Resize y Click-and-Drag (`CalendarTimeGrid.tsx` + `ViewCalendario.tsx`)
+- **Drag & Drop (snap 15m):** Permite arrastrar tareas desde `CalendarBacklogPanel` o eventos existentes (`tarea`, `actividad`, `habito`) a cualquier día y hora, mostrando un indicador fantasma Cobalt con horario exacto (`HH:mm – HH:mm`).
+- **Resize Inferior (snap 15m, mínimo 15m):** Manejador discreto (`cursor-ns-resize`) en el borde inferior de bloques editables con feedback visual en vivo de `horaInicio – horaFin` y duración en minutos.
+- **Click-and-Drag en Espacio Vacío:** Arrastrar sobre un bloque libre dibuja una selección Cobalt en vivo y al soltar abre un mini-popover ligero prellenado con fecha/horario para agendar una **Tarea** o **Actividad** al instante.
+
+#### 4. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado en todos los archivos nuevos y modificados del módulo Calendario.
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (381/381 tests al 100% verde)**, incluyendo pruebas de snap 15m, reprogramación y prioridad.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **61.25 kB** gzip 16.52 kB; `main-*.js` en **444.94 kB** < 500 kB).
+
+---
+
+### [REQ-FEAT-CAL-03: Lectura de Eventos Externos de Google Calendar (Solo-Lectura Deduplicado) e Indicador de Carga Diaria en ViewCalendario]
+**Fecha:** Noviembre 2026 | **Fase:** 8.35 (Espejo Bidireccional Google Calendar y Métrica de Capacidad Diaria en Calendario Maestro) | **Archivos Modificados:** `src/services/calendarSyncService.ts`, `src/hooks/useCalendarEngine.ts`, `src/hooks/__tests__/useCalendarEngine.test.ts`, `src/components/Calendario/calendarStyles.ts`, `src/components/Calendario/CalendarTimeGrid.tsx`, `src/components/Calendario/CalendarEventPopover.tsx`, `src/components/Views/ViewCalendario.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Lectura No Bloqueante y Deduplicación (`calendarSyncService.ts`)
+- **`listarEventosExternosGoogleCalendar(fechaInicioIso, fechaFinIso)`:**
+  - Verifica silenciosamente el token activo vía `obtenerTokenGoogleCalendar()` sin disparar popups intrusivos de login; si está offline o sin sesión, retorna `[]`.
+  - Consulta `GET /calendar/v3/calendars/primary/events` con `timeMin`, `timeMax`, `singleEvents=true`, `orderBy=startTime` y `maxResults=250`.
+- **`normalizarEventosExternosGoogleCalendar()`:**
+  - Excluye eventos cancelados (`status === 'cancelled'`) y cualquier evento con `extendedProperties.private.pmoId` para impedir duplicados contra entidades de MiPortalWeb.
+  - Normaliza tanto eventos `dateTime` (a fecha/hora local + `duracionMinutos`) como eventos `allDay` (`start.date`), preservando `htmlLink`, `location` y `hangoutLink`.
+
+#### 2. Caché por Rango y Carga Diaria (`useCalendarEngine.ts`)
+- **Integración Reactiva GCal:** Caché en memoria por rango (`inicioIso::finIso`), suscripción reactiva a `suscribirEstadoGoogleCalendar`, estado `gcalExternoEstado` (`'idle' | 'loading' | 'connected' | 'disconnected'`) y recarga manual `recargarEventosExternos()`.
+- **`calcularCargaDiariaPorFecha()` / `cargaDiariaPorFecha`:** Suma la duración de bloques horarios activos (`tarea`, `actividad`, `habito`, `externo_gcal`) frente a la capacidad base de `8h/día`, clasificando en `normal` ($\le 75\%$), `alta` ($76\text{--}100\%$) y `sobrecarga` ($> 100\%$).
+
+#### 3. Renderizado Solo-Lectura, Popover Externo e Indicador de Carga
+- **`CalendarTimeGrid.tsx`:** Muestra en la cabecera de cada día la carga horaria (`font-mono tabular-nums`, ej. `5.5h / 8h`) con micro-barra de 2px (`sky-400` / `amber-400` / `rose-400`). Los eventos `externo_gcal` se renderizan atenuados (`bg-slate-800/45`, `border-dashed border-slate-600/50`, `border-l-slate-500`) sin `draggable` ni resize.
+- **`CalendarEventPopover.tsx`:** Para `externo_gcal` oculta acciones PMO y muestra ubicación (`MapPin`), botón **"Unirse a la reunión"** (`hangoutLink`) y enlace directo **"Abrir en Google Calendar"** (`htmlLink`).
+- **`ViewCalendario.tsx`:** Incorpora filtro rápido `GCal` y control Ghost de estado/refresco de Google Calendar en la cabecera.
+
+#### 4. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado en todos los archivos del módulo Calendario.
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (383/383 tests al 100% verde)**, incluyendo pruebas unitarias de deduplicación `pmoId` y clasificación de `cargaDiariaPorFecha`.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **66.03 kB** gzip 17.95 kB; `main-*.js` en **446.95 kB** < 500 kB).

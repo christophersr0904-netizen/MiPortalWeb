@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Columns,
+  CalendarDays,
   HeartPulse,
   Plus,
   FileText,
@@ -104,21 +105,21 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
           <span className="text-[10px] font-semibold mt-1 tracking-tight">Kanban</span>
         </button>
 
-        {/* Botón 2: Hábitos (min-h-[48px]) */}
+        {/* Botón 2: Calendario (min-h-[48px]) */}
         <button
           type="button"
-          id="bottom-nav-habitos"
+          id="bottom-nav-calendario"
           onClick={() => {
             cerrarSheets();
-            onCambiarVista('habitos');
+            onCambiarVista('calendario');
           }}
           className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center flex-1 transition-colors group cursor-pointer active:scale-95 ${
-            vistaActiva === 'habitos' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
+            vistaActiva === 'calendario' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
           }`}
-          title="Hábitos & Vida"
+          title="Calendario Maestro"
         >
-          <HeartPulse className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
-          <span className="text-[10px] font-semibold mt-1 tracking-tight">Hábitos</span>
+          <CalendarDays className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
+          <span className="text-[10px] font-semibold mt-1 tracking-tight">Agenda</span>
         </button>
 
         {/* Botón Central (+): Acción Rápida Elevada (48x48px) */}
@@ -140,24 +141,24 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
           </span>
         </div>
 
-        {/* Botón 4: Notas (min-h-[48px]) */}
+        {/* Botón 4: Hábitos (min-h-[48px]) */}
         <button
           type="button"
-          id="bottom-nav-notas"
+          id="bottom-nav-habitos"
           onClick={() => {
             cerrarSheets();
-            onCambiarVista('notas');
+            onCambiarVista('habitos');
           }}
           className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center flex-1 transition-colors group cursor-pointer active:scale-95 ${
-            vistaActiva === 'notas' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
+            vistaActiva === 'habitos' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
           }`}
-          title="Notas Inteligentes"
+          title="Hábitos & Vida"
         >
-          <FileText className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
-          <span className="text-[10px] font-semibold mt-1 tracking-tight">Notas</span>
+          <HeartPulse className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
+          <span className="text-[10px] font-semibold mt-1 tracking-tight">Hábitos</span>
         </button>
 
-        {/* Botón 5: Más / Proyectos & Finanzas (min-h-[48px]) */}
+        {/* Botón 5: Más / Proyectos, Notas & Finanzas (min-h-[48px]) */}
         <button
           type="button"
           id="bottom-nav-mas"
@@ -166,7 +167,7 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
             setSheetMasAbierto(!sheetMasAbierto);
           }}
           className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center flex-1 transition-colors group cursor-pointer active:scale-95 ${
-            sheetMasAbierto || vistaActiva === 'portafolio' || vistaActiva === 'financiero' || vistaActiva === 'detalle'
+            sheetMasAbierto || vistaActiva === 'portafolio' || vistaActiva === 'financiero' || vistaActiva === 'detalle' || vistaActiva === 'notas'
               ? 'text-sky-400'
               : 'text-slate-400 hover:text-slate-200'
           }`}
@@ -319,6 +320,27 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
           </div>
 
           <div className="space-y-2 mb-2">
+            {/* Notas Inteligentes */}
+            <button
+              type="button"
+              onClick={() => {
+                cerrarSheets();
+                onCambiarVista('notas');
+              }}
+              className="w-full p-3 rounded-2xl bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/60 flex items-center justify-between text-left active:scale-98 transition-[color,background-color,border-color,transform] duration-150 transform-gpu will-change-transform cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" strokeWidth={1.75} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-100">Bóveda de Notas</div>
+                  <div className="text-[10px] text-slate-400">Notas inteligentes, checklists y wishlists</div>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400" strokeWidth={1.75} />
+            </button>
+
             {/* Portafolio */}
             <button
               type="button"
