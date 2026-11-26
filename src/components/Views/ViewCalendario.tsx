@@ -2,29 +2,39 @@
  * ============================================================================
  * ARCHIVO: src/components/Views/ViewCalendario.tsx
  * SISTEMA: PMO Personal Modular & Life OS
- * REQUISITO: REQ-FEAT-CAL-01 & REQ-FEAT-CAL-02
- * DESCRIPCIÓN: Vista dedicada de Calendario Maestro (Semana, Día, Mes y Agenda
- *              Móvil) con Time-Blocking Pro: Panel "Por Agendar", Drag & Drop
- *              (snap 15m), Resize inferior, Click-and-Drag y Popover Pomodoro.
+ * REQUISITO: REQ-FEAT-CAL-01 / CAL-02 / CAL-03 / REQ-UX-CAL-04
+ * DESCRIPCIÓN: Vista dedicada de Calendario Maestro con toolbar unificada de
+ *              1 línea, selector de Capas (Notion/Linear), Time-Blocking Pro,
+ *              espejo solo-lectura Google Calendar y motor Pomodoro integrado.
  * ============================================================================
  */
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Play,
   Pause,
   RotateCcw,
   X,
   Timer,
-  Inbox,
   Plus,
   Clock,
   CheckSquare,
   Activity,
-  RefreshCw
+  RefreshCw,
+  Layers,
+  Flame,
+  Flag,
+  Wallet,
+  Calendar,
+  PanelRight,
+  Check,
+  TrendingDown,
+  TrendingUp,
+  ExternalLink,
+  Undo2
 } from 'lucide-react';
 import {
   useCalendarEngine,
@@ -37,10 +47,9 @@ import { useCockpitPomodoro } from '../../hooks/useCockpitPomodoro';
 import type { DailyScheduleItem } from '../../hooks/useDailySchedule';
 import { formatFechaIsoLocal } from '../../utils/timeFormatters';
 import { mostrarToastCobalt } from '../../utils/toastCobalt';
-import type { ActividadPersonal, GastoRecord } from '../../types';
+import type { ActividadPersonal, GastoRecord, IngresoRecord } from '../../types';
 import type { VistaGlobal } from '../Layout/HeaderMaestro';
 import {
-  CALENDAR_ENTITY_STYLES,
   MESES_ES,
   formatearFechaCortaEs
 } from '../Calendario/calendarStyles';
@@ -58,23 +67,63 @@ import {
   CalendarBacklogPanel,
   type CalendarDragPayload
 } from '../Calendario/CalendarBacklogPanel';
+import { CalendarDatePickerPopover } from '../Calendario/CalendarDatePickerPopover';
 
 export interface ViewCalendarioProps {
   onAbrirTarea?: (tareaId: string) => void;
+  onCrearTareaConDetalles?: (prefill: {
+    titulo?: string;
+    fecha: string;
+    horaInicio?: string;
+  }) => void;
   onAbrirActividad?: (actividad: ActividadPersonal) => void;
-  onAbrirGasto?: (gasto: GastoRecord) => void;
+  onCrearActividadConDetalles?: () => void;
+  onAbrirGasto?: (gasto?: GastoRecord | null) => void;
+  onAbrirIngreso?: (ingreso?: IngresoRecord | null) => void;
   onNavegarVista?: (vista: VistaGlobal) => void;
 }
 
-const ENTIDADES_FILTRO: CalendarEntityType[] = [
+type LayerKey = 'tarea' | 'actividad' | 'habito' | 'hito' | 'finanzas' | 'externo_gcal';
+
+interface LayerDefinition {
+  key: LayerKey;
+  label: string;
+  entities: CalendarEntityType[];
+  iconColorClass: string;
+}
+
+const CAPAS_CALENDARIO: LayerDefinition[] = [
+  { key: 'tarea', label: 'Tareas', entities: ['tarea'], iconColorClass: 'text-sky-400' },
+  { key: 'actividad', label: 'Actividades', entities: ['actividad'], iconColorClass: 'text-indigo-300' },
+  { key: 'habito', label: 'Hábitos', entities: ['habito'], iconColorClass: 'text-teal-400' },
+  { key: 'hito', label: 'Hitos WBS', entities: ['hito'], iconColorClass: 'text-violet-300' },
+  { key: 'finanzas', label: 'Finanzas', entities: ['gasto', 'ingreso'], iconColorClass: 'text-amber-300/90' },
+  { key: 'externo_gcal', label: 'Google Calendar', entities: ['externo_gcal'], iconColorClass: 'text-slate-400' }
+];
+
+const ENTIDADES_ENFOQUE: ReadonlySet<CalendarEntityType> = new Set([
   'tarea',
   'actividad',
-  'habito',
-  'hito',
-  'gasto',
-  'ingreso',
-  'externo_gcal'
-];
+  'habito'
+]);
+
+function renderIconoCapa(key: LayerKey, colorClass: string) {
+  const cls = `w-3.5 h-3.5 shrink-0 ${colorClass}`;
+  switch (key) {
+    case 'tarea':
+      return <CheckSquare className={cls} strokeWidth={1.75} />;
+    case 'actividad':
+      return <Activity className={cls} strokeWidth={1.75} />;
+    case 'habito':
+      return <Flame className={cls} strokeWidth={1.75} />;
+    case 'hito':
+      return <Flag className={cls} strokeWidth={1.75} />;
+    case 'finanzas':
+      return <Wallet className={cls} strokeWidth={1.75} />;
+    case 'externo_gcal':
+      return <Calendar className={cls} strokeWidth={1.75} />;
+  }
+}
 
 function convertirEventoAItemFoco(ev: CalendarEventItem): DailyScheduleItem | null {
   if (ev.rawRef.kind !== 'tarea' && ev.rawRef.kind !== 'actividad' && ev.rawRef.kind !== 'habito') {
@@ -100,8 +149,11 @@ function convertirEventoAItemFoco(ev: CalendarEventItem): DailyScheduleItem | nu
 
 export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
   onAbrirTarea,
+  onCrearTareaConDetalles,
   onAbrirActividad,
+  onCrearActividadConDetalles,
   onAbrirGasto,
+  onAbrirIngreso,
   onNavegarVista
 }) => {
   const {
@@ -111,19 +163,26 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
     rango,
     filtrosEntidad,
     toggleFiltroEntidad,
+    resetFiltros,
     irAHoy,
     irAnterior,
     irSiguiente,
+    irAFecha,
     seleccionarFecha,
     todosEventos,
     eventosPorFecha,
     tareasPorAgendar,
+    tareasVencidasReprogramar,
+    tareasSinHora,
     cargaDiariaPorFecha,
     gcalExternoEstado,
     recargarEventosExternos,
+    puedeDeshacer,
+    deshacerUltimaAccion,
     toggleCompletarEvento,
     reprogramarEvento,
     agendarTareaDesdeBacklog,
+    devolverTareaABacklog,
     crearEventoRapido
   } = useCalendarEngine('semana');
 
@@ -131,21 +190,27 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   );
 
-  // Panel lateral "Por Agendar" (abierto por defecto en pantallas anchas >= 1280px)
+  // Panel lateral "Por Agendar"
   const [panelBacklogAbierto, setPanelBacklogAbierto] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 1280 : true
   );
   const [activeDragPayload, setActiveDragPayload] = useState<CalendarDragPayload | null>(null);
 
-  // Estado del Popover de evento seleccionado
+  // Popover de Capas (Notion / Linear style) y Mini-Calendario Mes/Año
+  const [capasAbierto, setCapasAbierto] = useState(false);
+  const [datePickerAbierto, setDatePickerAbierto] = useState(false);
+  const capasRef = useRef<HTMLDivElement>(null);
+
+  // Popover de evento seleccionado
   const [eventoActivo, setEventoActivo] = useState<CalendarEventItem | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<PopoverAnchorPosition | null>(null);
   const [procesandoCompletado, setProcesandoCompletado] = useState(false);
 
-  // Estado del Mini-Popover de creación al vuelo (Click-and-Drag)
+  // Mini-Popover de creación al vuelo de las 4 entidades (Click-and-Drag o botón +)
   const [slotNuevo, setSlotNuevo] = useState<EmptySlotSelection | null>(null);
-  const [tipoNuevoEvento, setTipoNuevoEvento] = useState<'tarea' | 'actividad'>('tarea');
+  const [tipoNuevoEvento, setTipoNuevoEvento] = useState<'tarea' | 'actividad' | 'gasto' | 'ingreso'>('tarea');
   const [tituloNuevoEvento, setTituloNuevoEvento] = useState('');
+  const [montoNuevoEvento, setMontoNuevoEvento] = useState('');
   const [creandoEvento, setCreandoEvento] = useState(false);
   const quickCreateRef = useRef<HTMLDivElement>(null);
 
@@ -157,6 +222,31 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
     mq.addEventListener('change', actualizar);
     return () => mq.removeEventListener('change', actualizar);
   }, []);
+
+  // Cierre por clic fuera / Escape para popover de Capas
+  useEffect(() => {
+    if (!capasAbierto) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (capasRef.current && !capasRef.current.contains(e.target as Node)) {
+        setCapasAbierto(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setCapasAbierto(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [capasAbierto]);
 
   // Cierre por clic fuera / Escape para mini-popover de creación rápida
   useEffect(() => {
@@ -183,7 +273,7 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
     };
   }, [slotNuevo]);
 
-  // Estado del motor Pomodoro integrado para eventos del Calendario
+  // Motor Pomodoro integrado
   const [focoEvento, setFocoEvento] = useState<CalendarEventItem | null>(null);
   const itemFocoPomodoro = useMemo(
     () => (focoEvento ? convertirEventoAItemFoco(focoEvento) : null),
@@ -209,7 +299,6 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
     [fechaAncla]
   );
 
-  // Mapa rápido id -> CalendarEventItem para resolver drops de eventos existentes
   const mapaEventosPorId = useMemo(() => {
     const map = new Map<string, CalendarEventItem>();
     for (const ev of todosEventos) {
@@ -218,10 +307,16 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
     return map;
   }, [todosEventos]);
 
-  // Atajos de teclado contextuales: D (Día), W (Semana), M (Mes), T (Hoy)
+  const handleDeshacer = useCallback(async () => {
+    const res = await deshacerUltimaAccion();
+    if (res.ok) {
+      mostrarToastCobalt(`Deshecho: ${res.mensaje || 'último cambio'}`, 'info');
+    }
+  }, [deshacerUltimaAccion]);
+
+  // Atajos de teclado contextuales: Ctrl/Cmd+Z (Deshacer), D (Día), W (Semana), M (Mes), T (Hoy)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
       const esInput = Boolean(
         target &&
@@ -230,6 +325,19 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
             target.getAttribute('contenteditable') === 'true')
       );
       if (esInput) return;
+
+      // Ctrl + Z / Cmd + Z: Deshacer última edición en el calendario (REQ-FEAT-CAL-07)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+        const hayModalBloqueante =
+          typeof document !== 'undefined' &&
+          document.querySelectorAll('[aria-modal="true"]').length > 0;
+        if (hayModalBloqueante || !puedeDeshacer) return;
+        e.preventDefault();
+        void handleDeshacer();
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       const hayModalAbierto =
         typeof document !== 'undefined' &&
@@ -254,7 +362,7 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [setVista, irAHoy]);
+  }, [setVista, irAHoy, puedeDeshacer, handleDeshacer]);
 
   // Título legible del periodo actual
   const tituloPeriodo = useMemo(() => {
@@ -267,37 +375,96 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
       const fIni = rango.fechas[0];
       const fFin = rango.fechas[rango.fechas.length - 1];
       if (fIni && fFin) {
-        const [, m1, d1] = fIni.split('-').map(Number);
-        const [, m2, d2] = fFin.split('-').map(Number);
+        const [, m1] = fIni.split('-').map(Number);
+        const [, m2] = fFin.split('-').map(Number);
         if (m1 === m2) {
-          return `${String(d1).padStart(2, '0')} – ${String(d2).padStart(2, '0')} ${mes} ${anio}`;
+          return `${mes} ${anio}`;
         }
-        return `${String(d1).padStart(2, '0')} ${MESES_ES[m1 - 1]?.slice(0, 3)} – ${String(d2).padStart(2, '0')} ${MESES_ES[m2 - 1]?.slice(0, 3)} ${anio}`;
+        return `${MESES_ES[m1 - 1]?.slice(0, 3)} – ${MESES_ES[m2 - 1]?.slice(0, 3)} ${anio}`;
       }
     }
     return `${mes} ${anio}`;
   }, [fechaAncla, fechaAnclaIso, vista, rango.fechas, esMovil]);
 
-  // Contadores por entidad en el rango visible
-  const conteoPorEntidad = useMemo(() => {
-    const map: Record<CalendarEntityType, number> = {
+  // Contadores y estado de las 6 capas lógicas
+  const conteoPorCapa = useMemo(() => {
+    const map: Record<LayerKey, number> = {
       tarea: 0,
       actividad: 0,
       habito: 0,
       hito: 0,
-      gasto: 0,
-      ingreso: 0,
+      finanzas: 0,
       externo_gcal: 0
     };
     for (const ev of todosEventos) {
-      map[ev.entidad] = (map[ev.entidad] || 0) + 1;
+      if (ev.entidad === 'gasto' || ev.entidad === 'ingreso') {
+        map.finanzas += 1;
+      } else {
+        map[ev.entidad] += 1;
+      }
     }
     return map;
   }, [todosEventos]);
 
+  const estaCapaActiva = useCallback(
+    (layer: LayerDefinition): boolean =>
+      layer.entities.some((ent) => filtrosEntidad[ent]),
+    [filtrosEntidad]
+  );
+
+  const capasActivasCount = useMemo(
+    () => CAPAS_CALENDARIO.filter((layer) => estaCapaActiva(layer)).length,
+    [estaCapaActiva]
+  );
+
+  const esPresetTodo = capasActivasCount === CAPAS_CALENDARIO.length;
+  const esPresetEnfoque = useMemo(
+    () =>
+      filtrosEntidad.tarea &&
+      filtrosEntidad.actividad &&
+      filtrosEntidad.habito &&
+      !filtrosEntidad.hito &&
+      !filtrosEntidad.gasto &&
+      !filtrosEntidad.ingreso &&
+      !filtrosEntidad.externo_gcal,
+    [filtrosEntidad]
+  );
+
+  const handleToggleCapa = useCallback(
+    (layer: LayerDefinition) => {
+      const actualmenteActiva = layer.entities.some((ent) => filtrosEntidad[ent]);
+      const objetivo = !actualmenteActiva;
+      for (const ent of layer.entities) {
+        if (filtrosEntidad[ent] !== objetivo) {
+          toggleFiltroEntidad(ent);
+        }
+      }
+    },
+    [filtrosEntidad, toggleFiltroEntidad]
+  );
+
+  const handleAplicarPresetEnfoque = useCallback(() => {
+    const todasEntidades: CalendarEntityType[] = [
+      'tarea',
+      'actividad',
+      'habito',
+      'hito',
+      'gasto',
+      'ingreso',
+      'externo_gcal'
+    ];
+    for (const ent of todasEntidades) {
+      const debeEstarActiva = ENTIDADES_ENFOQUE.has(ent);
+      if (filtrosEntidad[ent] !== debeEstarActiva) {
+        toggleFiltroEntidad(ent);
+      }
+    }
+  }, [filtrosEntidad, toggleFiltroEntidad]);
+
   const handleSeleccionarEvento = useCallback(
     (ev: CalendarEventItem, anchor: PopoverAnchorPosition) => {
       setSlotNuevo(null);
+      setCapasAbierto(false);
       setEventoActivo(ev);
       setPopoverAnchor(anchor);
     },
@@ -364,37 +531,136 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
   const handleSelectEmptySlot = useCallback((slot: EmptySlotSelection) => {
     setEventoActivo(null);
     setPopoverAnchor(null);
+    setCapasAbierto(false);
+    setDatePickerAbierto(false);
     setTituloNuevoEvento('');
+    setMontoNuevoEvento('');
     setTipoNuevoEvento('tarea');
     setSlotNuevo(slot);
   }, []);
+
+  const handleAbrirNuevoDesdeToolbar = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const now = new Date();
+      const horaSig = Math.min(21, Math.max(8, now.getHours() + 1));
+      const horaInicio = `${String(horaSig).padStart(2, '0')}:00`;
+      const horaFin = `${String(Math.min(22, horaSig + 1)).padStart(2, '0')}:00`;
+      handleSelectEmptySlot({
+        fecha: fechaAnclaIso,
+        horaInicio,
+        horaFin,
+        duracionMinutos: 60,
+        anchor: { x: rect.left - 240, y: rect.bottom + 4 }
+      });
+    },
+    [fechaAnclaIso, handleSelectEmptySlot]
+  );
 
   const handleConfirmarCrearRapido = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (!slotNuevo || !tituloNuevoEvento.trim() || creandoEvento) return;
       setCreandoEvento(true);
-      const ok = await crearEventoRapido({
-        tipo: tipoNuevoEvento,
-        titulo: tituloNuevoEvento,
-        fecha: slotNuevo.fecha,
-        horaInicio: slotNuevo.horaInicio,
-        duracionMinutos: slotNuevo.duracionMinutos
-      });
+
+      let ok = false;
+      if (tipoNuevoEvento === 'tarea' || tipoNuevoEvento === 'actividad') {
+        ok = await crearEventoRapido({
+          tipo: tipoNuevoEvento,
+          titulo: tituloNuevoEvento,
+          fecha: slotNuevo.fecha,
+          horaInicio: slotNuevo.horaInicio,
+          duracionMinutos: slotNuevo.duracionMinutos
+        });
+      } else {
+        const montoNum = parseFloat(montoNuevoEvento.replace(',', '.')) || 0;
+        ok = await crearEventoRapido({
+          tipo: tipoNuevoEvento,
+          titulo: tituloNuevoEvento,
+          fecha: slotNuevo.fecha,
+          monto: montoNum,
+          moneda: 'PEN'
+        });
+      }
+
       setCreandoEvento(false);
       if (ok) {
-        mostrarToastCobalt(
-          `${tipoNuevoEvento === 'tarea' ? 'Tarea' : 'Actividad'} agendada (${slotNuevo.horaInicio}–${slotNuevo.horaFin})`,
-          'success'
-        );
+        const label =
+          tipoNuevoEvento === 'tarea'
+            ? 'Tarea agendada'
+            : tipoNuevoEvento === 'actividad'
+            ? 'Actividad agendada'
+            : tipoNuevoEvento === 'gasto'
+            ? 'Gasto registrado'
+            : 'Ingreso registrado';
+        const detalle =
+          tipoNuevoEvento === 'tarea' || tipoNuevoEvento === 'actividad'
+            ? ` (${slotNuevo.horaInicio}–${slotNuevo.horaFin})`
+            : ` (${formatearFechaCortaEs(slotNuevo.fecha)})`;
+        mostrarToastCobalt(`${label}${detalle}`, 'success');
         setSlotNuevo(null);
         setTituloNuevoEvento('');
+        setMontoNuevoEvento('');
       } else {
-        mostrarToastCobalt('No se pudo crear el bloque en el calendario', 'error');
+        mostrarToastCobalt('No se pudo crear el registro en el calendario', 'error');
       }
     },
-    [slotNuevo, tituloNuevoEvento, creandoEvento, crearEventoRapido, tipoNuevoEvento]
+    [slotNuevo, tituloNuevoEvento, montoNuevoEvento, creandoEvento, crearEventoRapido, tipoNuevoEvento]
   );
+
+  const handleAbrirMasDetalles = useCallback(() => {
+    if (!slotNuevo) return;
+    const snapSlot = slotNuevo;
+    const snapTitulo = tituloNuevoEvento.trim();
+    const snapTipo = tipoNuevoEvento;
+    setSlotNuevo(null);
+
+    if (snapTipo === 'tarea') {
+      if (onCrearTareaConDetalles) {
+        onCrearTareaConDetalles({
+          titulo: snapTitulo,
+          fecha: snapSlot.fecha,
+          horaInicio: snapSlot.horaInicio
+        });
+      }
+      return;
+    }
+
+    if (snapTipo === 'actividad') {
+      if (onCrearActividadConDetalles) {
+        onCrearActividadConDetalles();
+      } else if (onNavegarVista) {
+        onNavegarVista('habitos');
+      }
+      return;
+    }
+
+    if (snapTipo === 'gasto') {
+      if (onAbrirGasto) {
+        onAbrirGasto(null);
+      } else if (onNavegarVista) {
+        onNavegarVista('financiero');
+      }
+      return;
+    }
+
+    if (snapTipo === 'ingreso') {
+      if (onAbrirIngreso) {
+        onAbrirIngreso(null);
+      } else if (onNavegarVista) {
+        onNavegarVista('financiero');
+      }
+    }
+  }, [
+    slotNuevo,
+    tituloNuevoEvento,
+    tipoNuevoEvento,
+    onCrearTareaConDetalles,
+    onCrearActividadConDetalles,
+    onAbrirGasto,
+    onAbrirIngreso,
+    onNavegarVista
+  ]);
 
   const handleIniciarPomodoro = useCallback(
     (ev: CalendarEventItem) => {
@@ -446,6 +712,20 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
     [toggleCompletarEvento, handleCerrarPopover]
   );
 
+  const handleDevolverABacklog = useCallback(
+    async (ev: CalendarEventItem) => {
+      if (ev.rawRef.kind !== 'tarea') return;
+      const ok = await devolverTareaABacklog(ev.sourceId);
+      handleCerrarPopover();
+      if (ok) {
+        mostrarToastCobalt('Tarea devuelta a Por Agendar', 'info');
+      } else {
+        mostrarToastCobalt('No se pudo devolver la tarea', 'error');
+      }
+    },
+    [devolverTareaABacklog, handleCerrarPopover]
+  );
+
   const handleVerEditar = useCallback(
     (ev: CalendarEventItem) => {
       handleCerrarPopover();
@@ -482,7 +762,11 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
       }
 
       if (ev.rawRef.kind === 'ingreso') {
-        if (onNavegarVista) onNavegarVista('financiero');
+        if (onAbrirIngreso) {
+          onAbrirIngreso(ev.rawRef.record);
+        } else if (onNavegarVista) {
+          onNavegarVista('financiero');
+        }
         return;
       }
 
@@ -499,7 +783,7 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
         }
       }
     },
-    [handleCerrarPopover, onAbrirTarea, onAbrirActividad, onAbrirGasto, onNavegarVista]
+    [handleCerrarPopover, onAbrirTarea, onAbrirActividad, onAbrirGasto, onAbrirIngreso, onNavegarVista]
   );
 
   const handleSeleccionarDiaDesdeMes = useCallback(
@@ -512,11 +796,10 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
     [seleccionarFecha, esMovil, setVista]
   );
 
-  // Coordenadas seguras para el mini-popover de creación al vuelo
   const quickCreatePosition = useMemo(() => {
     if (!slotNuevo) return null;
-    const width = 300;
-    const height = 210;
+    const width = 324;
+    const height = 260;
     const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
     const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
     return {
@@ -529,165 +812,323 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
   }, [slotNuevo]);
 
   return (
-    <div className="h-full w-full flex flex-col bg-[#040711] text-slate-200 px-3 sm:px-5 pt-3 pb-4 gap-3 overflow-hidden select-none">
-      {/* 1. CABECERA EJECUTIVA COBALT AERODYNAMIC */}
-      <div className="flex flex-col gap-2.5 shrink-0">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {/* Izquierda: Identidad + Navegación Temporal */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-[#0D1526] border border-slate-800/70 flex items-center justify-center text-sky-400 shrink-0 shadow-xs">
-              <CalendarDays className="w-4.5 h-4.5" strokeWidth={1.75} />
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={irAHoy}
-                className="px-2.5 py-1.5 rounded-xl bg-[#0D1526] hover:bg-sky-950/40 border border-slate-800/70 hover:border-sky-500/40 text-xs font-semibold text-slate-300 hover:text-sky-300 transition cursor-pointer active:scale-95"
-                title="Ir a Hoy (Atajo: T)"
-              >
-                Hoy
-              </button>
-
-              <div className="inline-flex items-center rounded-xl bg-[#0D1526] border border-slate-800/70 p-0.5">
-                <button
-                  type="button"
-                  onClick={irAnterior}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-white/[0.05] transition cursor-pointer"
-                  aria-label="Periodo anterior"
-                  title="Anterior"
-                >
-                  <ChevronLeft className="w-4 h-4" strokeWidth={1.75} />
-                </button>
-                <button
-                  type="button"
-                  onClick={irSiguiente}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-white/[0.05] transition cursor-pointer"
-                  aria-label="Periodo siguiente"
-                  title="Siguiente"
-                >
-                  <ChevronRight className="w-4 h-4" strokeWidth={1.75} />
-                </button>
-              </div>
-            </div>
-
-            <h2 className="text-sm sm:text-base font-bold text-slate-100 tracking-tight truncate capitalize">
-              {tituloPeriodo}
-            </h2>
+    <div className="h-full w-full flex flex-col bg-[#040711] text-slate-200 px-3 sm:px-5 pt-2.5 pb-3.5 gap-2.5 overflow-hidden select-none">
+      {/* 1. TOOLBAR EJECUTIVA DE ALTA PRECISIÓN EN 3 ZONAS (REQ-UX-CAL-08) */}
+      <div
+        role="toolbar"
+        aria-label="Barra de herramientas del calendario"
+        className="h-11 sm:h-12 flex items-center justify-between gap-2 shrink-0 relative border-b border-white/[0.06]"
+      >
+        {/* Zona Izquierda: Grupo [ < | Hoy | > ] + Título Periodo */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div
+            role="group"
+            aria-label="Navegación temporal"
+            className="inline-flex items-center rounded-lg border border-white/[0.07] bg-white/[0.02] p-0.5 shrink-0"
+          >
+            <button
+              type="button"
+              onClick={irAnterior}
+              className="h-7 w-7 rounded-md text-slate-400 hover:text-sky-300 hover:bg-white/[0.05] flex items-center justify-center transition cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70"
+              aria-label="Periodo anterior"
+              title="Anterior"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={irAHoy}
+              className="h-7 px-2.5 rounded-md text-xs font-medium text-slate-300 hover:text-sky-300 hover:bg-white/[0.05] transition cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70"
+              title="Ir a Hoy (Atajo: T)"
+            >
+              Hoy
+            </button>
+            <button
+              type="button"
+              onClick={irSiguiente}
+              className="h-7 w-7 rounded-md text-slate-400 hover:text-sky-300 hover:bg-white/[0.05] flex items-center justify-center transition cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70"
+              aria-label="Periodo siguiente"
+              title="Siguiente"
+            >
+              <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+            </button>
           </div>
 
-          {/* Derecha: Estado GCal + Toggle "Por Agendar" + Selector de Vista Ghost (Escritorio) */}
-          <div className="hidden md:flex items-center gap-2">
+          <div className="relative min-w-0">
+            <button
+              type="button"
+              onClick={() => {
+                setCapasAbierto(false);
+                setDatePickerAbierto((prev) => !prev);
+              }}
+              aria-expanded={datePickerAbierto}
+              className="px-2 py-1 rounded-lg hover:bg-white/[0.05] text-sm font-semibold tracking-tight text-slate-100 hover:text-sky-200 transition cursor-pointer inline-flex items-center gap-1 max-w-full capitalize focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70"
+              title="Seleccionar mes, año o fecha rápida"
+            >
+              <span className="truncate">{tituloPeriodo}</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 shrink-0 transition-transform duration-150 ${
+                  datePickerAbierto ? 'rotate-180 opacity-100 text-sky-400' : 'opacity-60'
+                }`}
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+            </button>
+
+            <CalendarDatePickerPopover
+              isOpen={datePickerAbierto}
+              fechaAncla={fechaAncla}
+              hoyIso={hoyIso}
+              onSelectDate={irAFecha}
+              onIrAHoy={irAHoy}
+              onClose={() => setDatePickerAbierto(false)}
+            />
+          </div>
+        </div>
+
+        {/* Zona Centro: Selector de Vista Compacto Estilo Linear [ Día | Semana | Mes ] */}
+        <div
+          role="group"
+          aria-label="Selector de vista"
+          className="hidden md:flex items-center gap-0.5 bg-white/[0.03] border border-white/[0.06] p-0.5 rounded-lg lg:absolute lg:left-1/2 lg:-translate-x-1/2"
+        >
+          {(
+            [
+              { id: 'dia', label: 'Día', k: 'D' },
+              { id: 'semana', label: 'Semana', k: 'W' },
+              { id: 'mes', label: 'Mes', k: 'M' }
+            ] as Array<{ id: CalendarViewMode; label: string; k: string }>
+          ).map((opt) => {
+            const activo = vista === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setVista(opt.id)}
+                aria-pressed={activo}
+                className={`h-7 px-2.5 rounded-md text-xs font-medium transition cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70 ${
+                  activo
+                    ? 'bg-white/[0.09] text-slate-100 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
+                }`}
+                title={`Vista ${opt.label} (Atajo: ${opt.k})`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Zona Derecha: Utilidades Ghost (Undo, Capas, Por Agendar, GCal) + Acción Primaria Única (+ Nuevo) */}
+        <div className="flex items-center gap-1 shrink-0">
+          {puedeDeshacer && (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleDeshacer()}
+                className="h-7 w-7 rounded-lg text-slate-400 hover:text-sky-300 bg-transparent hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70"
+                title="Deshacer (Ctrl+Z)"
+                aria-label="Deshacer"
+              >
+                <Undo2 className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+              </button>
+              <span
+                role="separator"
+                aria-orientation="vertical"
+                className="w-px h-4 bg-white/[0.08] mx-0.5 shrink-0"
+              />
+            </>
+          )}
+
+          {/* Utilidades Ghost: Capas + Por Agendar + Google Calendar */}
+          <div role="group" aria-label="Utilidades del calendario" className="flex items-center gap-1">
+            {/* Botón Capas (Popover flotante Notion/Linear) */}
+            <div ref={capasRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setCapasAbierto((prev) => !prev)}
+                aria-expanded={capasAbierto}
+                aria-label="Capas y filtros"
+                className={`h-7 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-1.5 transition cursor-pointer border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70 ${
+                  capasActivasCount < CAPAS_CALENDARIO.length ? 'px-2' : 'w-7'
+                } ${
+                  capasAbierto || capasActivasCount < CAPAS_CALENDARIO.length
+                    ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                    : 'text-slate-400 hover:text-slate-200 bg-transparent hover:bg-white/[0.06] border-transparent'
+                }`}
+                title="Capas y filtros"
+              >
+                <Layers className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                {capasActivasCount < CAPAS_CALENDARIO.length && (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" aria-hidden="true" />
+                    <span className="font-mono tabular-nums text-[10px] font-medium leading-none">
+                      {capasActivasCount}/{CAPAS_CALENDARIO.length}
+                    </span>
+                  </>
+                )}
+              </button>
+
+              {capasAbierto && (
+                <div
+                  role="dialog"
+                  aria-label="Selector de capas del calendario"
+                  className="absolute right-0 top-full mt-1.5 w-64 rounded-2xl bg-[#0D1526] border border-slate-800/80 shadow-[0_14px_35px_-5px_rgba(2,6,23,0.92),0_8px_15px_-6px_rgba(30,58,138,0.28)] p-2.5 z-[9990]"
+                >
+                  {/* Presets rápidos: Todo / Enfoque */}
+                  <div className="flex items-center justify-between gap-1 pb-2 mb-2 border-b border-slate-800/70">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 pl-1">
+                      Capas
+                    </span>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={resetFiltros}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition cursor-pointer ${
+                          esPresetTodo
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/35'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.05] border border-transparent'
+                        }`}
+                      >
+                        Todo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAplicarPresetEnfoque}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition cursor-pointer ${
+                          esPresetEnfoque
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/35'
+                            : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.05] border border-transparent'
+                        }`}
+                        title="Mostrar solo Tareas, Actividades y Hábitos"
+                      >
+                        Enfoque
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Lista vertical con iconos Lucide y check táctil */}
+                  <div className="space-y-0.5">
+                    {CAPAS_CALENDARIO.map((layer) => {
+                      const activa = estaCapaActiva(layer);
+                      const count = conteoPorCapa[layer.key] || 0;
+                      return (
+                        <button
+                          key={layer.key}
+                          type="button"
+                          onClick={() => handleToggleCapa(layer)}
+                          className={`w-full px-2 py-1.5 rounded-xl flex items-center justify-between gap-2 text-left transition cursor-pointer ${
+                            activa
+                              ? 'text-slate-200 hover:bg-white/[0.05]'
+                              : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={activa ? 'opacity-100' : 'opacity-40'}>
+                              {renderIconoCapa(layer.key, layer.iconColorClass)}
+                            </span>
+                            <span className="text-xs font-medium truncate">{layer.label}</span>
+                            {count > 0 && (
+                              <span className="font-mono tabular-nums text-[10px] text-slate-500">
+                                {count}
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className={`w-4 h-4 rounded-md border flex items-center justify-center transition shrink-0 ${
+                              activa
+                                ? 'bg-sky-500/25 border-sky-400/60 text-sky-300'
+                                : 'bg-transparent border-slate-700/80 text-transparent'
+                            }`}
+                          >
+                            <Check className="w-2.5 h-2.5" strokeWidth={2.5} />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Botón Por Agendar (Escritorio — Icono + Pill Numérico Compacto) */}
+            <button
+              type="button"
+              onClick={() => setPanelBacklogAbierto((prev) => !prev)}
+              aria-pressed={panelBacklogAbierto}
+              aria-label="Por Agendar (Time-Blocking)"
+              className={`hidden md:inline-flex h-7 rounded-lg text-xs font-medium items-center justify-center gap-1.5 transition cursor-pointer border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70 ${
+                tareasPorAgendar.length > 0 ? 'px-2' : 'w-7'
+              } ${
+                panelBacklogAbierto
+                  ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                  : 'text-slate-400 hover:text-slate-200 bg-transparent hover:bg-white/[0.06] border-transparent'
+              }`}
+              title="Por Agendar (Time-Blocking)"
+            >
+              <PanelRight className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              {tareasPorAgendar.length > 0 && (
+                <span
+                  className={`font-mono tabular-nums text-[10px] font-semibold px-1.5 py-0.5 rounded-md leading-none ${
+                    panelBacklogAbierto
+                      ? 'bg-sky-500/20 text-sky-200'
+                      : 'bg-white/[0.07] text-slate-300'
+                  }`}
+                >
+                  {tareasPorAgendar.length}
+                </span>
+              )}
+            </button>
+
+            {/* Indicador / Botón Ghost de Estado Google Calendar */}
             <button
               type="button"
               onClick={recargarEventosExternos}
-              className="px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-slate-400 hover:text-sky-300 bg-transparent hover:bg-white/[0.04] border border-slate-800/60 flex items-center gap-1.5 transition cursor-pointer"
+              className="relative h-7 w-7 rounded-lg text-slate-400 hover:text-slate-200 bg-transparent hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70"
               title={
                 gcalExternoEstado === 'connected'
                   ? 'Google Calendar conectado · Clic para refrescar eventos externos'
                   : gcalExternoEstado === 'loading'
                   ? 'Sincronizando eventos de Google Calendar...'
-                  : 'Google Calendar sin sesión activa · Conéctalo desde Configuración o clic para reintentar'
+                  : 'Google Calendar sin sesión activa · Clic para reintentar'
               }
+              aria-label="Sincronizar Google Calendar"
             >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${gcalExternoEstado === 'loading' ? 'animate-spin text-sky-400' : ''}`}
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
               <span
-                className={`w-1.5 h-1.5 rounded-full ${
+                aria-hidden="true"
+                className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${
                   gcalExternoEstado === 'connected'
-                    ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]'
+                    ? 'bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.7)]'
                     : gcalExternoEstado === 'loading'
                     ? 'bg-sky-400 animate-pulse'
-                    : 'bg-slate-600'
+                    : 'bg-slate-500'
                 }`}
               />
-              <span>GCal</span>
-              <RefreshCw
-                className={`w-3 h-3 ${gcalExternoEstado === 'loading' ? 'animate-spin text-sky-400' : ''}`}
-                strokeWidth={1.75}
-              />
             </button>
-
-            <button
-              type="button"
-              onClick={() => setPanelBacklogAbierto((prev) => !prev)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border ${
-                panelBacklogAbierto
-                  ? 'text-sky-300 bg-sky-950/40 border-sky-700/50'
-                  : 'text-slate-400 hover:text-sky-300 bg-transparent hover:bg-white/[0.04] border-slate-800/60'
-              }`}
-              title="Mostrar/ocultar panel lateral Por Agendar"
-            >
-              <Inbox className="w-3.5 h-3.5" strokeWidth={1.75} />
-              <span>Por Agendar</span>
-              <span className="font-mono tabular-nums text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-sky-950/70 text-sky-300 border border-sky-800/50">
-                {tareasPorAgendar.length}
-              </span>
-            </button>
-
-            <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#0D1526] border border-slate-800/60">
-              {(
-                [
-                  { id: 'dia', label: 'Día', k: 'D' },
-                  { id: 'semana', label: 'Semana', k: 'W' },
-                  { id: 'mes', label: 'Mes', k: 'M' }
-                ] as Array<{ id: CalendarViewMode; label: string; k: string }>
-              ).map((opt) => {
-                const activo = vista === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setVista(opt.id)}
-                    className={`relative px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                      activo
-                        ? 'text-sky-300 bg-sky-950/40'
-                        : 'text-slate-400 hover:text-sky-300 hover:bg-white/[0.03]'
-                    }`}
-                    title={`Vista ${opt.label} (Atajo: ${opt.k})`}
-                  >
-                    <span>{opt.label}</span>
-                    {activo && (
-                      <span className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-sky-400" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
           </div>
-        </div>
 
-        {/* Barra de Filtros Ghost por Entidad */}
-        <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-0.5">
-          {ENTIDADES_FILTRO.map((entidad) => {
-            const activo = filtrosEntidad[entidad];
-            const style = CALENDAR_ENTITY_STYLES[entidad];
-            const count = conteoPorEntidad[entidad] || 0;
+          <span
+            role="separator"
+            aria-orientation="vertical"
+            className="w-px h-4 bg-white/[0.08] mx-0.5 shrink-0"
+          />
 
-            return (
-              <button
-                key={entidad}
-                type="button"
-                onClick={() => toggleFiltroEntidad(entidad)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 shrink-0 transition cursor-pointer ${
-                  activo
-                    ? 'text-slate-200 bg-white/[0.05] hover:bg-white/[0.08]'
-                    : 'text-slate-500 hover:text-slate-300 bg-transparent opacity-60'
-                }`}
-                title={`${activo ? 'Ocultar' : 'Mostrar'} ${style.label}`}
-              >
-                <span
-                  className={`w-2 h-2 rounded-full ${style.dotClass} ${
-                    activo ? 'opacity-100' : 'opacity-35'
-                  }`}
-                />
-                <span>{style.label}</span>
-                {count > 0 && (
-                  <span className="font-mono tabular-nums text-[10px] text-slate-400">
-                    {count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          {/* Acción Primaria Única (+ Nuevo: Tarea, Actividad, Gasto, Ingreso) */}
+          <button
+            type="button"
+            onClick={handleAbrirNuevoDesdeToolbar}
+            className="h-7 px-2 sm:px-2.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-xs font-medium inline-flex items-center justify-center gap-1 transition cursor-pointer active:scale-95 shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400/70"
+            title="Nuevo registro en Calendario (Tarea, Actividad, Gasto o Ingreso)"
+            aria-label="Crear nuevo registro en calendario"
+          >
+            <Plus className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            <span className="hidden sm:inline">Nuevo</span>
+          </button>
         </div>
       </div>
 
@@ -695,7 +1136,8 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
       <div className="flex-1 flex min-h-0 gap-3">
         {!esMovil && panelBacklogAbierto && (
           <CalendarBacklogPanel
-            tareas={tareasPorAgendar}
+            tareasVencidas={tareasVencidasReprogramar}
+            tareasSinHora={tareasSinHora}
             onClose={() => setPanelBacklogAbierto(false)}
             onDragStartItem={setActiveDragPayload}
             onDragEndItem={() => setActiveDragPayload(null)}
@@ -734,6 +1176,7 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
             onResizeEvent={handleResizeEvent}
             onSelectEmptySlot={handleSelectEmptySlot}
             onSelectEvent={handleSeleccionarEvento}
+            onToggleCompletar={handleToggleCompletar}
             onSelectDay={(f) => {
               seleccionarFecha(f);
               if (vista === 'semana') setVista('dia');
@@ -750,30 +1193,35 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
         onIniciarPomodoro={handleIniciarPomodoro}
         onToggleCompletar={handleToggleCompletar}
         onVerEditar={handleVerEditar}
+        onDevolverABacklog={handleDevolverABacklog}
         procesandoCompletado={procesandoCompletado}
       />
 
-      {/* 4. MINI-POPOVER DE CREACIÓN AL VUELO (CLICK-AND-DRAG EN ESPACIO VACÍO) */}
+      {/* 4. MINI-POPOVER DE CREACIÓN AL VUELO DE 4 ENTIDADES (CLICK-AND-DRAG O BOTÓN +) */}
       {slotNuevo && quickCreatePosition && (
         <div
           ref={quickCreateRef}
           role="dialog"
-          aria-label="Crear bloque rápido en calendario"
+          aria-label="Crear registro rápido en calendario"
           style={{
             top: quickCreatePosition.top,
             left: quickCreatePosition.left,
-            width: 300
+            width: 324
           }}
-          className="fixed z-[9995] rounded-2xl bg-[#0D1526] border border-sky-500/40 ring-1 ring-sky-500/20 shadow-[0_14px_35px_-5px_rgba(2,6,23,0.92),0_8px_15px_-6px_rgba(30,58,138,0.28)] p-3.5 text-slate-200"
+          className="fixed z-[9995] rounded-2xl bg-[#0D1526] border border-sky-500/35 ring-1 ring-sky-500/15 shadow-[0_14px_35px_-5px_rgba(2,6,23,0.92),0_8px_15px_-6px_rgba(30,58,138,0.28)] p-3.5 text-slate-200"
         >
           <div className="flex items-center justify-between gap-2 mb-2.5">
             <div className="flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-sky-300">
               <Clock className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>{formatearFechaCortaEs(slotNuevo.fecha)}</span>
-              <span className="text-slate-500">·</span>
-              <span>
-                {slotNuevo.horaInicio}–{slotNuevo.horaFin}
-              </span>
+              {(tipoNuevoEvento === 'tarea' || tipoNuevoEvento === 'actividad') && (
+                <>
+                  <span className="text-slate-500">·</span>
+                  <span>
+                    {slotNuevo.horaInicio}–{slotNuevo.horaFin}
+                  </span>
+                </>
+              )}
             </div>
             <button
               type="button"
@@ -786,31 +1234,55 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
           </div>
 
           <form onSubmit={handleConfirmarCrearRapido} className="space-y-2.5">
-            {/* Selector Tarea vs Actividad */}
-            <div className="grid grid-cols-2 gap-1 p-0.5 rounded-xl bg-[#040711] border border-slate-800/80">
+            {/* Selector de 4 Entidades con Paleta Editorial Sobria */}
+            <div className="grid grid-cols-4 gap-1 p-0.5 rounded-xl bg-[#040711] border border-slate-800/80">
               <button
                 type="button"
                 onClick={() => setTipoNuevoEvento('tarea')}
-                className={`py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                className={`py-1.5 px-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
                   tipoNuevoEvento === 'tarea'
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                    ? 'bg-sky-500/15 text-sky-300 border border-sky-400/35'
                     : 'text-slate-400 hover:text-slate-200 border border-transparent'
                 }`}
               >
-                <CheckSquare className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <CheckSquare className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
                 <span>Tarea</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTipoNuevoEvento('actividad')}
-                className={`py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                className={`py-1.5 px-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
                   tipoNuevoEvento === 'actividad'
-                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-400/40'
+                    ? 'bg-indigo-500/15 text-indigo-200 border border-indigo-300/35'
                     : 'text-slate-400 hover:text-slate-200 border border-transparent'
                 }`}
               >
-                <Activity className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <Activity className="w-3.5 h-3.5 text-indigo-300" strokeWidth={1.75} />
                 <span>Actividad</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoNuevoEvento('gasto')}
+                className={`py-1.5 px-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+                  tipoNuevoEvento === 'gasto'
+                    ? 'bg-amber-500/15 text-amber-200 border border-amber-300/35'
+                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                }`}
+              >
+                <TrendingDown className="w-3.5 h-3.5 text-amber-300/90" strokeWidth={1.75} />
+                <span>Gasto</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoNuevoEvento('ingreso')}
+                className={`py-1.5 px-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+                  tipoNuevoEvento === 'ingreso'
+                    ? 'bg-teal-500/15 text-teal-200 border border-teal-400/35'
+                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5 text-teal-400" strokeWidth={1.75} />
+                <span>Ingreso</span>
               </button>
             </div>
 
@@ -822,15 +1294,44 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
               placeholder={
                 tipoNuevoEvento === 'tarea'
                   ? 'Título de la tarea...'
-                  : 'Nombre de la actividad...'
+                  : tipoNuevoEvento === 'actividad'
+                  ? 'Nombre de la actividad...'
+                  : tipoNuevoEvento === 'gasto'
+                  ? 'Concepto del gasto...'
+                  : 'Concepto del ingreso...'
               }
               className="w-full bg-[#040711] border border-slate-700/70 focus:border-sky-500/70 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition"
             />
 
+            {/* Campo Monto para Gasto / Ingreso */}
+            {(tipoNuevoEvento === 'gasto' || tipoNuevoEvento === 'ingreso') && (
+              <div className="relative flex items-center">
+                <span className="absolute left-3 font-mono text-xs text-slate-400 pointer-events-none">
+                  S/
+                </span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={montoNuevoEvento}
+                  onChange={(e) => setMontoNuevoEvento(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-[#040711] border border-slate-700/70 focus:border-amber-400/60 rounded-xl pl-8 pr-3 py-1.5 text-xs font-mono tabular-nums text-slate-100 placeholder-slate-500 focus:outline-none transition"
+                />
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-2 pt-1">
-              <span className="font-mono tabular-nums text-[10px] text-slate-500">
-                {slotNuevo.duracionMinutos} min
-              </span>
+              <button
+                type="button"
+                onClick={handleAbrirMasDetalles}
+                className="text-[10px] font-medium text-slate-400 hover:text-sky-300 inline-flex items-center gap-1 transition cursor-pointer"
+                title="Abrir formulario completo con más campos"
+              >
+                <ExternalLink className="w-3 h-3" strokeWidth={1.75} />
+                <span>Más detalles</span>
+              </button>
+
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
@@ -845,7 +1346,7 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
                   className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-white bg-sky-600 hover:bg-sky-500 border border-sky-400/30 flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
                 >
                   <Plus className="w-3.5 h-3.5" strokeWidth={2} />
-                  <span>{creandoEvento ? 'Guardando...' : 'Agendar'}</span>
+                  <span>{creandoEvento ? 'Guardando...' : 'Guardar'}</span>
                 </button>
               </div>
             </div>

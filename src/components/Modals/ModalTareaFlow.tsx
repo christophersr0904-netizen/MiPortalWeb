@@ -488,6 +488,7 @@ export const ModalTareaFlow: React.FC<ModalTareaFlowProps> = (props) => {
                     label="Hora Inicio"
                     value={horaInicio}
                     onChange={setHoraInicio}
+                    placeholder="Sin hora (ir a Por Agendar)"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">

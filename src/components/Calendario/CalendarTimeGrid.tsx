@@ -21,6 +21,7 @@ import {
 import {
   CALENDAR_ENTITY_STYLES,
   DIAS_SEMANA_CORTOS,
+  EXTERNAL_GCAL_STRIPE_STYLE,
   resolverBordeEstadoEvento
 } from './calendarStyles';
 import type { PopoverAnchorPosition } from './CalendarEventPopover';
@@ -66,6 +67,11 @@ interface CreateDragState {
   hasDragged: boolean;
 }
 
+interface HoverSlotState {
+  fechaIso: string;
+  startMinutes: number;
+}
+
 interface CalendarTimeGridProps {
   fechas: string[];
   hoyIso: string;
@@ -85,11 +91,16 @@ interface CalendarTimeGridProps {
   onResizeEvent: (evento: CalendarEventItem, nuevaDuracionMinutos: number) => void;
   onSelectEmptySlot: (slot: EmptySlotSelection) => void;
   onSelectEvent: (evento: CalendarEventItem, anchor: PopoverAnchorPosition) => void;
+  onToggleCompletar?: (evento: CalendarEventItem) => void;
   onSelectDay?: (fechaIso: string) => void;
 }
 
 function esEventoEditableEnGrilla(ev: CalendarEventItem): boolean {
   return ev.entidad === 'tarea' || ev.entidad === 'actividad' || ev.entidad === 'habito';
+}
+
+function esEventoCompletableEnGrilla(ev: CalendarEventItem): boolean {
+  return ev.entidad === 'tarea' || ev.entidad === 'habito';
 }
 
 export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
@@ -104,15 +115,17 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   onResizeEvent,
   onSelectEmptySlot,
   onSelectEvent,
+  onToggleCompletar,
   onSelectDay
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const suppressNextClickRef = useRef(false);
 
-  const [allDayExpandido, setAllDayExpandido] = useState(true);
+  const [allDayExpandido, setAllDayExpandido] = useState(false);
   const [dropPreview, setDropPreview] = useState<DropPreviewState | null>(null);
   const [resizeState, setResizeState] = useState<ResizeState | null>(null);
   const [createDrag, setCreateDrag] = useState<CreateDragState | null>(null);
+  const [hoverSlot, setHoverSlot] = useState<HoverSlotState | null>(null);
 
   const [minutosAhora, setMinutosAhora] = useState(() => {
     const now = new Date();
@@ -233,9 +246,20 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
   );
 
   const esVistaDia = fechas.length === 1;
+  const hoyEnVista = fechas.includes(hoyIso);
   const lineaAhoraTop = minutosAhora - HORA_INICIO_GRID * 60;
   const mostrarLineaAhora =
     lineaAhoraTop >= 0 && lineaAhoraTop <= TOTAL_HORAS * PIXELS_POR_HORA;
+  const hayInteraccionActiva = Boolean(
+    activeDragPayload || dropPreview || resizeState || createDrag
+  );
+
+  // Limpiar hover slot fantasma si inicia cualquier drag, resize o creación
+  useEffect(() => {
+    if (hayInteraccionActiva) {
+      setHoverSlot(null);
+    }
+  }, [hayInteraccionActiva]);
 
   const calcularMinutosDesdeEvento = (
     e: React.DragEvent<HTMLDivElement> | React.PointerEvent<HTMLDivElement>
@@ -247,12 +271,12 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#040711] rounded-2xl border border-slate-800/50 overflow-hidden shadow-[0_10px_25px_-5px_rgba(2,6,23,0.8)]">
-      {/* 1. Cabecera de Días */}
+      {/* 1. Cabecera de Días Compacta en 1 Línea + Micro-barra de Carga (REQ-UX-CAL-04) */}
       <div
-        className="grid border-b border-slate-800/70 bg-[#0D1526]/90 shrink-0"
+        className="grid border-b border-white/[0.06] bg-[#0D1526]/90 shrink-0"
         style={{ gridTemplateColumns: `60px repeat(${fechas.length}, minmax(0, 1fr))` }}
       >
-        <div className="flex items-center justify-center border-r border-slate-800/60 text-[10px] font-mono text-slate-500">
+        <div className="h-11 flex items-center justify-center border-r border-white/[0.05] text-[10px] font-mono text-slate-500">
           GMT-5
         </div>
         {fechas.map((fechaIso) => {
@@ -266,67 +290,54 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
           const carga = cargaDiariaPorFecha[fechaIso];
           const barColor =
             carga?.nivel === 'sobrecarga'
-              ? 'bg-rose-400'
+              ? 'bg-rose-400/90'
               : carga?.nivel === 'alta'
-              ? 'bg-amber-400'
-              : 'bg-sky-400';
-          const textCargaColor =
-            carga?.nivel === 'sobrecarga'
-              ? 'text-rose-400'
-              : carga?.nivel === 'alta'
-              ? 'text-amber-300'
-              : 'text-slate-400';
+              ? 'bg-amber-400/80'
+              : 'bg-sky-400/70';
 
           return (
             <button
               key={fechaIso}
               type="button"
               onClick={() => onSelectDay?.(fechaIso)}
-              className={`py-2 px-2 border-r last:border-r-0 border-slate-800/50 flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
-                esHoy ? 'bg-sky-950/25' : 'hover:bg-white/[0.02]'
+              className={`relative h-11 px-2 border-r last:border-r-0 border-white/[0.05] flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                esHoy ? 'bg-sky-500/[0.04]' : 'hover:bg-white/[0.02]'
               }`}
               title={
                 carga
-                  ? `Carga diaria: ${carga.horasComprometidas}h / ${carga.capacidadHoras}h (${carga.porcentaje}%)`
+                  ? `Carga: ${carga.horasComprometidas}h / ${carga.capacidadHoras}h (${carga.porcentaje}%)`
                   : undefined
               }
             >
               <span
-                className={`text-[10px] font-bold uppercase tracking-wider ${
+                className={`text-[11px] font-medium uppercase tracking-wider ${
                   esHoy ? 'text-sky-400' : 'text-slate-400'
                 }`}
               >
                 {DIAS_SEMANA_CORTOS[idxLun]}
               </span>
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`font-mono tabular-nums text-sm font-bold w-7 h-7 rounded-full flex items-center justify-center ${
-                    esHoy
-                      ? 'bg-sky-500 text-slate-950 shadow-[0_0_12px_rgba(56,189,248,0.45)]'
-                      : 'text-slate-200'
-                  }`}
-                >
-                  {String(d).padStart(2, '0')}
+              <span
+                className={`font-mono tabular-nums text-sm font-semibold inline-flex items-center justify-center ${
+                  esHoy
+                    ? 'bg-sky-500 text-white w-6 h-6 rounded-full shadow-[0_0_10px_rgba(56,189,248,0.4)]'
+                    : 'text-slate-200'
+                }`}
+              >
+                {String(d).padStart(2, '0')}
+              </span>
+              {esVistaDia && totalDia > 0 && (
+                <span className="text-[10px] font-mono tabular-nums text-slate-500 ml-1">
+                  · {totalDia}
                 </span>
-                {esVistaDia && totalDia > 0 && (
-                  <span className="text-[10px] font-mono tabular-nums text-slate-400">
-                    ({totalDia} eventos)
-                  </span>
-                )}
-              </div>
+              )}
 
-              {/* Indicador compacto de Carga Diaria (REQ-FEAT-CAL-03) */}
-              {carga && (
-                <div className="w-full max-w-[92px] flex flex-col items-center gap-0.5 mt-0.5">
-                  <span className={`font-mono tabular-nums text-[9px] leading-none ${textCargaColor}`}>
-                    {carga.horasComprometidas}h / {carga.capacidadHoras}h
-                  </span>
-                  <div className="w-full h-[2px] rounded-full bg-slate-800/90 overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-300 ${barColor}`}
-                      style={{ width: `${Math.min(100, Math.max(0, carga.porcentaje))}%` }}
-                    />
-                  </div>
+              {/* Micro-barra de carga diaria de 2px integrada al borde inferior */}
+              {carga && carga.porcentaje > 0 && (
+                <div className="absolute bottom-0 inset-x-0 h-[2px] bg-white/[0.03] overflow-hidden pointer-events-none">
+                  <div
+                    className={`h-full transition-all duration-300 ${barColor}`}
+                    style={{ width: `${Math.min(100, Math.max(0, carga.porcentaje))}%` }}
+                  />
                 </div>
               )}
             </button>
@@ -368,15 +379,15 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
           {fechas.map((fechaIso) => {
             const listaAllDay = eventosPorFecha.get(fechaIso)?.allDay ?? [];
             const esHoy = fechaIso === hoyIso;
-            const visibles = allDayExpandido ? listaAllDay : listaAllDay.slice(0, 1);
+            const visibles = allDayExpandido ? listaAllDay : listaAllDay.slice(0, 2);
             const ocultos = listaAllDay.length - visibles.length;
 
             return (
               <div
                 key={`allday-${fechaIso}`}
-                className={`p-1.5 border-r last:border-r-0 border-slate-800/40 flex flex-col gap-1 min-h-[38px] max-h-[120px] overflow-y-auto custom-scrollbar ${
-                  esHoy ? 'bg-sky-950/10' : ''
-                }`}
+                className={`p-1.5 border-r last:border-r-0 border-slate-800/40 flex flex-col gap-1 min-h-[38px] ${
+                  allDayExpandido ? 'max-h-[180px] overflow-y-auto custom-scrollbar' : ''
+                } ${esHoy ? 'bg-sky-950/10' : ''}`}
               >
                 {visibles.map((ev) => {
                   const style = CALENDAR_ENTITY_STYLES[ev.entidad];
@@ -405,6 +416,9 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                         e.stopPropagation();
                         onSelectEvent(ev, { x: e.clientX, y: e.clientY });
                       }}
+                      style={
+                        ev.entidad === 'externo_gcal' ? EXTERNAL_GCAL_STRIPE_STYLE : undefined
+                      }
                       className={`w-full text-left px-1.5 py-1 rounded-md border border-l-[3px] ${style.bgClass} ${style.hoverBgClass} ${style.borderClass} ${bordeEstado} transition cursor-pointer flex items-center gap-1 min-w-0 ${
                         ev.completado ? 'opacity-50' : ''
                       }`}
@@ -427,9 +441,18 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   <button
                     type="button"
                     onClick={() => setAllDayExpandido(true)}
-                    className="text-[10px] font-mono tabular-nums text-sky-400 hover:text-sky-300 text-left px-1 cursor-pointer"
+                    className="text-[10px] font-mono tabular-nums text-slate-400 hover:text-sky-300 text-left px-1 transition cursor-pointer"
                   >
                     +{ocultos} más
+                  </button>
+                )}
+                {allDayExpandido && listaAllDay.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => setAllDayExpandido(false)}
+                    className="text-[10px] font-medium text-slate-400 hover:text-sky-300 text-left px-1 transition cursor-pointer"
+                  >
+                    Ocultar
                   </button>
                 )}
               </div>
@@ -450,19 +473,39 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
             height: `${TOTAL_HORAS * PIXELS_POR_HORA}px`
           }}
         >
-          {/* Columna de Etiquetas Horarias */}
+          {/* Columna de Etiquetas Horarias + Pill Inteligente de Hora Actual (REQ-UX-CAL-09) */}
           <div className="border-r border-slate-800/60 bg-[#060B17] relative select-none">
-            {HORAS_LIST.map((hora, idx) => (
+            {HORAS_LIST.map((hora, idx) => {
+              const horaMinutos = hora * 60;
+              const cercaDeHoraActual =
+                hoyEnVista && mostrarLineaAhora && Math.abs(minutosAhora - horaMinutos) < 14;
+              return (
+                <div
+                  key={hora}
+                  style={{ top: `${idx * PIXELS_POR_HORA}px`, height: `${PIXELS_POR_HORA}px` }}
+                  className="absolute inset-x-0 flex justify-end pr-2 pt-0.5"
+                >
+                  <span
+                    className={`font-mono tabular-nums text-[10px] text-slate-500 -translate-y-2 transition-opacity duration-200 ${
+                      cercaDeHoraActual ? 'opacity-0' : 'opacity-100'
+                    }`}
+                  >
+                    {String(hora).padStart(2, '0')}:00
+                  </span>
+                </div>
+              );
+            })}
+
+            {hoyEnVista && mostrarLineaAhora && (
               <div
-                key={hora}
-                style={{ top: `${idx * PIXELS_POR_HORA}px`, height: `${PIXELS_POR_HORA}px` }}
-                className="absolute inset-x-0 flex justify-end pr-2 pt-0.5"
+                style={{ top: `${lineaAhoraTop}px` }}
+                className="absolute right-1 -translate-y-1/2 z-20 pointer-events-none"
               >
-                <span className="font-mono tabular-nums text-[10px] text-slate-500 -translate-y-2">
-                  {String(hora).padStart(2, '0')}:00
+                <span className="inline-block bg-sky-500 text-white font-mono tabular-nums text-[10px] font-semibold leading-none px-1.5 py-0.5 rounded-full shadow-sm">
+                  {minutosAHoraStr(minutosAhora)}
                 </span>
               </div>
-            ))}
+            )}
           </div>
 
           {/* Columnas de Días (Drop Zones + Click-and-Drag) */}
@@ -475,10 +518,36 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
               createDrag && createDrag.fechaIso === fechaIso && createDrag.hasDragged
                 ? createDrag
                 : null;
+            const hoverEnEstaColumna =
+              !hayInteraccionActiva && hoverSlot && hoverSlot.fechaIso === fechaIso
+                ? hoverSlot
+                : null;
 
             return (
               <div
                 key={`col-${fechaIso}`}
+                onMouseMove={(e) => {
+                  if (hayInteraccionActiva) return;
+                  if ((e.target as HTMLElement).closest('[data-calendar-event="true"]')) {
+                    setHoverSlot((prev) => (prev?.fechaIso === fechaIso ? null : prev));
+                    return;
+                  }
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const offsetY = Math.max(0, e.clientY - rect.top);
+                  const snappedMin = snapMinutos15(
+                    HORA_INICIO_GRID * 60 + offsetY,
+                    HORA_INICIO_GRID * 60,
+                    23 * 60 + 30
+                  );
+                  setHoverSlot((prev) =>
+                    prev && prev.fechaIso === fechaIso && prev.startMinutes === snappedMin
+                      ? prev
+                      : { fechaIso, startMinutes: snappedMin }
+                  );
+                }}
+                onMouseLeave={() => {
+                  setHoverSlot((prev) => (prev?.fechaIso === fechaIso ? null : prev));
+                }}
                 onDragOver={(e) => {
                   e.preventDefault();
                   e.dataTransfer.dropEffect = 'move';
@@ -534,6 +603,7 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 onPointerDown={(e) => {
                   if (e.button !== 0) return;
                   if ((e.target as HTMLElement).closest('[data-calendar-event="true"]')) return;
+                  setHoverSlot(null);
                   const anchorMin = calcularMinutosDesdeEvento(e);
                   setCreateDrag({
                     fechaIso,
@@ -543,20 +613,35 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                     hasDragged: false
                   });
                 }}
-                className={`relative border-r last:border-r-0 border-slate-800/40 ${
-                  esHoy ? 'bg-sky-950/[0.07]' : ''
+                className={`relative border-r last:border-r-0 border-white/[0.045] ${
+                  esHoy ? 'bg-sky-500/[0.02]' : ''
                 }`}
               >
-                {/* Líneas horizontales horarias y de media hora */}
+                {/* Líneas horizontales horarias limpias y medias horas sutiles */}
                 {HORAS_LIST.map((hora, idx) => (
                   <div
                     key={`line-${fechaIso}-${hora}`}
                     style={{ top: `${idx * PIXELS_POR_HORA}px`, height: `${PIXELS_POR_HORA}px` }}
-                    className="absolute inset-x-0 border-t border-slate-800/45 pointer-events-none"
+                    className="absolute inset-x-0 border-t border-white/[0.045] pointer-events-none"
                   >
-                    <div className="w-full h-1/2 border-b border-slate-800/20 border-dashed" />
+                    <div className="w-full h-1/2 border-b border-white/[0.02]" />
                   </div>
                 ))}
+
+                {/* Hover Slot Fantasma ultra-sutil de 30 min (REQ-UX-CAL-09) */}
+                {hoverEnEstaColumna && (
+                  <div
+                    style={{
+                      top: `${Math.max(0, hoverEnEstaColumna.startMinutes - HORA_INICIO_GRID * 60)}px`,
+                      height: '30px'
+                    }}
+                    className="absolute inset-x-1 z-[5] rounded-md border border-white/[0.06] bg-white/[0.015] px-1.5 py-0.5 pointer-events-none flex items-start"
+                  >
+                    <span className="font-mono tabular-nums text-[10px] text-slate-500/70 leading-none">
+                      {minutosAHoraStr(hoverEnEstaColumna.startMinutes)}
+                    </span>
+                  </div>
+                )}
 
                 {/* Indicador Fantasma (Drop Preview Cobalt con hora exacta) */}
                 {previewEnEstaColumna && (
@@ -609,14 +694,14 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                 {esHoy && mostrarLineaAhora && (
                   <div
                     style={{ top: `${lineaAhoraTop}px` }}
-                    className="absolute inset-x-0 z-20 pointer-events-none flex items-center"
+                    className="absolute inset-x-0 z-20 pointer-events-none flex items-center -translate-y-1/2"
                   >
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 -ml-1.5 shadow-[0_0_8px_rgba(244,63,94,0.85)]" />
-                    <div className="flex-1 h-[1.5px] bg-rose-500/85 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />
+                    <span className="w-2 h-2 rounded-full bg-sky-400 -ml-1 shadow-[0_0_8px_rgba(56,189,248,0.85)]" />
+                    <div className="flex-1 h-[1.5px] bg-sky-500/85 shadow-[0_0_6px_rgba(56,189,248,0.55)]" />
                   </div>
                 )}
 
-                {/* Eventos Posicionados con Resolución de Solapamiento + DnD + Resize */}
+                {/* Eventos Posicionados con Resolución de Solapamiento + Hover-Check + DnD + Resize */}
                 {eventosDia.map((ev) => {
                   const estaRedimensionando = resizeState?.evento.id === ev.id;
                   const minInicioVisible = HORA_INICIO_GRID * 60;
@@ -638,13 +723,55 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                   const style = CALENDAR_ENTITY_STYLES[ev.entidad];
                   const bordeEstado = resolverBordeEstadoEvento(ev);
                   const editable = esEventoEditableEnGrilla(ev);
-                  const compacto = heightPx < 44;
+                  const mostrarHoverCheck = Boolean(onToggleCompletar && esEventoCompletableEnGrilla(ev));
+                  const esBloqueCorto = heightPx <= 34;
+                  const esBloqueAlto = heightPx >= 64;
+                  const enCurso =
+                    esHoy &&
+                    !ev.completado &&
+                    minutosAhora >= ev.startMinutes &&
+                    minutosAhora < ev.endMinutes;
 
                   const horaFinMostrada = estaRedimensionando
                     ? effectiveEnd >= 24 * 60
                       ? '23:59'
                       : minutosAHoraStr(effectiveEnd)
                     : ev.horaFin;
+
+                  const microCheckbox = mostrarHoverCheck ? (
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={ev.completado}
+                      aria-label={
+                        ev.completado
+                          ? `Reabrir ${ev.titulo}`
+                          : `Completar ${ev.titulo}`
+                      }
+                      title={ev.completado ? 'Reabrir' : 'Completar en 1 clic'}
+                      draggable={false}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleCompletar?.(ev);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.stopPropagation();
+                        }
+                      }}
+                      className={`h-3.5 rounded-full flex items-center justify-center shrink-0 cursor-pointer transition-all duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400 ${
+                        ev.completado
+                          ? 'w-3.5 mr-1.5 opacity-100 bg-sky-500/25 border border-sky-400/60 text-sky-300 hover:bg-sky-500/35'
+                          : 'w-0 overflow-hidden mr-0 opacity-0 border-0 group-hover/card:w-3.5 group-hover/card:mr-1.5 group-hover/card:opacity-100 group-hover/card:border focus-visible:w-3.5 focus-visible:mr-1.5 focus-visible:opacity-100 focus-visible:border border-white/40 hover:border-sky-400 hover:bg-sky-500/20 text-transparent'
+                      }`}
+                    >
+                      {ev.completado && (
+                        <Check className="w-2.5 h-2.5" strokeWidth={2.5} aria-hidden="true" />
+                      )}
+                    </button>
+                  ) : null;
 
                   return (
                     <div
@@ -686,37 +813,75 @@ export const CalendarTimeGrid: React.FC<CalendarTimeGridProps> = ({
                         top: `${topClamped}px`,
                         height: `${heightPx}px`,
                         left: `calc(${leftPct}% + 2px)`,
-                        width: `calc(${widthPct}% - 4px)`
+                        width: `calc(${widthPct}% - 4px)`,
+                        ...(ev.entidad === 'externo_gcal' ? EXTERNAL_GCAL_STRIPE_STYLE : undefined)
                       }}
-                      className={`group/ev absolute rounded-lg border border-l-[3px] px-2 py-1 text-left overflow-hidden transition-[background-color,opacity,box-shadow] duration-100 flex flex-col justify-start select-none ${
+                      className={`group/ev group/card absolute rounded-lg border border-l-[3px] px-2 py-1 text-left overflow-hidden transition-[background-color,opacity,box-shadow] duration-100 flex flex-col justify-start select-none ${
                         estaRedimensionando
                           ? 'z-40 ring-1 ring-sky-400 shadow-[0_0_16px_rgba(56,189,248,0.3)]'
                           : 'z-10'
-                      } ${style.bgClass} ${style.hoverBgClass} ${style.borderClass} ${bordeEstado} ${
-                        editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
-                      } ${ev.completado ? 'opacity-50' : 'shadow-xs'}`}
+                      } ${style.bgClass} ${style.hoverBgClass} ${style.borderClass} ${
+                        enCurso
+                          ? 'border-l-sky-400 shadow-[inset_2px_0_8px_-2px_rgba(56,189,248,0.45),0_0_12px_rgba(56,189,248,0.12)]'
+                          : bordeEstado
+                      } ${editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${
+                        ev.completado ? 'opacity-50' : enCurso ? '' : 'shadow-xs'
+                      }`}
                       title={`${ev.horaInicio}–${horaFinMostrada} · ${ev.titulo}`}
                     >
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="font-mono tabular-nums text-[9px] text-slate-400 shrink-0">
-                          {estaRedimensionando
-                            ? `${ev.horaInicio}–${horaFinMostrada}`
-                            : ev.horaInicio}
-                        </span>
+                      {/* Micro-indicador de pulso discreto para evento en curso */}
+                      {enCurso && (
                         <span
-                          className={`text-[11px] font-bold truncate leading-tight ${style.textClass} ${
-                            ev.completado ? 'line-through' : ''
+                          aria-label="En curso"
+                          title="En curso ahora"
+                          className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse shadow-[0_0_6px_rgba(56,189,248,0.85)] pointer-events-none"
+                        />
+                      )}
+
+                      {esBloqueCorto ? (
+                        <div
+                          className={`flex items-center justify-between gap-1 min-w-0 leading-none my-auto ${
+                            enCurso ? 'pr-3' : ''
                           }`}
                         >
-                          {ev.titulo}
-                        </span>
-                      </div>
-                      {!compacto && ev.subtitulo && (
-                        <span className="text-[10px] text-slate-400 truncate mt-0.5">
-                          {estaRedimensionando
-                            ? `${resizeState.currentDuration} min`
-                            : ev.subtitulo}
-                        </span>
+                          <div className="flex items-center min-w-0 flex-1">
+                            {microCheckbox}
+                            <span
+                              className={`text-[11px] font-semibold truncate ${style.textClass} ${
+                                ev.completado ? 'line-through' : ''
+                              }`}
+                            >
+                              {ev.titulo}
+                            </span>
+                          </div>
+                          {estaRedimensionando && (
+                            <span className="font-mono tabular-nums text-[9px] text-sky-300 shrink-0">
+                              {ev.horaInicio}–{horaFinMostrada}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div className={`flex items-center min-w-0 ${enCurso ? 'pr-3' : ''}`}>
+                            {microCheckbox}
+                            <span
+                              className={`text-[11px] font-semibold truncate leading-snug ${style.textClass} ${
+                                ev.completado ? 'line-through' : ''
+                              }`}
+                            >
+                              {ev.titulo}
+                            </span>
+                          </div>
+                          <span className="font-mono tabular-nums text-[10px] opacity-75 text-slate-300 truncate leading-tight mt-0.5">
+                            {ev.horaInicio} – {horaFinMostrada}
+                            {estaRedimensionando ? ` (${resizeState.currentDuration}m)` : ''}
+                          </span>
+                          {esBloqueAlto && ev.subtitulo && !estaRedimensionando && (
+                            <span className="text-[10px] text-slate-400/80 truncate mt-0.5">
+                              {ev.subtitulo}
+                            </span>
+                          )}
+                        </>
                       )}
 
                       {/* Manejador Discreto de Resize Inferior (snap 15 min) */}

@@ -394,22 +394,6 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
             )}
           </button>
 
-          {/* 1b. Calendario Maestro */}
-          <button
-            type="button"
-            onClick={() => onCambiarVista('calendario')}
-            id="tab-nav-calendario"
-            className={`px-3 py-1.5 rounded-xl font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out transform-gpu will-change-transform flex items-center gap-2 cursor-pointer active:scale-95 ${
-              vistaActiva === 'calendario'
-                ? 'text-sky-300 bg-sky-950/30 border border-sky-800/40 shadow-xs'
-                : 'text-slate-400 hover:text-sky-300 hover:bg-slate-800/40 border border-transparent'
-            }`}
-            title="Calendario Maestro Unificado"
-          >
-            <CalendarDays className="w-4 h-4 shrink-0" strokeWidth={1.75} />
-            <span className="hidden lg:inline">Calendario</span>
-          </button>
-
           {/* 2. Portafolio */}
           <button
             type="button"
@@ -467,9 +451,25 @@ export const HeaderMaestro: React.FC<HeaderMaestroProps> = ({
           </button>
         </nav>
 
-        {/* FLANCO DERECHO: Dock Operativo Dark Cobalt (REQ-UI-32-FIX) */}
-        <div id="header-actions-container" className="hidden md:flex items-center gap-2.5 shrink-0">
-          {/* 0. Acceso Rápido a Notas Inteligentes (Atajo 5) */}
+        {/* FLANCO DERECHO: Dock Operativo Dark Cobalt (REQ-UI-32-FIX / REQ-UX-CAL-04) */}
+        <div id="header-actions-container" className="hidden md:flex items-center gap-2 shrink-0">
+          {/* 0a. Acceso Rápido a Calendario Maestro (Herramienta Estratégica) */}
+          <button
+            type="button"
+            onClick={() => onCambiarVista('calendario')}
+            id="tab-nav-calendario"
+            className={`min-w-[40px] min-h-[40px] w-10 h-10 p-0 rounded-xl transition-[transform,colors] duration-150 flex items-center justify-center cursor-pointer active:scale-95 shrink-0 select-none ${
+              vistaActiva === 'calendario'
+                ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30 shadow-[0_0_12px_rgba(56,189,248,0.18)]'
+                : 'text-slate-400 hover:text-sky-300 hover:bg-[#0D1526] bg-[#0D1526]/80 border border-slate-800/80 hover:border-sky-500/40'
+            }`}
+            title="Calendario Maestro"
+            aria-label="Abrir Calendario Maestro"
+          >
+            <CalendarDays className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+          </button>
+
+          {/* 0b. Acceso Rápido a Notas Inteligentes (Atajo 5) */}
           <button
             type="button"
             onClick={() => onCambiarVista('notas')}

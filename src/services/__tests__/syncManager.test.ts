@@ -240,6 +240,16 @@ describe('REQ-SYNC-02: syncPayloadSanitizer (Sanitización Pura de Payloads)', (
       expect(payload.estado_tarea).toBe('03_En_Proceso');
       expect(payload.fecha_programada).toBe('2026-10-19');
     });
+
+    it('omite fecha_completado del payload outbound hacia Supabase para prevenir PGRST204 (REQ-FIX-CAL-06)', () => {
+      const tareaConFechaComp = {
+        ...tareaBase,
+        estado_tarea: '04_Completado',
+        fecha_completado: '2026-11-25'
+      };
+      const payload = sanitizarTareaPayload(tareaConFechaComp, proyectoMap, hitoMap, dummyUser);
+      expect('fecha_completado' in payload).toBe(false);
+    });
   });
 
   describe('5. Sanitización de Notas (sanitizarNotaPayload)', () => {

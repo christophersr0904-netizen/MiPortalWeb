@@ -59,7 +59,7 @@ export async function crearTarea(
     horas_reales: Math.max(0, Number(datos.horas_reales) || 0),
     fecha_programada: datos.fecha_programada || nowIso.split('T')[0],
     fecha_completado: fechaCompletadoInicial,
-    hora_inicio: datos.hora_inicio?.trim() || '09:00',
+    hora_inicio: datos.hora_inicio?.trim() || undefined,
     agendado_calendar: datos.agendado_calendar === 'No' ? 'No' : 'Sí',
     es_mav: Boolean(datos.es_mav),
     costo_real_pen: Math.max(0, Number(datos.costo_real_pen) || 0),

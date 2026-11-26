@@ -105,21 +105,21 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
           <span className="text-[10px] font-semibold mt-1 tracking-tight">Kanban</span>
         </button>
 
-        {/* Botón 2: Calendario (min-h-[48px]) */}
+        {/* Botón 2: Hábitos (min-h-[48px]) */}
         <button
           type="button"
-          id="bottom-nav-calendario"
+          id="bottom-nav-habitos"
           onClick={() => {
             cerrarSheets();
-            onCambiarVista('calendario');
+            onCambiarVista('habitos');
           }}
           className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center flex-1 transition-colors group cursor-pointer active:scale-95 ${
-            vistaActiva === 'calendario' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
+            vistaActiva === 'habitos' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
           }`}
-          title="Calendario Maestro"
+          title="Hábitos & Vida"
         >
-          <CalendarDays className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
-          <span className="text-[10px] font-semibold mt-1 tracking-tight">Agenda</span>
+          <HeartPulse className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
+          <span className="text-[10px] font-semibold mt-1 tracking-tight">Hábitos</span>
         </button>
 
         {/* Botón Central (+): Acción Rápida Elevada (48x48px) */}
@@ -141,21 +141,22 @@ export const BottomNavMobile: React.FC<BottomNavMobileProps> = ({
           </span>
         </div>
 
-        {/* Botón 4: Hábitos (min-h-[48px]) */}
+        {/* Botón 4: Calendario Maestro — Herramienta Estratégica (min-h-[48px]) */}
         <button
           type="button"
-          id="bottom-nav-habitos"
+          id="bottom-nav-calendario"
           onClick={() => {
             cerrarSheets();
-            onCambiarVista('habitos');
+            onCambiarVista('calendario');
           }}
           className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center flex-1 transition-colors group cursor-pointer active:scale-95 ${
-            vistaActiva === 'habitos' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
+            vistaActiva === 'calendario' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
           }`}
-          title="Hábitos & Vida"
+          title="Calendario Maestro"
+          aria-label="Abrir Calendario Maestro"
         >
-          <HeartPulse className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
-          <span className="text-[10px] font-semibold mt-1 tracking-tight">Hábitos</span>
+          <CalendarDays className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.75} />
+          <span className="text-[10px] font-semibold mt-1 tracking-tight">Agenda</span>
         </button>
 
         {/* Botón 5: Más / Proyectos, Notas & Finanzas (min-h-[48px]) */}

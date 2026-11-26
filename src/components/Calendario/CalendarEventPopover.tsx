@@ -17,7 +17,8 @@ import {
   ExternalLink,
   CalendarCheck,
   MapPin,
-  Video
+  Video,
+  Inbox
 } from 'lucide-react';
 import type { CalendarEventItem } from '../../hooks/useCalendarEngine';
 import {
@@ -38,6 +39,7 @@ interface CalendarEventPopoverProps {
   onIniciarPomodoro: (evento: CalendarEventItem) => void;
   onToggleCompletar: (evento: CalendarEventItem) => void;
   onVerEditar: (evento: CalendarEventItem) => void;
+  onDevolverABacklog?: (evento: CalendarEventItem) => void;
   procesandoCompletado?: boolean;
 }
 
@@ -48,6 +50,7 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
   onIniciarPomodoro,
   onToggleCompletar,
   onVerEditar,
+  onDevolverABacklog,
   procesandoCompletado = false
 }) => {
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -254,6 +257,19 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
               <span>Ver / Editar</span>
             </button>
           </div>
+
+          {/* Devolver tarea agendada a "Por Agendar" (REQ-UX-CAL-05) */}
+          {evento.rawRef.kind === 'tarea' && !evento.allDay && Boolean(evento.horaInicio) && onDevolverABacklog && (
+            <button
+              type="button"
+              onClick={() => onDevolverABacklog(evento)}
+              className="w-full px-2.5 py-1.5 rounded-xl bg-transparent hover:bg-white/[0.05] text-slate-400 hover:text-amber-300 text-[11px] font-medium flex items-center justify-center gap-1.5 transition cursor-pointer mt-0.5"
+              title="Quitar horario y devolver esta tarea al panel Por Agendar"
+            >
+              <Inbox className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Devolver a Por Agendar</span>
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -11545,3 +11545,140 @@ supabase functions deploy gcal-auth
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (383/383 tests al 100% verde)**, incluyendo pruebas unitarias de deduplicación `pmoId` y clasificación de `cargaDiariaPorFecha`.
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **66.03 kB** gzip 17.95 kB; `main-*.js` en **446.95 kB** < 500 kB).
+
+---
+
+### [REQ-UX-CAL-04: Reposicionamiento Estratégico del Icono Calendario, Filtros Tipo Capas (Notion/Linear), Cabeceras Compactas de 1 Línea y Pulido Ergonómico]
+**Fecha:** Noviembre 2026 | **Fase:** 8.36 (Refinamiento UI/UX Ejecutivo del Calendario Maestro — Estándar Notion Calendar / Linear / Akiflow) | **Archivos Modificados:** `src/components/Layout/HeaderMaestro.tsx`, `src/components/Layout/BottomNavMobile.tsx`, `src/components/Views/ViewCalendario.tsx`, `src/components/Calendario/CalendarTimeGrid.tsx`, `src/components/Calendario/calendarStyles.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Reposicionamiento Estratégico de Navegación
+- **`HeaderMaestro.tsx`:** Se retiró `Calendario` del bloque central de áreas/módulos de vida (restaurando las 4 pestañas canónicas: *Tablero*, *Portafolio*, *Hábitos*, *Finanzas*) y se reubicó en el dock derecho de herramientas estratégicas como botón compacto Ghost (`CalendarDays`, `40×40px`, `strokeWidth={1.75}`, activo Cobalt `bg-sky-500/15 text-sky-300 border-sky-500/30`).
+- **`BottomNavMobile.tsx`:** Áreas de ejecución (*Kanban*, *Hábitos*) equilibradas a la izquierda del botón central `+`, y herramientas transversales (*Agenda* con `CalendarDays` + *Más*) a la derecha.
+
+#### 2. Toolbar Unificada de 1 Línea y Selector de Capas (`ViewCalendario.tsx`)
+- **Consolidación en 1 Barra Superior (`h-11 sm:h-12`):**
+  - Izquierda: grupo `[ < | Hoy | > ]` + título de periodo (`font-semibold tracking-tight`).
+  - Centro: control segmentado limpio `[ Día | Semana | Mes ]` estilo Ghost/Linear.
+  - Derecha: botón **Capas** (`Layers` + badge `N/6` visible solo al filtrar), botón **Por Agendar** (`PanelRight` + contador tabular) e indicador/botón compacto de estado **GCal**.
+- **Popover Flotante de Capas:** Sustituye la fila secundaria de pills con círculos de colores (liberando altura vertical para la grilla). Incluye presets rápidos **"Todo"** y **"Enfoque"** (solo `tarea`, `actividad`, `habito`) y lista vertical de 6 capas con iconos Lucide temáticos (`CheckSquare`, `Activity`, `Flame`, `Flag`, `Wallet`, `Calendar`) y checks táctiles.
+
+#### 3. Cabeceras Compactas de 1 Línea y Grilla Respirable (`CalendarTimeGrid.tsx`)
+- **Cabeceras de Día en 1 Línea (`h-11`):** Día abreviado (`MIÉ`) y número (`25`) en horizontal; el día actual resalta únicamente el número con pill circular Cobalt (`bg-sky-500 text-white w-6 h-6`) y columna con tinte sutilísimo (`bg-sky-500/[0.02]`).
+- **Micro-barra de Carga Integrada (2px):** Reemplaza el texto fijo `Xh / 8h` por una barra de 2px al borde inferior de cada cabecera (`sky-400/70` normal, `amber-400/80` alta, `rose-400/90` sobrecarga), preservando el detalle exacto en tooltip (`Carga: Xh / 8h (Y%)`).
+- **Respiración Visual de Grilla y Bloques:** Líneas horarias `border-white/[0.045]` y medias horas `border-white/[0.02]`. Bloques cortos (`<= 30 min`) muestran el título en 1 sola línea limpia sin solapar la hora; bloques medianos/largos muestran título + rango `HH:mm – HH:mm` en `font-mono tabular-nums`.
+
+#### 4. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado en todos los archivos intervenidos.
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (383/383 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **70.03 kB** gzip 18.83 kB; `main-*.js` en **446.99 kB** < 500 kB).
+
+---
+
+### [REQ-UX-CAL-05: Popover Mini-Calendario (Mes/Año), Paleta Editorial Sobria (Linear/Cron) y Flujo Real de Time-Blocking ("Por Agendar")]
+**Fecha:** Noviembre 2026 | **Fase:** 8.37 (Navegación Temporal Rápida, Estética Editorial Mineral y Flujo Completo de Backlog en Calendario Maestro) | **Archivos Creados/Modificados:** `src/components/Calendario/CalendarDatePickerPopover.tsx` (Nuevo), `src/components/Calendario/calendarStyles.ts`, `src/components/Calendario/CalendarBacklogPanel.tsx`, `src/components/Calendario/CalendarEventPopover.tsx`, `src/components/Views/ViewCalendario.tsx`, `src/hooks/useCalendarEngine.ts`, `src/hooks/__tests__/useCalendarEngine.test.ts`, `src/components/Modals/ModalTareaFlow.tsx`, `src/hooks/useTareaForm.ts`, `src/services/tareasService.ts`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Popover Mini-Calendario y Selector Rápido de Mes/Año (`CalendarDatePickerPopover.tsx`)
+- Activado al hacer clic en el título del periodo (`Noviembre 2026` + `ChevronDown`) en la toolbar de `ViewCalendario.tsx`, conectado a `irAFecha(fechaIso)` y `irAHoy()`.
+- **Modo Días:** Mini-calendario de 7 columnas (`font-mono tabular-nums`), resaltado Cobalt en hoy y fecha ancla, con cierre automático al seleccionar, pulsar `Escape` o clic fuera.
+- **Modo Meses/Años:** Selector de año (`< 2026 >`) + grilla compacta 3×4 (`Ene`–`Dic`) para saltar a cualquier mes/año en 2 clics.
+
+#### 2. Paleta Editorial / Tonos Sobrios (Linear/Cron) (`calendarStyles.ts`)
+- Base oscura homogénea (`bg-slate-900/85`, borde periférico `border-white/[0.06]`, hover `hover:bg-slate-800/90`) con micro-tinte mineral sutil (6–8%) y acento reservado al borde izquierdo (`border-l-[3px]`) e icono:
+  - `tarea`: Sky (`border-l-sky-400/85`, `text-sky-400`) | `actividad`: Indigo Acero (`border-l-indigo-300/80`, `text-indigo-300`) | `habito`: Verde Salvia / Teal (`border-l-teal-400/80`, `text-teal-400`) | `hito`: Violeta Humo (`border-l-violet-300/80`, `text-violet-300`) | `gasto`/`ingreso`: Arena / Bronce (`border-l-amber-300/75`, `text-amber-300/90`) | `externo_gcal`: Grafito neutro discontinuo (`border-l-slate-500/80`, `bg-slate-900/50`).
+- Propagada de forma uniforme en `CalendarTimeGrid`, `CalendarMonthGrid`, `CalendarMobileAgenda`, `CalendarEventPopover` y menú **Capas** de `ViewCalendario.tsx`.
+
+#### 3. Flujo Real de Time-Blocking ("Por Agendar")
+- **Creación sin Hora Forzada (`ModalTareaFlow.tsx` + `useTareaForm.ts` + `tareasService.ts`):** Las tareas nuevas inicializan `hora_inicio: ''` con placeholder `"Sin hora (ir a Por Agendar)"` y se persisten sin sobreescribir con `'09:00'`, fluyendo automáticamente al panel **Por Agendar**. Edición de tareas existentes y defaults de Actividades/Hábitos/Finanzas intactos.
+- **Clasificación Inteligente (`clasificarTareasBacklog` en `useCalendarEngine.ts`):** Expone `tareasVencidasReprogramar` (`fecha < hoyIso`) y `tareasSinHora` (sin `hora_inicio`, excluyendo las ya vencidas), ordenadas por prioridad y fecha, más `devolverTareaABacklog()` (`hora_inicio: ''`, `sync_status: 'pending'` + `syncManager.sincronizarTodo()`).
+- **UI de Backlog y Popover:** `CalendarBacklogPanel.tsx` presenta dos secciones colapsables (**Vencidas por reprogramar** con contador `amber-300/90` y **Sin hora asignada**), ambas arrastrables directo a la grilla; `CalendarEventPopover.tsx` añade el botón Ghost **"Devolver a Por Agendar"** para tareas con horario asignado.
+
+#### 4. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado en todos los archivos del módulo Calendario.
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (385/385 tests al 100% verde)**, incorporando pruebas para `clasificarTareasBacklog` y `devolverTareaABacklogLocal`.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **79.39 kB** gzip 20.63 kB; `main-*.js` en **446.99 kB** < 500 kB).
+
+---
+
+### [REQ-FIX-CAL-06: Fix PGRST204 fecha_completado en Tareas, Manejo Limpio de 401 en GCal y Creación de Tareas, Actividades, Gastos e Ingresos desde ViewCalendario]
+**Fecha:** Noviembre 2026 | **Fase:** 8.38 (Estabilización de Sincronización Supabase/GCal y Creación Omnicanal de 4 Entidades en Calendario Maestro) | **Archivos Modificados:** `src/services/syncPayloadSanitizer.ts`, `src/services/__tests__/syncManager.test.ts`, `src/services/calendarSyncService.ts`, `src/hooks/useCalendarEngine.ts`, `src/hooks/useTareaForm.ts`, `src/components/Views/ViewCalendario.tsx`, `src/App.tsx`, `DICCIONARIO_TECNICO_MAESTRO.md`
+
+#### 1. Fix HTTP 400 `PGRST204` en Sincronización de Tareas (`syncPayloadSanitizer.ts`)
+- Se auditó el esquema real de `public.tareas` en `supabase/migrations/` confirmando que `fecha_completado` no existe como columna remota (solo existe en `subtareas_pasos` y `planes_accion_hitos`).
+- Se eliminó `fecha_completado` del payload outbound de `sanitizarTareaPayload()`, preservando el campo local `fecha_completado` en Dexie para métricas y bóveda de archivados (+10 días).
+
+#### 2. Fix Bucle HTTP 401 en Google Calendar (`calendarSyncService.ts` + `useCalendarEngine.ts`)
+- En `listarEventosExternosGoogleCalendar()`: ante respuesta `401` o `403`, se invoca inmediatamente `limpiarTokenGoogleCalendar(false)` para invalidar el token expirado en memoria/`localStorage` y notificar estado `disconnected` a los suscriptores sin reintentar ni generar spam.
+- En `useCalendarEngine.ts`: se añadió guarda de concurrencia `inFlightRangeRef` + control `manualRefreshPendingRef` que impide peticiones duplicadas simultáneas para el mismo rango y evita disparos automáticos cuando no existe sesión GCal conectada.
+
+#### 3. Creación de las 4 Entidades desde Calendario (`ViewCalendario.tsx`, `useCalendarEngine.ts`, `App.tsx`)
+- **`crearEventoRapido()` (`QuickCreateCalendarParams`):** Endurecido y ampliado con unión discriminada estricta (0 `any`) para persistir al instante **Tarea** (`crearTarea`), **Actividad** (`db.actividades_personales.put` + sync), **Gasto** (`crearGasto` + sync) e **Ingreso** (`crearIngreso` + sync).
+- **Botón `+ Nuevo` en Toolbar y Mini-Popover de 4 Entidades:** Tanto desde Click-and-Drag en la grilla como desde el botón `+ Nuevo` en la toolbar se puede elegir **Tarea**, **Actividad**, **Gasto** o **Ingreso** (con campo monto `S/` para finanzas), más botón **"Más detalles"** para abrir el modal canónico correspondiente (`ModalTareaFlow` prellenado con fecha/hora/título, `ModalActividadFlow`, `ModalGasto` o `ModalIngreso` lazy-loaded en `App.tsx`).
+
+#### 4. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado en todos los archivos intervenidos del módulo Calendario.
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (386/386 tests al 100% verde)**, incluyendo test unitario en `syncManager.test.ts` que garantiza la ausencia de `fecha_completado` en el payload outbound de `tareas`.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **83.94 kB** gzip 21.65 kB; `ModalIngreso-*.js` chunk lazy en **12.35 kB**; `main-*.js` en **447.72 kB** < 500 kB).
+
+---
+
+### [REQ-FEAT-CAL-07: Historial Deshacer (Ctrl+Z) en ViewCalendario, Propagación Automática de Cambios a Google Calendar y Sincronización Multi-Dispositivo] (Fase 8.39)
+
+#### 1. Stack de Historial Deshacer (`Ctrl + Z` / `Cmd + Z`) en `useCalendarEngine.ts` y `ViewCalendario.tsx`
+- **Contrato Estricto (`CalendarUndoEntry`):** Unión discriminada sin coerciones `any` con snapshots tipados (`TareaUndoSnapshot` y `ActividadUndoSnapshot`) y profundidad máxima `MAX_UNDO_STACK = 20`.
+- **Operaciones Cubiertas:** Captura automática de estado previo antes de cada mutación desde la grilla: `reprogramarEvento` (Drag & Drop y Resize), `agendarTareaDesdeBacklog`, `devolverTareaABacklog` y `toggleCompletarEvento` (completar/reabrir tareas, actividades y hábitos).
+- **Reversión Atómica (`aplicarUndoEntryLocal` + `deshacerUltimaAccion`):** Restaura los campos exactos en Dexie (`db.tareas` o `db.actividades_personales`) con `updated_at` actual y `sync_status: 'pending'`, dispara `syncManager.sincronizarTodo()` para replicación inmediata multi-dispositivo y propaga la reversión hacia Google Calendar.
+- **Atajo Blindado y Botón Ghost en Toolbar:** `ViewCalendario.tsx` escucha `(Ctrl|Cmd) + Z` respetando la inhibición en `INPUT`, `TEXTAREA`, `SELECT`, `contentEditable` y cuando exista cualquier modal abierto (`[aria-modal="true"]`). Además, muestra un botón discreto Ghost (`Undo2`, `title="Deshacer (Ctrl+Z)"`) en la toolbar cuando `puedeDeshacer === true` y notifica con toast Cobalt `"Deshecho: <etiqueta>"`.
+
+#### 2. Propagación Automática y Silenciosa hacia Google Calendar (`propagarCambioAGoogleCalendar`)
+- **Alcance:** Invocada de forma no bloqueante tras `reprogramarEvento`, `agendarTareaDesdeBacklog` y `aplicarUndoEntryLocal` (`Ctrl + Z`).
+- **Regla de Seguridad:** Verifica conectividad (`navigator.onLine !== false`) y vínculo activo (`agendado_calendar === 'Sí'` o `id_evento_calendar` presente). Obtiene el token silenciosamente vía `obtenerTokenGoogleCalendar()` (cero popups OAuth) y ejecuta `sincronizarTareaCalendar` / `sincronizarActividadCalendar` en modo `'UPSERT'` (haciendo `PATCH /events/{id}` con recordatorios preservados). Degradación completamente silenciosa sin interrumpir el flujo en grilla cuando está offline o desconectado.
+
+#### 3. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `useCalendarEngine.ts`, `ViewCalendario.tsx` y `useCalendarEngine.test.ts` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**, incluyendo nuevo test unitario de ciclo Undo (`aplicarUndoEntryLocal`) y propagación condicional a Google Calendar (`propagarCambioAGoogleCalendar`).
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **89.18 kB** gzip 22.66 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-CAL-08: Refinamiento Quirúrgico de Toolbar en ViewCalendario (Jerarquía Visual, Reducción de Texto e Iconografía Ghost sin Regresiones)] (Fase 8.40)
+
+#### 1. Toolbar Ejecutiva de Alta Precisión en 3 Zonas (`src/components/Views/ViewCalendario.tsx`)
+- **Contenedor Canónico:** `h-11 sm:h-12` con `border-b border-white/[0.06]`, semántica accesible (`role="toolbar"`, `role="group"`, `role="separator" aria-orientation="vertical"`, `aria-pressed` en toggles) y sin `overflow-hidden` en la barra ni en sus nodos de anclaje de popovers.
+- **Zona Izquierda (Navegación Temporal):** Grupo unido Ghost `[ < | Hoy | > ]` (`border-white/[0.07] bg-white/[0.02] rounded-lg`, botones `h-7`) + título de periodo con `ChevronDown` (`opacity-60`) manteniendo intacto `CalendarDatePickerPopover`.
+- **Zona Centro (Selector de Vista — `hidden md:flex`):** Control segmentado estilo Linear (`bg-white/[0.03] border-white/[0.06] p-0.5 rounded-lg`) con opciones `Día`, `Semana`, `Mes` (`h-7 px-2.5 text-xs font-medium`), estado activo elevado (`bg-white/[0.09] text-slate-100 shadow-sm`) y `aria-pressed`.
+- **Zona Derecha (Utilidades Ghost + Acción Primaria Única):**
+  - **Deshacer (`Undo2`):** Botón icono puro Ghost (`h-7 w-7`, `title="Deshacer (Ctrl+Z)"`) solo visible cuando `puedeDeshacer === true`, seguido de separador vertical sutil.
+  - **Capas (`Layers`):** Icono puro Ghost (`h-7 w-7`) cuando todas las capas están activas; muestra punto Cobalt (`w-1.5 h-1.5 rounded-full bg-sky-400`) y contador ultra-compacto `N/6` (`font-mono tabular-nums text-[10px]`) únicamente al ocultar alguna capa. Popover interior intacto.
+  - **Por Agendar (`PanelRight`):** Reemplaza texto largo por icono limpio + pill numérico compacto únicamente cuando `tareasPorAgendar.length > 0`, resaltado Cobalt sutil al estar abierto (`bg-sky-500/15 text-sky-300 border-sky-500/30`).
+  - **Google Calendar (`RefreshCw`):** Botón icono puro Ghost (`h-7 w-7`) con micro-punto semántico (`emerald-400` conectado, `sky-400` sincronizando con `animate-spin`, `slate-500` desconectado) y tooltip descriptivo.
+  - **Acción Primaria Única (`+ Nuevo`):** Separada a la derecha tras divisor vertical, único botón con acento Cobalt permanente (`bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-500/30`), icono `Plus` y etiqueta `"Nuevo"` visible desde `sm:inline`.
+- **Consistencia de Iconografía:** Todos los iconos de la toolbar estandarizados a `w-3.5 h-3.5` y `strokeWidth={1.75}` con `aria-hidden="true"`. Cero cambios en hooks, popovers ni grillas.
+
+#### 2. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `ViewCalendario.tsx` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **90.76 kB** gzip 22.89 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-CAL-09: Hover-Check en 1 Clic, Línea de Hora Inteligente, Franja All-Day Acotada y Estados Visuales Nítidos en CalendarTimeGrid] (Fase 8.41)
+
+#### 1. Interactividad de Precisión en Tarjetas y Grilla (`CalendarTimeGrid.tsx`, `calendarStyles.ts`, `ViewCalendario.tsx`)
+- **Hover-Check en 1 Clic (`onToggleCompletar`):** Cableado desde `ViewCalendario.tsx` hacia `CalendarTimeGrid.tsx` exclusivamente para entidades `'tarea'` y `'habito'` (nunca en `externo_gcal`). Micro-checkbox circular (`w-3.5 h-3.5 rounded-full`) en la esquina superior izquierda integrado en la misma línea del título sin romper `truncate` (tanto en bloques cortos `<= 25 min` como normales): oculto en reposo (`opacity-0 group-hover/card:opacity-100`) y visible fijo con acento Cobalt (`bg-sky-500/25 border-sky-400/60 text-sky-300`) al estar completado. Bloquea propagación en `onClick`, `onMouseDown`, `onPointerDown` y teclado (`Enter`/`Space`) para preservar 100% Drag & Drop, Resize y Popover.
+- **Línea de Hora Actual Inteligente (Cero Encimamiento):** En el eje Y (`05:00`–`23:00`), cualquier etiqueta de hora en punto a menos de **14 minutos** de `minutosAhora` (`Math.abs(minutosAhora - hora * 60) < 14`) se atenúa suavemente a `opacity-0` para dejar lectura impecable al pill flotante `HH:mm` (`bg-sky-500 text-white font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded-full`) y la línea Cobalt en la columna de hoy.
+- **Franja All-Day Acotada y Expandible:** Estado inicial colapsado (`allDayExpandido = false`) mostrando un máximo de **2 eventos all-day** por columna + botón discreto `+N más` / `Ocultar` (`text-[10px] text-slate-400 hover:text-sky-300`), evitando desplazar la grilla horaria.
+- **Estados Visuales Nítidos y Hover Slot Fantasma:**
+  - **Evento en curso (`enCurso`):** Micro-indicador de pulso (`w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse`) en esquina superior derecha + brillo sutil en el borde izquierdo para eventos activos de hoy no completados.
+  - **Google Calendar Externo (`EXTERNAL_GCAL_STRIPE_STYLE`):** Patrón diagonal ultra-fino (`repeating-linear-gradient(-45deg, ...)`) aplicado tanto en tarjetas horarias como all-day de `externo_gcal` para diferenciación instantánea en modo solo-lectura.
+  - **Hover Slot Fantasma:** Al desplazar el cursor sobre espacio vacío (sin drag, resize ni click-and-drag activos), renderiza un contorno discreto de 30 min (`border-white/[0.06] bg-white/[0.015] pointer-events-none`) con hora `HH:mm` en `text-[10px] text-slate-500/70 font-mono`, limpiado al salir o al iniciar interacción.
+
+#### 2. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `CalendarTimeGrid.tsx`, `calendarStyles.ts` y `ViewCalendario.tsx` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **94.31 kB** gzip 23.80 kB; `main-*.js` en **447.73 kB** < 500 kB).

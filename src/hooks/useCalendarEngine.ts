@@ -15,9 +15,14 @@ import { db } from '../db/db';
 import { syncManager } from '../services/syncManager';
 import { completarActividadPersonalLocal } from '../services/habitosService';
 import { crearTarea } from '../services/tareasService';
+import { crearGasto } from '../services/gastosService';
+import { crearIngreso } from '../services/ingresosService';
 import {
   listarEventosExternosGoogleCalendar,
   obtenerEstadoConexionGoogleCalendar,
+  obtenerTokenGoogleCalendar,
+  sincronizarActividadCalendar,
+  sincronizarTareaCalendar,
   suscribirEstadoGoogleCalendar,
   type GoogleCalendarExternalEvent
 } from '../services/calendarSyncService';
@@ -66,6 +71,71 @@ export interface CargaDiariaInfo {
   porcentaje: number;
   nivel: 'normal' | 'alta' | 'sobrecarga';
 }
+
+export type QuickCreateCalendarParams =
+  | {
+      tipo: 'tarea';
+      titulo: string;
+      fecha: string;
+      horaInicio: string;
+      duracionMinutos: number;
+    }
+  | {
+      tipo: 'actividad';
+      titulo: string;
+      fecha: string;
+      horaInicio: string;
+      duracionMinutos: number;
+    }
+  | {
+      tipo: 'gasto';
+      titulo: string;
+      fecha: string;
+      monto: number;
+      moneda?: 'PEN' | 'USD' | 'EUR';
+    }
+  | {
+      tipo: 'ingreso';
+      titulo: string;
+      fecha: string;
+      monto: number;
+      moneda?: 'PEN' | 'USD' | 'EUR';
+    };
+
+export interface TareaUndoSnapshot {
+  fecha_programada?: string;
+  hora_inicio?: string;
+  horas_estimadas?: number;
+  estado_tarea: TareaRecord['estado_tarea'];
+  fecha_completado?: string;
+}
+
+export interface ActividadUndoSnapshot {
+  fecha_programada: string;
+  hora_inicio?: string;
+  duracion_horas: number;
+  estado: ActividadPersonal['estado'];
+  racha_actual: number;
+  ultima_fecha_completado?: string;
+  proxima_fecha_programada?: string;
+  historial_fechas?: string[];
+}
+
+export type CalendarUndoEntry =
+  | {
+      entidad: 'tarea';
+      id: string;
+      etiqueta: string;
+      snapshot: TareaUndoSnapshot;
+    }
+  | {
+      entidad: 'actividad' | 'habito';
+      id: string;
+      etiqueta: string;
+      snapshot: ActividadUndoSnapshot;
+    };
+
+const MAX_UNDO_STACK = 20;
 
 export interface CalendarEventItem {
   id: string;
@@ -259,6 +329,160 @@ export function pesoPrioridadTarea(prioridad?: string): number {
   if (p.includes('Q2') || p.includes('P2') || p.includes('ALTA')) return 2;
   if (p.includes('Q3') || p.includes('P3') || p.includes('MEDIA')) return 3;
   return 4;
+}
+
+/**
+ * Clasifica las tareas activas en dos grupos mutuamente excluyentes para el panel "Por Agendar":
+ * 1. `tareasVencidasReprogramar`: pendientes/en progreso con fecha programada < `hoyIso`.
+ * 2. `tareasSinHora`: pendientes/en progreso sin `hora_inicio` que no están vencidas.
+ */
+export function clasificarTareasBacklog(
+  tareas: TareaRecord[],
+  hoyIso: string
+): {
+  tareasVencidasReprogramar: TareaRecord[];
+  tareasSinHora: TareaRecord[];
+} {
+  const vencidas: TareaRecord[] = [];
+  const sinHora: TareaRecord[] = [];
+
+  for (const t of tareas) {
+    if (
+      t.estado_tarea === '04_Completado' ||
+      t.estado_tarea === '05_Archivado' ||
+      esElementoArchivado(t, 'tareas')
+    ) {
+      continue;
+    }
+
+    const fIso = normalizarFechaIso(t.fecha_programada);
+    if (fIso && fIso < hoyIso) {
+      vencidas.push(t);
+    } else if (!tieneHoraExplicita(t.hora_inicio)) {
+      sinHora.push(t);
+    }
+  }
+
+  const ordenar = (a: TareaRecord, b: TareaRecord): number => {
+    const pA = pesoPrioridadTarea(a.prioridad_eisenhower || a.Prioridad_Eisenhower);
+    const pB = pesoPrioridadTarea(b.prioridad_eisenhower || b.Prioridad_Eisenhower);
+    if (pA !== pB) return pA - pB;
+
+    const fA = normalizarFechaIso(a.fecha_programada) || '9999-12-31';
+    const fB = normalizarFechaIso(b.fecha_programada) || '9999-12-31';
+    return fA.localeCompare(fB);
+  };
+
+  vencidas.sort(ordenar);
+  sinHora.sort(ordenar);
+
+  return {
+    tareasVencidasReprogramar: vencidas,
+    tareasSinHora: sinHora
+  };
+}
+
+/**
+ * Limpia `hora_inicio` de una tarea en Dexie para devolverla al panel "Por Agendar"
+ * y dispara la sincronización bidireccional en segundo plano.
+ */
+export async function devolverTareaABacklogLocal(tareaId: string): Promise<boolean> {
+  if (!tareaId) return false;
+  try {
+    const nowIso = new Date().toISOString();
+    await db.tareas.update(tareaId, {
+      hora_inicio: '',
+      updated_at: nowIso,
+      sync_status: 'pending'
+    });
+    void syncManager.sincronizarTodo().catch(() => {});
+    return true;
+  } catch (err) {
+    console.error('[useCalendarEngine] Error al devolver tarea a Por Agendar:', err);
+    return false;
+  }
+}
+
+/**
+ * Propaga silenciosamente cambios de fecha/hora/duración a Google Calendar API v3
+ * solo si la entidad está vinculada (`agendado_calendar === 'Sí'` o `id_evento_calendar`)
+ * y existe token OAuth vigente (cero popups, degradación silenciosa offline).
+ */
+export async function propagarCambioAGoogleCalendar(
+  entidad: 'tarea' | 'actividad' | 'habito',
+  registro?: TareaRecord | ActividadPersonal | null
+): Promise<void> {
+  if (!registro) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+  const tieneVinculoGcal =
+    registro.agendado_calendar === 'Sí' ||
+    Boolean(registro.id_evento_calendar && registro.id_evento_calendar.trim() !== '');
+  if (!tieneVinculoGcal) return;
+
+  try {
+    const token = await obtenerTokenGoogleCalendar();
+    if (!token) return;
+
+    if (entidad === 'tarea') {
+      await sincronizarTareaCalendar(registro as TareaRecord, 'UPSERT');
+    } else {
+      await sincronizarActividadCalendar(registro as ActividadPersonal, 'UPSERT');
+    }
+  } catch {
+    // Degradación silenciosa: nunca bloquear la grilla ni mostrar errores intrusivos
+  }
+}
+
+/**
+ * Restaura en Dexie el snapshot previo de un `CalendarUndoEntry`, marca `sync_status: 'pending'`,
+ * dispara sincronización multi-dispositivo y propaga la reversión a Google Calendar.
+ */
+export async function aplicarUndoEntryLocal(entry: CalendarUndoEntry): Promise<boolean> {
+  const nowIso = new Date().toISOString();
+
+  try {
+    if (entry.entidad === 'tarea') {
+      await db.tareas.update(entry.id, {
+        fecha_programada: entry.snapshot.fecha_programada,
+        hora_inicio: entry.snapshot.hora_inicio,
+        horas_estimadas: entry.snapshot.horas_estimadas,
+        estado_tarea: entry.snapshot.estado_tarea,
+        fecha_completado: entry.snapshot.fecha_completado,
+        updated_at: nowIso,
+        sync_status: 'pending'
+      });
+
+      const tareaRestaurada = await db.tareas.get(entry.id);
+      if (tareaRestaurada) {
+        void propagarCambioAGoogleCalendar('tarea', tareaRestaurada);
+      }
+    } else {
+      await db.actividades_personales.update(entry.id, {
+        fecha_programada: entry.snapshot.fecha_programada,
+        hora_inicio: entry.snapshot.hora_inicio,
+        duracion_horas: entry.snapshot.duracion_horas,
+        estado: entry.snapshot.estado,
+        racha_actual: entry.snapshot.racha_actual,
+        ultima_fecha_completado: entry.snapshot.ultima_fecha_completado,
+        proxima_fecha_programada: entry.snapshot.proxima_fecha_programada,
+        historial_fechas: entry.snapshot.historial_fechas,
+        updated_at: nowIso,
+        sync_status: 'pending'
+      });
+
+      const actRestaurada = await db.actividades_personales.get(entry.id);
+      if (actRestaurada) {
+        void propagarCambioAGoogleCalendar(entry.entidad, actRestaurada);
+      }
+    }
+
+    void syncManager.sincronizarTodo().catch(() => {});
+    return true;
+  } catch (err) {
+    console.error('[useCalendarEngine] Error al restaurar snapshot Undo:', err);
+    return false;
+  }
 }
 
 /**
@@ -520,45 +744,48 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
     []
   );
 
-  // Tareas pendientes / en progreso sin hora fija asignada para panel "Por Agendar" (REQ-FEAT-CAL-02)
-  const tareasSinHoraRaw = useLiveQuery(
+  // Tareas activas para clasificar el panel "Por Agendar" en Vencidas vs Sin hora (REQ-UX-CAL-05)
+  const tareasActivasBacklogRaw = useLiveQuery(
     () =>
       db.tareas
         .filter(
           (t) =>
             t.estado_tarea !== '04_Completado' &&
             t.estado_tarea !== '05_Archivado' &&
-            !esElementoArchivado(t, 'tareas') &&
-            !tieneHoraExplicita(t.hora_inicio)
+            !esElementoArchivado(t, 'tareas')
         )
         .toArray(),
     [],
     []
   );
 
-  const tareasPorAgendar = useMemo<TareaRecord[]>(() => {
-    return [...tareasSinHoraRaw].sort((a, b) => {
-      const pA = pesoPrioridadTarea(a.prioridad_eisenhower || a.Prioridad_Eisenhower);
-      const pB = pesoPrioridadTarea(b.prioridad_eisenhower || b.Prioridad_Eisenhower);
-      if (pA !== pB) return pA - pB;
+  const hoyIsoActual = formatFechaIsoLocal(new Date());
 
-      const fA = normalizarFechaIso(a.fecha_programada) || '9999-12-31';
-      const fB = normalizarFechaIso(b.fecha_programada) || '9999-12-31';
-      return fA.localeCompare(fB);
-    });
-  }, [tareasSinHoraRaw]);
+  const { tareasVencidasReprogramar, tareasSinHora } = useMemo(
+    () => clasificarTareasBacklog(tareasActivasBacklogRaw, hoyIsoActual),
+    [tareasActivasBacklogRaw, hoyIsoActual]
+  );
+
+  const tareasPorAgendar = useMemo<TareaRecord[]>(
+    () => [...tareasVencidasReprogramar, ...tareasSinHora],
+    [tareasVencidasReprogramar, tareasSinHora]
+  );
 
   // ============================================================================
-  // LECTURA NO BLOQUEANTE DE EVENTOS EXTERNOS GOOGLE CALENDAR (REQ-FEAT-CAL-03)
+  // LECTURA NO BLOQUEANTE DE EVENTOS EXTERNOS GOOGLE CALENDAR (REQ-FEAT-CAL-03 / CAL-06)
   // ============================================================================
   const [eventosExternosGcal, setEventosExternosGcal] = useState<GoogleCalendarExternalEvent[]>([]);
   const [gcalExternoEstado, setGcalExternoEstado] = useState<GcalExternoEstado>('idle');
   const cacheExternosRef = useRef<Map<string, GoogleCalendarExternalEvent[]>>(new Map());
+  const inFlightRangeRef = useRef<string | null>(null);
+  const manualRefreshPendingRef = useRef<boolean>(false);
   const [refreshTickGcal, setRefreshTickGcal] = useState(0);
 
   const recargarEventosExternos = useCallback(() => {
     const key = `${inicioIso}::${finIso}`;
     cacheExternosRef.current.delete(key);
+    inFlightRangeRef.current = null;
+    manualRefreshPendingRef.current = true;
     setRefreshTickGcal((prev) => prev + 1);
   }, [inicioIso, finIso]);
 
@@ -566,9 +793,11 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
     return suscribirEstadoGoogleCalendar((estado) => {
       if (estado.conectado) {
         cacheExternosRef.current.clear();
+        inFlightRangeRef.current = null;
         setRefreshTickGcal((prev) => prev + 1);
       } else {
         cacheExternosRef.current.clear();
+        inFlightRangeRef.current = null;
         setEventosExternosGcal([]);
         setGcalExternoEstado('disconnected');
       }
@@ -578,32 +807,56 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
   useEffect(() => {
     let cancelado = false;
     const rangeKey = `${inicioIso}::${finIso}`;
+    const esManual = manualRefreshPendingRef.current;
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      manualRefreshPendingRef.current = false;
       setGcalExternoEstado('disconnected');
       return;
     }
 
+    // Evitar disparos duplicados concurrentes del mismo rango
+    if (!esManual && inFlightRangeRef.current === rangeKey) {
+      return;
+    }
+
     const cached = cacheExternosRef.current.get(rangeKey);
-    if (cached && refreshTickGcal === 0) {
+    if (cached && !esManual) {
       setEventosExternosGcal(cached);
       setGcalExternoEstado('connected');
       return;
     }
 
+    // Si no hay sesión activa y no es refresco manual explícito, no spamear requests
+    const estadoPrevio = obtenerEstadoConexionGoogleCalendar();
+    if (!estadoPrevio.conectado && !esManual) {
+      setEventosExternosGcal([]);
+      setGcalExternoEstado('disconnected');
+      return;
+    }
+
+    manualRefreshPendingRef.current = false;
+    inFlightRangeRef.current = rangeKey;
     setGcalExternoEstado('loading');
-    void listarEventosExternosGoogleCalendar(inicioIso, finIso).then((items) => {
-      if (cancelado) return;
-      const estadoAuth = obtenerEstadoConexionGoogleCalendar();
-      if (estadoAuth.conectado) {
-        cacheExternosRef.current.set(rangeKey, items);
-        setEventosExternosGcal(items);
-        setGcalExternoEstado('connected');
-      } else {
-        setEventosExternosGcal([]);
-        setGcalExternoEstado('disconnected');
-      }
-    });
+
+    void listarEventosExternosGoogleCalendar(inicioIso, finIso)
+      .then((items) => {
+        if (cancelado) return;
+        const estadoAuth = obtenerEstadoConexionGoogleCalendar();
+        if (estadoAuth.conectado) {
+          cacheExternosRef.current.set(rangeKey, items);
+          setEventosExternosGcal(items);
+          setGcalExternoEstado('connected');
+        } else {
+          setEventosExternosGcal([]);
+          setGcalExternoEstado('disconnected');
+        }
+      })
+      .finally(() => {
+        if (inFlightRangeRef.current === rangeKey) {
+          inFlightRangeRef.current = null;
+        }
+      });
 
     return () => {
       cancelado = true;
@@ -860,57 +1113,122 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
     return mapa;
   }, [fechas, eventosVisibles]);
 
-  // Toggle rápido de completado en Dexie + sincronización en segundo plano
-  const toggleCompletarEvento = useCallback(async (item: CalendarEventItem): Promise<boolean> => {
-    const nowIso = new Date().toISOString();
-    const hoyIso = formatFechaIsoLocal(new Date());
+  // ============================================================================
+  // STACK DE DESHACER (UNDO CTRL+Z, MÁXIMO 20 OPERACIONES) (REQ-FEAT-CAL-07)
+  // ============================================================================
+  const undoStackRef = useRef<CalendarUndoEntry[]>([]);
+  const [undoStackSize, setUndoStackSize] = useState(0);
 
-    try {
-      if (item.rawRef.kind === 'tarea') {
-        const nuevoEstado = item.completado ? '02_Por_Hacer' : '04_Completado';
-        await db.tareas.update(item.sourceId, {
-          estado_tarea: nuevoEstado,
-          fecha_completado: nuevoEstado === '04_Completado' ? hoyIso : undefined,
-          updated_at: nowIso,
-          sync_status: 'pending'
-        });
-      } else if (item.rawRef.kind === 'habito' || item.rawRef.kind === 'actividad') {
-        await completarActividadPersonalLocal(item.rawRef.record, !item.completado);
-      } else if (item.rawRef.kind === 'hito') {
-        const nuevoEstado = item.completado ? '01_Pendiente' : '03_Completado';
-        await db.hitos_wbs.update(item.sourceId, {
-          estado: nuevoEstado,
-          fecha_real_fin: nuevoEstado === '03_Completado' ? hoyIso : undefined,
-          updated_at: nowIso,
-          sync_status: 'pending'
-        });
-      } else if (item.rawRef.kind === 'gasto') {
-        const nuevoEstado = item.completado ? 'PENDIENTE' : 'PAGADO';
-        await db.gastos.update(item.sourceId, {
-          estado_pago: nuevoEstado,
-          fecha_ejecucion_real: nuevoEstado === 'PAGADO' ? hoyIso : undefined,
-          updated_at: nowIso,
-          sync_status: 'pending'
-        });
-      } else if (item.rawRef.kind === 'ingreso') {
-        const nuevoEstado = item.completado ? 'PENDIENTE' : 'COBRADO';
-        await db.ingresos.update(item.sourceId, {
-          estado_cobro: nuevoEstado,
-          fecha_ejecucion_real: nuevoEstado === 'COBRADO' ? hoyIso : undefined,
-          updated_at: nowIso,
-          sync_status: 'pending'
-        });
-      }
-
-      syncManager.sincronizarTodo().catch(() => {});
-      return true;
-    } catch (err) {
-      console.error('[useCalendarEngine] Error al actualizar estado del evento:', err);
-      return false;
-    }
+  const pushUndoEntry = useCallback((entry: CalendarUndoEntry) => {
+    const next = [...undoStackRef.current.slice(-(MAX_UNDO_STACK - 1)), entry];
+    undoStackRef.current = next;
+    setUndoStackSize(next.length);
   }, []);
 
-  // Reprogramación optimista en Dexie por Drag & Drop o Resize (REQ-FEAT-CAL-02)
+  const deshacerUltimaAccion = useCallback(async (): Promise<{
+    ok: boolean;
+    mensaje?: string;
+  }> => {
+    if (undoStackRef.current.length === 0) {
+      return { ok: false };
+    }
+    const stackCopia = [...undoStackRef.current];
+    const ultimo = stackCopia.pop();
+    if (!ultimo) return { ok: false };
+
+    undoStackRef.current = stackCopia;
+    setUndoStackSize(stackCopia.length);
+
+    const ok = await aplicarUndoEntryLocal(ultimo);
+    return ok ? { ok: true, mensaje: ultimo.etiqueta } : { ok: false };
+  }, []);
+
+  // Toggle rápido de completado en Dexie + Undo + sincronización en segundo plano
+  const toggleCompletarEvento = useCallback(
+    async (item: CalendarEventItem): Promise<boolean> => {
+      const nowIso = new Date().toISOString();
+      const hoyIso = formatFechaIsoLocal(new Date());
+
+      try {
+        if (item.rawRef.kind === 'tarea') {
+          const prevRec = (await db.tareas.get(item.sourceId)) ?? item.rawRef.record;
+          pushUndoEntry({
+            entidad: 'tarea',
+            id: item.sourceId,
+            etiqueta: `Estado de ${prevRec.codigo_legado || item.codigoLegado}`,
+            snapshot: {
+              fecha_programada: prevRec.fecha_programada,
+              hora_inicio: prevRec.hora_inicio,
+              horas_estimadas: prevRec.horas_estimadas,
+              estado_tarea: prevRec.estado_tarea,
+              fecha_completado: prevRec.fecha_completado
+            }
+          });
+
+          const nuevoEstado = item.completado ? '02_Por_Hacer' : '04_Completado';
+          await db.tareas.update(item.sourceId, {
+            estado_tarea: nuevoEstado,
+            fecha_completado: nuevoEstado === '04_Completado' ? hoyIso : undefined,
+            updated_at: nowIso,
+            sync_status: 'pending'
+          });
+        } else if (item.rawRef.kind === 'habito' || item.rawRef.kind === 'actividad') {
+          const prevAct =
+            (await db.actividades_personales.get(item.sourceId)) ?? item.rawRef.record;
+          pushUndoEntry({
+            entidad: item.rawRef.kind,
+            id: item.sourceId,
+            etiqueta: `Estado de ${prevAct.codigo_legado || item.codigoLegado}`,
+            snapshot: {
+              fecha_programada: prevAct.fecha_programada,
+              hora_inicio: prevAct.hora_inicio,
+              duracion_horas: prevAct.duracion_horas,
+              estado: prevAct.estado,
+              racha_actual: prevAct.racha_actual,
+              ultima_fecha_completado: prevAct.ultima_fecha_completado,
+              proxima_fecha_programada: prevAct.proxima_fecha_programada,
+              historial_fechas: prevAct.historial_fechas ? [...prevAct.historial_fechas] : undefined
+            }
+          });
+
+          await completarActividadPersonalLocal(item.rawRef.record, !item.completado);
+        } else if (item.rawRef.kind === 'hito') {
+          const nuevoEstado = item.completado ? '01_Pendiente' : '03_Completado';
+          await db.hitos_wbs.update(item.sourceId, {
+            estado: nuevoEstado,
+            fecha_real_fin: nuevoEstado === '03_Completado' ? hoyIso : undefined,
+            updated_at: nowIso,
+            sync_status: 'pending'
+          });
+        } else if (item.rawRef.kind === 'gasto') {
+          const nuevoEstado = item.completado ? 'PENDIENTE' : 'PAGADO';
+          await db.gastos.update(item.sourceId, {
+            estado_pago: nuevoEstado,
+            fecha_ejecucion_real: nuevoEstado === 'PAGADO' ? hoyIso : undefined,
+            updated_at: nowIso,
+            sync_status: 'pending'
+          });
+        } else if (item.rawRef.kind === 'ingreso') {
+          const nuevoEstado = item.completado ? 'PENDIENTE' : 'COBRADO';
+          await db.ingresos.update(item.sourceId, {
+            estado_cobro: nuevoEstado,
+            fecha_ejecucion_real: nuevoEstado === 'COBRADO' ? hoyIso : undefined,
+            updated_at: nowIso,
+            sync_status: 'pending'
+          });
+        }
+
+        void syncManager.sincronizarTodo().catch(() => {});
+        return true;
+      } catch (err) {
+        console.error('[useCalendarEngine] Error al actualizar estado del evento:', err);
+        return false;
+      }
+    },
+    [pushUndoEntry]
+  );
+
+  // Reprogramación optimista en Dexie por Drag & Drop o Resize + Undo + Propagación GCal (REQ-FEAT-CAL-02 / CAL-07)
   const reprogramarEvento = useCallback(
     async (
       evento: CalendarEventItem,
@@ -925,9 +1243,25 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
       const durBase = nuevaDuracionMinutos ?? evento.duracionMinutos ?? 60;
       const rangoCalc = calcularRangoReprogramado(inicioMin, durBase);
       const nowIso = new Date().toISOString();
+      const esSoloResize =
+        fechaNorm === evento.fecha && rangoCalc.horaInicio === evento.horaInicio;
 
       try {
         if (evento.rawRef.kind === 'tarea') {
+          const prevRec = (await db.tareas.get(evento.sourceId)) ?? evento.rawRef.record;
+          pushUndoEntry({
+            entidad: 'tarea',
+            id: evento.sourceId,
+            etiqueta: `${esSoloResize ? 'Duración' : 'Reprogramación'} de ${prevRec.codigo_legado || evento.codigoLegado}`,
+            snapshot: {
+              fecha_programada: prevRec.fecha_programada,
+              hora_inicio: prevRec.hora_inicio,
+              horas_estimadas: prevRec.horas_estimadas,
+              estado_tarea: prevRec.estado_tarea,
+              fecha_completado: prevRec.fecha_completado
+            }
+          });
+
           await db.tareas.update(evento.sourceId, {
             fecha_programada: fechaNorm,
             hora_inicio: rangoCalc.horaInicio,
@@ -935,7 +1269,35 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
             updated_at: nowIso,
             sync_status: 'pending'
           });
+
+          const tareaActualizada: TareaRecord = {
+            ...prevRec,
+            fecha_programada: fechaNorm,
+            hora_inicio: rangoCalc.horaInicio,
+            horas_estimadas: rangoCalc.horasDecimal,
+            updated_at: nowIso,
+            sync_status: 'pending'
+          };
+          void propagarCambioAGoogleCalendar('tarea', tareaActualizada);
         } else if (evento.rawRef.kind === 'actividad' || evento.rawRef.kind === 'habito') {
+          const prevAct =
+            (await db.actividades_personales.get(evento.sourceId)) ?? evento.rawRef.record;
+          pushUndoEntry({
+            entidad: evento.rawRef.kind,
+            id: evento.sourceId,
+            etiqueta: `${esSoloResize ? 'Duración' : 'Reprogramación'} de ${prevAct.codigo_legado || evento.codigoLegado}`,
+            snapshot: {
+              fecha_programada: prevAct.fecha_programada,
+              hora_inicio: prevAct.hora_inicio,
+              duracion_horas: prevAct.duracion_horas,
+              estado: prevAct.estado,
+              racha_actual: prevAct.racha_actual,
+              ultima_fecha_completado: prevAct.ultima_fecha_completado,
+              proxima_fecha_programada: prevAct.proxima_fecha_programada,
+              historial_fechas: prevAct.historial_fechas ? [...prevAct.historial_fechas] : undefined
+            }
+          });
+
           await db.actividades_personales.update(evento.sourceId, {
             fecha_programada: fechaNorm,
             hora_inicio: rangoCalc.horaInicio,
@@ -943,6 +1305,16 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
             updated_at: nowIso,
             sync_status: 'pending'
           });
+
+          const actActualizada: ActividadPersonal = {
+            ...prevAct,
+            fecha_programada: fechaNorm,
+            hora_inicio: rangoCalc.horaInicio,
+            duracion_horas: rangoCalc.horasDecimal,
+            updated_at: nowIso,
+            sync_status: 'pending'
+          };
+          void propagarCambioAGoogleCalendar(evento.rawRef.kind, actActualizada);
         } else {
           return false;
         }
@@ -954,10 +1326,10 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
         return false;
       }
     },
-    []
+    [pushUndoEntry]
   );
 
-  // Agendar tarea desde el panel lateral "Por Agendar" hacia un bloque horario (REQ-FEAT-CAL-02)
+  // Agendar tarea desde el panel lateral "Por Agendar" hacia un bloque horario + Undo + GCal (REQ-FEAT-CAL-02 / CAL-07)
   const agendarTareaDesdeBacklog = useCallback(
     async (
       tareaId: string,
@@ -971,6 +1343,19 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
       try {
         const tareaActual = await db.tareas.get(tareaId);
         if (!tareaActual) return false;
+
+        pushUndoEntry({
+          entidad: 'tarea',
+          id: tareaId,
+          etiqueta: `Agendar ${tareaActual.codigo_legado || 'tarea'}`,
+          snapshot: {
+            fecha_programada: tareaActual.fecha_programada,
+            hora_inicio: tareaActual.hora_inicio,
+            horas_estimadas: tareaActual.horas_estimadas,
+            estado_tarea: tareaActual.estado_tarea,
+            fecha_completado: tareaActual.fecha_completado
+          }
+        });
 
         const duracionBase =
           duracionMinutos ??
@@ -986,6 +1371,15 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
           sync_status: 'pending'
         });
 
+        const tareaActualizada: TareaRecord = {
+          ...tareaActual,
+          fecha_programada: fechaNorm,
+          hora_inicio: rangoCalc.horaInicio,
+          horas_estimadas: rangoCalc.horasDecimal,
+          updated_at: nowIso,
+          sync_status: 'pending'
+        };
+        void propagarCambioAGoogleCalendar('tarea', tareaActualizada);
         void syncManager.sincronizarTodo().catch(() => {});
         return true;
       } catch (err) {
@@ -993,29 +1387,22 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
         return false;
       }
     },
-    []
+    [pushUndoEntry]
   );
 
-  // Creación rápida al vuelo desde Click-and-Drag sobre espacio vacío (REQ-FEAT-CAL-02)
+  // Creación rápida de las 4 entidades desde el Calendario (REQ-FEAT-CAL-02 / REQ-FIX-CAL-06)
   const crearEventoRapido = useCallback(
-    async (params: {
-      tipo: 'tarea' | 'actividad';
-      titulo: string;
-      fecha: string;
-      horaInicio: string;
-      duracionMinutos: number;
-    }): Promise<boolean> => {
+    async (params: QuickCreateCalendarParams): Promise<boolean> => {
       const tituloLimpio = params.titulo.trim();
       const fechaNorm = normalizarFechaIso(params.fecha);
       if (!tituloLimpio || !fechaNorm) return false;
 
-      const rangoCalc = calcularRangoReprogramado(
-        horaAMinutos(params.horaInicio),
-        params.duracionMinutos
-      );
-
       try {
         if (params.tipo === 'tarea') {
+          const rangoCalc = calcularRangoReprogramado(
+            horaAMinutos(params.horaInicio),
+            params.duracionMinutos
+          );
           await crearTarea({
             nombre_tarea_actividad: tituloLimpio,
             fecha_programada: fechaNorm,
@@ -1024,14 +1411,18 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
             estado_tarea: '02_Por_Hacer',
             agendado_calendar: 'No'
           });
-        } else {
+        } else if (params.tipo === 'actividad') {
+          const rangoCalc = calcularRangoReprogramado(
+            horaAMinutos(params.horaInicio),
+            params.duracionMinutos
+          );
           const nowIso = new Date().toISOString();
           const codigoLegado = await generarCodigoCorrelativoSeguro(
             db.actividades_personales,
             'ACT',
             3
           );
-          await db.actividades_personales.add({
+          await db.actividades_personales.put({
             id: generateSafeUUID(),
             user_id: '00000000-0000-0000-0000-000000000001',
             codigo_legado: codigoLegado,
@@ -1051,6 +1442,38 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
             sync_status: 'pending'
           });
           void syncManager.sincronizarTodo().catch(() => {});
+        } else if (params.tipo === 'gasto') {
+          const montoSeguro = Math.max(0, Number(params.monto) || 0);
+          await crearGasto({
+            descripcion_gasto: tituloLimpio,
+            fecha_gasto: fechaNorm,
+            monto_original: montoSeguro,
+            monto_pen: montoSeguro,
+            moneda_original: params.moneda || 'PEN',
+            tipo_cambio: 1,
+            estado_pago: 'PENDIENTE',
+            tipo_origen: 'Personal',
+            categoria_gasto: 'General',
+            agendar_calendar: false,
+            agendado_calendar: 'No'
+          });
+          void syncManager.sincronizarTodo().catch(() => {});
+        } else if (params.tipo === 'ingreso') {
+          const montoSeguro = Math.max(0, Number(params.monto) || 0);
+          await crearIngreso({
+            descripcion_ingreso: tituloLimpio,
+            fecha_ingreso: fechaNorm,
+            monto_original: montoSeguro,
+            monto_pen: montoSeguro,
+            moneda_original: params.moneda || 'PEN',
+            tipo_cambio: 1,
+            estado_cobro: 'PENDIENTE',
+            tipo_origen: 'Honorario',
+            categoria_ingreso: 'Principal',
+            agendar_calendar: false,
+            agendado_calendar: 'No'
+          });
+          void syncManager.sincronizarTodo().catch(() => {});
         }
         return true;
       } catch (err) {
@@ -1059,6 +1482,30 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
       }
     },
     []
+  );
+
+  // Devolver tarea agendada a "Por Agendar" limpiando su hora_inicio + Undo (REQ-UX-CAL-05 / CAL-07)
+  const devolverTareaABacklog = useCallback(
+    async (tareaId: string): Promise<boolean> => {
+      if (!tareaId) return false;
+      const tareaActual = await db.tareas.get(tareaId);
+      if (tareaActual) {
+        pushUndoEntry({
+          entidad: 'tarea',
+          id: tareaId,
+          etiqueta: `Devolver ${tareaActual.codigo_legado || 'tarea'} a Por Agendar`,
+          snapshot: {
+            fecha_programada: tareaActual.fecha_programada,
+            hora_inicio: tareaActual.hora_inicio,
+            horas_estimadas: tareaActual.horas_estimadas,
+            estado_tarea: tareaActual.estado_tarea,
+            fecha_completado: tareaActual.fecha_completado
+          }
+        });
+      }
+      return devolverTareaABacklogLocal(tareaId);
+    },
+    [pushUndoEntry]
   );
 
   return {
@@ -1072,17 +1519,23 @@ export function useCalendarEngine(vistaInicial: CalendarViewMode = 'semana') {
     irAHoy,
     irAnterior,
     irSiguiente,
+    irAFecha: seleccionarFecha,
     seleccionarFecha,
     todosEventos,
     eventosVisibles,
     eventosPorFecha,
     tareasPorAgendar,
+    tareasVencidasReprogramar,
+    tareasSinHora,
     cargaDiariaPorFecha,
     gcalExternoEstado,
     recargarEventosExternos,
+    puedeDeshacer: undoStackSize > 0,
+    deshacerUltimaAccion,
     toggleCompletarEvento,
     reprogramarEvento,
     agendarTareaDesdeBacklog,
+    devolverTareaABacklog,
     crearEventoRapido
   };
 }

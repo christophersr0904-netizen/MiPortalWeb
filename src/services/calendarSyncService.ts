@@ -1566,6 +1566,12 @@ export async function listarEventosExternosGoogleCalendar(
       }
     });
 
+    if (response.status === 401 || response.status === 403) {
+      // Invalidar inmediatamente el token expirado/revocado para cortar cualquier bucle de 401
+      limpiarTokenGoogleCalendar(false);
+      return [];
+    }
+
     if (!response.ok) {
       return [];
     }

@@ -48,6 +48,8 @@ export interface UseTareaFormProps {
   initialProyectoCodigo?: string | null;
   initialTitulo?: string;
   initialNotas?: string;
+  initialFechaProgramada?: string;
+  initialHoraInicio?: string;
   onGuardado?: () => void;
 }
 
@@ -70,6 +72,8 @@ export function useTareaForm({
   initialProyectoCodigo = null,
   initialTitulo = '',
   initialNotas = '',
+  initialFechaProgramada,
+  initialHoraInicio,
   onGuardado
 }: UseTareaFormProps) {
   const estadoBase = estadoInicial || initialColumna || '01_Backlog';
@@ -130,7 +134,7 @@ export function useTareaForm({
   const [horasEstimadasStr, setHorasEstimadasStr] = useState('1:00');
   const [horasRealesStr, setHorasRealesStr] = useState('0:00');
   const [fechaProgramada, setFechaProgramada] = useState('');
-  const [horaInicio, setHoraInicio] = useState('09:00');
+  const [horaInicio, setHoraInicio] = useState('');
   const [agendadoCalendar, setAgendadoCalendar] = useState<'Sí' | 'No'>('Sí');
   const [esMav, setEsMav] = useState(false);
   const [costoRealPen, setCostoRealPen] = useState(0);
@@ -251,7 +255,7 @@ export function useTareaForm({
       setHorasEstimadasStr(convertirHorasDecimalAString(hEst));
       setHorasRealesStr(convertirHorasDecimalAString(hReal));
       setFechaProgramada(tareaExistente.fecha_programada ? tareaExistente.fecha_programada.split('T')[0] : '');
-      setHoraInicio(getProp(tareaExistente, 'hora_inicio', 'Hora_Inicio') || '09:00');
+      setHoraInicio(getProp(tareaExistente, 'hora_inicio', 'Hora_Inicio') || '');
       setAgendadoCalendar(tareaExistente.agendado_calendar === 'No' ? 'No' : 'Sí');
       setEsMav(Boolean(tareaExistente.es_mav));
       const cPen = tareaExistente.costo_real_pen ?? 0;
@@ -334,8 +338,8 @@ export function useTareaForm({
       setHorasReales(0);
       setHorasEstimadasStr('1:00');
       setHorasRealesStr('0:00');
-      setFechaProgramada(formatFechaIsoLocal(now));
-      setHoraInicio('09:00');
+      setFechaProgramada(initialFechaProgramada || formatFechaIsoLocal(now));
+      setHoraInicio(initialHoraInicio || '');
       setAgendadoCalendar('Sí');
       setEsMav(false);
       setCostoRealPen(0);
@@ -351,7 +355,7 @@ export function useTareaForm({
       setModoGasto('NUEVO');
       setMostrarGasto(false);
     }
-  }, [isOpen, tareaId, tareaExistente, estadoBase, initialColumna, initialProyectoCodigo, initialTitulo, initialNotas, proyectos]);
+  }, [isOpen, tareaId, tareaExistente, estadoBase, initialColumna, initialProyectoCodigo, initialTitulo, initialNotas, initialFechaProgramada, initialHoraInicio, proyectos]);
 
   // Lista de subtareas activa
   const listaSubtareasActiva = tareaId ? subtareasExistentes : subtareasLocal;

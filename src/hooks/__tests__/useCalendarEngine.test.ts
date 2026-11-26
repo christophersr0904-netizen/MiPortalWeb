@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   obtenerRangoVisible,
   calcularLayoutSolapados,
@@ -8,12 +8,21 @@ import {
   calcularRangoReprogramado,
   pesoPrioridadTarea,
   calcularCargaDiariaPorFecha,
-  type CalendarEventItem
+  clasificarTareasBacklog,
+  devolverTareaABacklogLocal,
+  aplicarUndoEntryLocal,
+  propagarCambioAGoogleCalendar,
+  type CalendarEventItem,
+  type CalendarUndoEntry
 } from '../useCalendarEngine';
+import * as calendarSyncService from '../../services/calendarSyncService';
 import {
   normalizarEventosExternosGoogleCalendar,
   type GoogleCalendarApiEventItem
 } from '../../services/calendarSyncService';
+import { db } from '../../db/db';
+import { syncManager } from '../../services/syncManager';
+import type { TareaRecord } from '../../types';
 
 function crearEventoTimed(
   id: string,
@@ -204,5 +213,171 @@ describe('REQ-FEAT-CAL-01: Motor Unificado useCalendarEngine', () => {
       porcentaje: 119,
       nivel: 'sobrecarga'
     });
+  });
+
+  it('separa tareasVencidasReprogramar vs tareasSinHora sin duplicados y excluye completadas/agendadas (REQ-UX-CAL-05)', () => {
+    const base = {
+      user_id: 'u1',
+      updated_at: '2026-11-25T00:00:00Z',
+      sync_status: 'synced' as const
+    };
+
+    const tareas: TareaRecord[] = [
+      {
+        ...base,
+        id: 't-vencida-con-hora',
+        codigo_legado: 'TAR-001',
+        nombre_tarea_actividad: 'Vencida con hora',
+        estado_tarea: '02_Por_Hacer',
+        prioridad_eisenhower: 'Q2_Alta',
+        fecha_programada: '2026-11-20',
+        hora_inicio: '09:00'
+      },
+      {
+        ...base,
+        id: 't-vencida-sin-hora',
+        codigo_legado: 'TAR-002',
+        nombre_tarea_actividad: 'Vencida sin hora (debe ir solo en vencidas)',
+        estado_tarea: '03_En_Proceso',
+        prioridad_eisenhower: 'Q1_Urgente',
+        fecha_programada: '2026-11-22',
+        hora_inicio: ''
+      },
+      {
+        ...base,
+        id: 't-hoy-sin-hora',
+        codigo_legado: 'TAR-003',
+        nombre_tarea_actividad: 'Pendiente de hoy sin hora',
+        estado_tarea: '02_Por_Hacer',
+        prioridad_eisenhower: 'Q2_Alta',
+        fecha_programada: '2026-11-25',
+        hora_inicio: ''
+      },
+      {
+        ...base,
+        id: 't-hoy-agendada',
+        codigo_legado: 'TAR-004',
+        nombre_tarea_actividad: 'Agendada hoy a las 10:00',
+        estado_tarea: '02_Por_Hacer',
+        fecha_programada: '2026-11-25',
+        hora_inicio: '10:00'
+      },
+      {
+        ...base,
+        id: 't-completada',
+        codigo_legado: 'TAR-005',
+        nombre_tarea_actividad: 'Completada antigua',
+        estado_tarea: '04_Completado',
+        fecha_programada: '2026-11-10',
+        hora_inicio: ''
+      }
+    ];
+
+    const { tareasVencidasReprogramar, tareasSinHora } = clasificarTareasBacklog(
+      tareas,
+      '2026-11-25'
+    );
+
+    // Vencidas ordenadas por prioridad (Q1 primero, luego Q2)
+    expect(tareasVencidasReprogramar.map((t) => t.id)).toEqual([
+      't-vencida-sin-hora',
+      't-vencida-con-hora'
+    ]);
+
+    // Sin hora excluye la que ya está en vencidas, las agendadas y las completadas
+    expect(tareasSinHora.map((t) => t.id)).toEqual(['t-hoy-sin-hora']);
+  });
+
+  it('devolverTareaABacklog limpia hora_inicio con sync_status pending y dispara sincronización (REQ-UX-CAL-05)', async () => {
+    const updateSpy = vi.spyOn(db.tareas, 'update').mockResolvedValue(1);
+    const syncSpy = vi.spyOn(syncManager, 'sincronizarTodo').mockResolvedValue(undefined);
+
+    const ok = await devolverTareaABacklogLocal('tar-123');
+    expect(ok).toBe(true);
+    expect(updateSpy).toHaveBeenCalledWith(
+      'tar-123',
+      expect.objectContaining({
+        hora_inicio: '',
+        sync_status: 'pending'
+      })
+    );
+    expect(syncSpy).toHaveBeenCalledTimes(1);
+
+    updateSpy.mockRestore();
+    syncSpy.mockRestore();
+  });
+
+  it('ciclo Undo (aplicarUndoEntryLocal): restaura snapshot previo, marca sync_status pending, dispara sync y propaga a GCal (REQ-FEAT-CAL-07)', async () => {
+    const tareaRestaurada: TareaRecord = {
+      id: 'tar-undo-1',
+      user_id: 'u1',
+      codigo_legado: 'TAR-060',
+      nombre_tarea_actividad: 'Revisar arquitectura',
+      estado_tarea: '02_Por_Hacer',
+      fecha_programada: '2026-11-25',
+      hora_inicio: '09:00',
+      horas_estimadas: 1.5,
+      agendado_calendar: 'Sí',
+      id_evento_calendar: 'gcal-evt-060',
+      updated_at: '2026-11-25T10:00:00Z',
+      sync_status: 'pending'
+    };
+
+    const updateSpy = vi.spyOn(db.tareas, 'update').mockResolvedValue(1);
+    const getSpy = vi.spyOn(db.tareas, 'get').mockResolvedValue(tareaRestaurada);
+    const syncSpy = vi.spyOn(syncManager, 'sincronizarTodo').mockResolvedValue(undefined);
+    const tokenSpy = vi
+      .spyOn(calendarSyncService, 'obtenerTokenGoogleCalendar')
+      .mockResolvedValue('mock-access-token');
+    const gcalSpy = vi
+      .spyOn(calendarSyncService, 'sincronizarTareaCalendar')
+      .mockResolvedValue({ success: true, mode: 'API_V3', eventId: 'gcal-evt-060' });
+
+    const entry: CalendarUndoEntry = {
+      entidad: 'tarea',
+      id: 'tar-undo-1',
+      etiqueta: 'Reprogramación de TAR-060',
+      snapshot: {
+        fecha_programada: '2026-11-25',
+        hora_inicio: '09:00',
+        horas_estimadas: 1.5,
+        estado_tarea: '02_Por_Hacer',
+        fecha_completado: undefined
+      }
+    };
+
+    const ok = await aplicarUndoEntryLocal(entry);
+    expect(ok).toBe(true);
+    expect(updateSpy).toHaveBeenCalledWith(
+      'tar-undo-1',
+      expect.objectContaining({
+        fecha_programada: '2026-11-25',
+        hora_inicio: '09:00',
+        horas_estimadas: 1.5,
+        estado_tarea: '02_Por_Hacer',
+        sync_status: 'pending'
+      })
+    );
+    expect(syncSpy).toHaveBeenCalledTimes(1);
+
+    // Esperar microtarea de propagación no bloqueante a Google Calendar
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(gcalSpy).toHaveBeenCalledWith(tareaRestaurada, 'UPSERT');
+
+    // Verificar que si una tarea NO está vinculada a GCal, propagarCambioAGoogleCalendar no llama a la API
+    gcalSpy.mockClear();
+    await propagarCambioAGoogleCalendar('tarea', {
+      ...tareaRestaurada,
+      agendado_calendar: 'No',
+      id_evento_calendar: undefined
+    });
+    expect(gcalSpy).not.toHaveBeenCalled();
+
+    updateSpy.mockRestore();
+    getSpy.mockRestore();
+    syncSpy.mockRestore();
+    tokenSpy.mockRestore();
+    gcalSpy.mockRestore();
   });
 });

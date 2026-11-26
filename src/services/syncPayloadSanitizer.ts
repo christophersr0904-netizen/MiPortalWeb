@@ -416,7 +416,6 @@ export function sanitizarTareaPayload(
     horas_estimadas: Math.max(0, Number(raw.horas_estimadas) || 1.00),
     horas_reales: Math.max(0, Number(raw.horas_reales) || 0.00),
     fecha_programada: sanitizeDate(raw.fecha_programada),
-    fecha_completado: sanitizeDate(raw.fecha_completado || ((raw as unknown as Record<string, unknown>).Fecha_Completado as string)) || null,
     agendado_en_calendar: raw.agendado_calendar === 'Sí' ? 'Sí' : 'No',
     id_evento_calendar: raw.id_evento_calendar?.trim() || null,
     dependencia_tarea_id: resolvedDependenciaUuid,

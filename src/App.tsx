@@ -10,7 +10,7 @@ import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { useUndoDelete } from './hooks/useUndoDelete';
 import { db, inicializarDatosSemillaSiVacio } from './db/db';
 import { syncManager } from './services/syncManager';
-import type { ActividadPersonal, GastoRecord, VinculoEntidad } from './types';
+import type { ActividadPersonal, GastoRecord, IngresoRecord, VinculoEntidad } from './types';
 import { UndoDeleteProvider } from './context/UndoDeleteContext';
 import { UndoToastContainer } from './components/UI/UndoToastContainer';
 
@@ -187,6 +187,9 @@ const ModalActividadFlow = lazy(() =>
 const ModalGasto = lazy(() =>
   import('./components/Modals/ModalGasto').then((m) => ({ default: m.ModalGasto }))
 );
+const ModalIngreso = lazy(() =>
+  import('./components/Modals/ModalIngreso').then((m) => ({ default: m.ModalIngreso }))
+);
 const EditorNotaModal = lazy(() =>
   import('./components/Notas/EditorNotaModal').then((m) => ({ default: m.EditorNotaModal }))
 );
@@ -362,6 +365,8 @@ export const App: React.FC = () => {
   const [actividadEditarGlobal, setActividadEditarGlobal] = useState<ActividadPersonal | null>(null);
   const [modalGastoGlobalAbierto, setModalGastoGlobalAbierto] = useState(false);
   const [gastoEditarGlobal, setGastoEditarGlobal] = useState<GastoRecord | null>(null);
+  const [modalIngresoGlobalAbierto, setModalIngresoGlobalAbierto] = useState(false);
+  const [ingresoEditarGlobal, setIngresoEditarGlobal] = useState<IngresoRecord | null>(null);
   const [modalNotaGlobalAbierto, setModalNotaGlobalAbierto] = useState(false);
   const [modalTareaProps, setModalTareaProps] = useState<{
     isOpen: boolean;
@@ -369,6 +374,8 @@ export const App: React.FC = () => {
     initialColumna?: string;
     initialTitulo?: string;
     initialNotas?: string;
+    initialFechaProgramada?: string;
+    initialHoraInicio?: string;
   } | null>(null);
 
   // Integración centralizada de atajos de teclado y pila LIFO
@@ -679,13 +686,31 @@ export const App: React.FC = () => {
                               tareaId
                             });
                           }}
+                          onCrearTareaConDetalles={(prefill) => {
+                            setModalTareaProps({
+                              isOpen: true,
+                              tareaId: null,
+                              initialColumna: '02_Por_Hacer',
+                              initialTitulo: prefill.titulo,
+                              initialFechaProgramada: prefill.fecha,
+                              initialHoraInicio: prefill.horaInicio
+                            });
+                          }}
                           onAbrirActividad={(actividad) => {
                             setActividadEditarGlobal(actividad);
                             setModalHabitoGlobalAbierto(true);
                           }}
+                          onCrearActividadConDetalles={() => {
+                            setActividadEditarGlobal(null);
+                            setModalHabitoGlobalAbierto(true);
+                          }}
                           onAbrirGasto={(gasto) => {
-                            setGastoEditarGlobal(gasto);
+                            setGastoEditarGlobal(gasto || null);
                             setModalGastoGlobalAbierto(true);
+                          }}
+                          onAbrirIngreso={(ingreso) => {
+                            setIngresoEditarGlobal(ingreso || null);
+                            setModalIngresoGlobalAbierto(true);
                           }}
                           onNavegarVista={handleCambiarVista}
                         />
@@ -777,6 +802,8 @@ export const App: React.FC = () => {
               initialColumna={modalTareaProps.initialColumna}
               initialTitulo={modalTareaProps.initialTitulo}
               initialNotas={modalTareaProps.initialNotas}
+              initialFechaProgramada={modalTareaProps.initialFechaProgramada}
+              initialHoraInicio={modalTareaProps.initialHoraInicio}
             />
           </Suspense>
         )}
@@ -821,6 +848,20 @@ export const App: React.FC = () => {
             onClose={() => {
               setModalGastoGlobalAbierto(false);
               setGastoEditarGlobal(null);
+            }}
+          />
+        </Suspense>
+      )}
+
+      {/* Modal Canónico Ingreso (Global) */}
+      {modalIngresoGlobalAbierto && (
+        <Suspense fallback={null}>
+          <ModalIngreso
+            isOpen={modalIngresoGlobalAbierto}
+            ingresoEditar={ingresoEditarGlobal}
+            onClose={() => {
+              setModalIngresoGlobalAbierto(false);
+              setIngresoEditarGlobal(null);
             }}
           />
         </Suspense>
