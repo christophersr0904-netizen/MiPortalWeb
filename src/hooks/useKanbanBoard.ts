@@ -9,7 +9,7 @@
  * ============================================================================
  */
 
-import { useState, useEffect, useMemo, useRef, useDeferredValue, useTransition } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue, useTransition } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
 import { useUndoDelete } from './useUndoDelete';
@@ -24,7 +24,8 @@ import {
   calcularAvancesProyectoCanonica,
   resolverDependenciasTarea
 } from '../utils/entityNormalizer';
-import { actualizarTarea, eliminarTarea } from '../services/tareasService';
+import { crearTarea, actualizarTarea, eliminarTarea } from '../services/tareasService';
+import { syncManager } from '../services/syncManager';
 import { coincideCategoriaIniciativa } from '../components/PMO/IconoCategoriaIniciativa';
 import type {
   ProyectoRecord,
@@ -36,6 +37,41 @@ import type {
 
 export type TimeFilter = 'TODO' | 'HOY' | 'SEMANA' | 'MES';
 export type SortFilter = 'PRIORITY' | 'DATE' | 'ENERGY' | 'HOURS' | 'ALPHA';
+export type EstadoTareaKanban = '01_Backlog' | '02_Por_Hacer' | '03_En_Proceso' | '04_Completado';
+
+export interface KanbanUndoEntry {
+  tareaId: string;
+  etiqueta: string;
+  estadoAnterior: string;
+  archivadaAnterior?: boolean;
+}
+
+const MAX_KANBAN_UNDO_STACK = 20;
+
+/**
+ * Restaura en Dexie el estado previo de una tarea desde el stack Undo del Kanban,
+ * marca `sync_status: 'pending'` con `updated_at` actual y dispara sincronización multi-dispositivo.
+ */
+export async function aplicarUndoKanbanLocal(entry: KanbanUndoEntry): Promise<boolean> {
+  if (!entry.tareaId) return false;
+  try {
+    const nowIso = new Date().toISOString();
+    const updates: Partial<TareaRecord> = {
+      estado_tarea: entry.estadoAnterior,
+      updated_at: nowIso,
+      sync_status: 'pending'
+    };
+    if (entry.archivadaAnterior !== undefined) {
+      updates.archivado = entry.archivadaAnterior;
+    }
+    await db.tareas.update(entry.tareaId, updates);
+    void syncManager.sincronizarTodo().catch(() => {});
+    return true;
+  } catch (err) {
+    console.error('[useKanbanBoard] Error al deshacer acción Kanban:', err);
+    return false;
+  }
+}
 
 export interface ColumnaKanbanDef {
   id: string;
@@ -239,6 +275,19 @@ export function useKanbanBoard(options: UseKanbanBoardOptions = {}) {
 
   // Estados Optimistas para Transición Inmediata de Drag-and-Drop (Zero Latency)
   const [estadosOptimistas, setEstadosOptimistas] = useState<Map<string, string>>(new Map());
+
+  // Stack de Historial Deshacer (Ctrl+Z) en memoria (máx 20 operaciones - REQ-UX-KANBAN-03)
+  const undoStackRef = useRef<KanbanUndoEntry[]>([]);
+  const [undoStackSize, setUndoStackSize] = useState(0);
+
+  const pushUndoKanban = useCallback((entry: KanbanUndoEntry) => {
+    const next = [...undoStackRef.current, entry];
+    if (next.length > MAX_KANBAN_UNDO_STACK) {
+      next.splice(0, next.length - MAX_KANBAN_UNDO_STACK);
+    }
+    undoStackRef.current = next;
+    setUndoStackSize(next.length);
+  }, []);
 
   // Modal Declarativo Bento para Advertencia Definition of Done (DoD)
   const [dodAdvertencia, setDodAdvertencia] = useState<DoDAdvertenciaState | null>(null);
@@ -824,8 +873,9 @@ export function useKanbanBoard(options: UseKanbanBoardOptions = {}) {
         : 'bg-[#0D1526] border-slate-800/80 hover:border-sky-500/40 text-slate-300 hover:text-slate-100 cursor-pointer'
     }`;
 
-  // Ejecución física de mutación en base de datos con rollback ante fallos
+  // Ejecución física de mutación en base de datos con rollback ante fallos y registro Undo
   const ejecutarMoverTarea = async (tarea: CanonicalTarea, nuevoEstado: string) => {
+    const estadoAnterior = tarea.estado;
     // 1. Inyección de Estado Optimista (Cero latencia visual)
     setEstadosOptimistas((prev) => new Map(prev).set(tarea.id, nuevoEstado));
 
@@ -834,6 +884,14 @@ export function useKanbanBoard(options: UseKanbanBoardOptions = {}) {
         estado_tarea: nuevoEstado,
         updated_at: new Date().toISOString()
       });
+      if (estadoAnterior !== nuevoEstado) {
+        pushUndoKanban({
+          tareaId: tarea.id,
+          etiqueta: `Movimiento de ${tarea.codigo_legado}`,
+          estadoAnterior
+        });
+      }
+      void syncManager.sincronizarTodo().catch(() => {});
     } catch (err) {
       console.error('Error al persistir estado de tarea en Dexie:', err);
       // Revertir optimistic UI en caso de error
@@ -904,6 +962,7 @@ export function useKanbanBoard(options: UseKanbanBoardOptions = {}) {
   };
 
   const handleArchivarTarea = (tar: CanonicalTarea) => {
+    const estadoPrevio = tar.estado;
     programarEliminacion({
       tabla: 'tareas',
       id: tar.id,
@@ -913,11 +972,68 @@ export function useKanbanBoard(options: UseKanbanBoardOptions = {}) {
         await db.tareas.update(tar.id, {
           estado_tarea: '05_Archivado',
           archivado: true,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          sync_status: 'pending'
         });
+        pushUndoKanban({
+          tareaId: tar.id,
+          etiqueta: `Archivado de ${tar.codigo_legado}`,
+          estadoAnterior: estadoPrevio,
+          archivadaAnterior: false
+        });
+        void syncManager.sincronizarTodo().catch(() => {});
       }
     });
   };
+
+  // Deshacer última acción del tablero (Ctrl+Z / Botón Toolbar - REQ-UX-KANBAN-03)
+  const deshacerUltimaAccionKanban = useCallback(async (): Promise<{
+    ok: boolean;
+    mensaje?: string;
+  }> => {
+    const stack = undoStackRef.current;
+    if (stack.length === 0) return { ok: false };
+
+    const entry = stack[stack.length - 1];
+    undoStackRef.current = stack.slice(0, -1);
+    setUndoStackSize(undoStackRef.current.length);
+
+    setEstadosOptimistas((prev) => new Map(prev).set(entry.tareaId, entry.estadoAnterior));
+    const ok = await aplicarUndoKanbanLocal(entry);
+    if (!ok) {
+      setEstadosOptimistas((prev) => {
+        const next = new Map(prev);
+        next.delete(entry.tareaId);
+        return next;
+      });
+      return { ok: false };
+    }
+    return { ok: true, mensaje: entry.etiqueta };
+  }, []);
+
+  // Creación rápida inline en una columna respetando Time-Blocking real (hora_inicio: '')
+  const crearTareaRapidaEnColumna = useCallback(
+    async (titulo: string, estadoColumna: EstadoTareaKanban | string): Promise<boolean> => {
+      const tituloLimpio = titulo.trim();
+      if (!tituloLimpio) return false;
+      try {
+        await crearTarea({
+          nombre_tarea_actividad: tituloLimpio,
+          estado_tarea: estadoColumna,
+          proyecto_codigo: proyectoSeleccionadoCodigo || 'PRO-001',
+          hito_codigo: filtroHito || undefined,
+          hora_inicio: '',
+          agendado_calendar: 'No'
+        });
+        void syncManager.sincronizarTodo().catch(() => {});
+        return true;
+      } catch (err) {
+        console.error('[useKanbanBoard] Error en creación rápida inline de tarea:', err);
+        return false;
+      }
+    },
+    [proyectoSeleccionadoCodigo, filtroHito]
+  );
 
   const handleEliminarTarea = (id: string, nombre: string) => {
     if (onEliminarTarea) {
@@ -1119,6 +1235,9 @@ export function useKanbanBoard(options: UseKanbanBoardOptions = {}) {
     moverTareaAEstado,
     handleArchivarTarea,
     handleEliminarTarea,
+    puedeDeshacerKanban: undoStackSize > 0,
+    deshacerUltimaAccionKanban,
+    crearTareaRapidaEnColumna,
 
     // Modales
     modalTareaFlowAbierto,

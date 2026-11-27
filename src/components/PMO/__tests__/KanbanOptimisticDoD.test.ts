@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { validarDoDSubtareas, normalizeTarea, type CanonicalTarea } from '../../../utils/entityNormalizer';
+import { aplicarUndoKanbanLocal, type KanbanUndoEntry } from '../../../hooks/useKanbanBoard';
+import { db } from '../../../db/db';
+import { syncManager } from '../../../services/syncManager';
 
 describe('REQ-SYS-001-F2: Kanban Optimista, Definition of Done y Desacoplamiento Memoizado', () => {
   const tareaMock: CanonicalTarea = {
@@ -88,5 +91,51 @@ describe('REQ-SYS-001-F2: Kanban Optimista, Definition of Done y Desacoplamiento
     const reposo = getDropzoneClass(false);
     expect(reposo).toContain('dark:bg-[#0D1526]/80');
     expect(reposo).toContain('dark:border-slate-800/40');
+  });
+
+  it('5. Ciclo Undo Kanban (REQ-UX-KANBAN-03): restaura estadoAnterior, marca sync_status pending y dispara sincronizarTodo', async () => {
+    const updateSpy = vi.spyOn(db.tareas, 'update').mockResolvedValue(1);
+    const syncSpy = vi.spyOn(syncManager, 'sincronizarTodo').mockResolvedValue(undefined);
+
+    const entryMovimiento: KanbanUndoEntry = {
+      tareaId: 'tar-001-uuid',
+      etiqueta: 'Movimiento de TAR-001',
+      estadoAnterior: '02_Por_Hacer'
+    };
+
+    const okMov = await aplicarUndoKanbanLocal(entryMovimiento);
+    expect(okMov).toBe(true);
+    expect(updateSpy).toHaveBeenCalledWith(
+      'tar-001-uuid',
+      expect.objectContaining({
+        estado_tarea: '02_Por_Hacer',
+        sync_status: 'pending'
+      })
+    );
+    expect(syncSpy).toHaveBeenCalledTimes(1);
+
+    // También valida deshacer archivado rápido (restaura archivado: false)
+    updateSpy.mockClear();
+    const entryArchivo: KanbanUndoEntry = {
+      tareaId: 'tar-002-uuid',
+      etiqueta: 'Archivado de TAR-002',
+      estadoAnterior: '03_En_Proceso',
+      archivadaAnterior: false
+    };
+
+    const okArch = await aplicarUndoKanbanLocal(entryArchivo);
+    expect(okArch).toBe(true);
+    expect(updateSpy).toHaveBeenCalledWith(
+      'tar-002-uuid',
+      expect.objectContaining({
+        estado_tarea: '03_En_Proceso',
+        archivado: false,
+        sync_status: 'pending'
+      })
+    );
+    expect(syncSpy).toHaveBeenCalledTimes(2);
+
+    updateSpy.mockRestore();
+    syncSpy.mockRestore();
   });
 });

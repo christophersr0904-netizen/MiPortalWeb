@@ -11722,3 +11722,112 @@ supabase functions deploy gcal-auth
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**.
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **102.33 kB** gzip 25.14 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-KANBAN-01: Refinamiento Quirúrgico de Toolbar y Controles de Filtro en Vista Kanban (Paridad Editorial Linear/Calendario con Preservación 100% de Funciones)] (Fase 8.44)
+
+#### 1. Toolbar Ejecutiva Unificada y Popover de Filtros (`src/components/Views/ViewKanban.tsx`)
+- **Chasis Unificado (`min-h-[44px] sm:h-12 border-b border-white/[0.06]`):** Consolidación del encabezado desktop de 2 filas saturadas a una sola toolbar ejecutiva (`role="toolbar"`, `role="group"`, `role="separator"`, `aria-pressed`) con iconos Lucide estandarizados (`w-3.5 h-3.5`, `strokeWidth={1.75}`), divisores `w-px h-4 bg-white/[0.08]` y tipografía `font-mono tabular-nums` en contadores e importes. Sin `overflow-hidden` en el header para evitar recorte de popovers.
+- **Buscador Compacto Ghost (`#filter-buscar-tarea`):** Altura `h-7` (`bg-white/[0.03] border-white/[0.07] focus-within:border-sky-500/40 rounded-lg text-xs`), icono `Search` y botón `X` Ghost de limpieza instantánea.
+- **Popover Unificado de Filtros Multidimensionales (`#popover-filtros-unificados-kanban`):** Agrupa los 5 filtros secundarios previamente dispersos (**Prioridad Eisenhower**, **Nivel de Energía**, **Plazo / Vencimiento**, **Dependencias / Bloqueos** y **Paquete de Trabajo WBS**) bajo la superficie ejecutiva compartida (`bg-[#0B1221]/95 backdrop-blur-xl border-white/[0.08] rounded-xl shadow-2xl p-3.5`), disparado por botón Ghost `SlidersHorizontal` con punto Cobalt (`bg-sky-400`) y contador tabular cuando hay filtros activos, cierre LIFO con `Escape` / clic fuera y botón `"Limpiar"` integrado.
+- **Controles Directos y Acción Primaria Única:** Permanecen visibles directamente el **Horizonte Temporal** (`Todo / Hoy / Semana / Mes`), el **Micro-Riel de Ordenamiento** (5 criterios: `PRIORITY`, `DATE`, `ENERGY`, `HOURS`, `ALPHA`), el contador de tareas filtradas + reset rápido `(X)` cuando hay filtros activos, y la acción primaria única **`+ Nueva`** en acento Cobalt (`bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-500/30`).
+- **Cinta Contextual de Proyecto Activo y Paridad Móvil:** Al seleccionar un proyecto, se despliega una cinta contextual delgada preservando `<HeaderProyectoActivo />` (Deselección, `360°`, Avance %, CPI, SPI), `#kanban-cronograma-proyecto` y `#kanban-gasto-presupuesto-box`. En Vista Global, `#label-proyecto-activo` y `#kanban-gasto-presupuesto-box` permanecen en la línea única. La barra móvil (`md:hidden`) conserva selector de proyecto, tabs de columnas y Bottom Sheet de filtros, incorporando acceso directo `+` Cobalt. **100% de funciones previas conservadas intactas.**
+
+#### 2. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `ViewKanban.tsx` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewKanban-*.js` en **99.90 kB** gzip 22.73 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-KANBAN-02: Refinamiento Editorial de Columnas y Tarjetas en ViewKanban (Jerarquía Visual de 3 Niveles, Paleta Mineral Sobria y Preservación 100% de Datos)] (Fase 8.45)
+
+#### 1. Cabeceras de Columna Minimalistas y Contenedor Sobrio (`src/components/PMO/ColumnaKanban.tsx`)
+- **Contenedor de Columna:** Superficie limpia y homogénea (`bg-slate-950/40 border border-white/[0.05] rounded-xl`) preservando el resaltado reactivo del dropzone (`kanban-dropzone-active bg-sky-950/20 border-sky-500/40`).
+- **Cabecera en 1 Línea:** Icono de estado limpio (`w-3.5 h-3.5`, `strokeWidth={1.75}`, sin cajas de fondo), título en `text-xs font-semibold tracking-tight text-slate-200`, contador tabular en pill discreta (`font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400`), sumatoria horaria alineada a la derecha (`text-[10px] text-slate-500`) y botón Ghost `+` (`h-6 w-6 rounded-md`) conectado a `onAbrirModalNuevaTarea(col.id)`.
+- **Tipado Estricto (0 `any`):** Reemplazadas las firmas `Map<string, any>` heredadas por `Map<string, CanonicalProyecto>` y `Map<string, HitoWbsRecord>`.
+
+#### 2. Tarjetas Editoriales Sobrias en 3 Niveles (`src/components/PMO/TarjetaTareaKanban.tsx`)
+- **Chasis y Borde Lateral Continuo de Prioridad:** Superficie `bg-slate-900/80 hover:bg-slate-800/85 border border-white/[0.06] hover:border-white/[0.11] rounded-lg` con `border-l-[3px]` continuo en tonos minerales sobrios por prioridad (`P1`: `border-l-rose-400/85`, `P2`: `border-l-amber-300/80`, `P3`: `border-l-sky-400/80`, `P4`: `border-l-slate-500/70`). Eliminados los casts `any` de `onDragStart`/`onDragEnd` al usar elemento `<div>` nativo tipado con `React.DragEvent`.
+- **Jerarquía Estricta de 3 Niveles (100% de Metadatos y Acciones Preservados):**
+  - **Nivel 1 (Cabecera Meta Silenciosa):** Código correlativo (`TAR-XXX`, `font-mono tabular-nums text-slate-500`) + ruta WBS truncada (`Proyecto · Hito/WP`) a la izquierda; icono discreto de tipo/energía (`w-3 h-3`), `<BadgeNotasVinculadas />` y acciones Ghost (`Archivar`, `Eliminar`, `opacity-70 group-hover:opacity-100`) a la derecha.
+  - **Nivel 2 (Título Protagonista):** `text-[13px] font-medium leading-snug text-slate-100 line-clamp-2 my-1.5`.
+  - **Nivel 3 (Pie de Metadatos en Flujo `flex-wrap`):** Micro-items sin pills apretadas (`w-3 h-3 strokeWidth={1.75} + valor` en `font-mono tabular-nums text-[11px]`): fecha/hora programada (`text-rose-400/90` vencida, `text-sky-300/90` hoy) + enlace directo Google Calendar (`CalendarCheck2`), horas reales/estimadas, progreso de subtareas (`CheckSquare` + micro-barra), dependencias/bloqueos (`Lock` + `Req COD` en `text-amber-300/90`) y presupuesto/costo `S/`.
+  - **Micro-Botonera Táctica de Estado:** Conservadas las 4 transiciones rápidas de columna (`Por Hacer`, `Backlog ←`, `Iniciar`, `Por Hacer ←`, `Completar`, `Reabrir`) en estética Ghost editorial.
+
+#### 3. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `ColumnaKanban.tsx` y `TarjetaTareaKanban.tsx` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewKanban-*.js` en **98.52 kB** gzip 22.36 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-KANBAN-02B: Corrección Visual y Ergonómica de ColumnaKanban y TarjetaTareaKanban (Profundidad, Separación, Botones Fijos y Micro-Chips de Metadatos)] (Fase 8.46)
+
+#### 1. Contraste, Límites y Cabecera Protagonista en `ColumnaKanban.tsx`
+- **Marco y Fondo de Columna Delimitados:** Elevación de la superficie de columna a `bg-slate-900/55 border border-white/[0.10] rounded-xl shadow-sm`, preservando el resaltado reactivo `kanban-dropzone-active`.
+- **Cabecera con Franja Superior Definida:** Franja flush `px-3.5 py-2.5 bg-white/[0.03] border-b border-white/[0.08] rounded-t-xl` con icono nítido (`w-4 h-4`, `strokeWidth={1.9}`), título `text-[13px] font-semibold text-slate-100`, contador contrastado (`bg-white/[0.08] text-slate-200 border-white/[0.08] px-2 py-0.5 rounded-md font-mono tabular-nums text-[11px]`), sumatoria horaria legible (`text-[11px] text-slate-400`) y botón `+` siempre visible (`text-slate-300 hover:text-sky-300 hover:bg-sky-500/15`).
+- **Aire Vertical:** Lista de tarjetas espaciada con `p-3 space-y-3` para evitar compresión visual.
+
+#### 2. Tarjetas con Volumen, Botones Visibles y Micro-Chips en `TarjetaTareaKanban.tsx`
+- **Profundidad y Aire Interno:** Superficie diferenciada `bg-[#151F32]/95 hover:bg-[#1A263D] border border-white/[0.09] hover:border-sky-400/30 rounded-xl shadow-sm hover:shadow-md`, borde lateral continuo reforzado (`border-l-[3.5px]`), relleno interno `p-3.5` y separación interna `space-y-2.5`.
+- **Acciones Siempre Visibles (Cero Efecto Fantasma):** Botones **Archivar** y **Eliminar** permanentemente visibles en reposo (`opacity-100 text-slate-400 p-1 rounded-md hover:bg-white/[0.08]`) con hover semántico (`hover:text-amber-300` para Archivar, `hover:text-rose-400` para Eliminar).
+- **Micro-Chips Armónicos de Metadatos (`flex flex-wrap items-center gap-1.5 pt-2 border-t border-white/[0.06]`):** Base `px-2 py-0.5 rounded-md bg-white/[0.045] border-white/[0.07] text-[11px] font-mono tabular-nums text-slate-300`, con tintes semánticos suaves para Fecha vencida (`rose-500/10`), Hoy (`sky-500/10`), Google Calendar (`CalendarCheck2` integrado), Horas (`Clock` `text-sky-400/80`), Subtareas (`CheckSquare` + micro-barra), Dependencias (`amber-500/10` `Req COD`) y Presupuesto/Costo (`emerald-500/10` `S/`).
+
+#### 3. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `ColumnaKanban.tsx` y `TarjetaTareaKanban.tsx` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewKanban-*.js` en **98.98 kB** gzip 22.40 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-KANBAN-02C: Ocultar Botones Archivar y Eliminar en Reposo con Revelado Suave en Hover en TarjetaTareaKanban] (Fase 8.47)
+
+- **Intervención Quirúrgica (`src/components/PMO/TarjetaTareaKanban.tsx`):** Wrapper de acciones **Archivar** y **Eliminar** configurado con `opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity duration-150`, eliminando ruido visual en reposo mientras conserva accesibilidad por foco de teclado, colores hover semánticos (`hover:text-amber-300` / `hover:text-rose-400`) y handlers con `e.stopPropagation()`.
+- **Certificación QA:** `0` coerciones `any`, `npx tsc --noEmit` (Exit Code 0), `npm test -- --run` (**37/37 suites · 387/387 tests** en verde) y `npm run build` (`ViewKanban-*.js` en **99.12 kB** gzip 22.43 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-KANBAN-03: Historial Deshacer (Ctrl+Z) en Kanban, Creación Rápida Inline por Columna y Feedback Visual de Drag & Drop Nivel Linear] (Fase 8.48)
+
+#### 1. Stack de Deshacer (`Ctrl + Z` / `Cmd + Z`) en `useKanbanBoard.ts` y `ViewKanban.tsx`
+- **Contrato Estricto (`KanbanUndoEntry`):** Tipado puro sin `any` (`tareaId`, `etiqueta`, `estadoAnterior`, `archivadaAnterior?`) con profundidad máxima `MAX_KANBAN_UNDO_STACK = 20`.
+- **Cobertura de Mutaciones:** Captura automática del snapshot previo en movimientos de columna (`ejecutarMoverTarea` vía Drag & Drop o botonera táctica) y en archivado rápido (`handleArchivarTarea`).
+- **Reversión y Sincronización Multi-Dispositivo (`aplicarUndoKanbanLocal` + `deshacerUltimaAccionKanban`):** Aplica actualización optimista instantánea, restaura `estado_tarea` (y `archivado: false` si corresponde) en `db.tareas` con `updated_at` y `sync_status: 'pending'`, y dispara `syncManager.sincronizarTodo()`.
+- **Atajo Blindado y Botón Ghost en Toolbar:** `ViewKanban.tsx` intercepta `(Ctrl|Cmd) + Z` inhibido en `INPUT`, `TEXTAREA`, `SELECT`, `contentEditable` y cuando existe cualquier `[aria-modal="true"]` abierto; muestra botón Ghost `Undo2` (`h-7 w-7`, `title="Deshacer (Ctrl+Z)"`) cuando `puedeDeshacerKanban === true` y notifica vía toast Cobalt `"Deshecho: <etiqueta>"`.
+
+#### 2. Creación Rápida Inline por Columna (`ColumnaKanban.tsx` + `useKanbanBoard.ts`)
+- **`crearTareaRapidaEnColumna(titulo, estadoColumna)`:** Persiste la tarea directamente en la columna objetivo con el proyecto activo (si hay selección), `hora_inicio: ''` (respetando Time-Blocking real), `sync_status: 'pending'` y disparo inmediato de `syncManager.sincronizarTodo()`.
+- **Tarjeta de Captura Inline:** Al pulsar `+` en la cabecera de columna (o `+ Añadir` en móvil), se despliega en la parte superior de la lista (`bg-[#151F32] border-sky-500/40 rounded-xl p-2.5 shadow-md`) un input con `autoFocus` (`Enter` crea al instante, `Escape` cancela), pie con `"Crear ↵"` (Cobalt), `"Más detalles"` (abre `ModalTareaFlow` completo) y botón `X`.
+
+#### 3. Feedback Táctil de Drag & Drop (`TarjetaTareaKanban.tsx` + `ColumnaKanban.tsx`)
+- **Tarjeta en Arrastre:** Opacidad y escala limpias (`opacity-40 scale-[0.98] border-sky-400/40 cursor-grabbing`) para diferenciar el origen con precisión.
+- **Columna Destino (`kanban-dropzone-active`):** Resaltado Cobalt nítido (`border-sky-400/50 bg-sky-500/[0.04] ring-1 ring-sky-400/20`).
+
+#### 4. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `useKanbanBoard.ts`, `ViewKanban.tsx`, `ColumnaKanban.tsx`, `TarjetaTareaKanban.tsx` y `KanbanOptimisticDoD.test.ts` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (388/388 tests al 100% verde)**, incluyendo nuevo test unitario del ciclo Undo Kanban (`aplicarUndoKanbanLocal`) para movimiento de columna y archivado rápido.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewKanban-*.js` en **103.99 kB** gzip 23.99 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-KANBAN-04: Paridad Móvil Táctil (Tabs, FAB Cobalt, Accesibilidad Touch en Tarjetas) y Estados Vacíos Editoriales en Kanban] (Fase 8.49)
+
+#### 1. Estados Vacíos Editoriales (`src/components/PMO/ColumnaKanban.tsx`)
+- Cuando una columna no presenta tareas visibles (y no está abierta la captura rápida inline), renderiza una tarjeta editorial sobria (`py-8 px-4 text-center rounded-xl border border-dashed border-white/[0.08] bg-white/[0.015]`) con el icono temático discreto de la columna (`w-5 h-5 text-slate-600`), mensaje `"Sin tareas aquí"` y botón Ghost compacto `"+ Nueva tarea"` que activa directamente la captura rápida inline en esa columna.
+
+#### 2. Paridad Móvil Táctil (`src/components/Views/ViewKanban.tsx` + `src/components/PMO/TarjetaTareaKanban.tsx`)
+- **Tabs de Columna Segmentados en Móvil (`md:hidden`):** Carril segmentado `bg-white/[0.03] border border-white/[0.06] p-1 rounded-xl`, pestaña activa en Cobalt (`bg-sky-500/15 text-sky-200 border-sky-500/30 shadow-sm`) con contador `font-mono tabular-nums text-[10px]`.
+- **Accesibilidad Touch en Tarjetas (`TarjetaTareaKanban.tsx`):** Botones **Archivar** y **Eliminar** accesibles directamente en dispositivos táctiles (`opacity-80 md:opacity-0`) manteniendo intacto el hover puro y foco de teclado en escritorio (`md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:focus-within:opacity-100 md:focus-within:pointer-events-auto`).
+- **Botón Flotante `+` Cobalt en Móvil (`#fab-nueva-tarea-kanban-movil`):** FAB `fixed bottom-20 right-4 z-30 w-11 h-11 rounded-full bg-sky-500/90 hover:bg-sky-400 text-white shadow-lg shadow-sky-500/25 md:hidden` conectado a `abrirModalNuevaTarea` con la columna activa móvil, despejado de `BottomNavMobile` y con `pb-28` en el contenedor scrollable móvil de tarjetas.
+
+#### 3. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `ViewKanban.tsx`, `ColumnaKanban.tsx` y `TarjetaTareaKanban.tsx` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (388/388 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewKanban-*.js` en **105.04 kB** gzip 24.14 kB; `main-*.js` en **447.73 kB** < 500 kB).
