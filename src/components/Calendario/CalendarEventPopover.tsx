@@ -18,14 +18,40 @@ import {
   CalendarCheck,
   MapPin,
   Video,
-  Inbox
+  Inbox,
+  CheckSquare,
+  Activity,
+  Flame,
+  Flag,
+  TrendingDown,
+  TrendingUp
 } from 'lucide-react';
-import type { CalendarEventItem } from '../../hooks/useCalendarEngine';
+import type { CalendarEntityType, CalendarEventItem } from '../../hooks/useCalendarEngine';
 import {
   CALENDAR_ENTITY_STYLES,
   formatearFechaCortaEs,
   resolverBordeEstadoEvento
 } from './calendarStyles';
+
+function renderIconoEntidadPopover(entidad: CalendarEntityType, colorClass: string) {
+  const cls = `w-3.5 h-3.5 shrink-0 ${colorClass}`;
+  switch (entidad) {
+    case 'tarea':
+      return <CheckSquare className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    case 'actividad':
+      return <Activity className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    case 'habito':
+      return <Flame className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    case 'hito':
+      return <Flag className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    case 'gasto':
+      return <TrendingDown className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    case 'ingreso':
+      return <TrendingUp className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    case 'externo_gcal':
+      return <Calendar className={cls} strokeWidth={1.75} aria-hidden="true" />;
+  }
+}
 
 export interface PopoverAnchorPosition {
   x: number;
@@ -111,42 +137,46 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
       role="dialog"
       aria-label={`Detalle de ${evento.titulo}`}
       style={{ top, left, width }}
-      className={`fixed z-[9995] rounded-2xl bg-[#0D1526] border border-slate-800/80 border-l-[3px] ${bordeIzq} shadow-[0_14px_35px_-5px_rgba(2,6,23,0.92),0_8px_15px_-6px_rgba(30,58,138,0.28)] p-3.5 text-slate-200 select-none animate-in fade-in zoom-in-95 duration-100`}
+      className={`fixed z-[9995] bg-[#0B1221]/95 backdrop-blur-xl border border-white/[0.08] border-l-[3px] ${bordeIzq} rounded-xl shadow-2xl shadow-black/50 p-3.5 text-slate-200 select-none animate-in fade-in zoom-in-95 duration-100`}
     >
-      {/* Cabecera: Badge Entidad + Código + Cerrar */}
-      <div className="flex items-center justify-between gap-2 mb-2">
+      {/* Cabecera: Micro-badge editorial de entidad + Código + Cerrar */}
+      <div className="flex items-center justify-between gap-2 mb-2.5">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span
-            className={`px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wider shrink-0 ${estilo.badgeClass}`}
-          >
-            {estilo.shortLabel}
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-300 shrink-0">
+            {renderIconoEntidadPopover(evento.entidad, estilo.iconColorClass)}
+            <span>{estilo.shortLabel}</span>
           </span>
-          <span className="font-mono tabular-nums text-[10px] text-slate-400 truncate">
-            {evento.codigoLegado}
-          </span>
+          {evento.codigoLegado && (
+            <>
+              <span className="text-slate-600 text-[10px]">·</span>
+              <span className="font-mono tabular-nums text-[10px] text-slate-500 truncate">
+                {evento.codigoLegado}
+              </span>
+            </>
+          )}
           {evento.agendadoCalendar && (
             <span
               className="text-sky-400 shrink-0"
               title="Sincronizado con Google Calendar"
             >
-              <CalendarCheck className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <CalendarCheck className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
             </span>
           )}
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="p-1 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/[0.06] transition cursor-pointer shrink-0"
+          className="h-6 w-6 rounded-md text-slate-400 hover:text-slate-100 hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer shrink-0"
           aria-label="Cerrar detalle"
           title="Cerrar (Esc)"
         >
-          <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <X className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
 
       {/* Título y subtítulo */}
       <h4
-        className={`text-sm font-bold leading-snug mb-1.5 ${
+        className={`text-sm font-semibold leading-snug tracking-tight mb-1 ${
           evento.completado ? 'line-through text-slate-400' : 'text-slate-100'
         }`}
       >
@@ -160,13 +190,13 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
       )}
 
       {/* Metadatos de Fecha, Horario y Estado */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-400 pb-3 mb-3 border-b border-slate-800/70">
-        <span className="inline-flex items-center gap-1 font-mono tabular-nums">
-          <Calendar className="w-3.5 h-3.5 text-slate-500" strokeWidth={1.75} />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-400 pb-3 mb-3 border-b border-white/[0.06]">
+        <span className="inline-flex items-center gap-1.5 font-mono tabular-nums">
+          <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" strokeWidth={1.75} aria-hidden="true" />
           {formatearFechaCortaEs(evento.fecha)}
         </span>
-        <span className="inline-flex items-center gap-1 font-mono tabular-nums">
-          <Clock className="w-3.5 h-3.5 text-slate-500" strokeWidth={1.75} />
+        <span className="inline-flex items-center gap-1.5 font-mono tabular-nums">
+          <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" strokeWidth={1.75} aria-hidden="true" />
           {evento.allDay
             ? 'Todo el día'
             : `${evento.horaInicio || '--:--'} – ${evento.horaFin || '--:--'}`}
@@ -175,19 +205,19 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
           className={`ml-auto px-1.5 py-0.5 rounded text-[10px] font-mono ${
             evento.completado
               ? 'bg-emerald-500/15 text-emerald-300'
-              : 'bg-slate-800/80 text-slate-300'
+              : 'bg-white/[0.05] text-slate-300'
           }`}
         >
           {estadoLegible}
         </span>
       </div>
 
-      {/* Acciones Rápidas (Solo-Lectura para externo_gcal vs Acciones PMO) */}
+      {/* Acciones Rápidas (Solo-Lectura para externo_gcal vs Acciones PMO Jerarquizadas) */}
       {evento.rawRef.kind === 'externo_gcal' ? (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {evento.rawRef.record.location && (
-            <div className="flex items-start gap-1.5 text-[11px] text-slate-300 bg-[#040711]/70 border border-slate-800/70 rounded-xl px-2.5 py-1.5">
-              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" strokeWidth={1.75} />
+            <div className="flex items-start gap-1.5 text-[11px] text-slate-300 bg-white/[0.03] border border-white/[0.06] rounded-lg px-2.5 py-1.5">
+              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" strokeWidth={1.75} aria-hidden="true" />
               <span className="break-words leading-snug">{evento.rawRef.record.location}</span>
             </div>
           )}
@@ -197,9 +227,9 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
               href={evento.rawRef.record.hangoutLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2 transition"
+              className="w-full h-8 px-3 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center justify-center gap-1.5 transition"
             >
-              <Video className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <Video className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
               <span>Unirse a la reunión</span>
             </a>
           )}
@@ -209,9 +239,9 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
               href={evento.rawRef.record.htmlLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-slate-800/80 text-slate-200 hover:text-sky-300 text-xs font-semibold flex items-center justify-center gap-2 transition"
+              className="w-full h-8 px-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.07] text-slate-300 hover:text-sky-300 text-xs font-medium flex items-center justify-center gap-1.5 transition"
             >
-              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
               <span>Abrir en Google Calendar</span>
             </a>
           )}
@@ -222,28 +252,30 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
             <button
               type="button"
               onClick={() => onIniciarPomodoro(evento)}
-              className="w-full px-3 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/35 text-sky-300 hover:text-sky-200 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.98]"
+              className="w-full h-8 px-3 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 hover:text-sky-200 text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98]"
+              title="Iniciar sesión Pomodoro de enfoque para este bloque"
             >
-              <Play className="w-3.5 h-3.5 fill-current" strokeWidth={1.75} />
+              <Play className="w-3.5 h-3.5 fill-current" strokeWidth={1.75} aria-hidden="true" />
               <span>Iniciar Pomodoro</span>
             </button>
           )}
 
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid grid-cols-2 gap-1">
             <button
               type="button"
               disabled={procesandoCompletado}
               onClick={() => onToggleCompletar(evento)}
-              className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 ${
+              title={evento.completado ? 'Marcar como pendiente' : 'Marcar como completado'}
+              className={`h-7 px-2 rounded-lg border text-[11px] font-medium flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 ${
                 evento.completado
-                  ? 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/60 text-slate-300'
-                  : 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+                  ? 'bg-transparent hover:bg-white/[0.06] border-transparent hover:border-white/[0.07] text-slate-300'
+                  : 'bg-transparent hover:bg-emerald-500/12 border-transparent hover:border-emerald-500/25 text-emerald-300'
               }`}
             >
               {evento.completado ? (
-                <Circle className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <Circle className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
               ) : (
-                <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
               )}
               <span>{evento.completado ? 'Reabrir' : 'Completar'}</span>
             </button>
@@ -251,9 +283,10 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
             <button
               type="button"
               onClick={() => onVerEditar(evento)}
-              className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-slate-800/80 text-slate-300 hover:text-sky-300 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+              title="Abrir ficha completa para ver o editar"
+              className="h-7 px-2 rounded-lg bg-transparent hover:bg-white/[0.06] border border-transparent hover:border-white/[0.07] text-slate-300 hover:text-sky-300 text-[11px] font-medium flex items-center justify-center gap-1.5 transition cursor-pointer"
             >
-              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <ExternalLink className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
               <span>Ver / Editar</span>
             </button>
           </div>
@@ -263,10 +296,10 @@ export const CalendarEventPopover: React.FC<CalendarEventPopoverProps> = ({
             <button
               type="button"
               onClick={() => onDevolverABacklog(evento)}
-              className="w-full px-2.5 py-1.5 rounded-xl bg-transparent hover:bg-white/[0.05] text-slate-400 hover:text-amber-300 text-[11px] font-medium flex items-center justify-center gap-1.5 transition cursor-pointer mt-0.5"
+              className="w-full h-7 px-2 rounded-lg bg-transparent hover:bg-white/[0.05] border border-transparent hover:border-white/[0.06] text-slate-400 hover:text-amber-300 text-[11px] font-medium flex items-center justify-center gap-1.5 transition cursor-pointer"
               title="Quitar horario y devolver esta tarea al panel Por Agendar"
             >
-              <Inbox className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <Inbox className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
               <span>Devolver a Por Agendar</span>
             </button>
           )}

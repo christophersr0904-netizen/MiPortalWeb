@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
 import {
   obtenerRangoVisible,
   crearFechaMediodia
@@ -113,39 +113,53 @@ export const CalendarDatePickerPopover: React.FC<CalendarDatePickerPopoverProps>
       ref={containerRef}
       role="dialog"
       aria-label="Selector rápido de fecha, mes y año"
-      className="absolute left-0 top-full mt-1.5 w-[272px] rounded-2xl bg-[#0D1526] border border-slate-800/80 shadow-[0_14px_35px_-5px_rgba(2,6,23,0.92),0_8px_15px_-6px_rgba(30,58,138,0.28)] p-3 z-[9990] text-slate-200 select-none"
+      className="absolute left-0 top-full mt-1.5 w-[276px] bg-[#0B1221]/95 backdrop-blur-xl border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 p-3.5 z-[9990] text-slate-200 select-none animate-in fade-in zoom-in-95 duration-100"
     >
-      {/* Cabecera de navegación interna */}
+      {/* Cabecera de navegación interna + cierre unificado */}
       <div className="flex items-center justify-between gap-1 mb-2.5">
-        <button
-          type="button"
-          onClick={() => (modo === 'dias' ? navegarMes(-1) : navegarAnio(-1))}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-white/[0.06] transition cursor-pointer"
-          aria-label={modo === 'dias' ? 'Mes anterior' : 'Año anterior'}
-        >
-          <ChevronLeft className="w-3.5 h-3.5" strokeWidth={1.75} />
-        </button>
+        <div className="flex items-center gap-0.5 min-w-0">
+          <button
+            type="button"
+            onClick={() => (modo === 'dias' ? navegarMes(-1) : navegarAnio(-1))}
+            className="h-6 w-6 rounded-md text-slate-400 hover:text-sky-300 hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer shrink-0"
+            aria-label={modo === 'dias' ? 'Mes anterior' : 'Año anterior'}
+            title={modo === 'dias' ? 'Mes anterior' : 'Año anterior'}
+          >
+            <ChevronLeft className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setModo((prev) => (prev === 'dias' ? 'meses' : 'dias'))}
+            className="px-2 py-0.5 rounded-md text-xs font-semibold text-slate-100 hover:text-sky-300 hover:bg-white/[0.05] transition cursor-pointer font-mono tabular-nums truncate"
+            title={
+              modo === 'dias'
+                ? 'Cambiar a selector rápido de Mes y Año'
+                : 'Volver al mini-calendario de días'
+            }
+          >
+            {modo === 'dias' ? `${MESES_ES[mesCursor]} ${anioCursor}` : `${anioCursor}`}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => (modo === 'dias' ? navegarMes(1) : navegarAnio(1))}
+            className="h-6 w-6 rounded-md text-slate-400 hover:text-sky-300 hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer shrink-0"
+            aria-label={modo === 'dias' ? 'Mes siguiente' : 'Año siguiente'}
+            title={modo === 'dias' ? 'Mes siguiente' : 'Año siguiente'}
+          >
+            <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+          </button>
+        </div>
 
         <button
           type="button"
-          onClick={() => setModo((prev) => (prev === 'dias' ? 'meses' : 'dias'))}
-          className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-100 hover:text-sky-300 hover:bg-white/[0.05] transition cursor-pointer font-mono tabular-nums"
-          title={
-            modo === 'dias'
-              ? 'Cambiar a selector rápido de Mes y Año'
-              : 'Volver al mini-calendario de días'
-          }
+          onClick={onClose}
+          className="h-6 w-6 rounded-md text-slate-400 hover:text-slate-100 hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer shrink-0"
+          aria-label="Cerrar selector de fecha"
+          title="Cerrar (Esc)"
         >
-          {modo === 'dias' ? `${MESES_ES[mesCursor]} ${anioCursor}` : `${anioCursor}`}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => (modo === 'dias' ? navegarMes(1) : navegarAnio(1))}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-white/[0.06] transition cursor-pointer"
-          aria-label={modo === 'dias' ? 'Mes siguiente' : 'Año siguiente'}
-        >
-          <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <X className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
 
@@ -204,9 +218,9 @@ export const CalendarDatePickerPopover: React.FC<CalendarDatePickerPopoverProps>
                 key={mesLabel}
                 type="button"
                 onClick={() => handleSeleccionarMes(idx)}
-                className={`py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                className={`py-2 rounded-lg text-xs font-medium transition cursor-pointer ${
                   esMesAncla
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 font-semibold'
+                    ? 'bg-sky-500/15 text-sky-300 border border-sky-500/35 font-semibold'
                     : 'text-slate-300 hover:text-sky-200 hover:bg-white/[0.06] border border-transparent'
                 }`}
               >
@@ -218,8 +232,8 @@ export const CalendarDatePickerPopover: React.FC<CalendarDatePickerPopoverProps>
       )}
 
       {/* Pie: Ir a Hoy */}
-      <div className="mt-2.5 pt-2 border-t border-slate-800/70 flex items-center justify-between">
-        <span className="text-[10px] font-mono text-slate-500">
+      <div className="mt-3 pt-2.5 border-t border-white/[0.06] flex items-center justify-between gap-2">
+        <span className="text-[10px] font-mono text-slate-500 truncate">
           {modo === 'dias' ? 'Clic en mes para cambiar año' : 'Selecciona un mes'}
         </span>
         <button
@@ -228,9 +242,9 @@ export const CalendarDatePickerPopover: React.FC<CalendarDatePickerPopoverProps>
             onIrAHoy();
             onClose();
           }}
-          className="px-2 py-1 rounded-lg text-[11px] font-medium text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 inline-flex items-center gap-1 transition cursor-pointer"
+          className="h-7 px-2 rounded-lg text-[11px] font-medium text-sky-300 hover:text-sky-200 hover:bg-sky-500/12 inline-flex items-center gap-1.5 transition cursor-pointer shrink-0"
         >
-          <Calendar className="w-3 h-3" strokeWidth={1.75} />
+          <Calendar className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
           <span>Ir a Hoy</span>
         </button>
       </div>

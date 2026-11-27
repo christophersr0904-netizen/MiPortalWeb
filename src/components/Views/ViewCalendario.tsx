@@ -539,22 +539,32 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
     setSlotNuevo(slot);
   }, []);
 
-  const handleAbrirNuevoDesdeToolbar = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
+  const handleAbrirNuevoEnDia = useCallback(
+    (fechaIso: string, anchor: PopoverAnchorPosition) => {
       const now = new Date();
       const horaSig = Math.min(21, Math.max(8, now.getHours() + 1));
       const horaInicio = `${String(horaSig).padStart(2, '0')}:00`;
       const horaFin = `${String(Math.min(22, horaSig + 1)).padStart(2, '0')}:00`;
       handleSelectEmptySlot({
-        fecha: fechaAnclaIso,
+        fecha: fechaIso,
         horaInicio,
         horaFin,
         duracionMinutos: 60,
-        anchor: { x: rect.left - 240, y: rect.bottom + 4 }
+        anchor
       });
     },
-    [fechaAnclaIso, handleSelectEmptySlot]
+    [handleSelectEmptySlot]
+  );
+
+  const handleAbrirNuevoDesdeToolbar = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      handleAbrirNuevoEnDia(fechaAnclaIso, {
+        x: rect.left - 240,
+        y: rect.bottom + 4
+      });
+    },
+    [fechaAnclaIso, handleAbrirNuevoEnDia]
   );
 
   const handleConfirmarCrearRapido = useCallback(
@@ -1153,6 +1163,8 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
             eventosPorFecha={eventosPorFecha}
             onSelectDay={seleccionarFecha}
             onSelectEvent={handleSeleccionarEvento}
+            onToggleCompletar={handleToggleCompletar}
+            onCrearEnDia={handleAbrirNuevoEnDia}
           />
         ) : vista === 'mes' ? (
           <CalendarMonthGrid
@@ -1197,7 +1209,7 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
         procesandoCompletado={procesandoCompletado}
       />
 
-      {/* 4. MINI-POPOVER DE CREACIÓN AL VUELO DE 4 ENTIDADES (CLICK-AND-DRAG O BOTÓN +) */}
+      {/* 4. MINI-POPOVER DE CREACIÓN AL VUELO DE 4 ENTIDADES (UNIFICADO REQ-UX-CAL-10) */}
       {slotNuevo && quickCreatePosition && (
         <div
           ref={quickCreateRef}
@@ -1206,18 +1218,18 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
           style={{
             top: quickCreatePosition.top,
             left: quickCreatePosition.left,
-            width: 324
+            width: 328
           }}
-          className="fixed z-[9995] rounded-2xl bg-[#0D1526] border border-sky-500/35 ring-1 ring-sky-500/15 shadow-[0_14px_35px_-5px_rgba(2,6,23,0.92),0_8px_15px_-6px_rgba(30,58,138,0.28)] p-3.5 text-slate-200"
+          className="fixed z-[9995] bg-[#0B1221]/95 backdrop-blur-xl border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50 p-3.5 text-slate-200 select-none animate-in fade-in zoom-in-95 duration-100"
         >
-          <div className="flex items-center justify-between gap-2 mb-2.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-sky-300">
-              <Clock className="w-3.5 h-3.5" strokeWidth={1.75} />
-              <span>{formatearFechaCortaEs(slotNuevo.fecha)}</span>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-1.5 text-xs font-mono tabular-nums text-slate-400 min-w-0">
+              <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              <span className="truncate">{formatearFechaCortaEs(slotNuevo.fecha)}</span>
               {(tipoNuevoEvento === 'tarea' || tipoNuevoEvento === 'actividad') && (
                 <>
-                  <span className="text-slate-500">·</span>
-                  <span>
+                  <span className="text-slate-600">·</span>
+                  <span className="shrink-0">
                     {slotNuevo.horaInicio}–{slotNuevo.horaFin}
                   </span>
                 </>
@@ -1226,129 +1238,129 @@ export const ViewCalendario: React.FC<ViewCalendarioProps> = ({
             <button
               type="button"
               onClick={() => setSlotNuevo(null)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/[0.06] transition cursor-pointer"
+              className="h-6 w-6 rounded-md text-slate-400 hover:text-slate-100 hover:bg-white/[0.06] flex items-center justify-center transition cursor-pointer shrink-0"
               aria-label="Cerrar creación rápida"
+              title="Cerrar (Esc)"
             >
-              <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <X className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
             </button>
           </div>
 
-          <form onSubmit={handleConfirmarCrearRapido} className="space-y-2.5">
-            {/* Selector de 4 Entidades con Paleta Editorial Sobria */}
-            <div className="grid grid-cols-4 gap-1 p-0.5 rounded-xl bg-[#040711] border border-slate-800/80">
+          <form onSubmit={handleConfirmarCrearRapido} className="space-y-3">
+            {/* Selector Segmentado Compacto de 4 Entidades */}
+            <div className="grid grid-cols-4 gap-0.5 bg-white/[0.03] border border-white/[0.06] p-0.5 rounded-lg">
               <button
                 type="button"
                 onClick={() => setTipoNuevoEvento('tarea')}
-                className={`py-1.5 px-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+                aria-pressed={tipoNuevoEvento === 'tarea'}
+                className={`py-1.5 px-1 rounded-md text-[10px] font-medium flex flex-col items-center justify-center gap-0.5 transition cursor-pointer border ${
                   tipoNuevoEvento === 'tarea'
-                    ? 'bg-sky-500/15 text-sky-300 border border-sky-400/35'
-                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                    ? 'bg-sky-500/15 text-sky-300 border-sky-400/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border-transparent'
                 }`}
               >
-                <CheckSquare className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} />
+                <CheckSquare className="w-3.5 h-3.5 text-sky-400" strokeWidth={1.75} aria-hidden="true" />
                 <span>Tarea</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTipoNuevoEvento('actividad')}
-                className={`py-1.5 px-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+                aria-pressed={tipoNuevoEvento === 'actividad'}
+                className={`py-1.5 px-1 rounded-md text-[10px] font-medium flex flex-col items-center justify-center gap-0.5 transition cursor-pointer border ${
                   tipoNuevoEvento === 'actividad'
-                    ? 'bg-indigo-500/15 text-indigo-200 border border-indigo-300/35'
-                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                    ? 'bg-indigo-500/15 text-indigo-200 border-indigo-300/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border-transparent'
                 }`}
               >
-                <Activity className="w-3.5 h-3.5 text-indigo-300" strokeWidth={1.75} />
-                <span>Actividad</span>
+                <Activity className="w-3.5 h-3.5 text-indigo-300" strokeWidth={1.75} aria-hidden="true" />
+                <span>Activ.</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTipoNuevoEvento('gasto')}
-                className={`py-1.5 px-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+                aria-pressed={tipoNuevoEvento === 'gasto'}
+                className={`py-1.5 px-1 rounded-md text-[10px] font-medium flex flex-col items-center justify-center gap-0.5 transition cursor-pointer border ${
                   tipoNuevoEvento === 'gasto'
-                    ? 'bg-amber-500/15 text-amber-200 border border-amber-300/35'
-                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                    ? 'bg-amber-500/15 text-amber-200 border-amber-300/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border-transparent'
                 }`}
               >
-                <TrendingDown className="w-3.5 h-3.5 text-amber-300/90" strokeWidth={1.75} />
+                <TrendingDown className="w-3.5 h-3.5 text-amber-300/90" strokeWidth={1.75} aria-hidden="true" />
                 <span>Gasto</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTipoNuevoEvento('ingreso')}
-                className={`py-1.5 px-1 rounded-lg text-[10px] font-semibold flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+                aria-pressed={tipoNuevoEvento === 'ingreso'}
+                className={`py-1.5 px-1 rounded-md text-[10px] font-medium flex flex-col items-center justify-center gap-0.5 transition cursor-pointer border ${
                   tipoNuevoEvento === 'ingreso'
-                    ? 'bg-teal-500/15 text-teal-200 border border-teal-400/35'
-                    : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                    ? 'bg-teal-500/15 text-teal-200 border-teal-400/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border-transparent'
                 }`}
               >
-                <TrendingUp className="w-3.5 h-3.5 text-teal-400" strokeWidth={1.75} />
+                <TrendingUp className="w-3.5 h-3.5 text-teal-400" strokeWidth={1.75} aria-hidden="true" />
                 <span>Ingreso</span>
               </button>
             </div>
 
-            <input
-              type="text"
-              autoFocus
-              value={tituloNuevoEvento}
-              onChange={(e) => setTituloNuevoEvento(e.target.value)}
-              placeholder={
-                tipoNuevoEvento === 'tarea'
-                  ? 'Título de la tarea...'
-                  : tipoNuevoEvento === 'actividad'
-                  ? 'Nombre de la actividad...'
-                  : tipoNuevoEvento === 'gasto'
-                  ? 'Concepto del gasto...'
-                  : 'Concepto del ingreso...'
-              }
-              className="w-full bg-[#040711] border border-slate-700/70 focus:border-sky-500/70 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition"
-            />
+            {/* Concepto + Monto fluido en la misma fila para Gasto / Ingreso */}
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                autoFocus
+                value={tituloNuevoEvento}
+                onChange={(e) => setTituloNuevoEvento(e.target.value)}
+                placeholder={
+                  tipoNuevoEvento === 'tarea'
+                    ? 'Título de la tarea...'
+                    : tipoNuevoEvento === 'actividad'
+                    ? 'Nombre de la actividad...'
+                    : tipoNuevoEvento === 'gasto'
+                    ? 'Concepto del gasto...'
+                    : 'Concepto del ingreso...'
+                }
+                className="flex-1 min-w-0 h-8 bg-white/[0.03] border border-white/[0.08] focus:border-sky-500/60 rounded-lg px-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition"
+              />
 
-            {/* Campo Monto para Gasto / Ingreso */}
-            {(tipoNuevoEvento === 'gasto' || tipoNuevoEvento === 'ingreso') && (
-              <div className="relative flex items-center">
-                <span className="absolute left-3 font-mono text-xs text-slate-400 pointer-events-none">
-                  S/
-                </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={montoNuevoEvento}
-                  onChange={(e) => setMontoNuevoEvento(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full bg-[#040711] border border-slate-700/70 focus:border-amber-400/60 rounded-xl pl-8 pr-3 py-1.5 text-xs font-mono tabular-nums text-slate-100 placeholder-slate-500 focus:outline-none transition"
-                />
-              </div>
-            )}
+              {(tipoNuevoEvento === 'gasto' || tipoNuevoEvento === 'ingreso') && (
+                <div className="relative w-24 shrink-0 flex items-center">
+                  <span className="absolute left-2 font-mono tabular-nums text-[11px] text-slate-400 pointer-events-none">
+                    S/
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={montoNuevoEvento}
+                    onChange={(e) => setMontoNuevoEvento(e.target.value)}
+                    placeholder="0.00"
+                    aria-label="Monto en soles"
+                    className="w-full h-8 bg-white/[0.03] border border-white/[0.08] focus:border-amber-400/60 rounded-lg pl-6 pr-2 text-xs font-mono tabular-nums text-slate-100 placeholder-slate-500 focus:outline-none transition"
+                  />
+                </div>
+              )}
+            </div>
 
-            <div className="flex items-center justify-between gap-2 pt-1">
+            {/* Pie unificado: Más detalles + Crear ↵ */}
+            <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-white/[0.06]">
               <button
                 type="button"
                 onClick={handleAbrirMasDetalles}
-                className="text-[10px] font-medium text-slate-400 hover:text-sky-300 inline-flex items-center gap-1 transition cursor-pointer"
+                className="text-[11px] font-medium text-slate-400 hover:text-sky-300 inline-flex items-center gap-1.5 transition cursor-pointer"
                 title="Abrir formulario completo con más campos"
               >
-                <ExternalLink className="w-3 h-3" strokeWidth={1.75} />
+                <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
                 <span>Más detalles</span>
               </button>
 
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setSlotNuevo(null)}
-                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] transition cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={creandoEvento || !tituloNuevoEvento.trim()}
-                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-white bg-sky-600 hover:bg-sky-500 border border-sky-400/30 flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
-                >
-                  <Plus className="w-3.5 h-3.5" strokeWidth={2} />
-                  <span>{creandoEvento ? 'Guardando...' : 'Guardar'}</span>
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={creandoEvento || !tituloNuevoEvento.trim()}
+                className="h-7 px-2.5 rounded-lg text-xs font-medium text-sky-300 bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 inline-flex items-center gap-1.5 transition cursor-pointer disabled:opacity-45"
+              >
+                <span>{creandoEvento ? 'Creando...' : 'Crear'}</span>
+                <kbd className="font-mono text-[10px] text-sky-300/75 leading-none">↵</kbd>
+              </button>
             </div>
           </form>
         </div>

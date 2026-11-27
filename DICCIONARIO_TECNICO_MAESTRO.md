@@ -11682,3 +11682,43 @@ supabase functions deploy gcal-auth
 - **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
 - **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**.
 - **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **94.31 kB** gzip 23.80 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-CAL-10: Lenguaje Visual Unificado en Popovers (Evento, DatePicker y Quick-Create) y Refinamiento Ergonómico del Dock Por Agendar] (Fase 8.42)
+
+#### 1. Sistema Unificado de Popovers (`CalendarEventPopover.tsx`, `CalendarDatePickerPopover.tsx`, Quick-Create en `ViewCalendario.tsx`)
+- **Superficie y Chasis Único:** Todos los overlays del Calendario Maestro adoptan la misma superficie ejecutiva (`bg-[#0B1221]/95 backdrop-blur-xl border border-white/[0.08] rounded-xl shadow-2xl shadow-black/50`), padding uniforme (`p-3.5`), divisores sutiles (`border-white/[0.06]`), botón de cierre Ghost (`h-6 w-6 rounded-md`) e iconos estandarizados (`w-3.5 h-3.5`, `strokeWidth={1.75}`).
+- **Refinamiento de `CalendarEventPopover.tsx`:** Cabecera minimalista con micro-badge editorial de entidad (icono Lucide por tipo + etiqueta corta sin bloques saturados) + horario en `font-mono tabular-nums text-xs text-slate-400`. Pie jerarquizado con **Iniciar Pomodoro** como acción destacada Cobalt y acciones secundarias (**Completar / Reabrir**, **Ver / Editar**, **Devolver a Por Agendar**) como botones Ghost compactos con tooltips claros; preservados enlaces `hangoutLink` / `htmlLink` en `externo_gcal`.
+- **Refinamiento de `CalendarDatePickerPopover.tsx`:** Adopción del chasis unificado con navegación interna compacta (`h-6 w-6`), botón de cierre Ghost `X` y pie `"Ir a Hoy"` alineado con iconos `w-3.5 h-3.5`.
+- **Refinamiento de Quick-Create en `ViewCalendario.tsx`:** Selector segmentado compacto de 4 entidades (`grid-cols-4 bg-white/[0.03] border-white/[0.06] p-0.5 rounded-lg`: `Tarea`, `Activ.`, `Gasto`, `Ingreso`), campo de monto `S/` (`w-24 font-mono tabular-nums`) integrado fluidamente en la misma fila del concepto para Gasto/Ingreso sin saltos verticales, y pie unificado con `"Más detalles"` a la izquierda y botón Cobalt `"Crear ↵"` a la derecha.
+
+#### 2. Refinamiento Ergonómico del Dock "Por Agendar" (`CalendarBacklogPanel.tsx`)
+- **Encabezados Ultralimpios:** Títulos compactos con contador tabular separado por punto medio (`Vencidas · N` con acento `text-amber-300/90` solo cuando `N > 0`, y `Sin hora · N` en `text-slate-400`), manteniendo el colapsado individual y el filtro superior compacto (`h-7 text-xs`).
+- **Tarjetas con Affordance de Arrastre:** Manejador `GripVertical` discreto (`text-slate-600 group-hover:text-slate-400`), pill compacto de duración estimada a la derecha (`font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-slate-400`, ej. `30m`, `1h`), borde izquierdo de prioridad `2.5px` y estética oscura homogénea (`bg-slate-900/70 hover:bg-slate-800/80 border-white/[0.05]`), preservando intacto el payload `CALENDAR_DRAG_MIME` hacia `CalendarTimeGrid`.
+
+#### 3. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `CalendarEventPopover.tsx`, `CalendarDatePickerPopover.tsx`, `CalendarBacklogPanel.tsx` y `ViewCalendario.tsx` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **96.90 kB** gzip 24.17 kB; `main-*.js` en **447.73 kB** < 500 kB).
+
+---
+
+### [REQ-UX-CAL-11: Refinamiento Editorial de CalendarMonthGrid (Popover +N más y Fines de Semana) y Agenda Móvil Táctil en CalendarMobileAgenda] (Fase 8.43)
+
+#### 1. Refinamiento Editorial de Vista Mes (`CalendarMonthGrid.tsx`)
+- **Contraste de Fines de Semana y Día Actual:** Columnas de Sábado y Domingo diferenciadas con tinte sutil (`bg-white/[0.015]`), días fuera del mes activo atenuados (`opacity-45`) y día actual resaltado con pill circular Cobalt (`bg-sky-500 text-white w-6 h-6 rounded-full font-mono tabular-nums text-xs`).
+- **Pills Editoriales Limpias:** Eventos renderizados como pills de 1 línea (`h-5 px-1.5 rounded text-[11px] truncate border-l-2` con paleta mineral de `calendarStyles.ts`), hora en `font-mono tabular-nums text-[10px] opacity-70` solo en eventos con horario (`!allDay`) y patrón diagonal `EXTERNAL_GCAL_STRIPE_STYLE` aplicado a `externo_gcal`.
+- **Popover Flotante para `+N más`:** Al hacer clic en `+N más`, se despliega un popover unificado (`bg-[#0B1221]/95 backdrop-blur-xl border-white/[0.08] rounded-xl shadow-2xl p-3`) con fecha clicable (para abrir vista Día), cierre Ghost `X`, lista desplazable de todos los eventos del día clicables hacia `CalendarEventPopover`, y cierre LIFO con `Escape` o clic fuera.
+
+#### 2. Experiencia Móvil Táctil (`CalendarMobileAgenda.tsx` + cableado en `ViewCalendario.tsx`)
+- **Tira Semanal con Indicadores de Densidad:** Hasta **3 micro-puntos** (`w-1 h-1 rounded-full`) debajo del número de cada día coloreados según las entidades presentes (priorizando diversidad de entidades vía `CALENDAR_ENTITY_STYLES[entidad].dotClass`).
+- **Tarjetas con Completado en 1 Toque:** Para eventos `'tarea'` y `'habito'`, botón circular táctil (`w-5 h-5 rounded-full`, `role="checkbox"`, `e.stopPropagation()`) que invoca `onToggleCompletar(evento)` directamente sin abrir el popover; `externo_gcal` permanece estrictamente en solo-lectura con `EXTERNAL_GCAL_STRIPE_STYLE`.
+- **Botón Flotante `+` en Móvil (FAB Cobalt):** Acceso táctil `fixed bottom-20 right-4 w-11 h-11 rounded-full bg-sky-500/90 text-white shadow-lg shadow-sky-500/25` sobre `BottomNavMobile` sin solapamiento (`pb-20` en la lista), cableado a `handleAbrirNuevoEnDia` para abrir el popover Quick-Create de 4 entidades prellenado con la fecha seleccionada.
+
+#### 3. Certificación QA y Desempeño
+- **Cero Coerciones `any`:** Verificado vía búsqueda estática en `CalendarMonthGrid.tsx`, `CalendarMobileAgenda.tsx` y `ViewCalendario.tsx` (0 coincidencias).
+- **Verificación de Tipos:** `npx tsc --noEmit` $\rightarrow$ Exit Code 0 (0 errores).
+- **Batería de Tests Unitarios:** `npm test -- --run` $\rightarrow$ **37/37 suites aprobadas (387/387 tests al 100% verde)**.
+- **Compilador de Producción:** `npm run build` $\rightarrow$ Exit Code 0 (`ViewCalendario-*.js` en **102.33 kB** gzip 25.14 kB; `main-*.js` en **447.73 kB** < 500 kB).
